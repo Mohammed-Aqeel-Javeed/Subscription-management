@@ -4,19 +4,11 @@ import { z } from "zod";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-<<<<<<< HEAD
   tenantId: text("tenant_id").notNull(), // Multi-tenancy
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   role: text("role").notNull().default("viewer"), // admin, viewer
   status: text("status").notNull().default("active"), // active, inactive
-=======
-  tenantId: text("tenant_id").notNull(), // Multi-tenancy - required for all users
-  name: text("name"),
-  email: text("email"),
-  role: text("role").default("viewer"), // admin, viewer
-  status: text("status").default("active"), // active, inactive
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
   lastLogin: timestamp("last_login"),
 });
 

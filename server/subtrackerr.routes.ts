@@ -478,16 +478,7 @@ router.get("/api/company/categories", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
-<<<<<<< HEAD
     const items = await collection.find({}).toArray();
-=======
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-    const items = await collection.find({ tenantId }).toArray();
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     // Only return categories with valid, non-empty names
     const categories = items
       .filter(item => typeof item.name === "string" && item.name.trim())
@@ -506,33 +497,16 @@ router.post("/api/company/categories", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
     let { name } = req.body;
-<<<<<<< HEAD
-=======
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Category name required" });
     }
     name = name.trim();
-<<<<<<< HEAD
     // Prevent duplicate category names
     const exists = await collection.findOne({ name });
     if (exists) {
       return res.status(409).json({ message: "Category already exists" });
     }
     const result = await collection.insertOne({ name, visible: true });
-=======
-    // Prevent duplicate category names within the same tenant
-    const exists = await collection.findOne({ name, tenantId });
-    if (exists) {
-      return res.status(409).json({ message: "Category already exists" });
-    }
-    const result = await collection.insertOne({ name, visible: true, tenantId });
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     res.status(201).json({ insertedId: result.insertedId });
   } catch (error) {
     res.status(500).json({ message: "Failed to add category", error });
@@ -544,27 +518,11 @@ router.delete("/api/company/categories/:name", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
     const name = req.params.name;
-<<<<<<< HEAD
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Category name required" });
     }
     // Case-insensitive and trimmed match
     const result = await collection.deleteOne({ name: { $regex: `^${name.trim()}$`, $options: "i" } });
-=======
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-    if (!name || typeof name !== "string" || !name.trim()) {
-      return res.status(400).json({ message: "Category name required" });
-    }
-    // Case-insensitive and trimmed match with tenantId
-    const result = await collection.deleteOne({ 
-      name: { $regex: `^${name.trim()}$`, $options: "i" },
-      tenantId 
-    });
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     if (result.deletedCount === 1) {
       res.status(200).json({ message: "Category deleted" });
     } else {
@@ -581,16 +539,7 @@ router.get("/api/company/departments", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
-<<<<<<< HEAD
     const items = await collection.find({}).toArray();
-=======
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-    const items = await collection.find({ tenantId }).toArray();
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     // Only return departments with valid, non-empty names
     const departments = items
       .filter(item => typeof item.name === "string" && item.name.trim())
@@ -610,33 +559,16 @@ router.post("/api/company/departments", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
     let { name } = req.body;
-<<<<<<< HEAD
-=======
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Department name required" });
     }
     name = name.trim();
-<<<<<<< HEAD
     // Prevent duplicate department names
     const exists = await collection.findOne({ name });
     if (exists) {
       return res.status(409).json({ message: "Department already exists" });
     }
     const result = await collection.insertOne({ name, visible: true });
-=======
-    // Prevent duplicate department names within the same tenant
-    const exists = await collection.findOne({ name, tenantId });
-    if (exists) {
-      return res.status(409).json({ message: "Department already exists" });
-    }
-    const result = await collection.insertOne({ name, visible: true, tenantId });
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     res.status(201).json({ insertedId: result.insertedId });
   } catch (error) {
     res.status(500).json({ message: "Failed to add department", error });
@@ -669,27 +601,11 @@ router.delete("/api/company/departments/:name", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
     const name = req.params.name;
-<<<<<<< HEAD
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Department name required" });
     }
     // Case-insensitive and trimmed match
     const result = await collection.deleteOne({ name: { $regex: `^${name.trim()}$`, $options: "i" } });
-=======
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-    if (!name || typeof name !== "string" || !name.trim()) {
-      return res.status(400).json({ message: "Department name required" });
-    }
-    // Case-insensitive and trimmed match with tenantId
-    const result = await collection.deleteOne({ 
-      name: { $regex: `^${name.trim()}$`, $options: "i" },
-      tenantId
-    });
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     if (result.deletedCount === 1) {
       res.status(200).json({ message: "Department deleted" });
     } else {
@@ -905,69 +821,11 @@ router.delete("/api/employees/:id", async (req, res) => {
 
 // --- Users API ---
 
-<<<<<<< HEAD
 // Add a new user
-=======
-// Get all users
-router.get("/api/users", async (req, res) => {
-  try {
-    const db = await connectToDatabase();
-    const collection = db.collection("users");
-    
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      console.error("Missing tenantId in user context for GET /api/users");
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-
-    console.log("Fetching users for tenantId:", tenantId);
-
-    // Get all users for this tenant and sort by creation date
-    const users = await collection
-      .find({ tenantId })
-      .sort({ createdAt: -1 })
-      .toArray();
-    
-    console.log(`Found ${users.length} users for tenant ${tenantId}`);
-    console.log("Raw users from DB:", JSON.stringify(users, null, 2));
-    
-    // Transform for client with detailed logging
-    const transformedUsers = users.map((user, index) => {
-      console.log(`Processing user ${index}:`, user);
-      
-      const transformed = {
-        id: user._id?.toString() || `temp-id-${index}`,
-        name: user.name || '',
-        email: user.email || '',
-        role: user.role || 'viewer',
-        status: user.status || 'active',
-        createdAt: user.createdAt ? new Date(user.createdAt) : new Date(),
-        updatedAt: user.updatedAt ? new Date(user.updatedAt) : new Date()
-      };
-      
-      console.log(`Transformed user ${index}:`, transformed);
-      return transformed;
-    });
-
-    console.log("Final transformed users:", JSON.stringify(transformedUsers, null, 2));
-    res.status(200).json(transformedUsers);
-  } catch (error) {
-    console.error("Error fetching users:", error);
-    res.status(500).json({ 
-      message: "Failed to fetch users", 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    });
-  }
-});
-
-    // Add a new user
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
 router.post("/api/users", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("users");
-<<<<<<< HEAD
     // Multi-tenancy: set tenantId
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
@@ -986,67 +844,6 @@ router.post("/api/users", async (req, res) => {
 });
 
 // Update a user
-=======
-    
-    // Multi-tenancy: get tenantId from the request user context
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      console.error("Missing tenantId in user context");
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-
-    console.log("Creating user with tenantId:", tenantId);
-    console.log("Request body:", req.body);
-
-    // Extract fields from request body
-    const { name, email, role, status } = req.body;
-    
-    // Allow empty fields, just log them
-    if (!name || !email) {
-      console.log("Creating user with empty fields:", { name, email });
-    }
-
-    // Only check for duplicate email if one is provided
-    if (email) {
-      const existingUser = await collection.findOne({ email: email.toLowerCase(), tenantId });
-      if (existingUser) {
-        console.log("Email already exists:", email);
-        return res.status(409).json({ message: "Email already exists" });
-      }
-    }
-
-    // Create user with tenantId
-    const user = {
-      name,
-      email: email.toLowerCase(), // Normalize email to lowercase
-      role: role || 'viewer', // Default to viewer if not provided
-      status: status || 'active', // Default to active if not provided
-      tenantId,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    
-    console.log("Attempting to save user:", user);
-    const result = await collection.insertOne(user);
-    console.log("User created successfully:", result.insertedId.toString());
-
-    // Return more detailed response
-    res.status(201).json({ 
-      message: "User created successfully",
-      user: {
-        id: result.insertedId,
-        ...user
-      }
-    });
-  } catch (error) {
-    console.error("Failed to add user:", error);
-    res.status(500).json({ 
-      message: "Failed to add user", 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    });
-  }
-});// Update a user
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
 router.put("/api/users/:_id", async (req, res) => {
   try {
     const db = await connectToDatabase();
@@ -1078,7 +875,6 @@ router.post("/api/config/fields", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("config");
     const { fields } = req.body;
-<<<<<<< HEAD
     if (!Array.isArray(fields)) {
       return res.status(400).json({ message: "Fields must be an array" });
     }
@@ -1086,20 +882,6 @@ router.post("/api/config/fields", async (req, res) => {
     await collection.updateOne(
       { key: "subscriptionFields" },
       { $set: { key: "subscriptionFields", fields } },
-=======
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-    if (!Array.isArray(fields)) {
-      return res.status(400).json({ message: "Fields must be an array" });
-    }
-    // Upsert a single config document for fields with tenantId
-    await collection.updateOne(
-      { key: "subscriptionFields", tenantId },
-      { $set: { key: "subscriptionFields", fields, tenantId } },
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
       { upsert: true }
     );
     res.status(200).json({ message: "Fields saved" });
@@ -1113,16 +895,7 @@ router.get("/api/config/fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("config");
-<<<<<<< HEAD
     const doc = await collection.findOne({ key: "subscriptionFields" });
-=======
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-    const doc = await collection.findOne({ key: "subscriptionFields", tenantId });
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     res.status(200).json(doc?.fields || []);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch fields", error });
@@ -1134,45 +907,24 @@ router.get("/api/config/fields", async (req, res) => {
 router.post("/api/config/compliance-fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
-<<<<<<< HEAD
     const collection = db.collection("Fields"); // Changed to Fields collection
     const { name } = req.body;
     
-=======
-    const collection = db.collection("Fields");
-    const { name } = req.body;
-    
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-    
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     // Validate field name
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Field name is required" });
     }
 
-<<<<<<< HEAD
     // Check if field already exists
     const existingField = await collection.findOne({ 
       name: name.trim(),
       fieldType: "compliance" // Changed type to fieldType
-=======
-    // Check if field already exists for this tenant
-    const existingField = await collection.findOne({ 
-      name: name.trim(),
-      fieldType: "compliance",
-      tenantId
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     });
     
     if (existingField) {
       return res.status(409).json({ message: "Field already exists" });
     }
 
-<<<<<<< HEAD
     // Insert new field
     const newField = {
       name: name.trim(),
@@ -1184,20 +936,6 @@ router.post("/api/config/compliance-fields", async (req, res) => {
       required: false, // Added required flag
       description: "", // Added description field
       validation: {} // Added validation rules object
-=======
-    // Insert new field with tenantId
-    const newField = {
-      name: name.trim(),
-      enabled: true,
-      fieldType: "compliance",
-      tenantId,  // Add tenantId to the field
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      displayOrder: 0,
-      required: false,
-      description: "",
-      validation: {}
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     };
 
     const result = await collection.insertOne(newField);
@@ -1215,21 +953,8 @@ router.post("/api/config/compliance-fields", async (req, res) => {
 router.get("/api/config/compliance-fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
-<<<<<<< HEAD
     const collection = db.collection("Fields"); // Changed to Fields collection
     const fields = await collection.find({ fieldType: "compliance" }).sort({ displayOrder: 1 }).toArray();
-=======
-    const collection = db.collection("Fields");
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-    const fields = await collection.find({ 
-      fieldType: "compliance",
-      tenantId 
-    }).sort({ displayOrder: 1 }).toArray();
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     res.status(200).json(fields.map(field => ({
       _id: field._id,
       name: field.name,
@@ -1257,23 +982,8 @@ router.patch("/api/config/compliance-fields/:id", async (req, res) => {
     delete updates.fieldType;
     delete updates.createdAt;
 
-<<<<<<< HEAD
     const result = await collection.updateOne(
       { _id: new ObjectId(id), fieldType: "compliance" },
-=======
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-
-    const result = await collection.updateOne(
-      { 
-        _id: new ObjectId(id), 
-        fieldType: "compliance",
-        tenantId 
-      },
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
       { 
         $set: {
           ...updates,
@@ -1299,22 +1009,9 @@ router.delete("/api/config/compliance-fields/:id", async (req, res) => {
     const collection = db.collection("Fields"); // Changed to Fields collection
     const { id } = req.params;
 
-<<<<<<< HEAD
     const result = await collection.deleteOne({
       _id: new ObjectId(id),
       fieldType: "compliance"
-=======
-    // Multi-tenancy: get tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-
-    const result = await collection.deleteOne({
-      _id: new ObjectId(id),
-      fieldType: "compliance",
-      tenantId
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
     });
 
     if (result.deletedCount === 0) {
