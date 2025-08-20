@@ -1,15 +1,18 @@
 {
-  "buildCommand": "cd client && npm install && npm run build",
-  "outputDirectory": "dist/public",
-  "framework": "vite",
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "server/index.ts",
+      "use": "@vercel/node"
     }
-  ]
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/server/index.ts"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }
