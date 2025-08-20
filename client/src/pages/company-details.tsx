@@ -631,7 +631,6 @@ const [searchTerm, setSearchTerm] = useState("");
 const { toast } = useToast();
 const queryClient = useQueryClient();
 
-<<<<<<< HEAD
 const { data: users, isLoading } = useQuery<UserType[]>({
 queryKey: ["/api/users"],
 });
@@ -699,123 +698,6 @@ form.reset();
 setEditingUser(undefined);
 queryClient.invalidateQueries({ queryKey: ["/api/users"] });
 },
-=======
-const { data: users = [], isLoading, error } = useQuery<UserType[], Error>({
-  queryKey: ["/api/users"],
-  // Enable automatic refetching
-  refetchOnMount: true,
-  refetchOnWindowFocus: true,
-  staleTime: 0, // Consider data stale immediately
-});
-
-React.useEffect(() => {
-  if (error) {
-    console.error("Error fetching users:", error);
-    toast({
-      title: "Error",
-      description: "Failed to fetch users. Please try refreshing the page.",
-      variant: "destructive",
-      duration: 3000,
-    });
-  }
-}, [error, toast]);
-
-const form = useForm<InsertUser>({
-  defaultValues: {
-    name: "",
-    email: "",
-    role: "viewer",
-    status: "active",
-  },
-  mode: "onChange", // Enable real-time validation
-});
-
-const createMutation = useMutation({
-  mutationFn: async (data: InsertUser) => {
-    // Log the create attempt
-    console.log("Attempting to create user:", {
-      ...data,
-      email: data.email.toLowerCase() // Show that we're normalizing email
-    });
-
-    try {
-      const response = await apiRequest("POST", "/api/users", {
-        ...data,
-        email: data.email.toLowerCase() // Normalize email before sending
-      });
-      console.log("User creation successful:", response);
-      return response;
-    } catch (error) {
-      console.error("User creation request failed:", error);
-      throw error;
-    }
-  },
-  onSuccess: (response) => {
-    console.log("Mutation success, created user:", response);
-    queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-    toast({
-      title: "Success",
-      description: "User created successfully",
-      duration: 1000,
-    });
-    setModalOpen(false);
-    form.reset();
-  },
-  onError: (error: any) => {
-    console.error("User creation error:", error);
-    // Handle specific error cases
-    let errorMessage = "Failed to create user";
-    if (error.status === 409) {
-      errorMessage = "A user with this email already exists";
-    } else if (error.status === 400) {
-      errorMessage = "Please fill in all required fields";
-    } else if (error.status === 401) {
-      errorMessage = "Please log in again to create users";
-    }
-    toast({
-      title: "Error",
-      description: error.message || errorMessage,
-      variant: "destructive",
-      duration: 3000,
-    });
-  },
-});
-
-const updateMutation = useMutation({
-  mutationFn: async ({ id, data }: { id: string; data: Partial<InsertUser> }) => {
-    console.log("Updating user:", id, data);
-    try {
-      const result = await apiRequest("PUT", `/api/users/${id}`, data);
-      console.log("Update successful:", result);
-      return result;
-    } catch (error: any) {
-      console.error("Update failed:", error);
-      throw error;
-    }
-  },
-  onSuccess: (result: any) => {
-    console.log("Update mutation success");
-    // Force an immediate refetch
-    queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-    toast({
-      title: "Success",
-      description: "User updated successfully",
-      duration: 1000,
-    });
-    setModalOpen(false);
-    form.reset();
-    setEditingUser(undefined);
-  },
-  onError: (error: any) => {
-    console.error("Update mutation error:", error);
-    toast({
-      title: "Error",
-      description: error.message || "Failed to update user",
-      variant: "destructive",
-      duration: 3000,
-    });
-  },
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
 });
 
 const deleteMutation = useMutation({
@@ -838,24 +720,12 @@ duration: 1000,
 },
 });
 
-<<<<<<< HEAD
 // Filter users based on search term
 const filteredUsers = users?.filter(user =>
 user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
 user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
 user.role.toLowerCase().includes(searchTerm.toLowerCase())
 ) || [];
-=======
-// Filter users based on search term with null checks
-const filteredUsers = (users || []).filter(user => {
-  const searchLower = searchTerm.toLowerCase();
-  return (
-    (user?.name?.toLowerCase()?.includes(searchLower) ?? false) ||
-    (user?.email?.toLowerCase()?.includes(searchLower) ?? false) ||
-    (user?.role?.toLowerCase()?.includes(searchLower) ?? false)
-  );
-});
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
 
 const handleEdit = (user: UserType) => {
 const freshUser = users?.find(u => u.id === user.id) || user;
@@ -887,7 +757,6 @@ setModalOpen(true);
 };
 
 const onSubmit = (data: InsertUser) => {
-<<<<<<< HEAD
 if (editingUser) {
 console.log("Updating user with id:", editingUser.id, editingUser);
 if (!editingUser.id || typeof editingUser.id !== "string" || editingUser.id.length < 10) {
@@ -906,35 +775,6 @@ createMutation.mutate(data);
 };
 
 const getRoleBadge = (role: string) => {
-=======
-  console.log("Form submitted with data:", data);
-  
-  if (editingUser) {
-    console.log("Updating user with id:", editingUser.id, editingUser);
-    if (!editingUser.id || typeof editingUser.id !== "string" || editingUser.id.length < 10) {
-      toast({
-        title: "Error",
-        description: `Invalid user id: ${editingUser.id}`,
-        variant: "destructive",
-        duration: 1000,
-      });
-      return;
-    }
-    updateMutation.mutate({ id: editingUser.id, data });
-  } else {
-    // Create new user with whatever data is provided
-    const newUser = {
-      ...data,
-      email: data.email?.toLowerCase() || '', // Make email optional
-      role: data.role || 'viewer',
-      status: data.status || 'active'
-    };
-    
-    console.log("Creating new user:", newUser);
-    createMutation.mutate(newUser);
-  }
-};const getRoleBadge = (role: string) => {
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
 switch (role) {
 case "admin":
 return (
@@ -1223,25 +1063,7 @@ disabled={deleteMutation.isPending}
 </motion.div>
 );
 }
-<<<<<<< HEAD
 export default function CompanyDetails() {
-=======
-// Event listener for tenant/account changes
-const handleTenantChange = () => {
-  // Invalidate and refetch user data when tenant changes
-  const queryClient = useQueryClient();
-  queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-};
-// ...existing code...
-export default function CompanyDetails() {
-  // Set up event listener for tenant changes
-  React.useEffect(() => {
-    window.addEventListener('tenantChange', handleTenantChange);
-    return () => {
-      window.removeEventListener('tenantChange', handleTenantChange);
-    };
-  }, []);
->>>>>>> de26afdd8c037f97775a6e0684dc8f0769af8786
 // Company information state
 const [companyInfo, setCompanyInfo] = useState({
 name: "",
