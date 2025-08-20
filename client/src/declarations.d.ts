@@ -2,16 +2,6 @@ declare module "drizzle-kit";
 // Workaround for missing type declarations in @radix-ui/react-tabs
 declare module "@radix-ui/react-tabs";
 
-// Vite environment variables
-interface ImportMetaEnv {
-  readonly VITE_API_URL?: string;
-  // add more env variables here as needed
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
-
 // Image declarations
 declare module "*.png" {
   const content: string;

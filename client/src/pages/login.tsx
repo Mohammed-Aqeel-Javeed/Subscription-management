@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogIn } from "lucide-react";
-import { apiFetch, API_ENDPOINTS } from "../lib/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -17,10 +16,11 @@ export default function LoginPage() {
       return;
     }
     try {
-      const res = await apiFetch(API_ENDPOINTS.LOGIN, {
+      const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
+        credentials: "include" // Important for cookies!
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.message !== "Login successful") {
