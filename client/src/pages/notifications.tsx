@@ -53,7 +53,7 @@ return dates;
 }
 const { data: notifications = [], isLoading, refetch } = useQuery<NotificationItem[]>({
 queryKey: ['/api/notifications'],
-refetchInterval: 3000, // Poll every 3 seconds for near-realtime updates
+refetchInterval: false, // Disable auto-refresh
 });
 const { data: subscriptions = [], refetch: refetchSubscriptions } = useQuery<Subscription[]>({
 queryKey: ['/api/subscriptions'],

@@ -62,15 +62,15 @@ export default function Subscriptions() {
   
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
   const { data: subscriptions, isLoading, refetch } = useQuery<Subscription[]>({
-    queryKey: ["/api/subscriptions", tenantId],
-    refetchOnWindowFocus: "always",
-    refetchOnReconnect: "always",
-    refetchInterval: 50, // Ultra-fast polling every 50ms
-    gcTime: 0,
-    staleTime: 0,
-    retry: false,
-    networkMode: "always",
-    refetchIntervalInBackground: true
+  queryKey: ["/api/subscriptions", tenantId],
+  refetchOnWindowFocus: "always",
+  refetchOnReconnect: "always",
+  refetchInterval: false, // Disable auto-refresh
+  gcTime: 0,
+  staleTime: 0,
+  retry: false,
+  networkMode: "always",
+  refetchIntervalInBackground: false
   });  // Listen for login/logout/account change events and trigger immediate refetch
   React.useEffect(() => {
     function handleAccountChange() {
@@ -138,8 +138,8 @@ export default function Subscriptions() {
       }
     }
 
-    // Check for changes every 50ms for near real-time updates
-    const intervalId = setInterval(checkChanges, 50);
+  // Check for changes every 5 seconds for better performance
+  const intervalId = setInterval(checkChanges, 5000);
     
     // Initial check
     checkChanges();

@@ -40,7 +40,7 @@ export default function ComplianceDashboard() {
       if (!res.ok) throw new Error("Failed to fetch compliance data");
       return res.json();
     },
-    refetchInterval: 30000, // Poll every 30 seconds
+  refetchInterval: false, // Disable auto-refresh
   });
 
   // Compute metrics, issues, deadlines from complianceList
