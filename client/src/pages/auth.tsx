@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { LogIn, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+// Backend API base URL
+const API_BASE_URL = "http://localhost:5000";
 
 export default function AuthPage() {
   const [showSignup, setShowSignup] = useState(false);
@@ -60,7 +62,7 @@ export default function AuthPage() {
     }
     // Only backend validation for login
     try {
-      const res = await fetch("/api/login", {
+  const res = await fetch(`${API_BASE_URL}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: loginEmail, password: loginPassword })
@@ -92,7 +94,7 @@ export default function AuthPage() {
     }
     try {
       // Store signup in login collection
-      const res = await fetch("/api/login", {
+  const res = await fetch(`${API_BASE_URL}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fullName: signupName, email: signupEmail, password: signupPassword })
