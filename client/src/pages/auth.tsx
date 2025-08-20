@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { LogIn, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { apiFetch, API_ENDPOINTS } from "../lib/api";
 
 export default function AuthPage() {
   const [showSignup, setShowSignup] = useState(false);
@@ -61,7 +60,7 @@ export default function AuthPage() {
     }
     // Only backend validation for login
     try {
-      const res = await apiFetch(API_ENDPOINTS.LOGIN, {
+      const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: loginEmail, password: loginPassword })
@@ -93,7 +92,7 @@ export default function AuthPage() {
     }
     try {
       // Store signup in login collection
-      const res = await apiFetch(API_ENDPOINTS.LOGIN, {
+      const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fullName: signupName, email: signupEmail, password: signupPassword })

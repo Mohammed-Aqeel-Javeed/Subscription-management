@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { UserPlus } from "lucide-react";
-import { apiFetch, API_ENDPOINTS } from "../lib/api";
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState("");
@@ -26,7 +25,7 @@ export default function SignupPage() {
     try {
       // Generate a random tenantId (UUID v4 style)
       const tenantId = 'tenant-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
-      const res = await apiFetch(API_ENDPOINTS.SIGNUP, {
+      const res = await fetch("/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fullName, email, password, tenantId }),
