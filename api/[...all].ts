@@ -27,6 +27,12 @@ function runMiddleware(req: VercelRequest, res: VercelResponse, fn: any) {
   });
 }
 
+// Helper to get database directly for login/signup (since they're not in the storage interface)
+async function getDbDirect() {
+  const { connectToDatabase } = await import('../server/mongo');
+  return await connectToDatabase();
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Apply CORS
   await runMiddleware(req, res, cors(corsOptions));
@@ -36,18 +42,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  const { method, url } = req;
+  const { method } = req;
+  // Get the path from the URL, removing query parameters
+  let path = req.url?.split('?')[0] || '';
+  
+  // In Vercel, the path might come without /api prefix, so add it if missing
+  if (!path.startsWith('/api/')) {
+    path = '/api' + (path.startsWith('/') ? path : '/' + path);
+  }
+  
+  console.log(`API Request: ${method} ${path}`); // Debug logging
   
   try {
     // Login endpoint
-    if (url === '/api/login' && method === 'POST') {
+    if (path === '/api/login' && method === 'POST') {
       const { email, password } = req.body;
       
       if (!email || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      const db = await storage.getDb();
+      const db = await getDbDirect();
       const user = await db.collection("login").findOne({ email, password });
       
       if (!user) {
@@ -77,14 +92,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Signup endpoint
-    if (url === '/api/signup' && method === 'POST') {
+    if (path === '/api/signup' && method === 'POST') {
       const { email, password } = req.body;
       
       if (!email || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      const db = await storage.getDb();
+      const db = await getDbDirect();
       
       // Check if user already exists
       const existingUser = await db.collection("login").findOne({ email });
@@ -100,7 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Logout endpoint
-    if (url === '/api/logout' && method === 'POST') {
+    if (path === '/api/logout' && method === 'POST') {
       const cookieOptions = [
         'token=',
         'HttpOnly=false',
@@ -115,69 +130,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Subscriptions endpoints
-    if (url === '/api/subscriptions' && method === 'GET') {
-      const db = await storage.getDb();
-      const subscriptions = await db.collection("history").find({}).toArray();
+    if (path === '/api/subscriptions' && method === 'GET') {
+      // TODO: Get tenantId from JWT token
+      const tenantId = 'default'; // Fallback for now
+      const subscriptions = await storage.getSubscriptions(tenantId);
       return res.status(200).json(subscriptions);
     }
 
-    if (url === '/api/subscriptions' && method === 'POST') {
-      const db = await storage.getDb();
+    if (path === '/api/subscriptions' && method === 'POST') {
+      // TODO: Get tenantId from JWT token
+      const tenantId = 'default'; // Fallback for now
       const subscription = req.body;
-      const result = await db.collection("history").insertOne({
-        ...subscription,
-        createdAt: new Date()
-      });
-      return res.status(201).json({ message: "Subscription created", id: result.insertedId });
+      const result = await storage.createSubscription(subscription, tenantId);
+      return res.status(201).json({ message: "Subscription created", data: result });
     }
 
     // Analytics endpoints
-    if (url === '/api/analytics/dashboard' && method === 'GET') {
-      const db = await storage.getDb();
-      
-      const totalSubscriptions = await db.collection("history").countDocuments();
-      const activeSubscriptions = await db.collection("history").countDocuments({ status: 'active' });
-      const totalSpent = await db.collection("history").aggregate([
-        { $group: { _id: null, total: { $sum: "$cost" } } }
-      ]).toArray();
-      
-      const dashboardData = {
-        totalSubscriptions,
-        activeSubscriptions,
-        totalSpent: totalSpent[0]?.total || 0,
-        upcomingRenewals: 0
-      };
-      
+    if (path === '/api/analytics/dashboard' && method === 'GET') {
+      // TODO: Get tenantId from JWT token
+      const tenantId = 'default'; // Fallback for now
+      const dashboardData = await storage.getDashboardMetrics(tenantId);
       return res.status(200).json(dashboardData);
     }
 
-    if (url === '/api/analytics/trends' && method === 'GET') {
-      const db = await storage.getDb();
-      const trends = await db.collection("history").aggregate([
-        {
-          $group: {
-            _id: { $month: "$createdAt" },
-            count: { $sum: 1 },
-            total: { $sum: "$cost" }
-          }
-        }
-      ]).toArray();
-      
+    if (path === '/api/analytics/trends' && method === 'GET') {
+      // TODO: Get tenantId from JWT token
+      const tenantId = 'default'; // Fallback for now
+      const trends = await storage.getSpendingTrends(tenantId);
       return res.status(200).json(trends);
     }
 
-    if (url === '/api/analytics/categories' && method === 'GET') {
-      const db = await storage.getDb();
-      const categories = await db.collection("history").aggregate([
-        {
-          $group: {
-            _id: "$category",
-            count: { $sum: 1 },
-            total: { $sum: "$cost" }
-          }
-        }
-      ]).toArray();
-      
+    if (path === '/api/analytics/categories' && method === 'GET') {
+      // TODO: Get tenantId from JWT token
+      const tenantId = 'default'; // Fallback for now
+      const categories = await storage.getCategoryBreakdown(tenantId);
       return res.status(200).json(categories);
     }
 
