@@ -25,7 +25,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(cookieParser());
   // Allow credentials in CORS for frontend cookie access
   app.use(cors({
-    origin: "http://localhost:5000", // Change to your frontend URL if needed
+    origin: process.env.NODE_ENV === 'production' 
+      ? "https://subscription-management-uhzp.vercel.app" 
+      : "http://localhost:5000",
     credentials: true
   }));
   // Signup route - saves to signup collection
