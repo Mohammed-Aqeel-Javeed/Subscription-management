@@ -9,72 +9,138 @@ import analyticsRouter from "./analytics.routes";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import cors from "cors";
+import { connectToDatabase } from "./mongo";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Logout route - clears JWT cookie
   app.post("/api/logout", (req, res) => {
     res.cookie("token", "", {
       httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? "none" : "lax",
+      secure: false,
+      sameSite: "lax",
       path: "/",
       expires: new Date(0) // Expire immediately
     });
     res.status(200).json({ message: "Logout successful" });
   });
   app.use(cookieParser());
+  
+  // JWT middleware to set req.user and req.user.tenantId (same as subtrackerr.routes.ts)
+  app.use((req, res, next) => {
+    let token;
+    // Support both Authorization header and cookie
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+      token = req.headers.authorization.replace("Bearer ", "");
+    } else if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || "subs_secret_key");
+        if (typeof decoded === "object" && "tenantId" in decoded) {
+          req.user = decoded as any;
+        } else {
+          req.user = undefined;
+        }
+      } catch (err) {
+        req.user = undefined;
+      }
+    }
+    next();
+  });
+  
   // Allow credentials in CORS for frontend cookie access
   app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-      ? "https://subscription-management-uhzp.vercel.app" 
-      : "http://localhost:5173",
+    origin: "http://localhost:5173", // Fixed: Frontend URL
     credentials: true
   }));
   // Signup route - saves to signup collection
   app.post("/api/signup", async (req, res) => {
     try {
       const { fullName, email, password, tenantId } = req.body;
+      console.log('Signup request received:', { fullName, email, tenantId }); // Debug log
+      
       if (!fullName || !email || !password || !tenantId) {
         return res.status(400).json({ message: "Missing required fields (fullName, email, password, tenantId)" });
       }
-  const db = await storage["getDb"]();
-  const doc = { fullName, email, password, tenantId, createdAt: new Date() };
+      
+      const db = await connectToDatabase();
+      console.log('Connected to database:', db.databaseName); // Debug log
+      
+      // Check if user already exists
+      const existingUser = await db.collection("login").findOne({ email });
+      console.log('Existing user check:', existingUser ? 'User exists' : 'User does not exist'); // Debug log
+      
+      if (existingUser) {
+        return res.status(400).json({ message: "User already exists with this email" });
+      }
+      
+      const doc = { fullName, email, password, tenantId, createdAt: new Date() };
+      console.log('Creating user document:', { fullName, email, tenantId }); // Debug log (no password)
+      
   await db.collection("signup").insertOne(doc);
   // Also store credentials in login collection for immediate login
-  await db.collection("login").insertOne(doc);
+  const loginResult = await db.collection("login").insertOne(doc);
+  console.log('User created with ID:', loginResult.insertedId); // Debug log
+
+  // Log all users in login collection after signup
+  const allUsers = await db.collection("login").find({}).toArray();
+  console.log('All users in login collection after signup:', allUsers.map(u => ({ email: u.email, password: u.password, tenantId: u.tenantId })));
+
   res.status(201).json({ message: "Signup successful" });
     } catch (err) {
+      console.error('Signup error:', err);
       res.status(500).json({ message: "Failed to save signup" });
     }
   });
 
-  // Login route - saves to login collection
+  // Login route - authenticates user and sets JWT cookie
   app.post("/api/login", async (req, res) => {
     try {
       const { email, password } = req.body;
+      console.log('Login attempt for email:', email); // Debug log
+      
       if (!email || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
-      const db = await storage["getDb"]();
-      const user = await db.collection("login").findOne({ email, password });
+      
+      const db = await connectToDatabase();
+      console.log('Connected to database:', db.databaseName); // Debug log
+      
+  // Log all users in login collection before login attempt
+  const allUsers = await db.collection("login").find({}).toArray();
+  console.log('All users in login collection before login:', allUsers.map(u => ({ email: u.email, password: u.password, tenantId: u.tenantId })));
+
+  const user = await db.collection("login").findOne({ email, password });
+  console.log('User found with credentials:', user ? 'Yes' : 'No'); // Debug log
+      
       if (!user) {
+        // Additional debug: check if user exists with different password
+        const userByEmail = await db.collection("login").findOne({ email });
+        console.log('User exists with this email:', userByEmail ? 'Yes' : 'No'); // Debug log
         return res.status(401).json({ message: "Invalid email or password" });
       }
-        // Include tenantId in JWT payload for multi-tenancy
-        const tokenPayload: any = { userId: user._id, email: user.email };
-        if (user.tenantId) {
-          tokenPayload.tenantId = user.tenantId;
-        }
-        const token = jwt.sign(tokenPayload, process.env.JWT_SECRET || "subs_secret_key", { expiresIn: "7d" });
+      
+      // Include tenantId in JWT payload for multi-tenancy
+      const tokenPayload: any = { userId: user._id, email: user.email };
+      if (user.tenantId) {
+        tokenPayload.tenantId = user.tenantId;
+      }
+      
+      const token = jwt.sign(tokenPayload, process.env.JWT_SECRET || "subs_secret_key", { expiresIn: "7d" });
+      
       res.cookie("token", token, {
         httpOnly: false,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? "none" : "lax",
+        secure: false,
+        sameSite: "lax",
         path: "/",
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
+      
+      console.log('Login successful for user:', user._id); // Debug log
       res.status(200).json({ message: "Login successful" });
     } catch (err) {
+      console.error('Login error:', err);
       res.status(500).json({ message: "Login failed" });
     }
   });

@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { UserPlus } from "lucide-react";
+// Backend API base URL
+const API_BASE_URL = "http://localhost:5000";
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState("");
@@ -25,19 +27,33 @@ export default function SignupPage() {
     try {
       // Generate a random tenantId (UUID v4 style)
       const tenantId = 'tenant-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
-      const res = await fetch("/api/signup", {
+      console.log('Attempting signup with:', { fullName, email, tenantId }); // Debug log
+      
+      const res = await fetch(`${API_BASE_URL}/api/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, email, password, tenantId }),
+        credentials: "include",
+        body: JSON.stringify({ fullName, email, password, tenantId })
       });
+      
+  // ...existing code...
+      const data = await res.json().catch(() => ({}));
+      console.log('Signup response data:', data); // Debug log
+      
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.message || "Signup failed");
+        setError(data.message || `Signup failed (${res.status})`);
         return;
       }
-      setSuccess("Signup successful!");
+      setSuccess("Signup successful! You can now login with your credentials.");
+      
+      // Clear form
+      setFullName("");
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
     } catch (err) {
-      setError("Network error");
+      console.error('Signup error:', err); // Debug log
+      setError("Network error - please check if the server is running");
     }
   };
 
@@ -47,10 +63,8 @@ export default function SignupPage() {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
           <UserPlus size={48} color="#007bff" style={{ marginBottom: 8 }} />
           <h2 style={{ fontWeight: 700, fontSize: 28, color: '#222' }}>Create Account</h2>
-          <p style={{ color: '#666', fontSize: 15, marginTop: 4 }}>Sign up to start tracking your subscriptions</p>
         </div>
-        <form onSubmit={handleSubmit}>
-          {/* Tenant ID field removed, autogeneration in handleSubmit */}
+  <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
             <label style={{ fontWeight: 500 }}>Full Name</label>
             <input

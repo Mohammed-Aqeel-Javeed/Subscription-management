@@ -1,36 +1,58 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogIn } from "lucide-react";
+import { apiFetch, API_ENDPOINTS } from "../lib/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsLoading(true);
+    
     if (!email || !password) {
       setError("Please enter both email and password.");
+      setIsLoading(false);
       return;
     }
+    
     try {
-      const res = await fetch("/api/login", {
+      console.log('Attempting login with:', { email }); // Debug log
+      const res = await apiFetch(API_ENDPOINTS.LOGIN, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
-        credentials: "include" // Important for cookies!
       });
+      
+      console.log('Login response status:', res.status); // Debug log
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.message !== "Login successful") {
-        setError(data.message || "Login failed");
+      console.log('Login response data:', data); // Debug log
+      
+      if (!res.ok) {
+        setError(data.message || `Login failed (${res.status})`);
+        setIsLoading(false);
         return;
       }
-      // Success: cookie is set, dashboard will check it
-  navigate("/dashboard");
+      
+      if (data.message === "Login successful") {
+        console.log('Login successful, navigating to dashboard'); // Debug log
+        // Small delay to ensure cookie is set
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 100);
+      } else {
+        setError("Unexpected response from server");
+        setIsLoading(false);
+      }
     } catch (err) {
-      setError("Network error");
+      console.error('Login error:', err); // Debug log
+      setError("Network error - please check if the server is running");
+      setIsLoading(false);
     }
   };
 
@@ -66,13 +88,41 @@ export default function LoginPage() {
           <div style={{ marginBottom: 16, textAlign: "right" }}>
             <a href="#" style={{ fontSize: 14, color: "#007bff", textDecoration: "underline" }}>Forgot Password?</a>
           </div>
-          <button type="submit" style={{ width: "100%", padding: 12, background: "#007bff", color: "#fff", border: 0, borderRadius: 8, fontWeight: 600, fontSize: 18, boxShadow: '0 2px 8px rgba(0,123,255,0.08)' }}>Login</button>
+          <button 
+            type="submit" 
+            disabled={isLoading}
+            style={{ 
+              width: "100%", 
+              padding: 12, 
+              background: isLoading ? "#ccc" : "#007bff", 
+              color: "#fff", 
+              border: 0, 
+              borderRadius: 8, 
+              fontWeight: 600, 
+              fontSize: 18, 
+              boxShadow: '0 2px 8px rgba(0,123,255,0.08)',
+              cursor: isLoading ? "not-allowed" : "pointer"
+            }}
+          >
+            {isLoading ? "Signing in..." : "Login"}
+          </button>
           <button
             type="button"
             style={{ width: "100%", padding: 12, background: "#eee", color: "#007bff", border: 0, borderRadius: 8, fontWeight: 600, fontSize: 18, marginTop: 8 }}
             onClick={() => navigate("/signup")}
           >
             Signup
+          </button>
+          <button
+            type="button"
+            style={{ width: "100%", padding: 8, background: "#f8f9fa", color: "#6c757d", border: "1px solid #dee2e6", borderRadius: 6, fontWeight: 500, fontSize: 14, marginTop: 8 }}
+            onClick={async () => {
+              setEmail("test@example.com");
+              setPassword("password123");
+              setError("Demo credentials loaded. Click Login or create this user via Signup first.");
+            }}
+          >
+            Load Demo Credentials
           </button>
           {error && <div style={{ color: "#d32f2f", marginTop: 12, textAlign: 'center' }}>{error}</div>}
         </form>
