@@ -5,8 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
-    "build": "cd client && npm install && npm run build",
-    "build:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build": "vite build",
     "vercel-build": "npm run build",
     "start": "cross-env NODE_ENV=production node dist/index.js",
     "poststart": "start http://localhost:5000",

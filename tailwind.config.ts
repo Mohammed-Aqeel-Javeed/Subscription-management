@@ -5,7 +5,7 @@ export default {
   content: [
     "./client/index.html",
     "./client/src/**/*.{js,jsx,ts,tsx}",
-    "./client/src/components/**/*.{js,jsx,ts,tsx}"
+    "./src/**/*.{js,jsx,ts,tsx}"
   ],
   theme: {
     extend: {
