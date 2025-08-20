@@ -15,8 +15,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/logout", (req, res) => {
     res.cookie("token", "", {
       httpOnly: false,
-      secure: false,
-      sameSite: "lax",
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? "none" : "lax",
       path: "/",
       expires: new Date(0) // Expire immediately
     });
@@ -27,7 +27,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(cors({
     origin: process.env.NODE_ENV === 'production' 
       ? "https://subscription-management-uhzp.vercel.app" 
-      : "http://localhost:5000",
+      : "http://localhost:5173",
     credentials: true
   }));
   // Signup route - saves to signup collection
@@ -68,10 +68,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const token = jwt.sign(tokenPayload, process.env.JWT_SECRET || "subs_secret_key", { expiresIn: "7d" });
       res.cookie("token", token, {
         httpOnly: false,
-        secure: false,
-        sameSite: "lax",
-        path: "/"
-        // No maxAge: session cookie, deleted when browser/tab closes
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? "none" : "lax",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
       res.status(200).json({ message: "Login successful" });
     } catch (err) {
