@@ -55,13 +55,14 @@ export default function Dashboard() {
       return res.json();
     }
   });
-  const { data: activity, isLoading: activityLoading } = useQuery<RecentActivity[]>({
-    queryKey: ["/api/analytics/activity"],
-    queryFn: async () => {
-      const res = await fetch("/api/analytics/activity", { credentials: "include" });
-      return res.json();
-    }
-  });
+  // Activity query removed as it's not currently used in the dashboard
+  // const { data: activity, isLoading: activityLoading } = useQuery<RecentActivity[]>({
+  //   queryKey: ["/api/analytics/activity"],
+  //   queryFn: async () => {
+  //     const res = await fetch("/api/analytics/activity", { credentials: "include" });
+  //     return res.json();
+  //   }
+  // });
   const { data: subscriptions } = useQuery<Subscription[]>({
     queryKey: ["/api/subscriptions"],
     queryFn: async () => {
