@@ -1,7 +1,8 @@
 // API configuration for different environments
 const getApiUrl = () => {
-  // In production, use environment variable or fallback to relative path if backend is in same domain
+  // In production, use environment variable or default to same domain
   if (import.meta.env.MODE === 'production') {
+    // If VITE_API_URL is set, use it; otherwise use same domain (relative path)
     return import.meta.env.VITE_API_URL || '';
   }
   // In development, use relative path (assumes backend runs on same domain)
