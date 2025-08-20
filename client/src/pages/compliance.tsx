@@ -148,7 +148,7 @@ export default function Compliance() {
       if (!response.ok) throw new Error("Failed to fetch employees");
       return response.json();
     },
-    refetchInterval: 5000, // Refresh every 5 seconds
+  refetchInterval: false, // Disable auto-refresh
     refetchOnWindowFocus: true, // Refresh when window regains focus
     refetchOnMount: true, // Refresh when component mounts
     staleTime: 0 // Consider data immediately stale so it refreshes
@@ -182,7 +182,7 @@ export default function Compliance() {
       if (!response.ok) throw new Error("Failed to fetch compliance filings");
       return response.json();
     },
-    refetchInterval: 50, // Aggressive polling every 50ms
+  refetchInterval: false, // Disable auto-refresh
     refetchOnWindowFocus: true,
     refetchOnMount: true,
     staleTime: 0 // Always consider data stale
