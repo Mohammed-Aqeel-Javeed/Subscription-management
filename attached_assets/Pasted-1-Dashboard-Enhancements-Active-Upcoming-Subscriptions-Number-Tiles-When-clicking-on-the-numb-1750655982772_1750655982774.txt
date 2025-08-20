@@ -1,0 +1,94 @@
+1. Dashboard Enhancements
+✅ Active & Upcoming Subscriptions (Number Tiles)
+When clicking on the number shown for Active or Upcoming Subscriptions, a list view should open displaying full details of all related subscriptions.
+
+🕵️‍♂️ Recent Activity Logs
+Shows recent actions such as added or updated subscriptions.
+
+Needs enhancement to also display the user responsible for each activity (i.e., who created or updated the record).
+
+➕ 2. Add Subscription – New Fields
+📌 Status Field
+Dropdown field with the following options:
+
+Active
+
+Cancelled
+
+⏰ Reminder Days
+Integer input
+
+Must be greater than 0 (value 0 should not be allowed)
+
+🔁 Reminder Policy
+Dropdown field with the following options:
+
+One time (default)
+
+Two times
+
+Until Renewal
+
+⚠️ Conditional Logic:
+If Reminder Days = 1, then:
+
+Only One time should be selectable.
+
+Disable or hide Two times and Until Renewal.
+
+✏️ 3. Edit Subscription
+On the Subscription List page, each subscription should have an Edit option.
+
+Clicking Edit should open the Edit Subscription Page with all the existing data pre-filled for that specific record.
+
+🧩 4. Configuration Setup (Renamed Tab)
+Rename the existing "Reminder" tab to "Configuration Setup".
+
+Inside this new tab, add the ability to manage subscription categories.
+
+➕ Subscription Categories Management:
+Allow users to add new categories if not already available.
+
+Pre-load the following default categories:
+
+Software
+
+Music
+
+News
+
+Business Tool
+
+Cloud Storage
+
+Regulatory
+
+Entertainment
+
+Others
+
+✅ Checkbox for Category Selection:
+Each category should have a checkbox beside it.
+
+User can select which categories they want to appear on the Subscription Card page.
+
+Only the checked categories should be shown in the Category Dropdown when creating a new subscription.
+
+📊 5. Reports Section – Additional Reports
+Enhance the Reports section with the following new report types:
+
+📉 1. Cancelled Subscriptions Report
+Shows all subscriptions that have been cancelled
+
+Include details like: Subscription name, category, cancellation date, duration before cancellation, etc.
+
+🔔 2. Renewal Due Report
+Lists all subscriptions that are due for renewal within the next X days
+
+Useful for planning and follow-ups
+
+⏳ 3. Retention/Duration Report
+Calculates the average subscription duration
+
+Shows how long subscriptions typically last before they are cancelled
+

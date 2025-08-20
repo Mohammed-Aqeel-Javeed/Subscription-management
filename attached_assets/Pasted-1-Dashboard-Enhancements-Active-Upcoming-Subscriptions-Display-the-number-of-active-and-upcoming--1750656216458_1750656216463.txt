@@ -1,0 +1,147 @@
+1. Dashboard Enhancements
+Active & Upcoming Subscriptions
+Display the number of active and upcoming subscriptions as summary tiles.
+
+On clicking the number, show a detailed list of the corresponding subscriptions with full information.
+
+Recent Activity Logs
+Show a timeline or list of recently added or updated subscriptions.
+
+Include the username or user ID responsible for each action.
+
+2. Add Subscription Page – Field Requirements
+New Fields:
+Status – Dropdown with options:
+
+Active, Cancelled
+
+Reminder Days – Integer input
+
+Must be greater than 0 (do not allow 0)
+
+Reminder Policy – Dropdown with values:
+
+One time (default)
+
+Two times
+
+Until Renewal
+
+Conditional Logic:
+If Reminder Days = 1, only allow "One time"
+
+Disable or hide "Two times" and "Until Renewal"
+
+3. Reminder Policy Logic
+Logic Based on Reminder Policy and Reminder Days (n):
+
+One time – One notification is sent n days before the subscription end date.
+
+Two times – Two notifications:
+
+First at n days before
+
+Second at n/2 days before (rounded down)
+
+Until Renewal – Continuous daily notifications from:
+
+Day n before the end date
+
+Down to the final day of the subscription
+
+4. Edit Subscription Functionality
+On the Subscription List page, each item should have an Edit button.
+
+Clicking it should open the Edit Subscription Page, pre-filled with existing data for that subscription.
+
+5. Configuration Setup (Reminder Tab Renamed)
+Rename the “Reminder” tab to "Configuration Setup".
+
+Inside this tab:
+Allow users to add new subscription categories.
+
+Preload default categories:
+
+Software, Music, News, Business Tool, Cloud Storage, Regulatory, Entertainment, Others
+
+Categories Management:
+Each category should have a checkbox.
+
+Checked categories will be shown in the Subscription Card.
+
+These checked categories will also appear in the dropdown while creating a new subscription.
+
+6. Reports Section
+Add the following new reports:
+
+Cancelled Subscriptions Report
+
+Shows all cancelled subscriptions with details like date, duration, etc.
+
+Renewal Due Report
+
+Lists subscriptions that are due for renewal in the upcoming days.
+
+Retention / Duration Report
+
+Shows average subscription length
+
+Calculates how long subscriptions typically last before being cancelled.
+
+7. Notifications Tab
+Add a new tab called "Notifications".
+
+Features:
+List of all active reminders/alerts based on Reminder Policy.
+
+Columns include:
+
+Subscription Name
+
+Category
+
+Reminder Type
+
+Reminder Trigger Date
+
+Subscription End Date
+
+Each notification record should include a "View" button that takes the user directly to the related Subscription Detail Page.
+
+8. User Roles & Login Access Control
+Admin Login
+Full Access
+
+Can:
+
+View, Add, Edit, and Delete subscriptions
+
+Access Configuration Setup
+
+Manage Categories
+
+View and manage Notifications
+
+Access all Reports
+
+User Login
+Limited Access
+
+Can:
+
+View and edit subscriptions
+
+Add new subscriptions
+
+View Notifications
+
+View reports
+
+Cannot:
+
+Delete subscriptions
+
+Access Configuration Setup
+
+Add, edit, or delete categories
+
