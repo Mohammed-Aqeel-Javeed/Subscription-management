@@ -76,7 +76,7 @@ export class MongoStorage implements IStorage {
     await db.collection("users").insertOne(doc);
     // Return user with both id and _id for frontend compatibility
     return {
-      id: typeof doc._id === 'object' && doc._id && typeof doc._id.toString === 'function' ? parseInt(doc._id.toString(), 10) : 0,
+      id: typeof doc._id === 'object' && doc._id ? parseInt((doc._id as import("mongodb").ObjectId).toString(), 10) : 0,
       tenantId: doc.tenantId || tenantId,
       status: typeof doc.status === 'string' ? doc.status : "active",
       name: doc.name || "",
@@ -182,7 +182,7 @@ export class MongoStorage implements IStorage {
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
     return {
-  id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+  id: typeof doc._id === 'object' && doc._id ? parseInt((doc._id as import("mongodb").ObjectId).toString(), 10) : 0,
       tenantId: doc.tenantId || tenantId,
       serviceName: doc.serviceName || "",
       vendor: doc.vendor || "",
