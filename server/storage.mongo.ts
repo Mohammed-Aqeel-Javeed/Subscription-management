@@ -82,7 +82,7 @@ export class MongoStorage implements IStorage {
       name: doc.name || "",
       email: doc.email || "",
       role: doc.role || "viewer",
-      lastLogin: doc.lastLogin ?? null
+  lastLogin: 'lastLogin' in doc ? doc.lastLogin ?? null : null
     };
   }
   async updateUser(id: string, user: Partial<InsertUser>, tenantId: string): Promise<User | undefined> {
