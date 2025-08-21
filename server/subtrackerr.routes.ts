@@ -2,15 +2,14 @@
 // List all history records
 
 
+import { ObjectId } from "mongodb";
 // --- Payment Methods API ---
-import { ObjectId as PaymentObjectId } from "mongodb";
-
+const PaymentObjectId = ObjectId;
 // List all payment methods
 // --- Employees API ---
-import { ObjectId as EmployeeObjectId } from "mongodb";
-
+const EmployeeObjectId = ObjectId;
 // --- Ledger API ---
-import { ObjectId as LedgerObjectId } from "mongodb";
+const LedgerObjectId = ObjectId;
 
 
 import { Router, Request, Response, NextFunction } from "express";
@@ -112,7 +111,7 @@ router.get("/api/history/list", async (req: Request, res: Response) => {
       .toArray();
 
     // Convert all IDs to strings for consistency
-    const processed = items.map(item => ({
+    const processed = items.map((item: any) => ({
       ...item,
       _id: item._id?.toString(),
       subscriptionId: item.subscriptionId?.toString(),
@@ -126,13 +125,13 @@ router.get("/api/history/list", async (req: Request, res: Response) => {
       } : undefined
     }));
 
-    res.status(200).json(processed);
-  } catch (error: unknown) {
-    console.error("History list error:", error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    res.status(500).json({ message: "Failed to fetch history records", error: errorMessage });
-  }
-});
+      res.status(200).json(processed);
+    } catch (error: unknown) {
+      console.error("History list error:", error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      res.status(500).json({ message: "Failed to fetch history records", error: errorMessage });
+    }
+  }); // <-- Add this closing brace to properly end the route handler
 
 // Get history for a specific subscription
 router.get("/api/history/:subscriptionId", async (req: Request, res: Response) => {
@@ -198,7 +197,7 @@ router.get("/api/history/:subscriptionId", async (req: Request, res: Response) =
     }
     
     // Convert IDs to strings for the frontend
-    const processedItems = items.map(item => ({
+    const processedItems = items.map((item: any) => ({
       ...item,
       _id: item._id.toString(),
       subscriptionId: item.subscriptionId?.toString ? item.subscriptionId.toString() : item.subscriptionId,
@@ -375,7 +374,6 @@ router.get("/api/compliance/list", async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to fetch compliance data", error });
   }
 });
-import { ObjectId } from "mongodb";
 // Delete a compliance filing from the database
 router.delete("/api/compliance/:id", async (req: Request, res: Response) => {
   try {
@@ -481,8 +479,8 @@ router.get("/api/company/categories", async (req: Request, res: Response) => {
     const items = await collection.find({}).toArray();
     // Only return categories with valid, non-empty names
     const categories = items
-      .filter(item => typeof item.name === "string" && item.name.trim())
-      .map(item => ({
+      .filter((item: any) => typeof item.name === "string" && item.name.trim())
+      .map((item: any) => ({
         name: item.name,
         visible: typeof item.visible === "boolean" ? item.visible : true
       }));
