@@ -11,8 +11,6 @@ export interface AuthUser {
 
 export interface AuthRequest extends Request {
   user?: AuthUser;
-  headers: Record<string, any>;
-  cookies: Record<string, any>;
 }
 
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {

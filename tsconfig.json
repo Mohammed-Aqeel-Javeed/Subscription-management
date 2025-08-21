@@ -2,20 +2,17 @@
   "include": ["client/src/**/*", "shared/**/*", "server/**/*"],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
-  "outDir": "dist/server",
-  "allowJs": true,
-  "declaration": true,
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
-  // "noEmit": true, // Removed to allow TypeScript to emit compiled files
+    "noEmit": true,
     "module": "ESNext",
     "strict": true,
     "lib": ["esnext", "dom", "dom.iterable"],
     "jsx": "react-jsx",
     "esModuleInterop": true,
     "skipLibCheck": true,
-  // "allowImportingTsExtensions": true, // Removed to fix TypeScript error
-  "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "moduleResolution": "node",
     "baseUrl": ".",
     // Removed explicit 'types' to avoid missing type definition errors
     "paths": {

@@ -1,11 +1,10 @@
 import { Db, ObjectId } from "mongodb";
 import { connectToDatabase } from "./mongo";
-import type { IStorage } from "./storage.js";
-// ...existing code...
-import { User, InsertUser, Subscription, InsertSubscription, Reminder, InsertReminder, DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, NotificationItem } from "../shared/schema";
+import type { IStorage } from "./storage";
+import type { User, InsertUser, Subscription, InsertSubscription, Reminder, InsertReminder, DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, NotificationItem } from "@shared/schema";
 
 // Helper to get tenantId from context (pass as argument from API)
-function getTenantFilter(tenantId: string): any {
+function getTenantFilter(tenantId: string) {
   return { tenantId };
 }
 
@@ -24,7 +23,7 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const users = await db.collection("users").find(getTenantFilter(tenantId)).toArray();
     // Map MongoDB _id to id for frontend compatibility
-  return users.map((u: any) => ({ ...u, id: u._id?.toString() }));
+    return users.map(u => ({ ...u, id: u._id?.toString() }));
   }
   async getUser(id: string, tenantId: string): Promise<User | undefined> {
     const db = await this.getDb();
@@ -84,7 +83,7 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const subs = await db.collection<Subscription>("subscriptions").find(getTenantFilter(tenantId)).toArray();
     // Ensure no empty string for Select fields
-  return subs.map((s: any) => ({
+    return subs.map(s => ({
       ...s,
       billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
       category: s.category && s.category !== "" ? s.category : "Software",
@@ -226,7 +225,7 @@ export class MongoStorage implements IStorage {
   async getReminders(tenantId: string): Promise<Reminder[]> {
     const db = await this.getDb();
     const reminders = await db.collection("reminders").find(getTenantFilter(tenantId)).toArray();
-  return reminders.map((r: any) => ({ ...r, id: r._id?.toString() }));
+    return reminders.map(r => ({ ...r, id: r._id?.toString() }));
   }
   async getReminderBySubscriptionId(subscriptionId: number): Promise<Reminder | undefined> {
     const db = await this.getDb();
@@ -451,7 +450,7 @@ export class MongoStorage implements IStorage {
       },
       { $sort: { "_id": 1 } }
     ]).toArray();
-  return trends.map((t: any) => ({ month: t._id, amount: t.amount }));
+    return trends.map(t => ({ month: t._id, amount: t.amount }));
   }
 
   async getCategoryBreakdown(tenantId: string): Promise<CategoryBreakdown[]> {
@@ -466,7 +465,7 @@ export class MongoStorage implements IStorage {
       }
     ]).toArray();
     const colorList = ["#6366f1", "#f59e42", "#10b981", "#ef4444", "#3b82f6", "#a78bfa", "#f43f5e", "#fbbf24"];
-  return categories.map((c: any, i: number) => ({ category: c._id, amount: c.amount, color: colorList[i % colorList.length] }));
+    return categories.map((c, i) => ({ category: c._id, amount: c.amount, color: colorList[i % colorList.length] }));
   }
 
   async getRecentActivity(tenantId: string): Promise<RecentActivity[]> {
@@ -514,7 +513,7 @@ export class MongoStorage implements IStorage {
       }
     }
     const subActivities: RecentActivity[] = Array.from(subActivitiesMap.values());
-  const reminderActivities: RecentActivity[] = reminders.map((r: any) => {
+    const reminderActivities: RecentActivity[] = reminders.map(r => {
       let desc = `Reminder for subscription ${r.subscriptionId}`;
       let icon = "bell";
       let action = "reminder";
@@ -528,7 +527,7 @@ export class MongoStorage implements IStorage {
         action
       };
     });
-  const all: RecentActivity[] = [...subActivities, ...reminderActivities].sort((a: any, b: any) => (b.timestamp || "") < (a.timestamp || "") ? -1 : 1);
+    const all: RecentActivity[] = [...subActivities, ...reminderActivities].sort((a, b) => (b.timestamp || "") < (a.timestamp || "") ? -1 : 1);
     return all.slice(0, 10);
   }
 
@@ -595,7 +594,7 @@ export class MongoStorage implements IStorage {
           reminderTriggeredDate = found;
         }
       }
-  let reminderObj = subReminders.find((r: any) => r.reminderDate === (reminderTriggeredDate ? reminderTriggeredDate.toISOString().slice(0, 10) : null));
+      let reminderObj = subReminders.find((r: any) => r.reminderDate === (reminderTriggeredDate ? reminderTriggeredDate.toISOString().slice(0, 10) : null));
       if (!reminderObj && subReminders.length > 0) reminderObj = subReminders[0];
       notifications.push({
         id: reminderObj?._id?.toString() || reminderObj?.id || subId,

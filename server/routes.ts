@@ -1,9 +1,8 @@
 import type { Express } from "express";
-import type { Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage.js";
+import { storage } from "./storage";
 import { ObjectId } from "mongodb";
-import { insertUserSchema, insertSubscriptionSchema, insertReminderSchema } from "../shared/schema";
+import { insertUserSchema, insertSubscriptionSchema, insertReminderSchema } from "@shared/schema";
 import { z } from "zod";
 import subtrackerrRouter from "./subtrackerr.routes";
 import analyticsRouter from "./analytics.routes";
@@ -14,7 +13,7 @@ import { connectToDatabase } from "./mongo";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Logout route - clears JWT cookie
-  app.post("/api/logout", (req: Request, res: Response) => {
+  app.post("/api/logout", (req, res) => {
     res.cookie("token", "", {
       httpOnly: false,
       secure: false,
@@ -27,7 +26,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(cookieParser());
   
   // JWT middleware to set req.user and req.user.tenantId (same as subtrackerr.routes.ts)
-  app.use((req: Request, res: Response, next: NextFunction) => {
+  app.use((req, res, next) => {
     let token;
     // Support both Authorization header and cookie
     if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
@@ -56,7 +55,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     credentials: true
   }));
   // Signup route - saves to signup collection
-  app.post("/api/signup", async (req: Request, res: Response) => {
+  app.post("/api/signup", async (req, res) => {
     try {
       const { fullName, email, password, tenantId } = req.body;
       console.log('Signup request received:', { fullName, email, tenantId }); // Debug log
@@ -96,7 +95,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Login route - authenticates user and sets JWT cookie
-  app.post("/api/login", async (req: Request, res: Response) => {
+  app.post("/api/login", async (req, res) => {
     try {
       const { email, password } = req.body;
       console.log('Login attempt for email:', email); // Debug log
@@ -146,7 +145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   // Delete a notification/reminder by id
-  app.delete("/api/notifications/:id", async (req: Request, res: Response) => {
+  app.delete("/api/notifications/:id", async (req, res) => {
     const { id } = req.params;
     try {
       const deleted = await storage.deleteReminder(id);
@@ -164,7 +163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register analytics routes
   app.use(analyticsRouter);
   // Users routes
-  app.get("/api/users", async (req: Request, res: Response) => {
+  app.get("/api/users", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -175,7 +174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/users/:id", async (req: Request, res: Response) => {
+  app.get("/api/users/:id", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -190,7 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/users", async (req: Request, res: Response) => {
+  app.post("/api/users", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -205,7 +204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/users/:id", async (req: Request, res: Response) => {
+  app.put("/api/users/:id", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -224,7 +223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/users/:id", async (req: Request, res: Response) => {
+  app.delete("/api/users/:id", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -240,7 +239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Subscriptions routes
-  app.get("/api/subscriptions", async (req: Request, res: Response) => {
+  app.get("/api/subscriptions", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -251,7 +250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/subscriptions/:id", async (req: Request, res: Response) => {
+  app.get("/api/subscriptions/:id", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -266,7 +265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/subscriptions", async (req: Request, res: Response) => {
+  app.post("/api/subscriptions", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -285,7 +284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/subscriptions/:id", async (req: Request, res: Response) => {
+  app.put("/api/subscriptions/:id", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -308,7 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/subscriptions/:id", async (req: Request, res: Response) => {
+  app.delete("/api/subscriptions/:id", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -334,7 +333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Analytics routes
-  app.get("/api/analytics/dashboard", async (req: Request, res: Response) => {
+  app.get("/api/analytics/dashboard", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -345,7 +344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/trends", async (req: Request, res: Response) => {
+  app.get("/api/analytics/trends", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -356,7 +355,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/categories", async (req: Request, res: Response) => {
+  app.get("/api/analytics/categories", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -367,7 +366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/analytics/activity", async (req: Request, res: Response) => {
+  app.get("/api/analytics/activity", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -379,7 +378,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reminders routes
-  app.get("/api/reminders", async (req: Request, res: Response) => {
+  app.get("/api/reminders", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -390,7 +389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/reminders", async (req: Request, res: Response) => {
+  app.post("/api/reminders", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -405,7 +404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/reminders/:id", async (req: Request, res: Response) => {
+  app.put("/api/reminders/:id", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
@@ -425,7 +424,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Notifications routes
-  app.get("/api/notifications", async (req: Request, res: Response) => {
+  app.get("/api/notifications", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
