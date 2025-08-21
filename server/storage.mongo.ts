@@ -54,7 +54,20 @@ export class MongoStorage implements IStorage {
       lastLogin: user.lastLogin ?? null
     };
   }
-  async getUserByEmail(email: string): Promise<User | undefined> { throw new Error('Not implemented'); }
+  async getUserByEmail(email: string, tenantId: string): Promise<User | undefined> {
+    const db = await this.getDb();
+    const user = await db.collection("users").findOne({ email, tenantId });
+    if (!user) return undefined;
+    return {
+      id: typeof user._id === 'object' && user._id ? parseInt(user._id.toString(), 10) : 0,
+      tenantId: user.tenantId || tenantId,
+      status: typeof user.status === 'string' ? user.status : "active",
+      name: user.name || "",
+      email: user.email || "",
+      role: user.role || "viewer",
+      lastLogin: user.lastLogin ?? null
+    };
+  }
   async createUser(user: InsertUser, tenantId: string): Promise<User> {
     const db = await this.getDb();
     // Always generate a new ObjectId for MongoDB _id
@@ -142,12 +155,22 @@ export class MongoStorage implements IStorage {
     const subscription = await db.collection("subscriptions").findOne(filter);
     if (!subscription) return undefined;
     return {
-      ...subscription,
-      id: subscription._id?.toString(),
+      id: typeof subscription._id === 'object' && subscription._id ? parseInt(subscription._id.toString(), 10) : 0,
+      tenantId: subscription.tenantId || tenantId,
+      serviceName: subscription.serviceName || "",
+      vendor: subscription.vendor || "",
+      amount: typeof subscription.amount === 'string' ? subscription.amount : subscription.amount?.toString() || "0",
       billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
       category: subscription.category && subscription.category !== "" ? subscription.category : "Software",
+      startDate: subscription.startDate ? new Date(subscription.startDate) : new Date(),
+      nextRenewal: subscription.nextRenewal ? new Date(subscription.nextRenewal) : new Date(),
       status: subscription.status && subscription.status !== "" ? subscription.status : "Active",
+      reminderDays: subscription.reminderDays || 7,
       reminderPolicy: subscription.reminderPolicy && subscription.reminderPolicy !== "" ? subscription.reminderPolicy : "One time",
+      notes: subscription.notes || null,
+      isActive: typeof subscription.isActive === 'boolean' ? subscription.isActive : true,
+      createdAt: subscription.createdAt ? new Date(subscription.createdAt) : new Date(),
+      updatedBy: subscription.updatedBy || null
     };
   }
   async createSubscription(subscription: InsertSubscription, tenantId: string): Promise<Subscription> {
@@ -327,7 +350,16 @@ export class MongoStorage implements IStorage {
     const { ObjectId } = await import("mongodb");
     const doc = { ...reminder, tenantId, _id: new ObjectId() };
     await db.collection("reminders").insertOne(doc);
-    return { ...reminder, id: doc._id.toString(), tenantId } as Reminder;
+    return {
+      id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+      tenantId: doc.tenantId || tenantId,
+      subscriptionId: doc.subscriptionId,
+      alertDays: doc.alertDays ?? 7,
+      emailEnabled: doc.emailEnabled ?? true,
+      whatsappEnabled: doc.whatsappEnabled ?? false,
+      reminderType: doc.reminderType || "renewal",
+      monthlyDay: doc.monthlyDay ?? null
+    };
   }
   async updateReminder(id: number, reminder: Partial<InsertReminder>, tenantId: string): Promise<Reminder | undefined> {
     const db = await this.getDb();
@@ -340,8 +372,18 @@ export class MongoStorage implements IStorage {
       { $set: reminder },
       { returnDocument: "after" }
     );
-    if (!result) return undefined;
-    return result.value as Reminder | undefined;
+    if (!result || !result.value) return undefined;
+    const r = result.value;
+    return {
+      id: typeof r._id === 'object' && r._id ? parseInt(r._id.toString(), 10) : 0,
+      tenantId: r.tenantId || tenantId,
+      subscriptionId: r.subscriptionId,
+      alertDays: r.alertDays ?? 7,
+      emailEnabled: r.emailEnabled ?? true,
+      whatsappEnabled: r.whatsappEnabled ?? false,
+      reminderType: r.reminderType || "renewal",
+      monthlyDay: r.monthlyDay ?? null
+    };
   }
   async deleteReminder(id: string): Promise<boolean> {
     const db = await this.getDb();
