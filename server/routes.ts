@@ -275,7 +275,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof subscriptionData.amount !== "number") {
         subscriptionData.amount = parseFloat(subscriptionData.amount);
       }
-      const subscription = await storage.createSubscription(subscriptionData, tenantId);
+  // Ensure id is always a string if needed
+  if (typeof subscriptionData.id === 'number') subscriptionData.id = subscriptionData.id.toString();
+  const subscription = await storage.createSubscription(subscriptionData, tenantId);
       res.status(201).json(subscription);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -296,7 +298,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof subscriptionData.amount !== "number") {
         subscriptionData.amount = parseFloat(subscriptionData.amount);
       }
-      const subscription = await storage.updateSubscription(id ?? "", subscriptionData, tenantId);
+  // Ensure id is always a string if needed
+  if (typeof subscriptionData.id === 'number') subscriptionData.id = subscriptionData.id.toString();
+  const subscription = await storage.updateSubscription(id ?? "", subscriptionData, tenantId);
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
