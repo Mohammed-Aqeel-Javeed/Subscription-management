@@ -95,6 +95,7 @@ export class MemStorage implements IStorage {
     const id = this.currentUserId++;
     const user: User = {
       id,
+      tenantId,
       name: insertUser.name,
       email: insertUser.email,
       role: insertUser.role || "viewer",
@@ -133,6 +134,7 @@ export class MemStorage implements IStorage {
     const id = this.currentSubscriptionId++;
     const subscription: Subscription = {
       id,
+      tenantId,
       serviceName: insertSubscription.serviceName,
       vendor: insertSubscription.vendor,
       amount: insertSubscription.amount,
@@ -166,6 +168,7 @@ export class MemStorage implements IStorage {
   private async createCategoryBasedReminder(subscription: Subscription, tenantId: string): Promise<void> {
     const alertDays = this.getCategoryDefaultAlertDays(subscription.category, subscription.billingCycle);
     const reminderData: InsertReminder = {
+      tenantId,
       subscriptionId: subscription.id,
       alertDays,
       emailEnabled: true,
@@ -221,8 +224,9 @@ export class MemStorage implements IStorage {
   async createReminder(insertReminder: InsertReminder, tenantId: string): Promise<Reminder> {
     const id = this.currentReminderId++;
     const reminder: Reminder = {
-      ...insertReminder,
       id,
+      tenantId,
+      subscriptionId: insertReminder.subscriptionId,
       alertDays: insertReminder.alertDays ?? 7,
       emailEnabled: insertReminder.emailEnabled ?? true,
       whatsappEnabled: insertReminder.whatsappEnabled ?? false,
