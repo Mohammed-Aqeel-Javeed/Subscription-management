@@ -278,7 +278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Remove id property from subscriptionData if present
   // Do not set or use id property in subscriptionData
   const subscription = await storage.createSubscription(subscriptionData, tenantId);
-      res.status(201).json(subscription);
+  res.status(201).json(subscription);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid subscription data", errors: error.issues });
