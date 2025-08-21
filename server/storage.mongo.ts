@@ -26,11 +26,11 @@ export class MongoStorage implements IStorage {
     return users.map(u => ({
       id: typeof u._id === 'object' && u._id ? parseInt(u._id.toString(), 10) : 0,
       tenantId: u.tenantId || tenantId,
-      status: typeof u.status === 'string' ? u.status.toLowerCase() : "active",
+      status: typeof u.status === 'string' ? u.status : "active",
       name: u.name || "",
       email: u.email || "",
-      role: u.role || "user",
-      lastLogin: u.lastLogin || null
+      role: u.role || "viewer",
+      lastLogin: u.lastLogin ?? null
     }));
   }
   async getUser(id: string, tenantId: string): Promise<User | undefined> {
@@ -44,7 +44,15 @@ export class MongoStorage implements IStorage {
     }
     const user = await db.collection("users").findOne(filter);
     if (!user) return undefined;
-    return { ...user, id: user._id?.toString() };
+    return {
+      id: typeof user._id === 'object' && user._id ? parseInt(user._id.toString(), 10) : 0,
+      tenantId: user.tenantId || tenantId,
+      status: typeof user.status === 'string' ? user.status : "active",
+      name: user.name || "",
+      email: user.email || "",
+      role: user.role || "viewer",
+      lastLogin: user.lastLogin ?? null
+    };
   }
   async getUserByEmail(email: string): Promise<User | undefined> { throw new Error('Not implemented'); }
   async createUser(user: InsertUser, tenantId: string): Promise<User> {
@@ -54,7 +62,15 @@ export class MongoStorage implements IStorage {
     const doc = { ...user, tenantId, _id: new ObjectId() };
     await db.collection("users").insertOne(doc);
     // Return user with both id and _id for frontend compatibility
-    return { ...user, id: doc._id.toString(), _id: doc._id, tenantId } as User;
+    return {
+      id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+      tenantId: doc.tenantId || tenantId,
+      status: typeof doc.status === 'string' ? doc.status : "active",
+      name: doc.name || "",
+      email: doc.email || "",
+      role: doc.role || "viewer",
+      lastLogin: doc.lastLogin ?? null
+    };
   }
   async updateUser(id: string, user: Partial<InsertUser>, tenantId: string): Promise<User | undefined> {
     const db = await this.getDb();
@@ -71,7 +87,16 @@ export class MongoStorage implements IStorage {
       { returnDocument: "after" }
     );
     if (!result || !result.value) return undefined;
-    return { ...result.value, id: result.value._id?.toString(), _id: result.value._id } as User;
+    const u = result.value;
+    return {
+      id: typeof u._id === 'object' && u._id ? parseInt(u._id.toString(), 10) : 0,
+      tenantId: u.tenantId || tenantId,
+      status: typeof u.status === 'string' ? u.status : "active",
+      name: u.name || "",
+      email: u.email || "",
+      role: u.role || "viewer",
+      lastLogin: u.lastLogin ?? null
+    };
   }
   async deleteUser(id: string, tenantId: string): Promise<boolean> {
     const db = await this.getDb();
@@ -93,26 +118,21 @@ export class MongoStorage implements IStorage {
     // Map MongoDB _id to id (number) and ensure all required Subscription fields
     return subs.map(s => ({
       id: typeof s._id === 'object' && s._id ? parseInt(s._id.toString(), 10) : 0,
-      startDate: s.startDate,
-      nextRenewal: s.nextRenewal,
-      paymentMethod: s.paymentMethod || "",
+      tenantId: s.tenantId || tenantId,
       serviceName: s.serviceName || "",
       vendor: s.vendor || "",
-      amount: s.amount || 0,
+      amount: typeof s.amount === 'string' ? s.amount : s.amount?.toString() || "0",
       billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
       category: s.category && s.category !== "" ? s.category : "Software",
-      department: s.department || "",
-      departments: s.departments || [],
-      owner: s.owner || "",
-      status: s.status && s.status !== "" ? s.status : "active",
+      startDate: s.startDate ? new Date(s.startDate) : new Date(),
+      nextRenewal: s.nextRenewal ? new Date(s.nextRenewal) : new Date(),
+      status: s.status && s.status !== "" ? s.status : "Active",
       reminderDays: s.reminderDays || 7,
       reminderPolicy: s.reminderPolicy && s.reminderPolicy !== "" ? s.reminderPolicy : "One time",
-      notes: s.notes || "",
+      notes: s.notes || null,
       isActive: typeof s.isActive === 'boolean' ? s.isActive : true,
-      tenantId: s.tenantId || tenantId,
-      createdAt: s.createdAt || new Date(),
-      updatedAt: s.updatedAt || new Date(),
-      // add any other required fields from your shared type
+      createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
+      updatedBy: s.updatedBy || null
     }));
   }
   async getSubscription(id: string, tenantId: string): Promise<Subscription | undefined> {
@@ -141,26 +161,21 @@ export class MongoStorage implements IStorage {
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
     return {
       id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
-      tenantId: doc.tenantId,
-      startDate: doc.startDate,
-      nextRenewal: doc.nextRenewal,
-      paymentMethod: doc.paymentMethod || "",
+      tenantId: doc.tenantId || tenantId,
       serviceName: doc.serviceName || "",
       vendor: doc.vendor || "",
-      amount: doc.amount || 0,
+      amount: typeof doc.amount === 'string' ? doc.amount : doc.amount?.toString() || "0",
       billingCycle: doc.billingCycle || "monthly",
       category: doc.category || "Software",
-      department: doc.department || "",
-      departments: doc.departments || [],
-      owner: doc.owner || "",
-      status: doc.status || "active",
+      startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
+      nextRenewal: doc.nextRenewal ? new Date(doc.nextRenewal) : new Date(),
+      status: doc.status || "Active",
       reminderDays: doc.reminderDays || 7,
       reminderPolicy: doc.reminderPolicy || "One time",
-      notes: doc.notes || "",
+      notes: doc.notes || null,
       isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
-      updatedBy: doc.updatedBy
+      createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
+      updatedBy: doc.updatedBy || null
     };
   }
   async updateSubscription(id: string, subscription: Partial<InsertSubscription>, tenantId: string): Promise<Subscription | undefined> {
@@ -183,24 +198,19 @@ export class MongoStorage implements IStorage {
     return {
       id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
       tenantId: doc.tenantId || tenantId,
-      startDate: doc.startDate,
-      nextRenewal: doc.nextRenewal,
-      paymentMethod: doc.paymentMethod || "",
       serviceName: doc.serviceName || "",
       vendor: doc.vendor || "",
-      amount: doc.amount || 0,
+      amount: typeof doc.amount === 'string' ? doc.amount : doc.amount?.toString() || "0",
       billingCycle: doc.billingCycle || "monthly",
       category: doc.category || "Software",
-      department: doc.department || "",
-      departments: doc.departments || [],
-      owner: doc.owner || "",
-      status: doc.status || "active",
+      startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
+      nextRenewal: doc.nextRenewal ? new Date(doc.nextRenewal) : new Date(),
+      status: doc.status || "Active",
       reminderDays: doc.reminderDays || 7,
       reminderPolicy: doc.reminderPolicy || "One time",
-      notes: doc.notes || "",
+      notes: doc.notes || null,
       isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
-      createdAt: doc.createdAt || new Date(),
-      updatedAt: doc.updatedAt || new Date(),
+      createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
       updatedBy: doc.updatedBy || null
     };
   }
@@ -302,9 +312,8 @@ export class MongoStorage implements IStorage {
       alertDays: r.alertDays || 7,
       emailEnabled: r.emailEnabled ?? true,
       whatsappEnabled: r.whatsappEnabled ?? false,
-      reminderType: r.reminderType || "default",
-      monthlyDay: r.monthlyDay ?? null,
-      // add any other required fields from your shared type
+      reminderType: r.reminderType || "renewal",
+      monthlyDay: r.monthlyDay ?? null
     }));
   }
   async getReminderBySubscriptionId(subscriptionId: number): Promise<Reminder | undefined> {
