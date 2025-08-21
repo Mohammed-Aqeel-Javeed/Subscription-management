@@ -260,7 +260,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
-      res.json(subscription);
+      // Ensure id is a string for frontend compatibility
+      res.json({ ...subscription, id: subscription.id.toString() });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch subscription" });
     }
@@ -278,7 +279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Remove id property from subscriptionData if present
   // Do not set or use id property in subscriptionData
   const subscription = await storage.createSubscription(subscriptionData, tenantId);
-  res.status(201).json(subscription);
+  res.status(201).json({ ...subscription, id: subscription.id.toString() });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid subscription data", errors: error.issues });
@@ -304,7 +305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
-      res.json(subscription);
+  res.json({ ...subscription, id: subscription.id.toString(), email: subscription.email ?? "" });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid subscription data", errors: error.issues });
