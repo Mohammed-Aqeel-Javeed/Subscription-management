@@ -135,11 +135,33 @@ export class MongoStorage implements IStorage {
     const { ObjectId } = await import("mongodb");
     // Remove updatedAt if present
     const { updatedAt, ...rest } = subscription;
-    const doc = { ...rest, tenantId, _id: new ObjectId() };
+    const doc = { ...rest, tenantId, _id: new ObjectId(), createdAt: new Date(), updatedAt: new Date(), updatedBy: null };
     await db.collection("subscriptions").insertOne(doc);
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
-    return { ...rest, id: doc._id.toString(), tenantId } as Subscription;
+    return {
+      id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+      tenantId: doc.tenantId,
+      startDate: doc.startDate,
+      nextRenewal: doc.nextRenewal,
+      paymentMethod: doc.paymentMethod || "",
+      serviceName: doc.serviceName || "",
+      vendor: doc.vendor || "",
+      amount: doc.amount || 0,
+      billingCycle: doc.billingCycle || "monthly",
+      category: doc.category || "Software",
+      department: doc.department || "",
+      departments: doc.departments || [],
+      owner: doc.owner || "",
+      status: doc.status || "active",
+      reminderDays: doc.reminderDays || 7,
+      reminderPolicy: doc.reminderPolicy || "One time",
+      notes: doc.notes || "",
+      isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+      updatedBy: doc.updatedBy
+    };
   }
   async updateSubscription(id: string, subscription: Partial<InsertSubscription>, tenantId: string): Promise<Subscription | undefined> {
     const db = await this.getDb();
@@ -157,7 +179,30 @@ export class MongoStorage implements IStorage {
       await db.collection("reminders").deleteMany({ subscriptionId });
     }
     await this.generateAndInsertRemindersForSubscription(result.value, tenantId);
-    return result.value as Subscription | undefined;
+    const doc = result.value;
+    return {
+      id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+      tenantId: doc.tenantId || tenantId,
+      startDate: doc.startDate,
+      nextRenewal: doc.nextRenewal,
+      paymentMethod: doc.paymentMethod || "",
+      serviceName: doc.serviceName || "",
+      vendor: doc.vendor || "",
+      amount: doc.amount || 0,
+      billingCycle: doc.billingCycle || "monthly",
+      category: doc.category || "Software",
+      department: doc.department || "",
+      departments: doc.departments || [],
+      owner: doc.owner || "",
+      status: doc.status || "active",
+      reminderDays: doc.reminderDays || 7,
+      reminderPolicy: doc.reminderPolicy || "One time",
+      notes: doc.notes || "",
+      isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
+      createdAt: doc.createdAt || new Date(),
+      updatedAt: doc.updatedAt || new Date(),
+      updatedBy: doc.updatedBy || null
+    };
   }
   /**
    * Generate and insert reminders for a subscription (on create or update)
