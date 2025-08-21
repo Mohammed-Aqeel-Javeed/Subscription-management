@@ -12,7 +12,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "moduleResolution": "node",
+  "moduleResolution": "bundler",
     "baseUrl": ".",
     // Removed explicit 'types' to avoid missing type definition errors
     "paths": {

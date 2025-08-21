@@ -8,6 +8,8 @@ export interface AuthenticatedUser {
 
 export interface AuthenticatedRequest extends Request {
   user?: AuthenticatedUser;
+  headers: Record<string, any>;
+  cookies: Record<string, any>;
 }
 
 declare global {
