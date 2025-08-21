@@ -3,15 +3,14 @@
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
     "incremental": true,
-    "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
-    "noEmit": true,
-    "module": "ESNext",
+  "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
+  "outDir": "dist/server",
+  "module": "ESNext",
     "strict": true,
     "lib": ["esnext", "dom", "dom.iterable"],
     "jsx": "react-jsx",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "allowImportingTsExtensions": true,
     "moduleResolution": "node",
     "baseUrl": ".",
     // Removed explicit 'types' to avoid missing type definition errors
