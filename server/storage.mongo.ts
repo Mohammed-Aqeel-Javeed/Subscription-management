@@ -24,13 +24,13 @@ export class MongoStorage implements IStorage {
     const users = await db.collection("users").find(getTenantFilter(tenantId)).toArray();
     // Map MongoDB _id to id (number) and ensure all required User fields
     return users.map(u => ({
-      id: typeof u._id === 'object' && u._id ? parseInt(u._id.toString(), 10) : 0,
+      id: typeof u._id === 'object' && u._id && typeof u._id.toString === 'function' ? parseInt(u._id.toString(), 10) : 0,
       tenantId: u.tenantId || tenantId,
       status: typeof u.status === 'string' ? u.status : "active",
       name: u.name || "",
       email: u.email || "",
       role: u.role || "viewer",
-      lastLogin: 'lastLogin' in u ? u.lastLogin ?? null : null
+      lastLogin: u.lastLogin ?? null
     }));
   }
   async getUser(id: string, tenantId: string): Promise<User | undefined> {
@@ -76,13 +76,13 @@ export class MongoStorage implements IStorage {
     await db.collection("users").insertOne(doc);
     // Return user with both id and _id for frontend compatibility
     return {
-      id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+      id: typeof doc._id === 'object' && doc._id && typeof doc._id.toString === 'function' ? parseInt(doc._id.toString(), 10) : 0,
       tenantId: doc.tenantId || tenantId,
       status: typeof doc.status === 'string' ? doc.status : "active",
       name: doc.name || "",
       email: doc.email || "",
       role: doc.role || "viewer",
-  lastLogin: doc.lastLogin instanceof Date ? doc.lastLogin : null
+      lastLogin: doc.lastLogin ?? null
     };
   }
   async updateUser(id: string, user: Partial<InsertUser>, tenantId: string): Promise<User | undefined> {
