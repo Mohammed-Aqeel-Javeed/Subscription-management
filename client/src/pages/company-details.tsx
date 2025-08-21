@@ -1,3 +1,4 @@
+import { insertUserSchema } from "@shared/schema";
 import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -17,8 +18,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
-import { insertUserSchema } from "@shared/schema";
-import type { User as UserType, InsertUser } from "@shared/schema";
+// ...existing code...
+import type { User as UserType, InsertUser } from "@shared/types";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import Papa from 'papaparse';

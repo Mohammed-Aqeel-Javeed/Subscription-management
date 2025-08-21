@@ -27,6 +27,11 @@ export type NotificationItem = {
 	message: string;
 	read: boolean;
 	timestamp: string;
+	reminderTriggerDate?: string;
+	subscriptionName?: string;
+	category?: string;
+	subscriptionId?: string;
+	subscriptionEndDate?: string;
 };
 
 export type Subscription = {
