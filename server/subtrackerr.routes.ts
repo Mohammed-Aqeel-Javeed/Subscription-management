@@ -1022,4 +1022,4 @@ router.delete("/api/config/compliance-fields/:id", async (req, res) => {
   }
 });
 
-export default router;
+  export default router;
