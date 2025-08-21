@@ -30,7 +30,7 @@ export class MongoStorage implements IStorage {
       name: u.name || "",
       email: u.email || "",
       role: u.role || "viewer",
-      lastLogin: u.lastLogin ?? null
+      lastLogin: 'lastLogin' in u ? u.lastLogin ?? null : null
     }));
   }
   async getUser(id: string, tenantId: string): Promise<User | undefined> {
@@ -176,9 +176,8 @@ export class MongoStorage implements IStorage {
   async createSubscription(subscription: InsertSubscription, tenantId: string): Promise<Subscription> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
-    // Remove updatedAt if present
-    const { updatedAt, ...rest } = subscription;
-    const doc = { ...rest, tenantId, _id: new ObjectId(), createdAt: new Date(), updatedAt: new Date(), updatedBy: null };
+  // Don't destructure updatedAt, just spread subscription
+  const doc = { ...subscription, tenantId, _id: new ObjectId(), createdAt: new Date(), updatedAt: new Date(), updatedBy: null };
     await db.collection("subscriptions").insertOne(doc);
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
@@ -205,10 +204,10 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
     let filter: any = { $or: [ { _id: new ObjectId(id), tenantId }, { id, tenantId } ] };
-    const { updatedAt, ...rest } = subscription;
+    // Don't destructure updatedAt, just spread subscription
     const result = await db.collection("subscriptions").findOneAndUpdate(
       filter,
-      { $set: rest },
+      { $set: subscription },
       { returnDocument: "after" }
     );
     if (!result || !result.value) return undefined;
@@ -243,8 +242,8 @@ export class MongoStorage implements IStorage {
   private async generateAndInsertRemindersForSubscription(subscription: any, tenantId?: string) {
     const db = await this.getDb();
     // Always use _id string for subscriptionId
-    const subscriptionId = subscription._id?.toString();
-    if (!subscriptionId) return;
+  const subscriptionId = subscription._id ? subscription._id.toString() : (typeof subscription.id === 'string' ? subscription.id : undefined);
+  if (!subscriptionId) return;
     // Remove all old reminders for this subscription
     await db.collection("reminders").deleteMany({ subscriptionId });
 

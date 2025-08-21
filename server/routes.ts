@@ -254,8 +254,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
-      const id = req.params.id;
-      const subscription = await storage.getSubscription(id, tenantId);
+  const id = req.params.id;
+  // Ensure id is a string
+  const subscription = await storage.getSubscription(id ?? "", tenantId);
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
@@ -289,12 +290,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
       const id = req.params.id;
+      // Ensure id is a string
       let subscriptionData = insertSubscriptionSchema.partial().parse(req.body);
       // Ensure amount is a number
       if (typeof subscriptionData.amount !== "number") {
         subscriptionData.amount = parseFloat(subscriptionData.amount);
       }
-      const subscription = await storage.updateSubscription(id, subscriptionData, tenantId);
+      const subscription = await storage.updateSubscription(id ?? "", subscriptionData, tenantId);
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
