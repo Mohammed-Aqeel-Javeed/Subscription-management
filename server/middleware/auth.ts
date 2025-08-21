@@ -6,7 +6,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "subs_secret_key";
 export interface AuthUser {
   userId: string;
   email: string;
-  tenantId?: string;
+  tenantId: string;
 }
 
 export interface AuthRequest extends Request {
