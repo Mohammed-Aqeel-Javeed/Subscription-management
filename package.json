@@ -4,14 +4,15 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development tsx server/index.ts",
-  "build": "cd client && npm install && npm run build",
-  "build:server": "cross-env NODE_OPTIONS=--max_old_space_size=2048 tsc",
-    "vercel-build": "npm run build",
-  "start": "npm run build:server && cross-env NODE_ENV=production node dist/server/index.js",
-    "poststart": "start http://localhost:5000",
-    "check": "tsc",
-    "db:push": "drizzle-kit push"
+  "dev": "cross-env NODE_ENV=development tsx server/index.ts",
+  "build:client": "cd client && npm install && npm run build",
+  "build:server": "tsc",
+  "build": "npm run build:client && npm run build:server",
+  "vercel-build": "npm run build",
+  "start": "NODE_ENV=production node dist/server/index.js",
+  "poststart": "start http://localhost:5000",
+  "check": "tsc",
+  "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
