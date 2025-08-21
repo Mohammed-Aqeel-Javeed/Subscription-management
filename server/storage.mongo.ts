@@ -89,14 +89,30 @@ export class MongoStorage implements IStorage {
   // Subscriptions
   async getSubscriptions(tenantId: string): Promise<Subscription[]> {
     const db = await this.getDb();
-    const subs = await db.collection<Subscription>("subscriptions").find(getTenantFilter(tenantId)).toArray();
-    // Ensure no empty string for Select fields
+    const subs = await db.collection("subscriptions").find(getTenantFilter(tenantId)).toArray();
+    // Map MongoDB _id to id (number) and ensure all required Subscription fields
     return subs.map(s => ({
-      ...s,
+      id: typeof s._id === 'object' && s._id ? parseInt(s._id.toString(), 10) : 0,
+      startDate: s.startDate,
+      nextRenewal: s.nextRenewal,
+      paymentMethod: s.paymentMethod || "",
+      serviceName: s.serviceName || "",
+      vendor: s.vendor || "",
+      amount: s.amount || 0,
       billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
       category: s.category && s.category !== "" ? s.category : "Software",
-      status: s.status && s.status !== "" ? s.status : "Active",
+      department: s.department || "",
+      departments: s.departments || [],
+      owner: s.owner || "",
+      status: s.status && s.status !== "" ? s.status : "active",
+      reminderDays: s.reminderDays || 7,
       reminderPolicy: s.reminderPolicy && s.reminderPolicy !== "" ? s.reminderPolicy : "One time",
+      notes: s.notes || "",
+      isActive: typeof s.isActive === 'boolean' ? s.isActive : true,
+      tenantId: s.tenantId || tenantId,
+      createdAt: s.createdAt || new Date(),
+      updatedAt: s.updatedAt || new Date(),
+      // add any other required fields from your shared type
     }));
   }
   async getSubscription(id: string, tenantId: string): Promise<Subscription | undefined> {
@@ -233,7 +249,18 @@ export class MongoStorage implements IStorage {
   async getReminders(tenantId: string): Promise<Reminder[]> {
     const db = await this.getDb();
     const reminders = await db.collection("reminders").find(getTenantFilter(tenantId)).toArray();
-    return reminders.map(r => ({ ...r, id: r._id?.toString() }));
+    // Map MongoDB _id to id (number) and ensure all required Reminder fields
+    return reminders.map(r => ({
+      id: typeof r._id === 'object' && r._id ? parseInt(r._id.toString(), 10) : 0,
+      tenantId: r.tenantId || tenantId,
+      subscriptionId: typeof r.subscriptionId === 'string' ? parseInt(r.subscriptionId, 10) : r.subscriptionId || 0,
+      alertDays: r.alertDays || 7,
+      emailEnabled: r.emailEnabled ?? true,
+      whatsappEnabled: r.whatsappEnabled ?? false,
+      reminderType: r.reminderType || "default",
+      monthlyDay: r.monthlyDay ?? null,
+      // add any other required fields from your shared type
+    }));
   }
   async getReminderBySubscriptionId(subscriptionId: number): Promise<Reminder | undefined> {
     const db = await this.getDb();
