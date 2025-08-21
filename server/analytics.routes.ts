@@ -1,11 +1,11 @@
-import { Router, Request, Response } from "express";
+import { Router } from "express";
 import { connectToDatabase } from "./mongo";
 import { ObjectId } from "mongodb";
 
 const router = Router();
 
 // Get dashboard metrics
-router.get("/api/analytics/dashboard", async (req: Request, res: Response) => {
+router.get("/api/analytics/dashboard", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
@@ -117,7 +117,7 @@ router.get("/api/analytics/dashboard", async (req: Request, res: Response) => {
 });
 
 // Get spending trends
-router.get("/api/analytics/trends", async (req: Request, res: Response) => {
+router.get("/api/analytics/trends", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
@@ -128,7 +128,7 @@ router.get("/api/analytics/trends", async (req: Request, res: Response) => {
     sixMonthsAgo.setMonth(now.getMonth() - 6);
 
     // Generate an array of the last 6 months
-  const monthsArray = Array.from({ length: 6 }, (_: any, i: number) => {
+    const monthsArray = Array.from({ length: 6 }, (_, i) => {
       const date = new Date();
       date.setMonth(date.getMonth() - i);
       return {
@@ -146,10 +146,10 @@ router.get("/api/analytics/trends", async (req: Request, res: Response) => {
     }).toArray();
 
     // Calculate monthly spend for each month
-  const trendsData = monthsArray.map((monthData: any) => {
+    const trendsData = monthsArray.map(monthData => {
       let monthlyTotal = 0;
 
-  subscriptions.forEach((sub: any) => {
+      subscriptions.forEach(sub => {
         // Only include active subscriptions
         if (sub.status !== "Active") {
           return;
@@ -186,7 +186,7 @@ router.get("/api/analytics/trends", async (req: Request, res: Response) => {
 });
 
 // Get category breakdown
-router.get("/api/analytics/categories", async (req: Request, res: Response) => {
+router.get("/api/analytics/categories", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
@@ -226,7 +226,7 @@ router.get("/api/analytics/categories", async (req: Request, res: Response) => {
       "#84CC16"  // lime-500
     ];
 
-  const categoriesWithColors = categories.map((cat: any, index: number) => ({
+    const categoriesWithColors = categories.map((cat, index) => ({
       ...cat,
       color: colors[index % colors.length]
     }));    res.status(200).json(categoriesWithColors);
@@ -236,7 +236,7 @@ router.get("/api/analytics/categories", async (req: Request, res: Response) => {
 });
 
 // Get recent activity
-router.get("/api/analytics/activity", async (req: Request, res: Response) => {
+router.get("/api/analytics/activity", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("history");

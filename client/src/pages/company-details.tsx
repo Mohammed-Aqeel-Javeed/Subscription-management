@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Upload, Save, Eye, Settings, UserPlus, Trash2, User, Activity, UsersIcon, Search, Edit, Plus, Users, Shield } from "lucide-react";
+import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,7 +18,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
-  // ...existing code...
+// ...existing code...
 import type { User as UserType, InsertUser } from "@shared/types";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
@@ -36,9 +36,9 @@ const parseCSV = (text: string): Promise<any[]> => {
   return new Promise((resolve, reject) => {
     Papa.parse(text, {
       header: true,
-  complete: (results: any) => resolve(results.data),
-  error: (error: any) => reject(error),
-  transform: (value: string) => value.trim()
+      complete: (results) => resolve(results.data),
+      error: (error: any) => reject(error),
+      transform: (value) => value.trim()
     });
   });
 };
@@ -1283,7 +1283,7 @@ duration: 1000,
 const visibleCategoryObjects = categories.filter(cat => cat.visible);
 const hiddenCategoryObjects = categories.filter(cat => !cat.visible);
 // Get visible category names (strings) for dropdowns and forms
-// ...existing code...
+const visibleCategoryNames = visibleCategoryObjects.map(cat => cat.name).filter(name => typeof name === "string" && name.trim());
 
 // Get visible departments for use in dropdowns and cards
 const visibleDepartments = departments.filter(dept => dept.visible);

@@ -2,17 +2,18 @@
 // List all history records
 
 
-import { ObjectId } from "mongodb";
 // --- Payment Methods API ---
-const PaymentObjectId = ObjectId;
+import { ObjectId as PaymentObjectId } from "mongodb";
+
 // List all payment methods
 // --- Employees API ---
-const EmployeeObjectId = ObjectId;
+import { ObjectId as EmployeeObjectId } from "mongodb";
+
 // --- Ledger API ---
-const LedgerObjectId = ObjectId;
+import { ObjectId as LedgerObjectId } from "mongodb";
 
 
-import { Router, Request, Response, NextFunction } from "express";
+import { Router } from "express";
 import { connectToDatabase } from "./mongo";
 import jwt from "jsonwebtoken";
 import type { User } from "./types";
@@ -21,7 +22,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 const router = Router();
 
 // JWT middleware to set req.user and req.user.tenantId
-router.use((req: Request, res: Response, next: NextFunction) => {
+router.use((req, res, next) => {
   let token;
   // Support both Authorization header and cookie
   if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
@@ -45,7 +46,7 @@ router.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 // Add a new history record
-router.post("/api/history", async (req: Request, res: Response) => {
+router.post("/api/history", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const historyCollection = db.collection("history");
@@ -94,7 +95,7 @@ router.post("/api/history", async (req: Request, res: Response) => {
 });
 
 // Get all history records
-router.get("/api/history/list", async (req: Request, res: Response) => {
+router.get("/api/history/list", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("history");
@@ -111,7 +112,7 @@ router.get("/api/history/list", async (req: Request, res: Response) => {
       .toArray();
 
     // Convert all IDs to strings for consistency
-    const processed = items.map((item: any) => ({
+    const processed = items.map(item => ({
       ...item,
       _id: item._id?.toString(),
       subscriptionId: item.subscriptionId?.toString(),
@@ -125,16 +126,16 @@ router.get("/api/history/list", async (req: Request, res: Response) => {
       } : undefined
     }));
 
-      res.status(200).json(processed);
-    } catch (error: unknown) {
-      console.error("History list error:", error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      res.status(500).json({ message: "Failed to fetch history records", error: errorMessage });
-    }
-  }); // <-- Add this closing brace to properly end the route handler
+    res.status(200).json(processed);
+  } catch (error: unknown) {
+    console.error("History list error:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to fetch history records", error: errorMessage });
+  }
+});
 
 // Get history for a specific subscription
-router.get("/api/history/:subscriptionId", async (req: Request, res: Response) => {
+router.get("/api/history/:subscriptionId", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("history");
@@ -197,7 +198,7 @@ router.get("/api/history/:subscriptionId", async (req: Request, res: Response) =
     }
     
     // Convert IDs to strings for the frontend
-    const processedItems = items.map((item: any) => ({
+    const processedItems = items.map(item => ({
       ...item,
       _id: item._id.toString(),
       subscriptionId: item.subscriptionId?.toString ? item.subscriptionId.toString() : item.subscriptionId,
@@ -220,41 +221,46 @@ router.get("/api/history/:subscriptionId", async (req: Request, res: Response) =
 });
 
 
-router.get("/api/history/list", async (req: Request, res: Response) => {
+router.get("/api/payment", async (req, res) => {
   try {
     const db = await connectToDatabase();
-    const collection = db.collection("history");
+    const collection = db.collection("payment");
     // Multi-tenancy: filter by tenantId
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    // Sort by timestamp and _id for consistent ordering
-    const items = await collection
-      .find({ tenantId })
-      .sort({ timestamp: -1, _id: -1 })
-      .toArray();
-    // Convert all IDs to strings for consistency
-    const processed = items.map((item: any, idx: number) => ({
-      ...item,
-      _id: item._id?.toString(),
-      subscriptionId: item.subscriptionId?.toString(),
-      data: item.data ? {
-        ...item.data,
-        _id: item.data._id?.toString()
-      } : undefined,
-      updatedFields: item.updatedFields ? {
-        ...item.updatedFields,
-      } : undefined
-    }));
-    res.status(200).json(processed);
+    const items = await collection.find({ tenantId }).toArray();
+    res.status(200).json(items);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch history records", error });
+    res.status(500).json({ message: "Failed to fetch payment methods", error });
+  }
+});
+
+// Add a new payment method
+router.post("/api/payment", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("payment");
+    // Multi-tenancy: set tenantId
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    const payment = {
+      ...req.body,
+      tenantId
+    };
+    // Optionally validate required fields here
+    const result = await collection.insertOne(payment);
+    res.status(201).json({ insertedId: result.insertedId });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to add payment method", error });
   }
 });
 
 // Update a payment method
-router.put("/api/payment/:id", async (req: Request, res: Response) => {
+router.put("/api/payment/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("payment");
@@ -278,7 +284,7 @@ router.put("/api/payment/:id", async (req: Request, res: Response) => {
 });
 
 // Delete a payment method
-router.delete("/api/payment/:id", async (req: Request, res: Response) => {
+router.delete("/api/payment/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("payment");
@@ -302,7 +308,7 @@ router.delete("/api/payment/:id", async (req: Request, res: Response) => {
 
 
 // List all ledger records
-router.get("/api/ledger/list", async (req: Request, res: Response) => {
+router.get("/api/ledger/list", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("ledger");
@@ -319,7 +325,7 @@ router.get("/api/ledger/list", async (req: Request, res: Response) => {
 });
 
 // Insert a new ledger record
-router.post("/api/ledger/insert", async (req: Request, res: Response) => {
+router.post("/api/ledger/insert", async (req, res) => {
   try {
     const db = await connectToDatabase();
     console.log("Connected to DB:", db.databaseName); // Add this line
@@ -338,7 +344,7 @@ router.post("/api/ledger/insert", async (req: Request, res: Response) => {
   }
 });
 // Delete a ledger record
-router.delete("/api/ledger/:id", async (req: Request, res: Response) => {
+router.delete("/api/ledger/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("ledger");
@@ -354,7 +360,7 @@ router.delete("/api/ledger/:id", async (req: Request, res: Response) => {
 });
 
 // List all compliance filings from the database
-router.get("/api/compliance/list", async (req: Request, res: Response) => {
+router.get("/api/compliance/list", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("compliance");
@@ -369,8 +375,9 @@ router.get("/api/compliance/list", async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to fetch compliance data", error });
   }
 });
+import { ObjectId } from "mongodb";
 // Delete a compliance filing from the database
-router.delete("/api/compliance/:id", async (req: Request, res: Response) => {
+router.delete("/api/compliance/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("compliance");
@@ -386,7 +393,7 @@ router.delete("/api/compliance/:id", async (req: Request, res: Response) => {
 });
 
 // Save a compliance filing to the database
-router.post("/api/compliance/insert", async (req: Request, res: Response) => {
+router.post("/api/compliance/insert", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("compliance");
@@ -403,7 +410,7 @@ router.post("/api/compliance/insert", async (req: Request, res: Response) => {
 });
 
 // Edit (update) a compliance filing in the database
-router.put("/api/compliance/:id", async (req: Request, res: Response) => {
+router.put("/api/compliance/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("compliance");
@@ -424,51 +431,58 @@ router.put("/api/compliance/:id", async (req: Request, res: Response) => {
 // Example: Save a subscription to the Subtrackerr database
 
 // Get all subscriptions
-router.get("/api/history/list", async (req: Request, res: Response) => {
+router.get("/api/subscriptions", async (req, res) => {
   try {
     const db = await connectToDatabase();
-    const collection = db.collection("history");
+    const collection = db.collection("subscriptions");
     // Multi-tenancy: filter by tenantId
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    // Sort by timestamp and _id for consistent ordering
-    const items = await collection
-      .find({ tenantId })
-      .sort({ timestamp: -1, _id: -1 })
-      .toArray();
-    // Convert all IDs to strings for consistency
-    const processed = items.map((item: any, idx: number) => ({
-      ...item,
-      _id: item._id?.toString(),
-      subscriptionId: item.subscriptionId?.toString(),
-      data: item.data ? {
-        ...item.data,
-        _id: item.data._id?.toString()
-      } : undefined,
-      updatedFields: item.updatedFields ? {
-        ...item.updatedFields,
-        _id: item.updatedFields._id?.toString()
-      } : undefined
-    }));
-    res.status(200).json(processed);
+    const subscriptions = await collection.find({ tenantId }).toArray();
+    res.status(200).json(subscriptions);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch history records", error });
+    res.status(500).json({ message: "Failed to fetch subscriptions", error });
+  }
+});
+
+// Delete a subscription and its reminders
+router.delete("/api/subtrackerr/:id", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { ObjectId } = await import("mongodb");
+    const collection = db.collection("subscriptions");
+    let filter;
+    try {
+      filter = { _id: new ObjectId(req.params.id) };
+    } catch {
+      filter = { id: req.params.id };
+    }
+    const result = await collection.deleteOne(filter);
+    if (result.deletedCount === 1) {
+      // Cascade delete reminders for this subscription
+      await db.collection("reminders").deleteMany({ $or: [ { subscriptionId: req.params.id }, { subscriptionId: new ObjectId(req.params.id) } ] });
+      res.status(200).json({ message: "Subscription and related reminders deleted" });
+    } else {
+      res.status(404).json({ message: "Subscription not found" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete subscription", error });
   }
 });
 
 // --- Category API ---
 // List all categories
-router.get("/api/company/categories", async (req: Request, res: Response) => {
+router.get("/api/company/categories", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
     const items = await collection.find({}).toArray();
     // Only return categories with valid, non-empty names
     const categories = items
-      .filter((item: any) => typeof item.name === "string" && item.name.trim())
-      .map((item: any) => ({
+      .filter(item => typeof item.name === "string" && item.name.trim())
+      .map(item => ({
         name: item.name,
         visible: typeof item.visible === "boolean" ? item.visible : true
       }));
@@ -478,7 +492,7 @@ router.get("/api/company/categories", async (req: Request, res: Response) => {
   }
 });
 // Add a new category
-router.post("/api/company/categories", async (req: Request, res: Response) => {
+router.post("/api/company/categories", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
@@ -499,7 +513,7 @@ router.post("/api/company/categories", async (req: Request, res: Response) => {
   }
 });
 // Delete a category by name
-router.delete("/api/company/categories/:name", async (req: Request, res: Response) => {
+router.delete("/api/company/categories/:name", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
@@ -521,7 +535,7 @@ router.delete("/api/company/categories/:name", async (req: Request, res: Respons
 
 // --- Departments API ---
 // List all departments
-router.get("/api/company/departments", async (req: Request, res: Response) => {
+router.get("/api/company/departments", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
@@ -540,7 +554,7 @@ router.get("/api/company/departments", async (req: Request, res: Response) => {
 });
 
 // Add a new department
-router.post("/api/company/departments", async (req: Request, res: Response) => {
+router.post("/api/company/departments", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
@@ -562,7 +576,7 @@ router.post("/api/company/departments", async (req: Request, res: Response) => {
 });
 
 // Update department visibility
-router.patch("/api/company/departments/:name", async (req: Request, res: Response) => {
+router.patch("/api/company/departments/:name", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
@@ -582,7 +596,7 @@ router.patch("/api/company/departments/:name", async (req: Request, res: Respons
 });
 
 // Delete a department by name
-router.delete("/api/company/departments/:name", async (req: Request, res: Response) => {
+router.delete("/api/company/departments/:name", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
@@ -604,7 +618,7 @@ router.delete("/api/company/departments/:name", async (req: Request, res: Respon
 
 // --- Subscriptions API ---
 // Create a new subscription (with history log)
-router.post("/api/subscriptions", async (req: Request, res: Response) => {
+router.post("/api/subscriptions", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
@@ -652,7 +666,7 @@ router.post("/api/subscriptions", async (req: Request, res: Response) => {
 
 
 // Update an existing subscription
-router.put("/api/subscriptions/:id", async (req: Request, res: Response) => {
+router.put("/api/subscriptions/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
@@ -720,7 +734,7 @@ router.put("/api/subscriptions/:id", async (req: Request, res: Response) => {
 
 
 // List all employees
-router.get("/api/employees", async (req: Request, res: Response) => {
+router.get("/api/employees", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("employees");
@@ -737,7 +751,7 @@ router.get("/api/employees", async (req: Request, res: Response) => {
 });
 
 // Add a new employee
-router.post("/api/employees", async (req: Request, res: Response) => {
+router.post("/api/employees", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("employees");
@@ -759,7 +773,7 @@ router.post("/api/employees", async (req: Request, res: Response) => {
 });
 
 // Update an employee
-router.put("/api/employees/:id", async (req: Request, res: Response) => {
+router.put("/api/employees/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("employees");
@@ -783,7 +797,7 @@ router.put("/api/employees/:id", async (req: Request, res: Response) => {
 });
 
 // Delete an employee
-router.delete("/api/employees/:id", async (req: Request, res: Response) => {
+router.delete("/api/employees/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("employees");
@@ -808,7 +822,7 @@ router.delete("/api/employees/:id", async (req: Request, res: Response) => {
 // --- Users API ---
 
 // Add a new user
-router.post("/api/users", async (req: Request, res: Response) => {
+router.post("/api/users", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("users");
@@ -830,7 +844,7 @@ router.post("/api/users", async (req: Request, res: Response) => {
 });
 
 // Update a user
-router.put("/api/users/:_id", async (req: Request, res: Response) => {
+router.put("/api/users/:_id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("users");
@@ -856,7 +870,7 @@ router.put("/api/users/:_id", async (req: Request, res: Response) => {
 
 // --- Subscription Fields Configuration API ---
 // Save enabled fields
-router.post("/api/config/fields", async (req: Request, res: Response) => {
+router.post("/api/config/fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("config");
@@ -877,7 +891,7 @@ router.post("/api/config/fields", async (req: Request, res: Response) => {
 });
 
 // Get enabled fields
-router.get("/api/config/fields", async (req: Request, res: Response) => {
+router.get("/api/config/fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("config");
@@ -890,7 +904,7 @@ router.get("/api/config/fields", async (req: Request, res: Response) => {
 
 // --- Compliance Fields Configuration API ---
 // Save compliance field
-router.post("/api/config/compliance-fields", async (req: Request, res: Response) => {
+router.post("/api/config/compliance-fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields"); // Changed to Fields collection
@@ -936,7 +950,7 @@ router.post("/api/config/compliance-fields", async (req: Request, res: Response)
 });
 
 // Get compliance fields
-router.get("/api/config/compliance-fields", async (req: Request, res: Response) => {
+router.get("/api/config/compliance-fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields"); // Changed to Fields collection
@@ -956,7 +970,7 @@ router.get("/api/config/compliance-fields", async (req: Request, res: Response) 
 });
 
 // Update compliance field
-router.patch("/api/config/compliance-fields/:id", async (req: Request, res: Response) => {
+router.patch("/api/config/compliance-fields/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields"); // Changed to Fields collection
