@@ -23,7 +23,7 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const users = await db.collection("users").find(getTenantFilter(tenantId)).toArray();
     // Map MongoDB _id to id for frontend compatibility
-  return users.map((u: User) => ({ ...u, id: u._id?.toString() }));
+  return users.map((u: any) => ({ ...u, id: u._id?.toString() }));
   }
   async getUser(id: string, tenantId: string): Promise<User | undefined> {
     const db = await this.getDb();
@@ -46,7 +46,7 @@ export class MongoStorage implements IStorage {
     const doc = { ...user, tenantId, _id: new ObjectId() };
     await db.collection("users").insertOne(doc);
     // Return user with both id and _id for frontend compatibility
-  return { ...user, id: doc._id.toString(), _id: doc._id, tenantId } as User;
+    return { ...user, id: doc._id.toString(), _id: doc._id, tenantId } as User;
   }
   async updateUser(id: string, user: Partial<InsertUser>, tenantId: string): Promise<User | undefined> {
     const db = await this.getDb();
@@ -83,7 +83,7 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const subs = await db.collection<Subscription>("subscriptions").find(getTenantFilter(tenantId)).toArray();
     // Ensure no empty string for Select fields
-  return subs.map((s: Subscription) => ({
+  return subs.map((s: any) => ({
       ...s,
       billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
       category: s.category && s.category !== "" ? s.category : "Software",
