@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "../components/ui/card";
@@ -47,12 +47,11 @@ function formatDate(date: string | Date) {
 
 export default function SubscriptionHistory() {
   // Get serviceName from query params if present
-  const [location] = useLocation();
+  const location = useLocation();
   // More robust extraction of id from URL
   let idParam = null;
   try {
-    const url = typeof window !== 'undefined' ? window.location.href : location;
-    const urlParams = new URLSearchParams(url.split('?')[1] || "");
+    const urlParams = new URLSearchParams(location.search || "");
     idParam = urlParams.get("id");
   } catch (e) {
     idParam = null;
