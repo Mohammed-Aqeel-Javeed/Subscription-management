@@ -354,10 +354,10 @@ export class MemStorage implements IStorage {
         subscriptionId: rem.subscriptionId,
         subscriptionName: sub?.serviceName || "",
         category: sub?.category || "",
-        reminderType: rem.reminderType || "",
+        reminderType: rem.reminderType || "renewal",
         reminderTriggerDate: new Date().toISOString(),
         subscriptionEndDate: sub?.nextRenewal ? sub.nextRenewal.toISOString() : "",
-        status: sub?.status || "active",
+        status: (sub?.status === "Active" ? "active" : (sub?.status === "Pending" ? "pending" : (sub?.status === "Completed" ? "completed" : "active"))),
       });
     });
     // Sort by reminderTriggerDate asc
