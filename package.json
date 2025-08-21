@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
   "build": "cd client && npm install && npm run build",
-  "build:server": "tsc",
+  "build:server": "cross-env NODE_OPTIONS=--max_old_space_size=2048 tsc",
     "vercel-build": "npm run build",
   "start": "npm run build:server && cross-env NODE_ENV=production node dist/server/index.js",
     "poststart": "start http://localhost:5000",
