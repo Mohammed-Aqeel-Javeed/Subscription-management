@@ -749,5 +749,4 @@ export class MongoStorage implements IStorage {
     return notifications;
   }
 }
-
 export const storage = new MongoStorage();
