@@ -275,8 +275,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof subscriptionData.amount !== "number") {
         subscriptionData.amount = parseFloat(subscriptionData.amount);
       }
-  // Ensure id is always a string if needed
-  if (typeof subscriptionData.id === 'number') subscriptionData.id = subscriptionData.id.toString();
+  // Remove id property from subscriptionData if present
+  // Do not set or use id property in subscriptionData
   const subscription = await storage.createSubscription(subscriptionData, tenantId);
       res.status(201).json(subscription);
     } catch (error) {
@@ -298,8 +298,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof subscriptionData.amount !== "number") {
         subscriptionData.amount = parseFloat(subscriptionData.amount);
       }
-  // Ensure id is always a string if needed
-  if (typeof subscriptionData.id === 'number') subscriptionData.id = subscriptionData.id.toString();
+  // Remove id property from subscriptionData if present
+  // Do not set or use id property in subscriptionData
   const subscription = await storage.updateSubscription(id ?? "", subscriptionData, tenantId);
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });

@@ -82,7 +82,7 @@ export class MongoStorage implements IStorage {
       name: doc.name || "",
       email: doc.email || "",
       role: doc.role || "viewer",
-  lastLogin: 'lastLogin' in doc ? doc.lastLogin ?? null : null
+  lastLogin: doc.lastLogin instanceof Date ? doc.lastLogin : null
     };
   }
   async updateUser(id: string, user: Partial<InsertUser>, tenantId: string): Promise<User | undefined> {
@@ -182,7 +182,7 @@ export class MongoStorage implements IStorage {
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
     return {
-  id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : (typeof doc.id === 'number' ? doc.id : 0),
+  id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
       tenantId: doc.tenantId || tenantId,
       serviceName: doc.serviceName || "",
       vendor: doc.vendor || "",
@@ -218,7 +218,7 @@ export class MongoStorage implements IStorage {
     await this.generateAndInsertRemindersForSubscription(result.value, tenantId);
     const doc = result.value;
     return {
-  id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : (typeof doc.id === 'number' ? doc.id : 0),
+  id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
       tenantId: doc.tenantId || tenantId,
       serviceName: doc.serviceName || "",
       vendor: doc.vendor || "",
@@ -359,7 +359,7 @@ export class MongoStorage implements IStorage {
     const doc = { ...reminder, tenantId, _id: new ObjectId() };
     await db.collection("reminders").insertOne(doc);
     return {
-      id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+  id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
       tenantId: doc.tenantId || tenantId,
       subscriptionId: doc.subscriptionId,
       alertDays: doc.alertDays ?? 7,
