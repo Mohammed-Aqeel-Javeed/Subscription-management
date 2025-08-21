@@ -36,9 +36,9 @@ const parseCSV = (text: string): Promise<any[]> => {
   return new Promise((resolve, reject) => {
     Papa.parse(text, {
       header: true,
-      complete: (results) => resolve(results.data),
-      error: (error: any) => reject(error),
-      transform: (value) => value.trim()
+  complete: (results: any) => resolve(results.data),
+  error: (error: any) => reject(error),
+  transform: (value: string) => value.trim()
     });
   });
 };
