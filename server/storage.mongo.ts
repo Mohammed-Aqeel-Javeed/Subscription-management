@@ -22,8 +22,16 @@ export class MongoStorage implements IStorage {
   async getUsers(tenantId: string): Promise<User[]> {
     const db = await this.getDb();
     const users = await db.collection("users").find(getTenantFilter(tenantId)).toArray();
-    // Map MongoDB _id to id for frontend compatibility
-    return users.map(u => ({ ...u, id: u._id?.toString() }));
+    // Map MongoDB _id to id (number) and ensure all required User fields
+    return users.map(u => ({
+      id: typeof u._id === 'object' && u._id ? parseInt(u._id.toString(), 10) : 0,
+      tenantId: u.tenantId || tenantId,
+      status: typeof u.status === 'string' ? u.status.toLowerCase() : "active",
+      name: u.name || "",
+      email: u.email || "",
+      role: u.role || "user",
+      lastLogin: u.lastLogin || null
+    }));
   }
   async getUser(id: string, tenantId: string): Promise<User | undefined> {
     const db = await this.getDb();
