@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, CheckCircle, Clock, FileCheck, Shield, Users, TrendingUp, Calendar } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, TrendingUp, Calendar } from "lucide-react";
 import ComplianceTrendsChart from "@/components/charts/compliance-trends-chart";
 import ComplianceCategoryChart from "@/components/charts/compliance-category-chart";
 import { useNavigate } from "react-router-dom";
@@ -15,15 +15,8 @@ import { motion } from "framer-motion";
 
 // Error boundary wrapper
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
-  const [error, setError] = useState<Error | null>(null);
-  return error ? (
-    <div style={{ color: 'red', padding: 32 }}>
-      <h2>Dashboard Error</h2>
-      <pre>{error.message}</pre>
-    </div>
-  ) : (
-    <React.Fragment>{children}</React.Fragment>
-  );
+  // No error boundary needed, just render children
+  return <React.Fragment>{children}</React.Fragment>;
 }
 
 export default function ComplianceDashboard() {

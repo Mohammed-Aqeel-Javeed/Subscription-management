@@ -6,25 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CalendarDays, TrendingUp, RefreshCw, Bell, Plus, Edit, BellRing, Users, Clock } from "lucide-react";
+import { CalendarDays, TrendingUp, RefreshCw, Bell, Users, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import TrendsChart from "@/components/charts/trends-chart";
 import CategoryChart from "@/components/charts/category-chart";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, Subscription } from "@shared/types";
+import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, Subscription } from "@shared/types";
 
 
 // Error boundary wrapper
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
-  const [error, setError] = useState<Error | null>(null);
-  return error ? (
-    <div style={{ color: 'red', padding: 32 }}>
-      <h2>Dashboard Error</h2>
-      <pre>{error.message}</pre>
-    </div>
-  ) : (
-    <React.Fragment>{children}</React.Fragment>
-  );
+  // No error boundary needed, just render children
+  return <React.Fragment>{children}</React.Fragment>;
 }
 
 export default function Dashboard() {

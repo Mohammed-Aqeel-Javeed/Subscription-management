@@ -1,3 +1,4 @@
+declare module 'papaparse';
 declare module "drizzle-kit";
 // Workaround for missing type declarations in @radix-ui/react-tabs
 declare module "@radix-ui/react-tabs";
