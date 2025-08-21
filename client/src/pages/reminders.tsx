@@ -11,7 +11,7 @@ import { Clock, TriangleAlert, Calendar, Settings, Plus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Subscription, Reminder } from "@shared/schema";
+import type { Subscription, Reminder } from "@shared/types";
 
 export default function Reminders() {
   // Category configuration with visibility settings
@@ -370,7 +370,7 @@ export default function Reminders() {
                             Renews on {new Date(subscription.nextRenewal).toLocaleDateString()}
                           </p>
                           <p className="text-sm text-gray-500">
-                            ${parseFloat(subscription.amount).toFixed(2)}/{subscription.billingCycle}
+                            {parseFloat(String(subscription.amount)).toFixed(2)}/{subscription.billingCycle}
                           </p>
                           {reminder?.reminderType === 'monthly_recurring' && (
                             <div className="flex items-center space-x-1 mt-1">
@@ -396,7 +396,7 @@ export default function Reminders() {
                               min="1"
                               max="365"
                               value={reminder?.alertDays || defaultDays}
-                              onChange={(e) => reminder && handleReminderUpdate(reminder.id, { alertDays: parseInt(e.target.value) })}
+                              onChange={(e) => reminder && handleReminderUpdate(reminder.id, { alertDays: Number(e.target.value) })}
                               className="w-16 h-8 text-xs"
                               placeholder="Days"
                             />
@@ -406,14 +406,14 @@ export default function Reminders() {
                             <Label className="flex items-center space-x-1">
                               <Checkbox 
                                 checked={reminder?.emailEnabled || false}
-                                onCheckedChange={(checked: boolean) => reminder && handleReminderUpdate(reminder.id, { emailEnabled: checked === true })}
+                                onCheckedChange={(checked: boolean) => reminder && handleReminderUpdate(reminder.id, { emailEnabled: Boolean(checked) })}
                               />
                               <span className="text-xs text-gray-600">Email</span>
                             </Label>
                             <Label className="flex items-center space-x-1">
                               <Checkbox 
                                 checked={reminder?.whatsappEnabled || false}
-                                onCheckedChange={(checked: boolean) => reminder && handleReminderUpdate(reminder.id, { whatsappEnabled: checked === true })}
+                                onCheckedChange={(checked: boolean) => reminder && handleReminderUpdate(reminder.id, { whatsappEnabled: Boolean(checked) })}
                               />
                               <span className="text-xs text-gray-600">WhatsApp</span>
                             </Label>

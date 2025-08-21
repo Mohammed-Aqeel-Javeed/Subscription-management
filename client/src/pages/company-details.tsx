@@ -1,4 +1,4 @@
-import { insertUserSchema } from "@shared/schema";
+// import { insertUserSchema } from "@shared/schema";
 import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -637,7 +637,8 @@ queryKey: ["/api/users"],
 });
 
 const form = useForm<InsertUser>({
-resolver: zodResolver(insertUserSchema),
+// TODO: Provide a local zod schema for user validation or remove this line if not needed
+// resolver: zodResolver(insertUserSchema),
 defaultValues: {
 name: "",
 email: "",

@@ -11,7 +11,7 @@ import SubscriptionModal from "@/components/modals/subscription-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Subscription } from "@shared/schema";
+import type { Subscription } from "@shared/types";
 
 // Helper component to display departments
 const DepartmentDisplay = ({ department }: { department: string | undefined }) => {
@@ -193,7 +193,6 @@ export default function Subscriptions() {
       ...subscription,
       id: subscriptionId,
       _id: subscriptionId,
-      subscriptionId: subscriptionId, // Add this to ensure consistency
       billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
       category: subscription.category && subscription.category !== "" ? subscription.category : "Software",
       status: subscription.status && subscription.status !== "" ? subscription.status : "Active",
@@ -524,7 +523,7 @@ export default function Subscriptions() {
                         </TableCell>
                         <TableCell className="text-slate-700 py-3 px-4">{subscription.vendor}</TableCell>
                         <TableCell className="font-medium text-slate-900 py-3 px-4">
-                          ${parseFloat(subscription.amount).toFixed(2)}
+                          {parseFloat(String(subscription.amount)).toFixed(2)}
                         </TableCell>
                         <TableCell className="text-slate-700 capitalize py-3 px-4">{subscription.billingCycle}</TableCell>
                         <TableCell className="text-center py-3 px-4">
