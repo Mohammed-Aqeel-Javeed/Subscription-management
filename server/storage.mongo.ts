@@ -343,7 +343,16 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const reminder = await db.collection("reminders").findOne({ subscriptionId });
     if (!reminder) return undefined;
-    return { ...reminder, id: reminder._id?.toString() };
+    return {
+      id: typeof reminder._id === 'object' && reminder._id ? parseInt(reminder._id.toString(), 10) : 0,
+      tenantId: reminder.tenantId,
+      subscriptionId: reminder.subscriptionId,
+      alertDays: reminder.alertDays ?? 7,
+      emailEnabled: reminder.emailEnabled ?? true,
+      whatsappEnabled: reminder.whatsappEnabled ?? false,
+      reminderType: reminder.reminderType || "renewal",
+      monthlyDay: reminder.monthlyDay ?? null
+    };
   }
   async createReminder(reminder: InsertReminder, tenantId: string): Promise<Reminder> {
     const db = await this.getDb();
