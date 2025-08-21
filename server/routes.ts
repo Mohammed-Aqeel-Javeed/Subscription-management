@@ -1,9 +1,9 @@
 import type { Express } from "express";
 import type { Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage } from "./storage.js";
 import { ObjectId } from "mongodb";
-import { insertUserSchema, insertSubscriptionSchema, insertReminderSchema } from "@shared/schema";
+import { insertUserSchema, insertSubscriptionSchema, insertReminderSchema } from "../shared/schema";
 import { z } from "zod";
 import subtrackerrRouter from "./subtrackerr.routes";
 import analyticsRouter from "./analytics.routes";
