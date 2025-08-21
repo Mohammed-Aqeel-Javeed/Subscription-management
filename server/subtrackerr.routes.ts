@@ -220,41 +220,36 @@ router.get("/api/history/:subscriptionId", async (req: Request, res: Response) =
 });
 
 
-router.get("/api/payment", async (req: Request, res: Response) => {
+router.get("/api/history/list", async (req: Request, res: Response) => {
   try {
     const db = await connectToDatabase();
-    const collection = db.collection("payment");
+    const collection = db.collection("history");
     // Multi-tenancy: filter by tenantId
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    const items = await collection.find({ tenantId }).toArray();
-    res.status(200).json(items);
+    // Sort by timestamp and _id for consistent ordering
+    const items = await collection
+      .find({ tenantId })
+      .sort({ timestamp: -1, _id: -1 })
+      .toArray();
+    // Convert all IDs to strings for consistency
+    const processed = items.map((item: any, idx: number) => ({
+      ...item,
+      _id: item._id?.toString(),
+      subscriptionId: item.subscriptionId?.toString(),
+      data: item.data ? {
+        ...item.data,
+        _id: item.data._id?.toString()
+      } : undefined,
+      updatedFields: item.updatedFields ? {
+        ...item.updatedFields,
+      } : undefined
+    }));
+    res.status(200).json(processed);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch payment methods", error });
-  }
-});
-
-// Add a new payment method
-router.post("/api/payment", async (req: Request, res: Response) => {
-  try {
-    const db = await connectToDatabase();
-    const collection = db.collection("payment");
-    // Multi-tenancy: set tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-    const payment = {
-      ...req.body,
-      tenantId
-    };
-    // Optionally validate required fields here
-    const result = await collection.insertOne(payment);
-    res.status(201).json({ insertedId: result.insertedId });
-  } catch (error) {
-    res.status(500).json({ message: "Failed to add payment method", error });
+    res.status(500).json({ message: "Failed to fetch history records", error });
   }
 });
 
@@ -429,44 +424,37 @@ router.put("/api/compliance/:id", async (req: Request, res: Response) => {
 // Example: Save a subscription to the Subtrackerr database
 
 // Get all subscriptions
-router.get("/api/subscriptions", async (req: Request, res: Response) => {
+router.get("/api/history/list", async (req: Request, res: Response) => {
   try {
     const db = await connectToDatabase();
-    const collection = db.collection("subscriptions");
+    const collection = db.collection("history");
     // Multi-tenancy: filter by tenantId
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    const subscriptions = await collection.find({ tenantId }).toArray();
-    res.status(200).json(subscriptions);
+    // Sort by timestamp and _id for consistent ordering
+    const items = await collection
+      .find({ tenantId })
+      .sort({ timestamp: -1, _id: -1 })
+      .toArray();
+    // Convert all IDs to strings for consistency
+    const processed = items.map((item: any, idx: number) => ({
+      ...item,
+      _id: item._id?.toString(),
+      subscriptionId: item.subscriptionId?.toString(),
+      data: item.data ? {
+        ...item.data,
+        _id: item.data._id?.toString()
+      } : undefined,
+      updatedFields: item.updatedFields ? {
+        ...item.updatedFields,
+        _id: item.updatedFields._id?.toString()
+      } : undefined
+    }));
+    res.status(200).json(processed);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch subscriptions", error });
-  }
-});
-
-// Delete a subscription and its reminders
-router.delete("/api/subtrackerr/:id", async (req: Request, res: Response) => {
-  try {
-    const db = await connectToDatabase();
-    const { ObjectId } = await import("mongodb");
-    const collection = db.collection("subscriptions");
-    let filter;
-    try {
-      filter = { _id: new ObjectId(req.params.id) };
-    } catch {
-      filter = { id: req.params.id };
-    }
-    const result = await collection.deleteOne(filter);
-    if (result.deletedCount === 1) {
-      // Cascade delete reminders for this subscription
-      await db.collection("reminders").deleteMany({ $or: [ { subscriptionId: req.params.id }, { subscriptionId: new ObjectId(req.params.id) } ] });
-      res.status(200).json({ message: "Subscription and related reminders deleted" });
-    } else {
-      res.status(404).json({ message: "Subscription not found" });
-    }
-  } catch (error) {
-    res.status(500).json({ message: "Failed to delete subscription", error });
+    res.status(500).json({ message: "Failed to fetch history records", error });
   }
 });
 
