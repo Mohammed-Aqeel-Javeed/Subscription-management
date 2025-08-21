@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 import TrendsChart from "@/components/charts/trends-chart";
 import CategoryChart from "@/components/charts/category-chart";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, Subscription } from "@shared/schema";
+import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, Subscription } from "@shared/types";
 
 
 // Error boundary wrapper
@@ -358,7 +358,7 @@ export default function Dashboard() {
                     <TableRow key={subscription.id}>
                       <TableCell className="font-medium">{subscription.serviceName}</TableCell>
                       <TableCell>{subscription.vendor}</TableCell>
-                      <TableCell>${parseFloat(subscription.amount).toFixed(2)}</TableCell>
+                      <TableCell>${parseFloat(String(subscription.amount)).toFixed(2)}</TableCell>
                       <TableCell className="capitalize">{subscription.billingCycle}</TableCell>
                       <TableCell>{new Date(subscription.nextRenewal).toLocaleDateString()}</TableCell>
                       <TableCell>
@@ -401,7 +401,7 @@ export default function Dashboard() {
                       <TableRow key={subscription.id}>
                         <TableCell className="font-medium">{subscription.serviceName}</TableCell>
                         <TableCell>{subscription.vendor}</TableCell>
-                        <TableCell>${parseFloat(subscription.amount).toFixed(2)}</TableCell>
+                        <TableCell>${parseFloat(String(subscription.amount)).toFixed(2)}</TableCell>
                         <TableCell>{new Date(subscription.nextRenewal).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <Badge variant={daysUntil <= 7 ? "destructive" : daysUntil <= 14 ? "default" : "secondary"}>
