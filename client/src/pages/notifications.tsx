@@ -9,12 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bell, Eye, Calendar, Clock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import type { NotificationItem } from "@shared/schema";
+import type { NotificationItem } from "@shared/types";
 import { format, addDays, subDays, eachDayOfInterval } from "date-fns";
 import { useState, useEffect } from "react";
 import SubscriptionModal from "@/components/modals/subscription-modal";
 import { apiRequest } from "@/lib/queryClient";
-import type { Subscription } from "@shared/schema";
+import type { Subscription } from "@shared/types";
 
 export default function Notifications() {
 // State to force daily refresh
@@ -123,8 +123,8 @@ All your subscription reminders are up to date. New notifications will appear he
 {[...notifications]
 .sort((a, b) => {
 // Sort by reminderTriggerDate descending (newest first)
-const dateA = isValidDate(a.reminderTriggerDate) ? new Date(a.reminderTriggerDate).getTime() : 0;
-const dateB = isValidDate(b.reminderTriggerDate) ? new Date(b.reminderTriggerDate).getTime() : 0;
+const dateA = isValidDate(a.reminderTriggerDate) ? new Date(a.reminderTriggerDate || "").getTime() : 0;
+const dateB = isValidDate(b.reminderTriggerDate) ? new Date(b.reminderTriggerDate || "").getTime() : 0;
 return dateB - dateA;
 })
 .map((notification) => (
@@ -164,7 +164,7 @@ return `Reminder`;
 <Button
 variant="outline"
 size="sm"
-onClick={() => handleViewSubscription(notification.subscriptionId)}
+onClick={() => handleViewSubscription(notification.subscriptionId || "")}
 className="flex items-center gap-2"
 >
 <Eye className="h-4 w-4" />
@@ -187,18 +187,18 @@ const reminderDays = Number(subscription?.reminderDays) || 7;
 const renewalDate = notification.subscriptionEndDate;
 let triggerDate: Date | null = null;
 if (reminderPolicy === "One time") {
-triggerDate = isValidDate(renewalDate) ? subDays(new Date(renewalDate), reminderDays) : null;
+triggerDate = isValidDate(renewalDate) ? subDays(new Date(renewalDate || ""), reminderDays) : null;
 } else if (reminderPolicy === "Two times") {
-const first = isValidDate(renewalDate) ? subDays(new Date(renewalDate), reminderDays) : null;
-const second = isValidDate(renewalDate) ? subDays(new Date(renewalDate), Math.floor(reminderDays / 2)) : null;
+const first = isValidDate(renewalDate) ? subDays(new Date(renewalDate || ""), reminderDays) : null;
+const second = isValidDate(renewalDate) ? subDays(new Date(renewalDate || ""), Math.floor(reminderDays / 2)) : null;
 // Show the next upcoming trigger date
 if (first && today < first) triggerDate = first;
 else if (second && today < second) triggerDate = second;
 else triggerDate = null;
 } else if (reminderPolicy === "Until Renewal") {
 // For daily, show the next upcoming date
-const startDate = isValidDate(renewalDate) ? subDays(new Date(renewalDate), reminderDays) : null;
-if (startDate && today < new Date(renewalDate)) {
+const startDate = isValidDate(renewalDate) ? subDays(new Date(renewalDate || ""), reminderDays) : null;
+if (startDate && today < new Date(renewalDate || "")) {
 triggerDate = today >= startDate ? today : startDate;
 }
 }
@@ -212,7 +212,7 @@ return triggerDate ? format(triggerDate, 'MMM dd, yyyy') : 'N/A';
 <span>Renewal Date:</span>
 <span className="font-medium">
 {isValidDate(notification.subscriptionEndDate)
-? format(new Date(notification.subscriptionEndDate), 'MMM dd, yyyy')
+? format(new Date(notification.subscriptionEndDate || ""), 'MMM dd, yyyy')
 : 'N/A'}
 </span>
 </div>
@@ -221,7 +221,7 @@ return triggerDate ? format(triggerDate, 'MMM dd, yyyy') : 'N/A';
 <p className="text-sm text-amber-800">
 <strong>Action Required:</strong> Your {notification.subscriptionName || 'Unknown Subscription'} subscription
 will renew on {isValidDate(notification.subscriptionEndDate)
-? format(new Date(notification.subscriptionEndDate), 'MMMM dd, yyyy')
+? format(new Date(notification.subscriptionEndDate || ""), 'MMMM dd, yyyy')
 : 'N/A'}.
 Please review and take necessary action if needed.
 </p>
