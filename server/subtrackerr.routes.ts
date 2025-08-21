@@ -26,23 +26,23 @@ router.use((req: Request, res: Response, next: NextFunction) => {
   // Support both Authorization header and cookie
   if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
     token = req.headers.authorization.replace("Bearer ", "");
-  } else if (req.cookies && req.cookies.token) {
-    token = req.cookies.token;
-  }
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      if (typeof decoded === "object" && "tenantId" in decoded) {
-        req.user = decoded as User;
-      } else {
+    } else if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (typeof decoded === "object" && "tenantId" in decoded) {
+          req.user = decoded as User;
+        } else {
+          req.user = undefined;
+        }
+      } catch (err) {
         req.user = undefined;
       }
-    } catch (err) {
-      req.user = undefined;
     }
-  }
-  next();
-});
+    next();
+  });
 
 // Add a new history record
 router.post("/api/history", async (req: Request, res: Response) => {
@@ -125,13 +125,13 @@ router.get("/api/history/list", async (req: Request, res: Response) => {
       } : undefined
     }));
 
-      res.status(200).json(processed);
-    } catch (error: unknown) {
-      console.error("History list error:", error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      res.status(500).json({ message: "Failed to fetch history records", error: errorMessage });
-    }
-  }); // <-- Add this closing brace to properly end the route handler
+    res.status(200).json(processed);
+  } catch (error: unknown) {
+    console.error("History list error:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to fetch history records", error: errorMessage });
+  }
+});
 
 // Get history for a specific subscription
 router.get("/api/history/:subscriptionId", async (req: Request, res: Response) => {
