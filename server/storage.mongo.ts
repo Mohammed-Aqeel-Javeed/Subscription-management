@@ -82,7 +82,7 @@ export class MongoStorage implements IStorage {
       name: doc.name || "",
       email: doc.email || "",
       role: doc.role || "viewer",
-  lastLogin: 'lastLogin' in doc ? doc.lastLogin ?? null : null
+  lastLogin: doc.lastLogin instanceof Date ? doc.lastLogin : null
     };
   }
   async updateUser(id: string, user: Partial<InsertUser>, tenantId: string): Promise<User | undefined> {
@@ -182,7 +182,7 @@ export class MongoStorage implements IStorage {
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
     return {
-  id: typeof doc._id === 'object' && doc._id ? parseInt((doc._id as import("mongodb").ObjectId).toString(), 10) : 0,
+  id: doc._id instanceof ObjectId ? doc._id.toHexString() : String(doc._id ?? ""),
       tenantId: doc.tenantId || tenantId,
       serviceName: doc.serviceName || "",
       vendor: doc.vendor || "",
