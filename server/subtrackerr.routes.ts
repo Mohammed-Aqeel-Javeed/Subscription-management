@@ -14,6 +14,7 @@ import { ObjectId as LedgerObjectId } from "mongodb";
 
 
 import { Router } from "express";
+// @ts-ignore
 import { connectToDatabase } from "./mongo.js";
 import jwt from "jsonwebtoken";
 import type { User } from "./types";
