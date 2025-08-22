@@ -23,14 +23,15 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const users = await db.collection("users").find(getTenantFilter(tenantId)).toArray();
     // Map MongoDB _id to id (number) and ensure all required User fields
-    return users.map(u => ({
-      id: typeof u._id === 'object' && u._id && typeof u._id.toString === 'function' ? parseInt(u._id.toString(), 10) : 0,
-      tenantId: u.tenantId || tenantId,
-      status: typeof u.status === 'string' ? u.status : "active",
-      name: u.name || "",
-      email: u.email || "",
-      role: u.role || "viewer"
-    }));
+      return users.map(u => ({
+        id: typeof u._id === 'object' && u._id ? parseInt(u._id.toString(), 10) : 0,
+        tenantId: u.tenantId || tenantId,
+        status: typeof u.status === 'string' ? u.status : "active",
+        name: u.name || "",
+        email: u.email || "",
+        role: u.role || "viewer",
+        lastLogin: u.lastLogin instanceof Date ? u.lastLogin : null
+      }));
   }
 
   async getUser(id: string, tenantId: string): Promise<User | undefined> {
@@ -44,28 +45,30 @@ export class MongoStorage implements IStorage {
     }
     const user = await db.collection("users").findOne(filter);
     if (!user) return undefined;
-    return {
-      id: typeof user._id === 'object' && user._id ? parseInt(user._id.toString(), 10) : 0,
-      tenantId: user.tenantId || tenantId,
-      status: typeof user.status === 'string' ? user.status : "active",
-      name: user.name || "",
-      email: user.email || "",
-      role: user.role || "viewer"
-    };
+      return {
+        id: typeof user._id === 'object' && user._id ? parseInt(user._id.toString(), 10) : 0,
+        tenantId: user.tenantId || tenantId,
+        status: typeof user.status === 'string' ? user.status : "active",
+        name: user.name || "",
+        email: user.email || "",
+        role: user.role || "viewer",
+        lastLogin: user.lastLogin instanceof Date ? user.lastLogin : null
+      };
   }
 
   async getUserByEmail(email: string, tenantId: string): Promise<User | undefined> {
     const db = await this.getDb();
     const user = await db.collection("users").findOne({ email, tenantId });
     if (!user) return undefined;
-    return {
-      id: typeof user._id === 'object' && user._id ? parseInt(user._id.toString(), 10) : 0,
-      tenantId: user.tenantId || tenantId,
-      status: typeof user.status === 'string' ? user.status : "active",
-      name: user.name || "",
-      email: user.email || "",
-      role: user.role || "viewer"
-    };
+      return {
+        id: typeof user._id === 'object' && user._id ? parseInt(user._id.toString(), 10) : 0,
+        tenantId: user.tenantId || tenantId,
+        status: typeof user.status === 'string' ? user.status : "active",
+        name: user.name || "",
+        email: user.email || "",
+        role: user.role || "viewer",
+        lastLogin: user.lastLogin instanceof Date ? user.lastLogin : null
+      };
   }
 
   async createUser(user: InsertUser, tenantId: string): Promise<User> {
@@ -75,14 +78,15 @@ export class MongoStorage implements IStorage {
     const doc = { ...user, tenantId, _id: new ObjectId() };
     await db.collection("users").insertOne(doc);
     // Return user with both id and _id for frontend compatibility
-    return {
-      id: typeof doc._id === 'object' && doc._id ? parseInt((doc._id as import("mongodb").ObjectId).toString(), 10) : 0,
-      tenantId: doc.tenantId || tenantId,
-      status: typeof doc.status === 'string' ? doc.status : "active",
-      name: doc.name || "",
-      email: doc.email || "",
-      role: doc.role || "viewer"
-    };
+      return {
+        id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+        tenantId: doc.tenantId || tenantId,
+        status: typeof doc.status === 'string' ? doc.status : "active",
+        name: doc.name || "",
+        email: doc.email || "",
+        role: doc.role || "viewer",
+        lastLogin: doc.lastLogin instanceof Date ? doc.lastLogin : null
+      };
   }
 
   async updateUser(id: string, user: Partial<InsertUser>, tenantId: string): Promise<User | undefined> {
@@ -101,14 +105,15 @@ export class MongoStorage implements IStorage {
     );
     if (!result || !result.value) return undefined;
     const u = result.value;
-    return {
-      id: typeof u._id === 'object' && u._id ? parseInt(u._id.toString(), 10) : 0,
-      tenantId: u.tenantId || tenantId,
-      status: typeof u.status === 'string' ? u.status : "active",
-      name: u.name || "",
-      email: u.email || "",
-      role: u.role || "viewer"
-    };
+      return {
+        id: typeof u._id === 'object' && u._id ? parseInt(u._id.toString(), 10) : 0,
+        tenantId: u.tenantId || tenantId,
+        status: typeof u.status === 'string' ? u.status : "active",
+        name: u.name || "",
+        email: u.email || "",
+        role: u.role || "viewer",
+        lastLogin: u.lastLogin instanceof Date ? u.lastLogin : null
+      };
   }
 
   async deleteUser(id: string, tenantId: string): Promise<boolean> {
@@ -183,24 +188,24 @@ export class MongoStorage implements IStorage {
     await db.collection("subscriptions").insertOne(doc);
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
-    return {
-      id: doc._id ? parseInt(doc._id.toString(), 10) : 0,
-      tenantId: doc.tenantId || tenantId,
-      serviceName: doc.serviceName || "",
-      vendor: doc.vendor || "",
-      amount: typeof doc.amount === 'string' ? doc.amount : doc.amount?.toString() || "0",
-      billingCycle: doc.billingCycle || "monthly",
-      category: doc.category || "Software",
-      startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
-      nextRenewal: doc.nextRenewal ? new Date(doc.nextRenewal) : new Date(),
-      status: doc.status || "Active",
-      reminderDays: doc.reminderDays || 7,
-      reminderPolicy: doc.reminderPolicy || "One time",
-      notes: doc.notes || null,
-      isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
-      createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
-      updatedBy: doc.updatedBy || null
-    };
+      return {
+        id: doc._id ? doc._id.toHexString() : "0",
+        tenantId: doc.tenantId || tenantId,
+        serviceName: doc.serviceName || "",
+        vendor: doc.vendor || "",
+        amount: typeof doc.amount === 'string' ? doc.amount : doc.amount?.toString() || "0",
+        billingCycle: doc.billingCycle || "monthly",
+        category: doc.category || "Software",
+        startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
+        nextRenewal: doc.nextRenewal ? new Date(doc.nextRenewal) : new Date(),
+        status: doc.status || "Active",
+        reminderDays: doc.reminderDays || 7,
+        reminderPolicy: doc.reminderPolicy || "One time",
+        notes: doc.notes || null,
+        isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
+        createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
+        updatedBy: doc.updatedBy || null
+      };
   }
 
   async updateSubscription(id: string, subscription: Partial<InsertSubscription>, tenantId: string): Promise<Subscription | undefined> {
@@ -220,24 +225,24 @@ export class MongoStorage implements IStorage {
     }
     await this.generateAndInsertRemindersForSubscription(result.value, tenantId);
     const doc = result.value;
-    return {
-      id: doc._id ? parseInt(doc._id.toString(), 10) : 0,
-      tenantId: doc.tenantId || tenantId,
-      serviceName: doc.serviceName || "",
-      vendor: doc.vendor || "",
-      amount: typeof doc.amount === 'string' ? doc.amount : doc.amount?.toString() || "0",
-      billingCycle: doc.billingCycle || "monthly",
-      category: doc.category || "Software",
-      startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
-      nextRenewal: doc.nextRenewal ? new Date(doc.nextRenewal) : new Date(),
-      status: doc.status || "Active",
-      reminderDays: doc.reminderDays || 7,
-      reminderPolicy: doc.reminderPolicy || "One time",
-      notes: doc.notes || null,
-      isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
-      createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
-      updatedBy: doc.updatedBy || null
-    };
+      return {
+        id: doc._id ? doc._id.toHexString() : "0",
+        tenantId: doc.tenantId || tenantId,
+        serviceName: doc.serviceName || "",
+        vendor: doc.vendor || "",
+        amount: typeof doc.amount === 'string' ? doc.amount : doc.amount?.toString() || "0",
+        billingCycle: doc.billingCycle || "monthly",
+        category: doc.category || "Software",
+        startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
+        nextRenewal: doc.nextRenewal ? new Date(doc.nextRenewal) : new Date(),
+        status: doc.status || "Active",
+        reminderDays: doc.reminderDays || 7,
+        reminderPolicy: doc.reminderPolicy || "One time",
+        notes: doc.notes || null,
+        isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
+        createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
+        updatedBy: doc.updatedBy || null
+      };
   }
 
   /**
