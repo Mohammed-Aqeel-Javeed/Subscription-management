@@ -36,9 +36,9 @@ export type NotificationItem = {
 };
 
 export type Subscription = {
-	id: string;
-	_id?: string;
-	tenantId?: string;
+		id: string;
+		_id?: string;
+		tenantId: string;
 	serviceName: string;
 	vendor: string;
 	amount: number | string;

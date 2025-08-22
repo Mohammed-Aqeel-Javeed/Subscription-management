@@ -131,13 +131,13 @@ export class MemStorage implements IStorage {
   }
 
   async createSubscription(insertSubscription: InsertSubscription, tenantId: string): Promise<Subscription> {
-    const id = this.currentSubscriptionId++;
+    const id = String(this.currentSubscriptionId++);
     const subscription: Subscription = {
       id,
       tenantId,
       serviceName: insertSubscription.serviceName,
       vendor: insertSubscription.vendor,
-      amount: insertSubscription.amount,
+      amount: typeof insertSubscription.amount === 'string' ? parseFloat(insertSubscription.amount) : insertSubscription.amount,
       billingCycle: insertSubscription.billingCycle,
       category: insertSubscription.category,
       startDate: insertSubscription.startDate,
@@ -150,7 +150,7 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
       updatedBy: insertSubscription.updatedBy || null,
     };
-    this.subscriptions.set(String(id), subscription);
+    this.subscriptions.set(id, subscription);
     // Track activity
     this.activities.push({
       id: String(id),

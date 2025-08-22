@@ -79,7 +79,7 @@ export class MongoStorage implements IStorage {
     await db.collection("users").insertOne(doc);
     // Return user with both id and _id for frontend compatibility
         return {
-          id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+          id: typeof doc._id === 'object' && doc._id ? doc._id.toString() : (typeof doc._id === 'string' ? doc._id : ''),
           tenantId: doc.tenantId || tenantId,
           status: typeof doc.status === 'string' ? doc.status : "active",
           name: doc.name || "",
@@ -135,7 +135,7 @@ export class MongoStorage implements IStorage {
     const subs = await db.collection("subscriptions").find(getTenantFilter(tenantId)).toArray();
     // Map MongoDB _id to id (number) and ensure all required Subscription fields
       return subs.map(s => ({
-        id: typeof s._id === 'object' && s._id ? parseInt(s._id.toString(), 10) : 0,
+        id: typeof s._id === 'object' && s._id ? s._id.toString() : (typeof s._id === 'number' ? String(s._id) : ''),
       tenantId: s.tenantId || tenantId,
       serviceName: s.serviceName || "",
       vendor: s.vendor || "",
@@ -161,7 +161,7 @@ export class MongoStorage implements IStorage {
     const subscription = await db.collection("subscriptions").findOne(filter);
     if (!subscription) return undefined;
       return {
-        id: typeof subscription._id === 'object' && subscription._id ? parseInt(subscription._id.toString(), 10) : 0,
+        id: typeof subscription._id === 'object' && subscription._id ? subscription._id.toString() : (typeof subscription._id === 'number' ? String(subscription._id) : ''),
       tenantId: subscription.tenantId || tenantId,
       serviceName: subscription.serviceName || "",
       vendor: subscription.vendor || "",
@@ -189,7 +189,7 @@ export class MongoStorage implements IStorage {
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
       return {
-        id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+        id: typeof doc._id === 'object' && doc._id ? doc._id.toString() : (typeof doc._id === 'string' ? doc._id : ''),
         tenantId: doc.tenantId || tenantId,
         serviceName: doc.serviceName || "",
         vendor: doc.vendor || "",
@@ -226,7 +226,7 @@ export class MongoStorage implements IStorage {
     await this.generateAndInsertRemindersForSubscription(result.value, tenantId);
     const doc = result.value;
         return {
-          id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+          id: typeof doc._id === 'object' && doc._id ? doc._id.toString() : (typeof doc._id === 'string' ? doc._id : ''),
           tenantId: doc.tenantId || tenantId,
           serviceName: doc.serviceName || "",
           vendor: doc.vendor || "",
