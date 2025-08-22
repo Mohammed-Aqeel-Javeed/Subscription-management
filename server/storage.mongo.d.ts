@@ -1,5 +1,5 @@
 import type { IStorage } from "./storage.js";
-import type { User, InsertUser, Subscription, InsertSubscription, Reminder, InsertReminder, DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, NotificationItem } from "../../shared/schema";
+import type { User, InsertUser, Subscription, InsertSubscription, Reminder, InsertReminder, DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, NotificationItem } from "../shared/types";
 export declare class MongoStorage implements IStorage {
     private db;
     private getDb;
