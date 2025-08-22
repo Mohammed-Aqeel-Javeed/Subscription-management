@@ -1,5 +1,5 @@
 import { Db, ObjectId } from "mongodb";
-import { connectToDatabase } from "./mongo";
+import { connectToDatabase } from "./mongo.js";
 import type { IStorage } from "./storage";
 import type { User, InsertUser, Subscription, InsertSubscription, Reminder, InsertReminder, DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, NotificationItem } from "@shared/schema";
 
