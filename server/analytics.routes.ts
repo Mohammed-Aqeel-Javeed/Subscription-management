@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { connectToDatabase } from "./mongo";
+// @ts-ignore
+import { connectToDatabase } from "./mongo.js";
 import { ObjectId } from "mongodb";
 
 const router = Router();
