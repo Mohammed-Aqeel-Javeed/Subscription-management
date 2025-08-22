@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage } from "./storage.js";
 import { ObjectId } from "mongodb";
 import {
   insertUserSchema,
@@ -8,12 +8,12 @@ import {
   insertReminderSchema
 } from "@shared/schema";
 import { z } from "zod";
-import subtrackerrRouter from "./subtrackerr.routes";
-import analyticsRouter from "./analytics.routes";
+import subtrackerrRouter from "./subtrackerr.routes.js";
+import analyticsRouter from "./analytics.routes.js";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import cors from "cors";
-import { connectToDatabase } from "./mongo";
+import { connectToDatabase } from "./mongo.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Logout
