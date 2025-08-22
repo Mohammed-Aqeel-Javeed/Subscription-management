@@ -223,11 +223,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Subscription not found" });
       }
       // Destructure to avoid duplicate property issue
-      const { id: subId, amount, ...rest } = subscription;
+      const { id: subId, amount, ...restWithoutId } = subscription;
       res.json({
-  ...rest,
-  id: subId !== undefined && subId !== null ? String(subId) : "",
-  amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
+        ...restWithoutId,
+        id: subId !== undefined && subId !== null ? String(subId) : "",
+        amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
       });
     } catch {
       res.status(500).json({ message: "Failed to fetch subscription" });
@@ -248,11 +248,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId
       );
       // Destructure to avoid duplicate property issue
-      const { id: subId, amount, ...rest } = subscription;
+      const { id: subId, amount, ...restWithoutId } = subscription;
       res.status(201).json({
-  ...rest,
-  id: subId !== undefined && subId !== null ? String(subId) : "",
-  amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
+        ...restWithoutId,
+        id: subId !== undefined && subId !== null ? String(subId) : "",
+        amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -283,11 +283,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Subscription not found" });
       }
       // Destructure to avoid duplicate property issue
-      const { id: subId, amount, ...rest } = subscription;
+      const { id: subId, amount, ...restWithoutId } = subscription;
       res.json({
-  ...rest,
-  id: subId !== undefined && subId !== null ? String(subId) : "",
-  amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
+        ...restWithoutId,
+        id: subId !== undefined && subId !== null ? String(subId) : "",
+        amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
