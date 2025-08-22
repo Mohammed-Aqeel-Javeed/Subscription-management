@@ -73,17 +73,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .status(400)
           .json({ message: "Missing required fields (fullName, email, password, tenantId)" });
       }
-
       const db = await connectToDatabase();
       const existingUser = await db.collection("login").findOne({ email });
       if (existingUser) {
         return res.status(400).json({ message: "User already exists with this email" });
       }
-
       const doc = { fullName, email, password, tenantId, createdAt: new Date() };
       await db.collection("signup").insertOne(doc);
       await db.collection("login").insertOne(doc);
-
       res.status(201).json({ message: "Signup successful" });
     } catch (err) {
       res.status(500).json({ message: "Failed to save signup" });
@@ -97,24 +94,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!email || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
-
       const db = await connectToDatabase();
       const user = await db.collection("login").findOne({ email, password });
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
-
       const tokenPayload: any = { userId: user._id, email: user.email };
       if (user.tenantId) {
         tokenPayload.tenantId = user.tenantId;
       }
-
       const token = jwt.sign(
         tokenPayload,
         process.env.JWT_SECRET || "subs_secret_key",
         { expiresIn: "7d" }
       );
-
       res.cookie("token", token, {
         httpOnly: false,
         secure: false,
@@ -122,7 +115,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         path: "/",
         maxAge: 7 * 24 * 60 * 60 * 1000
       });
-
       res.status(200).json({ message: "Login successful" });
     } catch (err) {
       res.status(500).json({ message: "Login failed" });
@@ -209,7 +201,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
       const subscriptions = await storage.getSubscriptions(tenantId);
-      res.json(subscriptions);
+      // Convert all IDs to strings to ensure consistent type
+      const formattedSubscriptions = subscriptions.map(sub => ({
+        ...sub,
+        id: typeof sub.id === "string" ? sub.id : String(sub.id ?? ""),
+        amount: typeof sub.amount === "number" ? sub.amount : parseFloat(sub.amount ?? "0")
+      }));
+      res.json(formattedSubscriptions);
     } catch {
       res.status(500).json({ message: "Failed to fetch subscriptions" });
     }
@@ -224,10 +222,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
+      // Destructure to avoid duplicate property issue
+      const { id: subId, amount, ...rest } = subscription;
       res.json({
-        ...subscription,
-        id: typeof subscription.id === "string" ? subscription.id : String(subscription.id ?? ""),
-        amount: typeof subscription.amount === "number" ? subscription.amount : parseFloat(subscription.amount ?? "0")
+        ...rest,
+        id: typeof subId === "string" ? subId : String(subId ?? ""),
+        amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
       });
     } catch {
       res.status(500).json({ message: "Failed to fetch subscription" });
@@ -239,20 +239,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
       let subscriptionData = insertSubscriptionSchema.parse(req.body);
-
       // ✅ Ensure amount is always a number
       if (typeof subscriptionData.amount === "string") {
         subscriptionData.amount = parseFloat(subscriptionData.amount);
       }
-
       const subscription = await storage.createSubscription(
         subscriptionData,
         tenantId
       );
+      // Destructure to avoid duplicate property issue
+      const { id: subId, amount, ...rest } = subscription;
       res.status(201).json({
-        ...subscription,
-        id: typeof subscription.id === "string" ? subscription.id : String(subscription.id ?? ""),
-        amount: typeof subscription.amount === "number" ? subscription.amount : parseFloat(subscription.amount ?? "0")
+        ...rest,
+        id: typeof subId === "string" ? subId : String(subId ?? ""),
+        amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -269,14 +269,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
       const id = req.params.id ?? "";
-
       let subscriptionData = insertSubscriptionSchema.partial().parse(req.body);
-
       // ✅ Ensure amount is always a number
       if (typeof subscriptionData.amount === "string") {
         subscriptionData.amount = parseFloat(subscriptionData.amount);
       }
-
       const subscription = await storage.updateSubscription(
         id,
         subscriptionData,
@@ -285,11 +282,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
-
+      // Destructure to avoid duplicate property issue
+      const { id: subId, amount, ...rest } = subscription;
       res.json({
-        ...subscription,
-        id: typeof subscription.id === "string" ? subscription.id : String(subscription.id ?? ""),
-        amount: typeof subscription.amount === "number" ? subscription.amount : parseFloat(subscription.amount ?? "0")
+        ...rest,
+        id: typeof subId === "string" ? subId : String(subId ?? ""),
+        amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
