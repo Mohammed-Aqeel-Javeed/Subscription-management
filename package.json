@@ -7,7 +7,7 @@
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "build:client": "cd client && npm install && npm run build",
   "build:server": "tsc -p tsconfig.server.json",
-    "build": "npm run build:client && npm run build:server",
+  "build": "npm run build:client && npm run build:server && copy vite.config.js dist/vite.config.js",
     "vercel-build": "npm run build",
   "start": "NODE_ENV=production node dist/server/server/index.js",
     "poststart": "start http://localhost:5000",
