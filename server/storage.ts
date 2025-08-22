@@ -94,7 +94,7 @@ export class MemStorage implements IStorage {
   async createUser(insertUser: InsertUser, tenantId: string): Promise<User> {
     const id = this.currentUserId++;
     const user: User = {
-      id,
+      id: String(id),
       tenantId,
       name: insertUser.name,
       email: insertUser.email,
@@ -224,7 +224,7 @@ export class MemStorage implements IStorage {
   async createReminder(insertReminder: InsertReminder, tenantId: string): Promise<Reminder> {
     const id = this.currentReminderId++;
     const reminder: Reminder = {
-      id,
+      id: String(id),
       tenantId,
       subscriptionId: insertReminder.subscriptionId,
       alertDays: insertReminder.alertDays ?? 7,
