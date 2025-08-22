@@ -51,6 +51,7 @@ export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
   id: true,
   createdAt: true,
 }).extend({
+  amount: z.number(),
   startDate: z.preprocess((val) => new Date(val as string), z.date()),
   nextRenewal: z.preprocess((val) => new Date(val as string), z.date()),
 });
