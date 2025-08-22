@@ -24,7 +24,7 @@ export class MongoStorage implements IStorage {
     const users = await db.collection("users").find(getTenantFilter(tenantId)).toArray();
     // Map MongoDB _id to id (number) and ensure all required User fields
       return users.map(u => ({
-        id: typeof u._id === 'object' && u._id ? parseInt(u._id.toString(), 10) : 0,
+    id: u._id?.toString() || "",
         tenantId: u.tenantId || tenantId,
         status: typeof u.status === 'string' ? u.status : "active",
         name: u.name || "",
@@ -46,7 +46,7 @@ export class MongoStorage implements IStorage {
     const user = await db.collection("users").findOne(filter);
     if (!user) return undefined;
         return {
-          id: typeof user._id === 'object' && user._id ? parseInt(user._id.toString(), 10) : 0,
+            id: user._id?.toString() || "",
           tenantId: user.tenantId || tenantId,
           status: typeof user.status === 'string' ? user.status : "active",
           name: user.name || "",
@@ -61,7 +61,7 @@ export class MongoStorage implements IStorage {
     const user = await db.collection("users").findOne({ email, tenantId });
     if (!user) return undefined;
         return {
-          id: typeof user._id === 'object' && user._id ? parseInt(user._id.toString(), 10) : 0,
+            id: user._id?.toString() || "",
           tenantId: user.tenantId || tenantId,
           status: typeof user.status === 'string' ? user.status : "active",
           name: user.name || "",
@@ -106,7 +106,7 @@ export class MongoStorage implements IStorage {
     if (!result || !result.value) return undefined;
     const u = result.value;
         return {
-          id: typeof u._id === 'object' && u._id ? parseInt(u._id.toString(), 10) : 0,
+    id: u._id?.toString() || "",
           tenantId: u.tenantId || tenantId,
           status: typeof u.status === 'string' ? u.status : "active",
           name: u.name || "",
@@ -139,7 +139,7 @@ export class MongoStorage implements IStorage {
       tenantId: s.tenantId || tenantId,
       serviceName: s.serviceName || "",
       vendor: s.vendor || "",
-      amount: typeof s.amount === 'string' ? s.amount : s.amount?.toString() || "0",
+  amount: Number(s.amount) || 0,
       billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
       category: s.category && s.category !== "" ? s.category : "Software",
       startDate: s.startDate ? new Date(s.startDate) : new Date(),
@@ -165,7 +165,7 @@ export class MongoStorage implements IStorage {
       tenantId: subscription.tenantId || tenantId,
       serviceName: subscription.serviceName || "",
       vendor: subscription.vendor || "",
-      amount: typeof subscription.amount === 'string' ? subscription.amount : subscription.amount?.toString() || "0",
+  amount: Number(subscription.amount) || 0,
       billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
       category: subscription.category && subscription.category !== "" ? subscription.category : "Software",
       startDate: subscription.startDate ? new Date(subscription.startDate) : new Date(),
@@ -193,7 +193,7 @@ export class MongoStorage implements IStorage {
         tenantId: doc.tenantId || tenantId,
         serviceName: doc.serviceName || "",
         vendor: doc.vendor || "",
-        amount: typeof doc.amount === 'string' ? doc.amount : doc.amount?.toString() || "0",
+    amount: Number(doc.amount) || 0,
         billingCycle: doc.billingCycle || "monthly",
         category: doc.category || "Software",
         startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
@@ -230,7 +230,7 @@ export class MongoStorage implements IStorage {
           tenantId: doc.tenantId || tenantId,
           serviceName: doc.serviceName || "",
           vendor: doc.vendor || "",
-          amount: typeof doc.amount === 'string' ? doc.amount : doc.amount?.toString() || "0",
+      amount: Number(doc.amount) || 0,
           billingCycle: doc.billingCycle || "monthly",
           category: doc.category || "Software",
           startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
@@ -337,9 +337,9 @@ export class MongoStorage implements IStorage {
     const reminders = await db.collection("reminders").find(getTenantFilter(tenantId)).toArray();
     // Map MongoDB _id to id (number) and ensure all required Reminder fields
     return reminders.map(r => ({
-      id: typeof r._id === 'object' && r._id ? parseInt(r._id.toString(), 10) : 0,
+  id: r._id?.toString() || "",
       tenantId: r.tenantId || tenantId,
-      subscriptionId: typeof r.subscriptionId === 'string' ? parseInt(r.subscriptionId, 10) : r.subscriptionId || 0,
+    subscriptionId: r.subscriptionId || "",
       alertDays: r.alertDays || 7,
       emailEnabled: r.emailEnabled ?? true,
       whatsappEnabled: r.whatsappEnabled ?? false,
@@ -353,9 +353,9 @@ export class MongoStorage implements IStorage {
     const reminder = await db.collection("reminders").findOne({ subscriptionId });
     if (!reminder) return undefined;
     return {
-      id: typeof reminder._id === 'object' && reminder._id ? parseInt(reminder._id.toString(), 10) : 0,
+  id: reminder._id?.toString() || "",
       tenantId: reminder.tenantId,
-      subscriptionId: reminder.subscriptionId,
+    subscriptionId: reminder.subscriptionId?.toString() || "",
       alertDays: reminder.alertDays ?? 7,
       emailEnabled: reminder.emailEnabled ?? true,
       whatsappEnabled: reminder.whatsappEnabled ?? false,
@@ -370,7 +370,7 @@ export class MongoStorage implements IStorage {
     const doc = { ...reminder, tenantId, _id: new ObjectId() };
     await db.collection("reminders").insertOne(doc);
     return {
-      id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+  id: doc._id?.toString() || "",
       tenantId: doc.tenantId || tenantId,
       subscriptionId: doc.subscriptionId,
       alertDays: doc.alertDays ?? 7,
@@ -395,9 +395,9 @@ export class MongoStorage implements IStorage {
     if (!result || !result.value) return undefined;
     const r = result.value;
     return {
-      id: typeof r._id === 'object' && r._id ? parseInt(r._id.toString(), 10) : 0,
+  id: r._id?.toString() || "",
       tenantId: r.tenantId || tenantId,
-      subscriptionId: r.subscriptionId,
+    subscriptionId: r.subscriptionId?.toString() || "",
       alertDays: r.alertDays ?? 7,
       emailEnabled: r.emailEnabled ?? true,
       whatsappEnabled: r.whatsappEnabled ?? false,
