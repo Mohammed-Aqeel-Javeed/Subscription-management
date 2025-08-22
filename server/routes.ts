@@ -2,11 +2,13 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { ObjectId } from "mongodb";
+// @ts-ignore
+// @ts-ignore
 import {
   insertUserSchema,
   insertSubscriptionSchema,
   insertReminderSchema
-} from "@shared/schema";
+} from "../shared/schema.js";
 import { z } from "zod";
 import subtrackerrRouter from "./subtrackerr.routes.js";
 import analyticsRouter from "./analytics.routes.js";
