@@ -29,10 +29,10 @@ export class MongoStorage implements IStorage {
       status: typeof u.status === 'string' ? u.status : "active",
       name: u.name || "",
       email: u.email || "",
-      role: u.role || "viewer",
-  lastLogin: u.lastLogin instanceof Date ? u.lastLogin : null
+      role: u.role || "viewer"
     }));
   }
+
   async getUser(id: string, tenantId: string): Promise<User | undefined> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -50,10 +50,10 @@ export class MongoStorage implements IStorage {
       status: typeof user.status === 'string' ? user.status : "active",
       name: user.name || "",
       email: user.email || "",
-      role: user.role || "viewer",
-  lastLogin: user.lastLogin instanceof Date ? user.lastLogin : null
+      role: user.role || "viewer"
     };
   }
+
   async getUserByEmail(email: string, tenantId: string): Promise<User | undefined> {
     const db = await this.getDb();
     const user = await db.collection("users").findOne({ email, tenantId });
@@ -64,10 +64,10 @@ export class MongoStorage implements IStorage {
       status: typeof user.status === 'string' ? user.status : "active",
       name: user.name || "",
       email: user.email || "",
-      role: user.role || "viewer",
-  lastLogin: user.lastLogin instanceof Date ? user.lastLogin : null
+      role: user.role || "viewer"
     };
   }
+
   async createUser(user: InsertUser, tenantId: string): Promise<User> {
     const db = await this.getDb();
     // Always generate a new ObjectId for MongoDB _id
@@ -81,10 +81,10 @@ export class MongoStorage implements IStorage {
       status: typeof doc.status === 'string' ? doc.status : "active",
       name: doc.name || "",
       email: doc.email || "",
-      role: doc.role || "viewer",
-  lastLogin: doc.lastLogin instanceof Date ? doc.lastLogin : null
+      role: doc.role || "viewer"
     };
   }
+
   async updateUser(id: string, user: Partial<InsertUser>, tenantId: string): Promise<User | undefined> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -107,10 +107,10 @@ export class MongoStorage implements IStorage {
       status: typeof u.status === 'string' ? u.status : "active",
       name: u.name || "",
       email: u.email || "",
-      role: u.role || "viewer",
-  lastLogin: u.lastLogin instanceof Date ? u.lastLogin : null
+      role: u.role || "viewer"
     };
   }
+
   async deleteUser(id: string, tenantId: string): Promise<boolean> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -148,6 +148,7 @@ export class MongoStorage implements IStorage {
       updatedBy: s.updatedBy || null
     }));
   }
+
   async getSubscription(id: string, tenantId: string): Promise<Subscription | undefined> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -173,16 +174,17 @@ export class MongoStorage implements IStorage {
       updatedBy: subscription.updatedBy || null
     };
   }
+
   async createSubscription(subscription: InsertSubscription, tenantId: string): Promise<Subscription> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
-  // Don't destructure updatedAt, just spread subscription
-  const doc = { ...subscription, tenantId, _id: new ObjectId(), createdAt: new Date(), updatedAt: new Date(), updatedBy: null };
+    // Don't destructure updatedAt, just spread subscription
+    const doc = { ...subscription, tenantId, _id: new ObjectId(), createdAt: new Date(), updatedAt: new Date(), updatedBy: null };
     await db.collection("subscriptions").insertOne(doc);
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
     return {
-  id: typeof doc._id === 'object' && doc._id instanceof ObjectId ? doc._id.toHexString() : String(doc._id ?? ""),
+      id: doc._id ? parseInt(doc._id.toString(), 10) : 0,
       tenantId: doc.tenantId || tenantId,
       serviceName: doc.serviceName || "",
       vendor: doc.vendor || "",
@@ -200,6 +202,7 @@ export class MongoStorage implements IStorage {
       updatedBy: doc.updatedBy || null
     };
   }
+
   async updateSubscription(id: string, subscription: Partial<InsertSubscription>, tenantId: string): Promise<Subscription | undefined> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -218,7 +221,7 @@ export class MongoStorage implements IStorage {
     await this.generateAndInsertRemindersForSubscription(result.value, tenantId);
     const doc = result.value;
     return {
-  id: typeof doc._id === 'object' && doc._id instanceof ObjectId ? doc._id.toHexString() : String(doc._id ?? ""),
+      id: doc._id ? parseInt(doc._id.toString(), 10) : 0,
       tenantId: doc.tenantId || tenantId,
       serviceName: doc.serviceName || "",
       vendor: doc.vendor || "",
@@ -236,17 +239,17 @@ export class MongoStorage implements IStorage {
       updatedBy: doc.updatedBy || null
     };
   }
+
   /**
    * Generate and insert reminders for a subscription (on create or update)
    */
   private async generateAndInsertRemindersForSubscription(subscription: any, tenantId?: string) {
     const db = await this.getDb();
     // Always use _id string for subscriptionId
-  const subscriptionId = subscription._id ? subscription._id.toString() : (typeof subscription.id === 'string' ? subscription.id : undefined);
-  if (!subscriptionId) return;
+    const subscriptionId = subscription._id ? subscription._id.toString() : (typeof subscription.id === 'string' ? subscription.id : undefined);
+    if (!subscriptionId) return;
     // Remove all old reminders for this subscription
     await db.collection("reminders").deleteMany({ subscriptionId });
-
     // Only generate if subscription has a nextRenewal or endDate
     const renewalDate = subscription.nextRenewal || subscription.endDate;
     if (!renewalDate) return;
@@ -304,6 +307,7 @@ export class MongoStorage implements IStorage {
       });
     }
   }
+
   async deleteSubscription(id: string, tenantId: string): Promise<{ success: boolean; message: string }> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -338,6 +342,7 @@ export class MongoStorage implements IStorage {
       monthlyDay: r.monthlyDay ?? null
     }));
   }
+
   async getReminderBySubscriptionId(subscriptionId: number): Promise<Reminder | undefined> {
     const db = await this.getDb();
     const reminder = await db.collection("reminders").findOne({ subscriptionId });
@@ -353,13 +358,14 @@ export class MongoStorage implements IStorage {
       monthlyDay: reminder.monthlyDay ?? null
     };
   }
+
   async createReminder(reminder: InsertReminder, tenantId: string): Promise<Reminder> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
     const doc = { ...reminder, tenantId, _id: new ObjectId() };
     await db.collection("reminders").insertOne(doc);
     return {
-  id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
+      id: typeof doc._id === 'object' && doc._id ? parseInt(doc._id.toString(), 10) : 0,
       tenantId: doc.tenantId || tenantId,
       subscriptionId: doc.subscriptionId,
       alertDays: doc.alertDays ?? 7,
@@ -369,6 +375,7 @@ export class MongoStorage implements IStorage {
       monthlyDay: doc.monthlyDay ?? null
     };
   }
+
   async updateReminder(id: number, reminder: Partial<InsertReminder>, tenantId: string): Promise<Reminder | undefined> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -393,6 +400,7 @@ export class MongoStorage implements IStorage {
       monthlyDay: r.monthlyDay ?? null
     };
   }
+
   async deleteReminder(id: string): Promise<boolean> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -408,6 +416,7 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     return await db.collection("compliance").find(getTenantFilter(tenantId)).toArray();
   }
+
   async createComplianceItem(item: any, tenantId: string): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -415,6 +424,7 @@ export class MongoStorage implements IStorage {
     await db.collection("compliance").insertOne(doc);
     return { ...item, id: doc._id.toString(), tenantId };
   }
+
   async updateComplianceItem(id: string, item: any): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -430,6 +440,7 @@ export class MongoStorage implements IStorage {
     );
     return result?.value || null;
   }
+
   async deleteComplianceItem(id: string): Promise<boolean> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -447,6 +458,7 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     return await db.collection("history").find(getTenantFilter(tenantId)).toArray();
   }
+
   async createHistoryItem(item: any, tenantId: string): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -454,6 +466,7 @@ export class MongoStorage implements IStorage {
     await db.collection("history").insertOne(doc);
     return { ...item, id: doc._id.toString(), tenantId };
   }
+
   async updateHistoryItem(id: string, item: any): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -469,6 +482,7 @@ export class MongoStorage implements IStorage {
     );
     return result?.value || null;
   }
+
   async deleteHistoryItem(id: string): Promise<boolean> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -486,6 +500,7 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     return await db.collection("payment").find(getTenantFilter(tenantId)).toArray();
   }
+
   async createPayment(payment: any, tenantId: string): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -493,6 +508,7 @@ export class MongoStorage implements IStorage {
     await db.collection("payment").insertOne(doc);
     return { ...payment, id: doc._id.toString(), tenantId };
   }
+
   async updatePayment(id: string, payment: any): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -508,6 +524,7 @@ export class MongoStorage implements IStorage {
     );
     return result?.value || null;
   }
+
   async deletePayment(id: string): Promise<boolean> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -525,6 +542,7 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     return await db.collection("ledger").find(getTenantFilter(tenantId)).toArray();
   }
+
   async createLedgerItem(item: any, tenantId: string): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -532,6 +550,7 @@ export class MongoStorage implements IStorage {
     await db.collection("ledger").insertOne(doc);
     return { ...item, id: doc._id.toString(), tenantId };
   }
+
   async deleteLedgerItem(id: string): Promise<boolean> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -544,6 +563,7 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     return await db.collection("employees").find(getTenantFilter(tenantId)).toArray();
   }
+
   async createEmployee(employee: any, tenantId: string): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
@@ -749,4 +769,5 @@ export class MongoStorage implements IStorage {
     return notifications;
   }
 }
+
 export const storage = new MongoStorage();
