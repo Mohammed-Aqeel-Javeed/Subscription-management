@@ -224,7 +224,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
-      res.json({ ...subscription, id: subscription.id.toString() });
+      res.json({
+        ...subscription,
+        id: subscription.id ? subscription.id.toString() : "",
+        amount: typeof subscription.amount === "number" ? subscription.amount : parseFloat(subscription.amount ?? "0")
+      });
     } catch {
       res.status(500).json({ message: "Failed to fetch subscription" });
     }
@@ -245,7 +249,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subscriptionData,
         tenantId
       );
-      res.status(201).json({ ...subscription, id: subscription.id.toString() });
+      res.status(201).json({
+        ...subscription,
+        id: subscription.id ? subscription.id.toString() : "",
+        amount: typeof subscription.amount === "number" ? subscription.amount : parseFloat(subscription.amount ?? "0")
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res
@@ -278,7 +286,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Subscription not found" });
       }
 
-      res.json({ ...subscription, id: subscription.id.toString() });
+      res.json({
+        ...subscription,
+        id: subscription.id ? subscription.id.toString() : "",
+        amount: typeof subscription.amount === "number" ? subscription.amount : parseFloat(subscription.amount ?? "0")
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res
