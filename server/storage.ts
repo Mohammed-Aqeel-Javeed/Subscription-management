@@ -222,7 +222,7 @@ export class MemStorage implements IStorage {
   }
 
   async getReminderBySubscriptionId(subscriptionId: number, tenantId: string): Promise<Reminder | undefined> {
-    return Array.from(this.reminders.values()).find(r => r.subscriptionId === subscriptionId);
+    return Array.from(this.reminders.values()).find(r => Number(r.subscriptionId) === Number(subscriptionId));
   }
 
   async createReminder(insertReminder: InsertReminder, tenantId: string): Promise<Reminder> {
