@@ -30,7 +30,7 @@ export class MongoStorage implements IStorage {
         name: u.name || "",
         email: u.email || "",
         role: u.role || "viewer",
-        lastLogin: u.lastLogin instanceof Date ? u.lastLogin : null
+  lastLogin: u.lastLogin ? new Date(u.lastLogin) : null
       }));
   }
 
@@ -52,7 +52,7 @@ export class MongoStorage implements IStorage {
         name: user.name || "",
         email: user.email || "",
         role: user.role || "viewer",
-        lastLogin: user.lastLogin instanceof Date ? user.lastLogin : null
+  lastLogin: user.lastLogin ? new Date(user.lastLogin) : null
       };
   }
 
@@ -67,7 +67,7 @@ export class MongoStorage implements IStorage {
         name: user.name || "",
         email: user.email || "",
         role: user.role || "viewer",
-        lastLogin: user.lastLogin ? new Date(user.lastLogin) : null
+  lastLogin: user.lastLogin ? new Date(user.lastLogin) : null
       };
   }
 
@@ -85,7 +85,7 @@ export class MongoStorage implements IStorage {
         name: doc.name || "",
         email: doc.email || "",
         role: doc.role || "viewer",
-        lastLogin: doc.lastLogin ? new Date(doc.lastLogin) : null
+  lastLogin: doc.lastLogin ? new Date(doc.lastLogin) : null
       };
   }
 
@@ -112,7 +112,7 @@ export class MongoStorage implements IStorage {
         name: u.name || "",
         email: u.email || "",
         role: u.role || "viewer",
-        lastLogin: u.lastLogin ? new Date(u.lastLogin) : null
+  lastLogin: u.lastLogin ? new Date(u.lastLogin) : null
       };
   }
 
