@@ -34,7 +34,7 @@ export const subscriptions = pgTable("subscriptions", {
 export const reminders = pgTable("reminders", {
   id: serial("id").primaryKey(),
   tenantId: text("tenant_id").notNull(), // Multi-tenancy
-  subscriptionId: integer("subscription_id").notNull().references(() => subscriptions.id),
+  subscriptionId: text("subscription_id").notNull(),
   alertDays: integer("alert_days").notNull().default(7),
   emailEnabled: boolean("email_enabled").notNull().default(true),
   whatsappEnabled: boolean("whatsapp_enabled").notNull().default(false),
@@ -64,7 +64,7 @@ export type InsertUser = z.infer<typeof insertUserSchema> & { tenantId: string }
 export type User = Omit<typeof users.$inferSelect, 'id'> & { id: string; tenantId: string };
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema> & { tenantId: string };
 export type Subscription = Omit<typeof subscriptions.$inferSelect, 'id'> & { id: string; tenantId: string };
-export type InsertReminder = z.infer<typeof insertReminderSchema> & { tenantId: string };
+export type InsertReminder = z.infer<typeof insertReminderSchema> & { tenantId: string; subscriptionId: string };
 export type Reminder = Omit<typeof reminders.$inferSelect, 'id'> & { id: string; tenantId: string; subscriptionId: string };
 
 // Analytics types
