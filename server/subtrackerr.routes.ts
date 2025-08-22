@@ -14,7 +14,7 @@ import { ObjectId as LedgerObjectId } from "mongodb";
 
 
 import { Router } from "express";
-import { connectToDatabase } from "./mongo";
+import { connectToDatabase } from "./mongo.js";
 import jwt from "jsonwebtoken";
 import type { User } from "./types";
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
