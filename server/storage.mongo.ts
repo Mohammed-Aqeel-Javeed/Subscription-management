@@ -1,7 +1,8 @@
 import { Db, ObjectId } from "mongodb";
 import { connectToDatabase } from "./mongo.js";
 import type { IStorage } from "./storage";
-import type { User, InsertUser, Subscription, InsertSubscription, Reminder, InsertReminder, DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, NotificationItem } from "@shared/schema";
+// @ts-ignore
+import type { User, InsertUser, Subscription, InsertSubscription, Reminder, InsertReminder, DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, NotificationItem } from "../../shared/schema.js";
 
 // Helper to get tenantId from context (pass as argument from API)
 function getTenantFilter(tenantId: string) {
