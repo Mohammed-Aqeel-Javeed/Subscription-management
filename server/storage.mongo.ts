@@ -136,22 +136,22 @@ export class MongoStorage implements IStorage {
     // Map MongoDB _id to id (number) and ensure all required Subscription fields
       return subs.map(s => ({
         id: s._id?.toString() || '',
-      tenantId: s.tenantId || tenantId,
-      serviceName: s.serviceName || "",
-      vendor: s.vendor || "",
-  amount: Number(s.amount) || 0,
-      billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
-      category: s.category && s.category !== "" ? s.category : "Software",
-      startDate: s.startDate ? new Date(s.startDate) : new Date(),
-      nextRenewal: s.nextRenewal ? new Date(s.nextRenewal) : new Date(),
-      status: s.status && s.status !== "" ? s.status : "Active",
-      reminderDays: s.reminderDays || 7,
-      reminderPolicy: s.reminderPolicy && s.reminderPolicy !== "" ? s.reminderPolicy : "One time",
-      notes: s.notes || null,
-      isActive: typeof s.isActive === 'boolean' ? s.isActive : true,
-      createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
-      updatedBy: s.updatedBy || null
-    }));
+        tenantId: s.tenantId || tenantId,
+        serviceName: s.serviceName || "",
+        vendor: s.vendor || "",
+        amount: s.amount?.toString() ?? "0",
+        billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
+        category: s.category && s.category !== "" ? s.category : "Software",
+        startDate: s.startDate ? new Date(s.startDate) : new Date(),
+        nextRenewal: s.nextRenewal ? new Date(s.nextRenewal) : new Date(),
+        status: s.status && s.status !== "" ? s.status : "Active",
+        reminderDays: s.reminderDays || 7,
+        reminderPolicy: s.reminderPolicy && s.reminderPolicy !== "" ? s.reminderPolicy : "One time",
+        notes: s.notes || null,
+        isActive: typeof s.isActive === 'boolean' ? s.isActive : true,
+        createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
+        updatedBy: s.updatedBy || null
+      }));
   }
 
   async getSubscription(id: string, tenantId: string): Promise<Subscription | undefined> {
@@ -161,23 +161,23 @@ export class MongoStorage implements IStorage {
     const subscription = await db.collection("subscriptions").findOne(filter);
     if (!subscription) return undefined;
       return {
-        id: typeof subscription._id === 'object' && subscription._id ? subscription._id.toString() : (typeof subscription._id === 'number' ? String(subscription._id) : ''),
-      tenantId: subscription.tenantId || tenantId,
-      serviceName: subscription.serviceName || "",
-      vendor: subscription.vendor || "",
-  amount: Number(subscription.amount) || 0,
-      billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
-      category: subscription.category && subscription.category !== "" ? subscription.category : "Software",
-      startDate: subscription.startDate ? new Date(subscription.startDate) : new Date(),
-      nextRenewal: subscription.nextRenewal ? new Date(subscription.nextRenewal) : new Date(),
-      status: subscription.status && subscription.status !== "" ? subscription.status : "Active",
-      reminderDays: subscription.reminderDays || 7,
-      reminderPolicy: subscription.reminderPolicy && subscription.reminderPolicy !== "" ? subscription.reminderPolicy : "One time",
-      notes: subscription.notes || null,
-      isActive: typeof subscription.isActive === 'boolean' ? subscription.isActive : true,
-      createdAt: subscription.createdAt ? new Date(subscription.createdAt) : new Date(),
-      updatedBy: subscription.updatedBy || null
-    };
+        id: subscription._id?.toString() || '',
+        tenantId: subscription.tenantId || tenantId,
+        serviceName: subscription.serviceName || "",
+        vendor: subscription.vendor || "",
+        amount: subscription.amount?.toString() ?? "0",
+        billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
+        category: subscription.category && subscription.category !== "" ? subscription.category : "Software",
+        startDate: subscription.startDate ? new Date(subscription.startDate) : new Date(),
+        nextRenewal: subscription.nextRenewal ? new Date(subscription.nextRenewal) : new Date(),
+        status: subscription.status && subscription.status !== "" ? subscription.status : "Active",
+        reminderDays: subscription.reminderDays || 7,
+        reminderPolicy: subscription.reminderPolicy && subscription.reminderPolicy !== "" ? subscription.reminderPolicy : "One time",
+        notes: subscription.notes || null,
+        isActive: typeof subscription.isActive === 'boolean' ? subscription.isActive : true,
+        createdAt: subscription.createdAt ? new Date(subscription.createdAt) : new Date(),
+        updatedBy: subscription.updatedBy || null
+      };
   }
 
   async createSubscription(subscription: InsertSubscription, tenantId: string): Promise<Subscription> {
@@ -193,7 +193,7 @@ export class MongoStorage implements IStorage {
         tenantId: doc.tenantId || tenantId,
         serviceName: doc.serviceName || "",
         vendor: doc.vendor || "",
-    amount: Number(doc.amount) || 0,
+        amount: doc.amount?.toString() ?? "0",
         billingCycle: doc.billingCycle || "monthly",
         category: doc.category || "Software",
         startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
@@ -230,7 +230,7 @@ export class MongoStorage implements IStorage {
           tenantId: doc.tenantId || tenantId,
           serviceName: doc.serviceName || "",
           vendor: doc.vendor || "",
-      amount: Number(doc.amount) || 0,
+          amount: doc.amount?.toString() ?? "0",
           billingCycle: doc.billingCycle || "monthly",
           category: doc.category || "Software",
           startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
