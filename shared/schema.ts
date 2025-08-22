@@ -65,7 +65,7 @@ export type User = Omit<typeof users.$inferSelect, 'id'> & { id: string; tenantI
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema> & { tenantId: string };
 export type Subscription = Omit<typeof subscriptions.$inferSelect, 'id'> & { id: string; tenantId: string };
 export type InsertReminder = z.infer<typeof insertReminderSchema> & { tenantId: string };
-export type Reminder = Omit<typeof reminders.$inferSelect, 'id'> & { id: string; tenantId: string };
+export type Reminder = Omit<typeof reminders.$inferSelect, 'id'> & { id: string; tenantId: string; subscriptionId: string };
 
 // Analytics types
 export type DashboardMetrics = {
@@ -106,7 +106,7 @@ export type CategoryConfig = {
 
 export type NotificationItem = {
   id: string;
-  subscriptionId: number;
+  subscriptionId: string;
   subscriptionName: string;
   category: string;
   reminderType: string;
