@@ -158,7 +158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
-      const userData = insertUserSchema.parse(req.body);
+      const userData = insertUserSchema.parse({ ...req.body, tenantId });
       const user = await storage.createUser(userData, tenantId);
       res.status(201).json(user);
     } catch (error) {
@@ -226,7 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json({
         ...subscription,
-        id: subscription.id ? subscription.id.toString() : "",
+        id: typeof subscription.id === "string" ? subscription.id : String(subscription.id ?? ""),
         amount: typeof subscription.amount === "number" ? subscription.amount : parseFloat(subscription.amount ?? "0")
       });
     } catch {
@@ -251,7 +251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       res.status(201).json({
         ...subscription,
-        id: subscription.id ? subscription.id.toString() : "",
+        id: typeof subscription.id === "string" ? subscription.id : String(subscription.id ?? ""),
         amount: typeof subscription.amount === "number" ? subscription.amount : parseFloat(subscription.amount ?? "0")
       });
     } catch (error) {
@@ -288,7 +288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         ...subscription,
-        id: subscription.id ? subscription.id.toString() : "",
+        id: typeof subscription.id === "string" ? subscription.id : String(subscription.id ?? ""),
         amount: typeof subscription.amount === "number" ? subscription.amount : parseFloat(subscription.amount ?? "0")
       });
     } catch (error) {
