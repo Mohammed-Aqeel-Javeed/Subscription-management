@@ -63,7 +63,7 @@ export const insertReminderSchema = createInsertSchema(reminders).omit({
 export type InsertUser = z.infer<typeof insertUserSchema> & { tenantId: string };
 export type User = Omit<typeof users.$inferSelect, 'id'> & { id: number; tenantId: string };
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema> & { tenantId: string };
-export type Subscription = Omit<typeof subscriptions.$inferSelect, 'id'> & { id: number; tenantId: string };
+export type Subscription = Omit<typeof subscriptions.$inferSelect, 'id'> & { id: string; tenantId: string };
 export type InsertReminder = z.infer<typeof insertReminderSchema> & { tenantId: string };
 export type Reminder = Omit<typeof reminders.$inferSelect, 'id'> & { id: number; tenantId: string };
 
