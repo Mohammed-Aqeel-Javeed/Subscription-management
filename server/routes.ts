@@ -61,7 +61,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Allow CORS
   app.use(
     cors({
-      origin: "http://localhost:5173",
+      origin: [
+        "http://localhost:5173",
+        "https://subscription-management-6uje.onrender.com"
+      ],
       credentials: true
     })
   );
