@@ -226,7 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id: subId, amount, ...rest } = subscription;
       res.json({
         ...rest,
-        id: typeof subId === "string" ? subId : String(subId ?? ""),
+        id: String(subId ?? ""),
         amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
       });
     } catch {
@@ -251,7 +251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id: subId, amount, ...rest } = subscription;
       res.status(201).json({
         ...rest,
-        id: typeof subId === "string" ? subId : String(subId ?? ""),
+        id: String(subId ?? ""),
         amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
       });
     } catch (error) {
@@ -286,7 +286,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id: subId, amount, ...rest } = subscription;
       res.json({
         ...rest,
-        id: typeof subId === "string" ? subId : String(subId ?? ""),
+        id: String(subId ?? ""),
         amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
       });
     } catch (error) {
