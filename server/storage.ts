@@ -137,7 +137,7 @@ export class MemStorage implements IStorage {
       tenantId,
       serviceName: insertSubscription.serviceName,
       vendor: insertSubscription.vendor,
-      amount: typeof insertSubscription.amount === 'string' ? parseFloat(insertSubscription.amount) : insertSubscription.amount,
+      amount: insertSubscription.amount !== undefined ? String(insertSubscription.amount) : "0",
       billingCycle: insertSubscription.billingCycle,
       category: insertSubscription.category,
       startDate: insertSubscription.startDate,
@@ -169,7 +169,7 @@ export class MemStorage implements IStorage {
     const alertDays = this.getCategoryDefaultAlertDays(subscription.category, subscription.billingCycle);
     const reminderData: InsertReminder = {
       tenantId,
-      subscriptionId: subscription.id,
+      subscriptionId: String(subscription.id),
       alertDays,
       emailEnabled: true,
       whatsappEnabled: subscription.category === 'Regulatory',
@@ -182,7 +182,11 @@ export class MemStorage implements IStorage {
   async updateSubscription(id: string, updateSubscription: Partial<InsertSubscription>, tenantId: string): Promise<Subscription | undefined> {
     const subscription = this.subscriptions.get(id);
     if (!subscription) return undefined;
-    const updatedSubscription = { ...subscription, ...updateSubscription };
+    const updatedSubscription: Subscription = {
+      ...subscription,
+      ...updateSubscription,
+      amount: updateSubscription.amount !== undefined ? String(updateSubscription.amount) : subscription.amount,
+    };
     this.subscriptions.set(id, updatedSubscription);
     // Track activity
     this.activities.push({
