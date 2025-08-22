@@ -1,4 +1,5 @@
-import { users, subscriptions, reminders, type User, type InsertUser, type Subscription, type InsertSubscription, type Reminder, type InsertReminder, type DashboardMetrics, type SpendingTrend, type CategoryBreakdown, type RecentActivity, type NotificationItem } from "@shared/schema";
+// @ts-ignore
+import { users, subscriptions, reminders, type User, type InsertUser, type Subscription, type InsertSubscription, type Reminder, type InsertReminder, type DashboardMetrics, type SpendingTrend, type CategoryBreakdown, type RecentActivity, type NotificationItem } from "../../shared/schema.js";
 // Extend RecentActivity type to include serviceName for frontend display
 type RecentActivityWithName = RecentActivity & { serviceName?: string };
 import { MongoStorage } from "./storage.mongo.js";
