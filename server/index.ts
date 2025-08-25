@@ -1,7 +1,16 @@
 import express, { type Request, Response, NextFunction } from "express";
 // @ts-ignore
 import { registerRoutes } from "./routes.js";
-import { log } from "../dev/vite.js";
+
+function log(message: string, source = "express") {
+  const formattedTime = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  console.log(`${formattedTime} [${source}] ${message}`);
+}
 
 const app = express();
 app.use(express.json());
@@ -48,12 +57,16 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     throw err;
   });
 
-  if (app.get("env") === "development") {
-    const { setupVite } = await import("../dev/vite.js");
-    await setupVite(app, server);
-  } else {
-    const { serveStatic } = await import("../dev/vite.js");
-    serveStatic(app);
+  // In production, serve static files from dist/public
+  if (app.get("env") !== "development") {
+    const expressStatic = require("express").static;
+    const path = require("path");
+    const publicPath = path.join(process.cwd(), "dist/public");
+    app.use(expressStatic(publicPath));
+    app.get("*", (req: Request, res: Response, next: NextFunction) => {
+      if (req.path.startsWith("/api")) return next();
+      res.sendFile(path.join(publicPath, "index.html"));
+    });
   }
 
   const port = process.env.PORT ? Number(process.env.PORT) : 5000;
