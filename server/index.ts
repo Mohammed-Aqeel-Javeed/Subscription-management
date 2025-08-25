@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import path from "path";
 // @ts-ignore
 import { registerRoutes } from "./routes.js";
 import { setupVite, serveStatic, log } from "./vite.js";
@@ -6,6 +7,16 @@ import { setupVite, serveStatic, log } from "./vite.js";
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Serve frontend build (dist/public)
+const publicPath = path.join(__dirname, "../public");
+app.use(express.static(publicPath));
+
+// All non-API routes → React index.html
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api")) return next();
+  res.sendFile(path.join(publicPath, "index.html"));
+});
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
