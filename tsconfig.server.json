@@ -1,18 +1,10 @@
 {
   "include": ["server/index.ts", "server/**/*.ts"],
-  "exclude": [
-  "node_modules",
-  "build",
-  "dist",
-  "**/*.test.ts",
-  "**/vite.config.ts",
-  "vite.config.ts",
-  "server/vite.ts"
-  ],
+  "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo.server",
-    "module": "CommonJS",
+    "module": "ESNext",
     "target": "ES2020",
     "outDir": "dist/server",
     "rootDir": ".",
