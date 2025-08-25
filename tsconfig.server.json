@@ -4,8 +4,8 @@
     "node_modules",
     "dist",
     "build",
-    "vite.config.ts",
-    "dev/**"
+    "dev/**",
+    "vite.config.ts"
   ],
   "compilerOptions": {
     "incremental": true,

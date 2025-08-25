@@ -1,7 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 // @ts-ignore
 import { registerRoutes } from "./routes.js";
-import { setupVite, serveStatic, log } from "../dev/vite.js";
+import { log } from "../dev/vite.js";
 
 const app = express();
 app.use(express.json());
@@ -48,16 +48,14 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (app.get("env") === "development") {
+    const { setupVite } = await import("../dev/vite.js");
     await setupVite(app, server);
   } else {
+    const { serveStatic } = await import("../dev/vite.js");
     serveStatic(app);
   }
 
-  // Use process.env.PORT for Render compatibility, fallback to 5000 locally
   const port = process.env.PORT ? Number(process.env.PORT) : 5000;
   server.listen({
     port,
