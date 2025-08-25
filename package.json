@@ -9,7 +9,7 @@
   "build:server": "tsc -p tsconfig.server.json",
   "build": "npm run build:client && npm run build:server",
     "vercel-build": "npm run build",
-  "start": "NODE_ENV=production node dist/server/server/index.js",
+  "start": "NODE_ENV=production node dist/server/index.js",
     "poststart": "start http://localhost:5000",
     "check": "tsc",
     "db:push": "drizzle-kit push"
@@ -17,6 +17,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
+
     "@neondatabase/serverless": "^0.10.4",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-alert-dialog": "^1.1.7",
