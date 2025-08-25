@@ -104,15 +104,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
-      const tokenPayload: any = { userId: user._id, email: user.email };
-      if (user.tenantId) {
-        tokenPayload.tenantId = user.tenantId;
-      }
-      const token = jwt.sign(
-        tokenPayload,
-        process.env.JWT_SECRET || "subs_secret_key",
-        { expiresIn: "7d" }
-      );
+        // Always include tenantId in JWT and response
+        const tokenPayload: any = {
+          userId: user._id,
+          email: user.email,
+          tenantId: user.tenantId || null
+        };
+        const token = jwt.sign(
+          tokenPayload,
+          process.env.JWT_SECRET || "subs_secret_key",
+          { expiresIn: "7d" }
+        );
         res.cookie("token", token, {
           httpOnly: true,
           secure: true,
@@ -126,7 +128,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log("[LOGIN] Request headers:", req.headers);
           console.log("[LOGIN] Response headers:", res.getHeaders());
         });
-      res.status(200).json({ message: "Login successful" });
+        res.status(200).json({
+          message: "Login successful",
+          user: {
+            userId: user._id,
+            email: user.email,
+            tenantId: user.tenantId || null,
+            fullName: user.fullName || null
+          }
+        });
     } catch (err) {
       res.status(500).json({ message: "Login failed" });
     }
