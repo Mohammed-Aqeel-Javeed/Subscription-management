@@ -114,9 +114,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { expiresIn: "7d" }
       );
       res.cookie("token", token, {
-        httpOnly: false,
-        secure: false,
-        sameSite: "lax",
+  httpOnly: true,
+  secure: true,
+  sameSite: "none",
         path: "/",
         maxAge: 7 * 24 * 60 * 60 * 1000
       });
