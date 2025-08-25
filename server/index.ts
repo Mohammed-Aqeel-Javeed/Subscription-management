@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
 // @ts-ignore
 import { registerRoutes } from "./routes.js";
 
@@ -12,7 +13,12 @@ function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+
 const app = express();
+app.use(cors({
+  origin: "https://subscription-management-6uje.onrender.com",
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -47,6 +53,18 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 (async () => {
+
+  // Example: Secure cookie setup in login route (adjust as needed)
+  // app.post("/api/login", (req, res) => {
+  //   // ...login logic...
+  //   res.cookie("token", token, {
+  //     httpOnly: true,
+  //     secure: true,
+  //     sameSite: "none",
+  //   });
+  //   res.json({ message: "Login successful" });
+  // });
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
