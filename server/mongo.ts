@@ -13,7 +13,11 @@ let db: Db | null = null;
 export async function connectToDatabase() {
   if (db) return db;
   if (!client) {
-    client = new MongoClient(uri);
+    client = new MongoClient(uri, {
+      tls: true,
+      tlsAllowInvalidCertificates: false,
+      tlsAllowInvalidHostnames: false,
+    });
     await client.connect();
   }
   db = client.db(dbName);
