@@ -6,7 +6,9 @@
     "build",
     "**/*.test.ts",
     "vite.config.ts",
-    "server/vite.ts"
+    "./vite.config.ts",
+    "server/vite.ts",
+    "./server/vite.ts"
   ],
   "compilerOptions": {
     "incremental": true,
