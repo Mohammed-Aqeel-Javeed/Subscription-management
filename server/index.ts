@@ -1,7 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 // @ts-ignore
 import { registerRoutes } from "./routes.js";
-import { setupVite, serveStatic, log } from "../tools/vite.js";
+import { setupVite, serveStatic, log } from "../dev/vite.js";
 
 const app = express();
 app.use(express.json());
