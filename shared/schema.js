@@ -1,54 +1,58 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
-export var users = pgTable("users", {
-    id: serial("id").primaryKey(),
-    tenantId: text("tenant_id").notNull(), // Multi-tenancy
-    name: text("name").notNull(),
-    email: text("email").notNull().unique(),
-    role: text("role").notNull().default("viewer"), // admin, viewer
-    status: text("status").notNull().default("active"), // active, inactive
-    lastLogin: timestamp("last_login"),
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.insertReminderSchema = exports.insertSubscriptionSchema = exports.insertUserSchema = exports.reminders = exports.subscriptions = exports.users = void 0;
+const pg_core_1 = require("drizzle-orm/pg-core");
+const drizzle_zod_1 = require("drizzle-zod");
+const zod_1 = require("zod");
+exports.users = (0, pg_core_1.pgTable)("users", {
+    id: (0, pg_core_1.serial)("id").primaryKey(),
+    tenantId: (0, pg_core_1.text)("tenant_id").notNull(), // Multi-tenancy
+    name: (0, pg_core_1.text)("name").notNull(),
+    email: (0, pg_core_1.text)("email").notNull().unique(),
+    role: (0, pg_core_1.text)("role").notNull().default("viewer"), // admin, viewer
+    status: (0, pg_core_1.text)("status").notNull().default("active"), // active, inactive
+    lastLogin: (0, pg_core_1.timestamp)("last_login"),
 });
-export var subscriptions = pgTable("subscriptions", {
-    id: serial("id").primaryKey(),
-    tenantId: text("tenant_id").notNull(), // Multi-tenancy
-    serviceName: text("service_name").notNull(),
-    vendor: text("vendor").notNull(),
-    amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-    billingCycle: text("billing_cycle").notNull(), // monthly, yearly, quarterly, weekly
-    category: text("category").notNull(),
-    startDate: timestamp("start_date").notNull(),
-    nextRenewal: timestamp("next_renewal").notNull(),
-    status: text("status").notNull().default("Active"), // Active, Cancelled
-    reminderDays: integer("reminder_days").notNull().default(7),
-    reminderPolicy: text("reminder_policy").notNull().default("One time"), // One time, Two times, Until Renewal
-    notes: text("notes"),
-    isActive: boolean("is_active").notNull().default(true),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedBy: text("updated_by"), // username who last updated
+exports.subscriptions = (0, pg_core_1.pgTable)("subscriptions", {
+    id: (0, pg_core_1.serial)("id").primaryKey(),
+    tenantId: (0, pg_core_1.text)("tenant_id").notNull(), // Multi-tenancy
+    serviceName: (0, pg_core_1.text)("service_name").notNull(),
+    vendor: (0, pg_core_1.text)("vendor").notNull(),
+    amount: (0, pg_core_1.decimal)("amount", { precision: 10, scale: 2 }).notNull(),
+    billingCycle: (0, pg_core_1.text)("billing_cycle").notNull(), // monthly, yearly, quarterly, weekly
+    category: (0, pg_core_1.text)("category").notNull(),
+    startDate: (0, pg_core_1.timestamp)("start_date").notNull(),
+    nextRenewal: (0, pg_core_1.timestamp)("next_renewal").notNull(),
+    status: (0, pg_core_1.text)("status").notNull().default("Active"), // Active, Cancelled
+    reminderDays: (0, pg_core_1.integer)("reminder_days").notNull().default(7),
+    reminderPolicy: (0, pg_core_1.text)("reminder_policy").notNull().default("One time"), // One time, Two times, Until Renewal
+    notes: (0, pg_core_1.text)("notes"),
+    isActive: (0, pg_core_1.boolean)("is_active").notNull().default(true),
+    createdAt: (0, pg_core_1.timestamp)("created_at").notNull().defaultNow(),
+    updatedBy: (0, pg_core_1.text)("updated_by"), // username who last updated
 });
-export var reminders = pgTable("reminders", {
-    id: serial("id").primaryKey(),
-    tenantId: text("tenant_id").notNull(), // Multi-tenancy
-    subscriptionId: integer("subscription_id").notNull().references(function () { return subscriptions.id; }),
-    alertDays: integer("alert_days").notNull().default(7),
-    emailEnabled: boolean("email_enabled").notNull().default(true),
-    whatsappEnabled: boolean("whatsapp_enabled").notNull().default(false),
-    reminderType: text("reminder_type").notNull().default("renewal"), // renewal, monthly_recurring
-    monthlyDay: integer("monthly_day"), // for monthly recurring reminders (1-31)
+exports.reminders = (0, pg_core_1.pgTable)("reminders", {
+    id: (0, pg_core_1.serial)("id").primaryKey(),
+    tenantId: (0, pg_core_1.text)("tenant_id").notNull(), // Multi-tenancy
+    subscriptionId: (0, pg_core_1.text)("subscription_id").notNull(),
+    alertDays: (0, pg_core_1.integer)("alert_days").notNull().default(7),
+    emailEnabled: (0, pg_core_1.boolean)("email_enabled").notNull().default(true),
+    whatsappEnabled: (0, pg_core_1.boolean)("whatsapp_enabled").notNull().default(false),
+    reminderType: (0, pg_core_1.text)("reminder_type").notNull().default("renewal"), // renewal, monthly_recurring
+    monthlyDay: (0, pg_core_1.integer)("monthly_day"), // for monthly recurring reminders (1-31)
 });
-export var insertUserSchema = createInsertSchema(users).omit({
+exports.insertUserSchema = (0, drizzle_zod_1.createInsertSchema)(exports.users).omit({
     id: true,
     lastLogin: true,
 });
-export var insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
+exports.insertSubscriptionSchema = (0, drizzle_zod_1.createInsertSchema)(exports.subscriptions).omit({
     id: true,
     createdAt: true,
 }).extend({
-    startDate: z.preprocess(function (val) { return new Date(val); }, z.date()),
-    nextRenewal: z.preprocess(function (val) { return new Date(val); }, z.date()),
+    amount: zod_1.z.number(),
+    startDate: zod_1.z.preprocess((val) => new Date(val), zod_1.z.date()),
+    nextRenewal: zod_1.z.preprocess((val) => new Date(val), zod_1.z.date()),
 });
-export var insertReminderSchema = createInsertSchema(reminders).omit({
+exports.insertReminderSchema = (0, drizzle_zod_1.createInsertSchema)(exports.reminders).omit({
     id: true,
 });
