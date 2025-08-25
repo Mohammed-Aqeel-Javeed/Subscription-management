@@ -4,13 +4,8 @@
     "node_modules",
     "dist",
     "build",
-    "**/*.test.ts",
     "vite.config.ts",
-    "./vite.config.ts",
-    "server/vite.ts",
-    "./server/vite.ts",
-    "tools/vite.ts",
-    "dev/vite.ts"
+    "dev/**"
   ],
   "compilerOptions": {
     "incremental": true,
