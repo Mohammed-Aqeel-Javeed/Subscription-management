@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { apiFetch } from "../lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -37,22 +38,32 @@ export default function Dashboard() {
   const { data: metrics, isLoading: metricsLoading } = useQuery<DashboardMetrics>({
     queryKey: ["/api/analytics/dashboard"],
     queryFn: async () => {
-      const res = await fetch("/api/analytics/dashboard", { credentials: "include" });
-      return res.json();
+  const res = await apiFetch("/api/analytics/dashboard");
+  // Debug: log response headers
+  const headersObj: Record<string, string> = {};
+  res.headers.forEach((value, key) => { headersObj[key] = value; });
+  console.log('[Dashboard] /api/analytics/dashboard response headers:', headersObj);
+  return res.json();
     }
   });
   const { data: trends, isLoading: trendsLoading } = useQuery<SpendingTrend[]>({
     queryKey: ["/api/analytics/trends"],
     queryFn: async () => {
-      const res = await fetch("/api/analytics/trends", { credentials: "include" });
-      return res.json();
+  const res = await apiFetch("/api/analytics/trends");
+  const headersObj: Record<string, string> = {};
+  res.headers.forEach((value, key) => { headersObj[key] = value; });
+  console.log('[Dashboard] /api/analytics/trends response headers:', headersObj);
+  return res.json();
     }
   });
   const { data: categories, isLoading: categoriesLoading } = useQuery<CategoryBreakdown[]>({
     queryKey: ["/api/analytics/categories"],
     queryFn: async () => {
-      const res = await fetch("/api/analytics/categories", { credentials: "include" });
-      return res.json();
+  const res = await apiFetch("/api/analytics/categories");
+  const headersObj: Record<string, string> = {};
+  res.headers.forEach((value, key) => { headersObj[key] = value; });
+  console.log('[Dashboard] /api/analytics/categories response headers:', headersObj);
+  return res.json();
     }
   });
   // Activity query removed as it's not currently used in the dashboard
@@ -66,8 +77,11 @@ export default function Dashboard() {
   const { data: subscriptions } = useQuery<Subscription[]>({
     queryKey: ["/api/subscriptions"],
     queryFn: async () => {
-      const res = await fetch("/api/subscriptions", { credentials: "include" });
-      return res.json();
+  const res = await apiFetch("/api/subscriptions");
+  const headersObj: Record<string, string> = {};
+  res.headers.forEach((value, key) => { headersObj[key] = value; });
+  console.log('[Dashboard] /api/subscriptions response headers:', headersObj);
+  return res.json();
     }
   });
 
