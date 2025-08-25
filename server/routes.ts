@@ -113,13 +113,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         process.env.JWT_SECRET || "subs_secret_key",
         { expiresIn: "7d" }
       );
-      res.cookie("token", token, {
-  httpOnly: true,
-  secure: true,
-  sameSite: "none",
-        path: "/",
-        maxAge: 7 * 24 * 60 * 60 * 1000
-      });
+        res.cookie("token", token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "none",
+          path: "/",
+          maxAge: 7 * 24 * 60 * 60 * 1000
+        });
+        // Debug log: verify cookie setting
+        console.log("[LOGIN] Set-Cookie header:", res.getHeader('Set-Cookie'));
+        res.on('finish', () => {
+          console.log("[LOGIN] Request headers:", req.headers);
+          console.log("[LOGIN] Response headers:", res.getHeaders());
+        });
       res.status(200).json({ message: "Login successful" });
     } catch (err) {
       res.status(500).json({ message: "Login failed" });
