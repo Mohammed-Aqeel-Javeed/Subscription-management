@@ -1,15 +1,4 @@
-// API configuration for different environments
-const getApiUrl = () => {
-  // In production, use environment variable or default to same domain
-  if (import.meta.env.MODE === 'production') {
-    // If VITE_API_URL is set, use it; otherwise use same domain (relative path)
-    return import.meta.env.VITE_API_URL || '';
-  }
-  // In development, point to backend server on port 5000
-  return 'http://localhost:5000';
-};
-
-export const API_BASE_URL = getApiUrl();
+import { API_BASE_URL } from "./config";
 
 // Helper function to make API calls with proper URL
 export const apiFetch = (endpoint: string, options?: RequestInit) => {
