@@ -109,9 +109,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!email || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
-      const db = await connectToDatabase();
-      // Use 'users' collection for authentication
-      const user = await db.collection("users").findOne({ email, password });
+  const db = await connectToDatabase();
+  // Use 'login' collection for authentication
+  const user = await db.collection("login").findOne({ email, password });
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
