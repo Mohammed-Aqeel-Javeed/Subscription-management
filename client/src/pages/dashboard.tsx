@@ -31,56 +31,40 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
 export default function Dashboard() {
   const location = window.location.pathname;
   const navigate = useNavigate();
-  const [authChecked, setAuthChecked] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   console.log("[Dashboard] Component mounted");
   const [activeSubscriptionsModalOpen, setActiveSubscriptionsModalOpen] = useState(false);
   const [upcomingRenewalsModalOpen, setUpcomingRenewalsModalOpen] = useState(false);
-  // Auth check: call protected endpoint
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiFetch("/api/analytics/dashboard");
-        if (res.status === 200) {
-          setAuthChecked(true);
-        } else {
-          setAuthError("Unauthorized");
-          navigate("/login");
-        }
-      } catch (err) {
-        setAuthError("Unauthorized");
-        navigate("/login");
-      }
-    })();
-  }, [navigate]);
-  const { data: metrics, isLoading: metricsLoading } = useQuery<DashboardMetrics>({
+  // Use dashboard metrics query for auth check and data
+  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery<DashboardMetrics>({
     queryKey: ["/api/analytics/dashboard"],
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/dashboard");
       const headersObj: Record<string, string> = {};
       res.headers.forEach((value, key) => { headersObj[key] = value; });
       console.log('[Dashboard] /api/analytics/dashboard response headers:', headersObj);
+      if (res.status === 401) throw new Error("Unauthorized");
       return res.json();
     }
   });
   const { data: trends, isLoading: trendsLoading } = useQuery<SpendingTrend[]>({
     queryKey: ["/api/analytics/trends"],
     queryFn: async () => {
-  const res = await apiFetch("/api/analytics/trends");
-  const headersObj: Record<string, string> = {};
-  res.headers.forEach((value, key) => { headersObj[key] = value; });
-  console.log('[Dashboard] /api/analytics/trends response headers:', headersObj);
-  return res.json();
+      const res = await apiFetch("/api/analytics/trends");
+      const headersObj: Record<string, string> = {};
+      res.headers.forEach((value, key) => { headersObj[key] = value; });
+      console.log('[Dashboard] /api/analytics/trends response headers:', headersObj);
+      return res.json();
     }
   });
   const { data: categories, isLoading: categoriesLoading } = useQuery<CategoryBreakdown[]>({
     queryKey: ["/api/analytics/categories"],
     queryFn: async () => {
-  const res = await apiFetch("/api/analytics/categories");
-  const headersObj: Record<string, string> = {};
-  res.headers.forEach((value, key) => { headersObj[key] = value; });
-  console.log('[Dashboard] /api/analytics/categories response headers:', headersObj);
-  return res.json();
+      const res = await apiFetch("/api/analytics/categories");
+      const headersObj: Record<string, string> = {};
+      res.headers.forEach((value, key) => { headersObj[key] = value; });
+      console.log('[Dashboard] /api/analytics/categories response headers:', headersObj);
+      return res.json();
     }
   });
   // Activity query removed as it's not currently used in the dashboard
@@ -91,23 +75,35 @@ export default function Dashboard() {
   //     return res.json();
   //   }
   // });
-  const { data: subscriptions } = useQuery<Subscription[]>({
+  const { data: subscriptions, isLoading: subscriptionsLoading } = useQuery<Subscription[]>({
     queryKey: ["/api/subscriptions"],
     queryFn: async () => {
-  const res = await apiFetch("/api/subscriptions");
-  const headersObj: Record<string, string> = {};
-  res.headers.forEach((value, key) => { headersObj[key] = value; });
-  console.log('[Dashboard] /api/subscriptions response headers:', headersObj);
-  return res.json();
+      const res = await apiFetch("/api/subscriptions");
+      const headersObj: Record<string, string> = {};
+      res.headers.forEach((value, key) => { headersObj[key] = value; });
+      console.log('[Dashboard] /api/subscriptions response headers:', headersObj);
+      return res.json();
     }
   });
 
   // ...existing code...
-  if (!authChecked) {
+  if (metricsError && metricsError.message === "Unauthorized") {
+    navigate("/login");
+    return null;
+  }
+  // Show skeletons while loading any data
+  if (metricsLoading || trendsLoading || categoriesLoading || subscriptionsLoading) {
     return (
-      <div style={{ padding: 32, textAlign: 'center' }}>
-        <h2>Checking authentication...</h2>
-        {authError && <p style={{ color: 'red' }}>{authError}</p>}
+      <div className="p-8">
+        <div className="mb-8">
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
       </div>
     );
   }
