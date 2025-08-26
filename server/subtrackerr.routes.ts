@@ -1,3 +1,11 @@
+declare global {
+  namespace Express {
+    interface User {
+      tenantId: string;
+      // add other properties if needed
+    }
+  }
+}
 // --- History API ---
 // List all history records
 
