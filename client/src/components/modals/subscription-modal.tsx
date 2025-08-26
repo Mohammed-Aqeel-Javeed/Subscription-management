@@ -590,7 +590,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     <>
       <style>{animationStyles}</style>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl min-w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0">
+  <DialogContent className="max-w-4xl min-w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white">
           <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl flex flex-row items-center justify-between">
             <div className="flex items-center gap-3">
               <CreditCard className="h-6 w-6" />
