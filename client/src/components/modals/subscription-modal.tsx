@@ -45,8 +45,8 @@ interface Department {
 }
 // Update the form schema to handle multiple departments
 const formSchema = z.object({
-  startDate: z.string().min(1, "Start date is required"),
-  nextRenewal: z.string().min(1, "End date is required"),
+  startDate: z.string().optional(),
+  nextRenewal: z.string().optional(),
   paymentMethod: z.string().min(1, "Payment method is required"),
   // All other fields are optional
   serviceName: z.string().optional(),
@@ -73,6 +73,7 @@ const formSchema = z.object({
   message: "When reminder days = 1, only 'One time' policy is allowed",
   path: ["reminderPolicy"],
 });
+
 function parseInputDate(dateStr: string): Date {
   if (!dateStr) return new Date();
   if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
@@ -81,6 +82,7 @@ function parseInputDate(dateStr: string): Date {
   }
   return new Date(dateStr);
 }
+
 function calculateEndDate(startDate: string, billingCycle: string): string {
   if (!startDate || !billingCycle) return "";
   const date = parseInputDate(startDate);
@@ -107,6 +109,7 @@ function calculateEndDate(startDate: string, billingCycle: string): string {
   const dd = String(endDate.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
+
 function calculateRenewalDates(currentEndDate: string, billingCycle: string): { newStartDate: string; newEndDate: string } {
   if (!currentEndDate || !billingCycle) {
     return { newStartDate: "", newEndDate: "" };
@@ -125,25 +128,43 @@ function calculateRenewalDates(currentEndDate: string, billingCycle: string): { 
   
   return { newStartDate, newEndDate };
 }
+
 type FormData = z.infer<typeof formSchema>;
+
 interface SubscriptionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   subscription?: SubscriptionModalData;
 }
+
 export default function SubscriptionModal({ open, onOpenChange, subscription }: SubscriptionModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEditing = !!subscription;
   
-  // No need to track _id, use id from Subscription type
+  // Track the current subscription ObjectId for History button
+  const [currentSubscriptionId, setCurrentSubscriptionId] = useState<string | undefined>();
+  
+  useEffect(() => {
+    if (open) {
+      if (subscription?.id) {
+        setCurrentSubscriptionId(subscription.id);
+      } else {
+        setCurrentSubscriptionId(undefined);
+      }
+    } else {
+      setTimeout(() => {
+        setCurrentSubscriptionId(undefined);
+      }, 100);
+    }
+  }, [subscription, open]);
   
   // Query for categories
   const { data: categories, isLoading: categoriesLoading, refetch: refetchCategories } = useQuery<Category[]>({
     queryKey: ["/api/company/categories"],
     queryFn: async () => {
-  const res = await fetch(`${API_BASE_URL}/api/company/categories`, { credentials: "include" });
-  return res.json();
+      const res = await fetch(`${API_BASE_URL}/api/company/categories`, { credentials: "include" });
+      return res.json();
     }
   });
   
@@ -151,42 +172,46 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const { data: departments, isLoading: departmentsLoading, refetch: refetchDepartments } = useQuery<Department[]>({
     queryKey: ["/api/company/departments"],
     queryFn: async () => {
-  const res = await fetch(`${API_BASE_URL}/api/company/departments`, { credentials: "include" });
-  return res.json();
+      const res = await fetch(`${API_BASE_URL}/api/company/departments`, { credentials: "include" });
+      return res.json();
     }
   });
+  
   // Query for currencies
   const { data: currencies = [] } = useQuery({
     queryKey: ["/api/currencies"],
     queryFn: async () => {
-  const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+      const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     }
   });
   
   // Dynamic subscription fields from config
   const [dynamicFields, setDynamicFields] = useState<SubscriptionField[]>([]);
   const [fieldsLoading, setFieldsLoading] = useState(true);
+  
   // Employee list for Owner dropdown (from /api/employee)
   // Fetch employees from /api/employees (plural) to match company-details.tsx
   const { data: employeesRaw = [], isLoading: employeesLoading } = useQuery({
     queryKey: ['/api/employees'],
     queryFn: async () => {
-  const res = await fetch(`${API_BASE_URL}/api/employees`, { credentials: 'include' });
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+      const res = await fetch(`${API_BASE_URL}/api/employees`, { credentials: 'include' });
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     }
   });
+  
   // Map _id to id for frontend usage (like company-details)
   const employees = employeesRaw.map((emp: any) => ({ ...emp, id: emp._id }));
+  
   // Fetch payment methods for dynamic dropdown
   const { data: paymentMethods = [], isLoading: paymentMethodsLoading } = useQuery({
     queryKey: ['/api/payment'],
     queryFn: async () => {
-  const res = await fetch(`${API_BASE_URL}/api/payment`, { credentials: 'include' });
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+      const res = await fetch(`${API_BASE_URL}/api/payment`, { credentials: 'include' });
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     }
   });
   
@@ -232,10 +257,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       category: subscription?.category || "",
       department: subscription?.department || "",
       departments: parseDepartments(subscription?.department),
-      owner: subscription?.owner || "", // Added owner to defaultValues
-      paymentMethod: subscription?.paymentMethod || "", // Added payment method to defaultValues
-      startDate: subscription?.startDate ? new Date(subscription.startDate).toISOString().split('T')[0] : "",
-      nextRenewal: subscription?.nextRenewal ? new Date(subscription.nextRenewal).toISOString().split('T')[0] : "",
+      owner: subscription?.owner || "",
+      paymentMethod: subscription?.paymentMethod || "",
+      startDate: subscription?.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "",
+      nextRenewal: subscription?.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "",
       status: subscription?.status && subscription?.status !== "" ? subscription.status : "Active",
       reminderDays: subscription?.reminderDays || 7,
       reminderPolicy: subscription?.reminderPolicy && subscription?.reminderPolicy !== "" ? subscription.reminderPolicy : "One time",
@@ -244,9 +269,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     },
   });
   
-  const [startDate, setStartDate] = useState(subscription?.startDate ? new Date(subscription.startDate).toISOString().split('T')[0] : "");
+  const [startDate, setStartDate] = useState(subscription?.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "");
   const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle || "monthly");
-  const [endDate, setEndDate] = useState(subscription?.nextRenewal ? new Date(subscription.nextRenewal).toISOString().split('T')[0] : "");
+  const [endDate, setEndDate] = useState(subscription?.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "");
   const [endDateManuallySet, setEndDateManuallySet] = useState(false);
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(parseDepartments(subscription?.department));
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -262,8 +287,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   useEffect(() => {
     if (subscription) {
-      const start = subscription.startDate ? new Date(subscription.startDate).toISOString().split('T')[0] : "";
-      const end = subscription.nextRenewal ? new Date(subscription.nextRenewal).toISOString().split('T')[0] : "";
+      const start = subscription.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "";
+      const end = subscription.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "";
       const depts = parseDepartments(subscription.department);
       
       setStartDate(start);
@@ -280,7 +305,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         category: subscription.category || "",
         department: subscription.department || "",
         departments: depts,
-        owner: subscription.owner || "", // Added owner to reset values
+        owner: subscription.owner || "",
         startDate: start,
         nextRenewal: end,
         status: subscription.status && subscription.status !== "" ? subscription.status : "Active",
@@ -304,7 +329,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         category: "",
         department: "",
         departments: [],
-        owner: "", // Added owner to reset values
+        owner: "",
         startDate: "",
         nextRenewal: "",
         status: "Active",
@@ -335,12 +360,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const subscriptionData: InsertSubscription = {
         ...rest,
         department: JSON.stringify(data.departments || []),
-        startDate: new Date(data.startDate).toISOString(),
-        nextRenewal: new Date(data.nextRenewal).toISOString(),
+        startDate: new Date(data.startDate ?? "").toISOString(),
+        nextRenewal: new Date(data.nextRenewal ?? "").toISOString(),
       };
       
       let res;
-    const subId = subscription?.id;
+      const subId = subscription?.id;
       if (isEditing && subId) {
         res = await apiRequest("PUT", `/api/subscriptions/${subId}`, subscriptionData);
       } else {
@@ -349,15 +374,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       return res.json();
     },
     onSuccess: async (data, variables) => {
-      // Use only the subscription's _id
-  // No need to setCurrentSubscriptionId
+      // Use only the subscription's id
+      if (subscription?.id) {
+        setCurrentSubscriptionId(subscription.id);
+      }
       
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
       // Insert into history table
       try {
-  const subId = subscription?.id || data.insertedId;
+        const subId = subscription?.id || data.insertedId;
         // Only create history record if we have a subscription ID
         if (subId) {
           await axios.post("/api/history", {
@@ -420,8 +447,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         amount: isNaN(amountNum) ? 0 : amountNum,
         departments: selectedDepartments,
         department: JSON.stringify(selectedDepartments),
-        startDate: new Date(data.startDate),
-        nextRenewal: new Date(data.nextRenewal),
+        startDate: new Date(data.startDate ?? ""),
+        nextRenewal: new Date(data.nextRenewal ?? ""),
         tenantId,
       };
       if (isEditing) {
@@ -526,10 +553,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     setIsRenewing(true);
     setTimeout(async () => {
       const { newStartDate, newEndDate } = calculateRenewalDates(endDate, billingCycle);
-  setStartDate(newStartDate);
-  setEndDate(newEndDate);
-  form.setValue('startDate', newStartDate);
-  form.setValue('nextRenewal', newEndDate);
+      setStartDate(newStartDate);
+      setEndDate(newEndDate);
+      form.setValue('startDate', newStartDate);
+      form.setValue('nextRenewal', newEndDate);
       setEndDateManuallySet(true);
       // Save to main table
       const payload = {
@@ -538,7 +565,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         nextRenewal: newEndDate,
       };
       try {
-  const subId = subscription?.id;
+        const subId = subscription?.id;
         if (subId) {
           await apiRequest("PUT", `/api/subscriptions/${subId}`, payload);
         }
@@ -590,7 +617,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     <>
       <style>{animationStyles}</style>
       <Dialog open={open} onOpenChange={onOpenChange}>
-  <DialogContent className="max-w-4xl min-w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white">
+        <DialogContent className="max-w-4xl min-w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0">
           <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl flex flex-row items-center justify-between">
             <div className="flex items-center gap-3">
               <CreditCard className="h-6 w-6" />
@@ -1126,14 +1153,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   )}
                 />
               </div>
-              {/* Global form error message */}
-              {form.formState.errors && Object.keys(form.formState.errors).length > 0 && (
-                <div className="text-red-600 font-semibold text-center mb-4">
-                  {Object.values(form.formState.errors).map((err: any, idx) => (
-                    <div key={idx}>{err.message}</div>
-                  ))}
-                </div>
-              )}
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
                 <Button 
                   type="button" 
