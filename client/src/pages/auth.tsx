@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { LogIn, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-// Backend API base URL
-const API_BASE_URL = "http://localhost:5000";
+import { API_BASE_URL } from "../lib/config";
 
 export default function AuthPage() {
   const [showSignup, setShowSignup] = useState(false);

@@ -11,49 +11,48 @@ import SubscriptionModal from "@/components/modals/subscription-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Subscription } from "@shared/types";
+import type { Subscription } from "@shared/schema";
 
 // Helper component to display departments
-const DepartmentDisplay = ({ department }: { department: string | undefined }) => {
-  if (!department) return <span>-</span>;
-  
-  try {
-    // Try to parse as JSON array
-    const parsed = JSON.parse(department);
-    if (Array.isArray(parsed)) {
-      return (
-        <div className="flex flex-wrap gap-1">
-          {parsed.map((d, index) => (
-            <Badge key={index} className="bg-slate-100 text-slate-800">
-              {d}
-            </Badge>
-          ))}
-        </div>
-      );
+  // Extend Subscription type locally to include department for frontend use
+  type SubscriptionWithExtras = Subscription & { department?: string };
+  const DepartmentDisplay = ({ department }: { department?: string | string[] }) => {
+    if (!department) return <span>-</span>;
+    let departments: string[] = [];
+    if (Array.isArray(department)) {
+      departments = department;
+    } else {
+      try {
+        const parsed = JSON.parse(department);
+        if (Array.isArray(parsed)) {
+          departments = parsed;
+        } else if (typeof parsed === 'string') {
+          departments = [parsed];
+        }
+      } catch {
+        if (typeof department === 'string' && department.trim()) {
+          departments = [department];
+        }
+      }
     }
-  } catch (e) {
-    // If parsing fails, treat as a single department
+    if (!departments.length) return <span>-</span>;
     return (
       <div className="flex flex-wrap gap-1">
-        <Badge className="bg-slate-100 text-slate-800">{department}</Badge>
+        {departments.map((dept, idx) => (
+          <span key={dept + idx} className="inline-block bg-indigo-100 text-indigo-700 text-xs font-medium px-2 py-0.5 rounded-full">
+            {dept}
+          </span>
+        ))}
       </div>
     );
-  }
-  
-  // Fallback
-  return (
-    <div className="flex flex-wrap gap-1">
-      <Badge className="bg-slate-100 text-slate-800">{department}</Badge>
-    </div>
-  );
-};
+  };
 
 export default function Subscriptions() {
   // ...existing code...
   // Removed duplicate declaration of subscriptions, isLoading, and refetch
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingSubscription, setEditingSubscription] = useState<Subscription | undefined>();
+  const [editingSubscription, setEditingSubscription] = useState<Partial<SubscriptionWithExtras> | undefined>();
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [vendorFilter, setVendorFilter] = useState("all");
@@ -178,8 +177,8 @@ export default function Subscriptions() {
   });
   
   const handleEdit = (subscription: Subscription) => {
-    // Always use _id if present for editing
-    const subscriptionId = subscription._id?.toString() || subscription.id?.toString();
+    // Always use id for editing
+    const subscriptionId = subscription.id?.toString();
     if (!subscriptionId) {
       toast({
         title: "Error",
@@ -188,16 +187,11 @@ export default function Subscriptions() {
       });
       return;
     }
-    
     setEditingSubscription({
       ...subscription,
       id: subscriptionId,
-      _id: subscriptionId,
-      billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
-      category: subscription.category && subscription.category !== "" ? subscription.category : "Software",
-      status: subscription.status && subscription.status !== "" ? subscription.status : "Active",
-      reminderPolicy: subscription.reminderPolicy && subscription.reminderPolicy !== "" ? subscription.reminderPolicy : "One time",
-      amount: typeof subscription.amount === "string" ? parseFloat(subscription.amount) : subscription.amount,
+      amount: subscription.amount !== undefined ? String(subscription.amount) : "",
+      department: (subscription as any).department ?? "",
     });
     setModalOpen(true);
   };
@@ -269,10 +263,15 @@ export default function Subscriptions() {
   };
   
   // Helper to format date as dd/mm/yyyy
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return "";
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
+  const formatDate = (dateVal?: string | Date) => {
+    if (!dateVal) return "";
+    let d: Date;
+    if (typeof dateVal === "string") {
+      d = new Date(dateVal);
+      if (isNaN(d.getTime())) return dateVal;
+    } else {
+      d = dateVal;
+    }
     const dd = String(d.getDate()).padStart(2, '0');
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const yyyy = String(d.getFullYear());
@@ -512,7 +511,7 @@ export default function Subscriptions() {
                 <TableBody>
                   {filteredSubscriptions && filteredSubscriptions.length > 0 ? (
                     filteredSubscriptions.map((subscription) => (
-                      <TableRow key={subscription._id || subscription.id} className="hover:bg-slate-50 transition-colors">
+                      <TableRow key={subscription.id} className="hover:bg-slate-50 transition-colors">
                         <TableCell className="py-3 px-4">
                           <div>
                             <div className="font-medium text-slate-900">{subscription.serviceName}</div>
@@ -536,7 +535,7 @@ export default function Subscriptions() {
                           <StatusBadge status={subscription.status} />
                         </TableCell>
                         <TableCell className="py-3 px-4">
-                          <DepartmentDisplay department={subscription.department} />
+                          <DepartmentDisplay department={(subscription as any).department ?? ""} />
                         </TableCell>
                         <TableCell className="py-3 px-4">
                           <Badge className={getCategoryColor(subscription.category)}>
@@ -559,7 +558,7 @@ export default function Subscriptions() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDelete(subscription._id || subscription.id)}
+                              onClick={() => handleDelete(subscription.id)}
                               className="text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg p-2 h-8 w-8"
                               disabled={deleteMutation.isPending}
                             >
@@ -590,7 +589,7 @@ export default function Subscriptions() {
       <SubscriptionModal
         open={modalOpen}
         onOpenChange={handleCloseModal}
-        subscription={editingSubscription}
+  subscription={editingSubscription}
       />
     </div>
   );
