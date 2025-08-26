@@ -30,7 +30,7 @@ export default function ComplianceDashboard() {
   const navigate = useNavigate();
   const [activeIssuesModalOpen, setActiveIssuesModalOpen] = useState(false);
   const [upcomingDeadlinesModalOpen, setUpcomingDeadlinesModalOpen] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   
   // Fetch all compliance filings (live data)
   const { data: complianceList, isLoading: complianceLoading } = useQuery({
@@ -109,31 +109,26 @@ export default function ComplianceDashboard() {
     });
   }, [complianceList, now]);
 
-  // Helper to get cookie by name
-  function getCookie(name: string) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop()?.split(';').shift();
-    return null;
-  }
-
-  React.useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token = getCookie("token");
-      if (token) {
-        setAuthChecked(true);
-      } else {
-        navigate("/login");
-      }
-    }
-  }, [navigate]);
-
-  if (!authChecked) {
+  // Auth check: use complianceList query error
+  if (complianceLoading) {
     return (
-      <div style={{ padding: 32, textAlign: 'center' }}>
-        <h2>Checking authentication...</h2>
+      <div className="p-8">
+        <div className="mb-8">
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
       </div>
     );
+  }
+  if (complianceList === undefined) {
+    // If query failed (likely 401), redirect to login
+    navigate("/login");
+    return null;
   }
 
   const handleLogout = async () => {
