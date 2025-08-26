@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE_URL } from "@/lib/config";
 // Type for dynamic subscription fields
 interface SubscriptionField {
   name: string;
@@ -23,6 +24,13 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { insertSubscriptionSchema } from "@shared/schema";
 import type { InsertSubscription, Subscription } from "@shared/schema";
+// Extend Subscription for modal usage to include extra fields
+type SubscriptionModalData = Partial<Subscription> & {
+  currency?: string;
+  department?: string;
+  owner?: string;
+  paymentMethod?: string;
+};
 import { z } from "zod";
 import { CreditCard, X, ChevronDown, Check, History, RefreshCw } from "lucide-react";
 // Define the Category interface
@@ -121,36 +129,21 @@ type FormData = z.infer<typeof formSchema>;
 interface SubscriptionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  subscription?: Subscription;
+  subscription?: SubscriptionModalData;
 }
 export default function SubscriptionModal({ open, onOpenChange, subscription }: SubscriptionModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEditing = !!subscription;
   
-  // Track the current subscription ObjectId for History button
-  const [currentSubscriptionId, setCurrentSubscriptionId] = useState<string | undefined>();
-  
-  useEffect(() => {
-    if (open) {
-      if (subscription?._id) {
-        setCurrentSubscriptionId(subscription._id);
-      } else {
-        setCurrentSubscriptionId(undefined);
-      }
-    } else {
-      setTimeout(() => {
-        setCurrentSubscriptionId(undefined);
-      }, 100);
-    }
-  }, [subscription, open]);
+  // No need to track _id, use id from Subscription type
   
   // Query for categories
   const { data: categories, isLoading: categoriesLoading, refetch: refetchCategories } = useQuery<Category[]>({
     queryKey: ["/api/company/categories"],
     queryFn: async () => {
-      const res = await fetch("/api/company/categories", { credentials: "include" });
-      return res.json();
+  const res = await fetch(`${API_BASE_URL}/api/company/categories`, { credentials: "include" });
+  return res.json();
     }
   });
   
@@ -158,20 +151,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const { data: departments, isLoading: departmentsLoading, refetch: refetchDepartments } = useQuery<Department[]>({
     queryKey: ["/api/company/departments"],
     queryFn: async () => {
-      const res = await fetch("/api/company/departments", { credentials: "include" });
-      return res.json();
+  const res = await fetch(`${API_BASE_URL}/api/company/departments`, { credentials: "include" });
+  return res.json();
     }
   });
   // Query for currencies
-    // Query for currencies (disabled, backend does not provide /api/currencies)
-    // const { data: currencies = [] } = useQuery({
-    //   queryKey: ["/api/currencies"],
-    //   queryFn: async () => {
-    //     const res = await fetch("/api/currencies", { credentials: "include" });
-    //     const data = await res.json();
-    //     return Array.isArray(data) ? data : [];
-    //   }
-    // });
+  const { data: currencies = [] } = useQuery({
+    queryKey: ["/api/currencies"],
+    queryFn: async () => {
+  const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+    }
+  });
+  
   // Dynamic subscription fields from config
   const [dynamicFields, setDynamicFields] = useState<SubscriptionField[]>([]);
   const [fieldsLoading, setFieldsLoading] = useState(true);
@@ -180,9 +173,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const { data: employeesRaw = [], isLoading: employeesLoading } = useQuery({
     queryKey: ['/api/employees'],
     queryFn: async () => {
-      const res = await fetch('/api/employees', { credentials: 'include' });
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
+  const res = await fetch(`${API_BASE_URL}/api/employees`, { credentials: 'include' });
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
     }
   });
   // Map _id to id for frontend usage (like company-details)
@@ -191,16 +184,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const { data: paymentMethods = [], isLoading: paymentMethodsLoading } = useQuery({
     queryKey: ['/api/payment'],
     queryFn: async () => {
-      const res = await fetch('/api/payment', { credentials: 'include' });
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
+  const res = await fetch(`${API_BASE_URL}/api/payment`, { credentials: 'include' });
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
     }
   });
   
   // Fetch enabled fields from backend
   useEffect(() => {
     setFieldsLoading(true);
-    fetch('/api/config/fields')
+    fetch(`${API_BASE_URL}/api/config/fields`)
       .then(res => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -347,7 +340,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       };
       
       let res;
-    const subId = subscription?._id;
+    const subId = subscription?.id;
       if (isEditing && subId) {
         res = await apiRequest("PUT", `/api/subscriptions/${subId}`, subscriptionData);
       } else {
@@ -357,16 +350,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     },
     onSuccess: async (data, variables) => {
       // Use only the subscription's _id
-      if (subscription?._id) {
-        setCurrentSubscriptionId(subscription._id);
-      }
+  // No need to setCurrentSubscriptionId
       
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
       // Insert into history table
       try {
-        const subId = subscription?._id || data.insertedId;
+  const subId = subscription?.id || data.insertedId;
         // Only create history record if we have a subscription ID
         if (subId) {
           await axios.post("/api/history", {
@@ -449,8 +440,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           const subscriptionId = result._id || result.subscription?._id;
           
           if (subscriptionId) {
-            setCurrentSubscriptionId(subscriptionId);
-            
             // Create history record using the same payload that created the subscription
             try {
               await apiRequest("POST", "/api/history", {
@@ -549,7 +538,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         nextRenewal: newEndDate,
       };
       try {
-        const subId = subscription?._id || subscription?.id;
+  const subId = subscription?.id;
         if (subId) {
           await apiRequest("PUT", `/api/subscriptions/${subId}`, payload);
         }
@@ -638,9 +627,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 variant="outline"
                 className={`bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-5 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 min-w-[90px] border-indigo-200 flex items-center gap-2 ${!isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
-                  if (isEditing && subscription?._id) {
+                  if (isEditing && subscription?.id) {
                     // Only pass the ID, removing serviceName to simplify filtering
-                    window.location.href = `/subscription-history?id=${subscription._id}`;
+                    window.location.href = `/subscription-history?id=${subscription.id}`;
                   }
                 }}
                 disabled={!isEditing}

@@ -1,3 +1,4 @@
+
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 // @ts-ignore
@@ -14,9 +15,14 @@ function log(message: string, source = "express") {
 }
 
 
+
 const app = express();
+// CORS must be the first middleware
 app.use(cors({
-  origin: "https://subscription-management-6uje.onrender.com",
+  origin: [
+    "https://subscription-management-6uje.onrender.com",
+    "http://localhost:5173"
+  ],
   credentials: true,
 }));
 app.use(express.json());

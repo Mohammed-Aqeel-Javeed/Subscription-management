@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { UserPlus } from "lucide-react";
-// Backend API base URL
-const API_BASE_URL = "http://localhost:5000";
+import { API_BASE_URL } from "../lib/config";
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState("");
