@@ -89,11 +89,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .json({ message: "Missing required fields (fullName, email, password, tenantId)" });
       }
       const db = await connectToDatabase();
+      // Check if user already exists in login collection
       const existingUser = await db.collection("login").findOne({ email });
       if (existingUser) {
         return res.status(400).json({ message: "User already exists with this email" });
       }
       const doc = { fullName, email, password, tenantId, createdAt: new Date() };
+      // Save user in both signup and login collections
       await db.collection("signup").insertOne(doc);
       await db.collection("login").insertOne(doc);
       res.status(201).json({ message: "Signup successful" });
@@ -109,45 +111,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!email || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
-  const db = await connectToDatabase();
-  // Use 'login' collection for authentication (matches your DB)
-  const user = await db.collection("login").findOne({ email, password });
+      const db = await connectToDatabase();
+      // Use 'login' collection for authentication
+      const user = await db.collection("login").findOne({ email });
       if (!user) {
-        return res.status(401).json({ message: "Invalid email or password" });
+        return res.status(401).json({ message: "User not found" });
       }
-      // Always include tenantId in JWT and response
-      const tokenPayload: any = {
-        userId: user._id,
-        email: user.email,
-        tenantId: user.tenantId || null
-      };
+      // If you use bcrypt for password hashing, compare here
+      // If not, use plain text comparison (not recommended for production)
+      // const valid = await bcrypt.compare(password, user.password);
+      // For now, use plain text:
+      if (user.password !== password) {
+        return res.status(401).json({ message: "Invalid password" });
+      }
       const token = jwt.sign(
-        tokenPayload,
+        { id: user._id, email: user.email, tenantId: user.tenantId },
         process.env.JWT_SECRET || "subs_secret_key",
-        { expiresIn: "7d" }
+        { expiresIn: "1d" }
       );
       res.cookie("token", token, {
         httpOnly: true,
         secure: true,
         sameSite: "none",
         path: "/",
-        maxAge: 7 * 24 * 60 * 60 * 1000
       });
-      // Debug log: verify cookie setting
-      console.log("[LOGIN] Set-Cookie header:", res.getHeader('Set-Cookie'));
-      res.on('finish', () => {
-        console.log("[LOGIN] Request headers:", req.headers);
-        console.log("[LOGIN] Response headers:", res.getHeaders());
-      });
-      res.status(200).json({
-        message: "Login successful",
-        user: {
-          userId: user._id,
-          email: user.email,
-          tenantId: user.tenantId || null,
-          fullName: user.fullName || null
-        }
-      });
+      res.json({ message: "Login successful" });
     } catch (err) {
       res.status(500).json({ message: "Login failed" });
     }
