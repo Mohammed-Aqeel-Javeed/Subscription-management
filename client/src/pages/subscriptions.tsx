@@ -114,7 +114,7 @@ export default function Subscriptions() {
   }, []);
   // Fetch recent activities
   const { data: recentActivitiesRaw, isLoading: isActivitiesLoading } = useQuery({
-    queryKey: ["/api/analytics/recent-activity"],
+  queryKey: ["/api/analytics/activity"],
   });
   
   // Ensure recentActivities is always an array

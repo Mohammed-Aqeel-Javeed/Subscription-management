@@ -75,17 +75,15 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     throw err;
   });
 
-  // In production, serve static files from dist/public
-  if (app.get("env") !== "development") {
-    const expressStatic = require("express").static;
-    const path = require("path");
-    const publicPath = path.join(process.cwd(), "dist/public");
-    app.use(expressStatic(publicPath));
-    app.get("*", (req: Request, res: Response, next: NextFunction) => {
-      if (req.path.startsWith("/api")) return next();
-      res.sendFile(path.join(publicPath, "index.html"));
-    });
-  }
+  // Serve static files from client/dist in all environments
+  const expressStatic = require("express").static;
+  const path = require("path");
+  const publicPath = path.join(process.cwd(), "dist/public");
+  app.use(expressStatic(publicPath));
+  app.get("*", (req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(path.join(publicPath, "index.html"));
+  });
 
   const port = process.env.PORT ? Number(process.env.PORT) : 5000;
   server.listen({

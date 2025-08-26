@@ -163,15 +163,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     }
   });
   // Query for currencies
-  const { data: currencies = [] } = useQuery({
-    queryKey: ["/api/currencies"],
-    queryFn: async () => {
-      const res = await fetch("/api/currencies", { credentials: "include" });
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
-    }
-  });
-  
+    // Query for currencies (disabled, backend does not provide /api/currencies)
+    // const { data: currencies = [] } = useQuery({
+    //   queryKey: ["/api/currencies"],
+    //   queryFn: async () => {
+    //     const res = await fetch("/api/currencies", { credentials: "include" });
+    //     const data = await res.json();
+    //     return Array.isArray(data) ? data : [];
+    //   }
+    // });
   // Dynamic subscription fields from config
   const [dynamicFields, setDynamicFields] = useState<SubscriptionField[]>([]);
   const [fieldsLoading, setFieldsLoading] = useState(true);
