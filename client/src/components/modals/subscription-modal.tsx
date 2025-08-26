@@ -441,7 +441,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Ensure amount is a number
       const amountNum = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount ?? 0;
       // Get tenantId from context, state, or user info
-      const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
+  const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
         ...data,
         amount: isNaN(amountNum) ? 0 : amountNum,
@@ -1110,9 +1110,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="One time">One time</SelectItem>
-                            <SelectItem value="Two times" disabled={isOnlyOneTimeAllowed}>Two times</SelectItem>
-                            <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed}>Until Renewal</SelectItem>
+                            <SelectItem value="One time" className="bg-white text-black px-3 py-2 hover:bg-blue-50">One time</SelectItem>
+                            <SelectItem value="Two times" disabled={isOnlyOneTimeAllowed} className="bg-white text-black px-3 py-2 hover:bg-blue-50">Two times</SelectItem>
+                            <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed} className="bg-white text-black px-3 py-2 hover:bg-blue-50">Until Renewal</SelectItem>
                           </SelectContent>
                         </Select>
                         {isOnlyOneTimeAllowed && (
