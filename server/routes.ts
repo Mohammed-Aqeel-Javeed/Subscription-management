@@ -1,4 +1,14 @@
 import type { Express } from "express";
+import type { User } from "./types";
+
+declare global {
+  namespace Express {
+    interface User {
+      tenantId: string;
+      // add other properties if needed
+    }
+  }
+}
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { ObjectId } from "mongodb";
