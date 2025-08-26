@@ -62,18 +62,20 @@ export default function AuthPage() {
     }
     // Only backend validation for login
     try {
-  const res = await fetch(`${API_BASE_URL}/api/login`, {
+      const res = await fetch(`${API_BASE_URL}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+        credentials: "include"
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setLoginError(data.message || "Login failed");
         return;
       }
+      // Check if cookie is set (optional: check response for user)
       sessionStorage.setItem("isAuthenticated", "true");
-  navigate("/dashboard");
+      navigate("/dashboard");
     } catch (err) {
       setLoginError("Network error");
     }
