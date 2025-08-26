@@ -32,18 +32,35 @@ export default function Dashboard() {
   const location = window.location.pathname;
   const navigate = useNavigate();
   const [authChecked, setAuthChecked] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   console.log("[Dashboard] Component mounted");
   const [activeSubscriptionsModalOpen, setActiveSubscriptionsModalOpen] = useState(false);
   const [upcomingRenewalsModalOpen, setUpcomingRenewalsModalOpen] = useState(false);
+  // Auth check: call protected endpoint
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiFetch("/api/analytics/dashboard");
+        if (res.status === 200) {
+          setAuthChecked(true);
+        } else {
+          setAuthError("Unauthorized");
+          navigate("/login");
+        }
+      } catch (err) {
+        setAuthError("Unauthorized");
+        navigate("/login");
+      }
+    })();
+  }, [navigate]);
   const { data: metrics, isLoading: metricsLoading } = useQuery<DashboardMetrics>({
     queryKey: ["/api/analytics/dashboard"],
     queryFn: async () => {
-  const res = await apiFetch("/api/analytics/dashboard");
-  // Debug: log response headers
-  const headersObj: Record<string, string> = {};
-  res.headers.forEach((value, key) => { headersObj[key] = value; });
-  console.log('[Dashboard] /api/analytics/dashboard response headers:', headersObj);
-  return res.json();
+      const res = await apiFetch("/api/analytics/dashboard");
+      const headersObj: Record<string, string> = {};
+      res.headers.forEach((value, key) => { headersObj[key] = value; });
+      console.log('[Dashboard] /api/analytics/dashboard response headers:', headersObj);
+      return res.json();
     }
   });
   const { data: trends, isLoading: trendsLoading } = useQuery<SpendingTrend[]>({
@@ -85,32 +102,12 @@ export default function Dashboard() {
     }
   });
 
-  // Helper to get cookie by name
-  function getCookie(name: string) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop()?.split(';').shift();
-    return null;
-  }
-
-  React.useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token = getCookie("token");
-      console.log("[Dashboard] Cookie token:", token);
-      if (token) {
-        setAuthChecked(true);
-        console.log("[Dashboard] Authenticated, rendering dashboard.");
-      } else {
-        console.log("[Dashboard] No token found, redirecting to login.");
-        navigate("/login");
-      }
-    }
-  }, [navigate]);
-
+  // ...existing code...
   if (!authChecked) {
     return (
       <div style={{ padding: 32, textAlign: 'center' }}>
         <h2>Checking authentication...</h2>
+        {authError && <p style={{ color: 'red' }}>{authError}</p>}
       </div>
     );
   }
