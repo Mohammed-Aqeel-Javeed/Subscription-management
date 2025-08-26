@@ -111,31 +111,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!email || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
-      const db = await connectToDatabase();
-      // Use 'login' collection for authentication
-      const user = await db.collection("login").findOne({ email });
+  const db = await connectToDatabase();
+  // Use 'login' collection for authentication (matches your DB)
+  const user = await db.collection("login").findOne({ email, password });
       if (!user) {
-        return res.status(401).json({ message: "User not found" });
+        return res.status(401).json({ message: "Invalid email or password" });
       }
-      // If you use bcrypt for password hashing, compare here
-      // If not, use plain text comparison (not recommended for production)
-      // const valid = await bcrypt.compare(password, user.password);
-      // For now, use plain text:
-      if (user.password !== password) {
-        return res.status(401).json({ message: "Invalid password" });
-      }
+      // Always include tenantId in JWT and response
+      const tokenPayload: any = {
+        userId: user._id,
+        email: user.email,
+        tenantId: user.tenantId || null
+      };
       const token = jwt.sign(
-        { id: user._id, email: user.email, tenantId: user.tenantId },
+        tokenPayload,
         process.env.JWT_SECRET || "subs_secret_key",
-        { expiresIn: "1d" }
+        { expiresIn: "7d" }
       );
       res.cookie("token", token, {
         httpOnly: true,
         secure: true,
         sameSite: "none",
         path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1000
       });
-      res.json({ message: "Login successful" });
+      // Debug log: verify cookie setting
+      console.log("[LOGIN] Set-Cookie header:", res.getHeader('Set-Cookie'));
+      res.on('finish', () => {
+        console.log("[LOGIN] Request headers:", req.headers);
+        console.log("[LOGIN] Response headers:", res.getHeaders());
+      });
+      res.status(200).json({
+        message: "Login successful",
+        user: {
+          userId: user._id,
+          email: user.email,
+          tenantId: user.tenantId || null,
+          fullName: user.fullName || null
+        }
+      });
     } catch (err) {
       res.status(500).json({ message: "Login failed" });
     }
