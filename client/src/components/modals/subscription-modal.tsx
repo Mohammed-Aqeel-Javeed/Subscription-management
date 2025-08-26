@@ -428,7 +428,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       } else {
         toast({
           title: "Error",
-          description: error.message || `Failed to create subscription`,
+          description: error?.response?.data?.message || error.message || `Failed to create subscription`,
           variant: "destructive",
         });
       }
@@ -715,10 +715,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         value={field.value || ''}
                         onValueChange={field.onChange}
                       >
-                        <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                        <SelectTrigger className="w-full bg-white border border-blue-300 rounded-lg shadow-sm p-2 text-base focus:ring-2 focus:ring-blue-500">
                           <SelectValue placeholder="Select currency" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-white border border-blue-200 shadow-xl rounded-lg">
                           {currencies && currencies.length > 0 ? (
                             currencies.map((curr: any) => (
                               <SelectItem key={curr.code} value={curr.code}>
