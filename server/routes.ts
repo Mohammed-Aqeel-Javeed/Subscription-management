@@ -89,13 +89,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .json({ message: "Missing required fields (fullName, email, password, tenantId)" });
       }
       const db = await connectToDatabase();
-      // Check if user already exists in login collection
       const existingUser = await db.collection("login").findOne({ email });
       if (existingUser) {
         return res.status(400).json({ message: "User already exists with this email" });
       }
       const doc = { fullName, email, password, tenantId, createdAt: new Date() };
-      // Save user in both signup and login collections
       await db.collection("signup").insertOne(doc);
       await db.collection("login").insertOne(doc);
       res.status(201).json({ message: "Signup successful" });
@@ -111,9 +109,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!email || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
-  const db = await connectToDatabase();
-  // Use 'login' collection for authentication (matches your DB)
-  const user = await db.collection("login").findOne({ email, password });
+      const db = await connectToDatabase();
+      // Use 'users' collection for authentication
+      const user = await db.collection("users").findOne({ email, password });
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
