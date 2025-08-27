@@ -73,7 +73,6 @@ const formSchema = z.object({
   message: "When reminder days = 1, only 'One time' policy is allowed",
   path: ["reminderPolicy"],
 });
-
 function parseInputDate(dateStr: string): Date {
   if (!dateStr) return new Date();
   if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
@@ -82,7 +81,6 @@ function parseInputDate(dateStr: string): Date {
   }
   return new Date(dateStr);
 }
-
 function calculateEndDate(startDate: string, billingCycle: string): string {
   if (!startDate || !billingCycle) return "";
   const date = parseInputDate(startDate);
@@ -109,7 +107,6 @@ function calculateEndDate(startDate: string, billingCycle: string): string {
   const dd = String(endDate.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
-
 function calculateRenewalDates(currentEndDate: string, billingCycle: string): { newStartDate: string; newEndDate: string } {
   if (!currentEndDate || !billingCycle) {
     return { newStartDate: "", newEndDate: "" };
@@ -128,15 +125,12 @@ function calculateRenewalDates(currentEndDate: string, billingCycle: string): { 
   
   return { newStartDate, newEndDate };
 }
-
 type FormData = z.infer<typeof formSchema>;
-
 interface SubscriptionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   subscription?: SubscriptionModalData;
 }
-
 export default function SubscriptionModal({ open, onOpenChange, subscription }: SubscriptionModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -611,6 +605,49 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     .animate-spin {
       animation: spin 1s linear infinite;
     }
+    
+    /* Improved dropdown styles */
+    .dropdown-content {
+      background-color: white;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      z-index: 50;
+      overflow: hidden;
+    }
+    
+    .dropdown-item {
+      padding: 10px 16px;
+      font-size: 14px;
+      color: #334155;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    
+    .dropdown-item:last-child {
+      border-bottom: none;
+    }
+    
+    .dropdown-item:hover {
+      background-color: #f1f5f9;
+      color: #1e40af;
+    }
+    
+    .dropdown-item.selected {
+      background-color: #eff6ff;
+      color: #1d4ed8;
+      font-weight: 500;
+    }
+    
+    .dropdown-item.disabled {
+      color: #94a3b8;
+      cursor: not-allowed;
+    }
+    
+    .dropdown-item.disabled:hover {
+      background-color: transparent;
+    }
   `;
   
   return (
@@ -718,15 +755,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <SelectTrigger className="w-full bg-white border border-blue-300 rounded-lg shadow-sm p-2 text-base focus:ring-2 focus:ring-blue-500">
                           <SelectValue placeholder="Select currency" />
                         </SelectTrigger>
-                        <SelectContent className="bg-white border border-blue-200 shadow-xl rounded-lg">
+                        <SelectContent className="dropdown-content">
                           {currencies && currencies.length > 0 ? (
                             currencies.map((curr: any) => (
-                              <SelectItem key={curr.code} value={curr.code}>
+                              <SelectItem key={curr.code} value={curr.code} className="dropdown-item">
                                 {curr.symbol} {curr.code} - {curr.name}
                               </SelectItem>
                             ))
                           ) : (
-                            <SelectItem value="no-currency" disabled>
+                            <SelectItem value="no-currency" disabled className="dropdown-item disabled">
                               No currencies configured
                             </SelectItem>
                           )}
@@ -765,11 +802,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                           <SelectValue placeholder="Select cycle" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="yearly">Yearly</SelectItem>
-                          <SelectItem value="quarterly">Quarterly</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectContent className="dropdown-content">
+                          <SelectItem value="monthly" className="dropdown-item">Monthly</SelectItem>
+                          <SelectItem value="yearly" className="dropdown-item">Yearly</SelectItem>
+                          <SelectItem value="quarterly" className="dropdown-item">Quarterly</SelectItem>
+                          <SelectItem value="weekly" className="dropdown-item">Weekly</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -788,9 +825,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Active">Active</SelectItem>
-                          <SelectItem value="Cancelled">Cancelled</SelectItem>
+                        <SelectContent className="dropdown-content">
+                          <SelectItem value="Active" className={`${field.value === 'Active' ? 'selected' : ''} dropdown-item`}>Active</SelectItem>
+                          <SelectItem value="Cancelled" className={`${field.value === 'Cancelled' ? 'selected' : ''} dropdown-item`}>Cancelled</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -811,15 +848,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                           <SelectValue placeholder={categoriesLoading ? "Loading..." : "Select category"} />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="dropdown-content">
                           {Array.isArray(categories) && categories.length > 0 ? (
                             categories
                               .filter(cat => cat.visible)
                               .map(cat => (
-                                <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
+                                <SelectItem key={cat.name} value={cat.name} className={`${field.value === cat.name ? 'selected' : ''} dropdown-item`}>{cat.name}</SelectItem>
                               ))
                           ) : (
-                            <SelectItem value="no-category" disabled>No categories found</SelectItem>
+                            <SelectItem value="no-category" disabled className="dropdown-item disabled">No categories found</SelectItem>
                           )}
                         </SelectContent>
                       </Select>
@@ -848,7 +885,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-full p-0">
+                          <PopoverContent className="w-full p-0 dropdown-content">
                             <div className="max-h-60 overflow-auto p-2">
                               {Array.isArray(departments) && departments.length > 0 ? (
                                 departments
@@ -917,15 +954,19 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                           <SelectValue placeholder={employeesLoading ? 'Loading employees...' : 'Select owner'} />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="dropdown-content">
                           {Array.isArray(employees) && employees.length > 0 ? (
                             employees.map(emp => (
-                              <SelectItem key={emp.id || emp._id || emp.name} value={emp.name}>
+                              <SelectItem 
+                                key={emp.id || emp._id || emp.name} 
+                                value={emp.name}
+                                className={`${field.value === emp.name ? 'selected' : ''} dropdown-item`}
+                              >
                                 {emp.name}
                               </SelectItem>
                             ))
                           ) : (
-                            <SelectItem value="no-employee" disabled>No employees found</SelectItem>
+                            <SelectItem value="no-employee" disabled className="dropdown-item disabled">No employees found</SelectItem>
                           )}
                         </SelectContent>
                       </Select>
@@ -948,13 +989,19 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                           <SelectValue placeholder={paymentMethodsLoading ? 'Loading...' : 'Select payment method'} />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="dropdown-content">
                           {Array.isArray(paymentMethods) && paymentMethods.length > 0 ? (
                             paymentMethods.map((pm: any) => (
-                              <SelectItem key={pm._id || pm.id || pm.name} value={pm.name}>{pm.name}</SelectItem>
+                              <SelectItem 
+                                key={pm._id || pm.id || pm.name} 
+                                value={pm.name}
+                                className={`${field.value === pm.name ? 'selected' : ''} dropdown-item`}
+                              >
+                                {pm.name}
+                              </SelectItem>
                             ))
                           ) : (
-                            <SelectItem value="no-method" disabled>No payment methods found</SelectItem>
+                            <SelectItem value="no-method" disabled className="dropdown-item disabled">No payment methods found</SelectItem>
                           )}
                         </SelectContent>
                       </Select>
@@ -1109,10 +1156,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               <SelectValue placeholder="Select policy" />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
-                            <SelectItem value="One time" className="bg-white text-black px-3 py-2 hover:bg-blue-50">One time</SelectItem>
-                            <SelectItem value="Two times" disabled={isOnlyOneTimeAllowed} className="bg-white text-black px-3 py-2 hover:bg-blue-50">Two times</SelectItem>
-                            <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed} className="bg-white text-black px-3 py-2 hover:bg-blue-50">Until Renewal</SelectItem>
+                          <SelectContent className="dropdown-content">
+                            <SelectItem value="One time" className={`${field.value === 'One time' ? 'selected' : ''} dropdown-item`}>One time</SelectItem>
+                            <SelectItem value="Two times" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Two times' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Two times</SelectItem>
+                            <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Until Renewal' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Until Renewal</SelectItem>
                           </SelectContent>
                         </Select>
                         {isOnlyOneTimeAllowed && (
