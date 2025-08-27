@@ -561,10 +561,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       form.setValue('nextRenewal', newEndDate);
       
       // Prepare payload for API
+      const formValues = form.getValues();
       const payload = {
-        ...form.getValues(),
+        ...formValues,
         startDate: newStartDate,
         nextRenewal: newEndDate,
+        amount:
+          formValues.amount !== undefined && formValues.amount !== ""
+            ? Number(formValues.amount)
+            : undefined,
       };
       
       // Save to backend
