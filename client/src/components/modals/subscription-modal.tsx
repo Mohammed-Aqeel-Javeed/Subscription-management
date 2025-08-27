@@ -562,6 +562,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       // Prepare payload for API
       const formValues = form.getValues();
+      // Always get tenantId from context or user info
+      const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
         ...formValues,
         startDate: newStartDate,
@@ -570,6 +572,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           formValues.amount !== undefined && formValues.amount !== ""
             ? Number(formValues.amount)
             : undefined,
+        tenantId,
       };
       
       // Save to backend

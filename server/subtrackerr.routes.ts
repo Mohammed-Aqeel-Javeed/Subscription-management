@@ -698,13 +698,11 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     if (!oldDoc) {
       return res.status(404).json({ message: "Subscription not found or access denied" });
     }
-    // Remove tenantId from payload to prevent overwriting
-    const { tenantId: _ignoreTenantId, ...payload } = req.body;
     // Perform the update
     const update = { 
       $set: { 
-        ...payload,
-        tenantId, // Always preserve tenantId from session
+        ...req.body,
+        tenantId, // Always preserve tenantId
         status: req.body.status || oldDoc.status, // Preserve status if not provided
         updatedAt: new Date()  // Add updatedAt timestamp
       } 

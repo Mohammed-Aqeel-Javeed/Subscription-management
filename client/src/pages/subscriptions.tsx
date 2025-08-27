@@ -199,8 +199,6 @@ export default function Subscriptions() {
       id: subscriptionId,
       amount: subscription.amount !== undefined ? String(subscription.amount) : "",
       department: (subscription as any).department ?? "",
-      isActive: true,
-      tenantId: (window as any).currentTenantId || (window as any).user?.tenantId || null,
     });
     setModalOpen(true);
   };
@@ -229,7 +227,7 @@ export default function Subscriptions() {
     const matchesCategory = categoryFilter === "all" || sub.category === categoryFilter;
     const matchesVendor = vendorFilter === "all" || sub.vendor === vendorFilter;
     return matchesSearch && matchesCategory && matchesVendor;
-  }).map(sub => ({ ...sub })) as SubscriptionWithExtras[] : [];
+  }) : [];
   
   const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.category) : []));
   const uniqueVendors = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.vendor) : []));
@@ -520,7 +518,7 @@ export default function Subscriptions() {
                 <TableBody>
                   {filteredSubscriptions && filteredSubscriptions.length > 0 ? (
                     filteredSubscriptions.map((subscription) => (
-                      <TableRow key={subscription._id || subscription.id} className="hover:bg-slate-50 transition-colors">
+                      <TableRow key={subscription.id} className="hover:bg-slate-50 transition-colors">
                         <TableCell className="py-3 px-4">
                           <div>
                             <div className="font-medium text-slate-900">{subscription.serviceName}</div>
@@ -567,7 +565,7 @@ export default function Subscriptions() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDelete(subscription._id || subscription.id)}
+                              onClick={() => handleDelete(subscription.id)}
                               className="text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg p-2 h-8 w-8"
                               disabled={deleteMutation.isPending}
                             >
