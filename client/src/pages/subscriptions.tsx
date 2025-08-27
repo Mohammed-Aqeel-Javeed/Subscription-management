@@ -79,6 +79,11 @@ export default function Subscriptions() {
       // Force an immediate refetch
       refetch();
     }
+      // Listen for subscription-renewed event and refetch subscriptions
+      function handleSubscriptionRenewed() {
+        queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+        refetch();
+      }
 
     // Add event listeners
     window.addEventListener('account-changed', handleAccountChange);
@@ -87,6 +92,7 @@ export default function Subscriptions() {
     window.addEventListener('subscription-created', handleAccountChange);
     window.addEventListener('subscription-updated', handleAccountChange);
     window.addEventListener('subscription-deleted', handleAccountChange);
+      window.addEventListener('subscription-renewed', handleSubscriptionRenewed);
 
     // Trigger initial fetch
     handleAccountChange();
@@ -99,6 +105,7 @@ export default function Subscriptions() {
       window.removeEventListener('subscription-created', handleAccountChange);
       window.removeEventListener('subscription-updated', handleAccountChange);
       window.removeEventListener('subscription-deleted', handleAccountChange);
+        window.removeEventListener('subscription-renewed', handleSubscriptionRenewed);
     };
   }, [queryClient, refetch]);
   // Listen for new subscription created from modal
