@@ -717,9 +717,10 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     if (result.matchedCount === 1) {
       // Get the updated document
       const updatedDoc = await collection.findOne({ _id: subscriptionId, tenantId });
-      // Create history record
+      // Create history record with tenantId
       const historyRecord = {
         subscriptionId: subscriptionId,  // Store as ObjectId
+        tenantId, // Always include tenantId for filtering
         data: {
           ...oldDoc,
           _id: subscriptionId
