@@ -702,7 +702,7 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     const update = { 
       $set: { 
         ...req.body,
-        tenantId, // Always preserve tenantId
+        tenantId, // Always set tenantId from user/session, not from payload
         status: req.body.status || oldDoc.status, // Preserve status if not provided
         updatedAt: new Date()  // Add updatedAt timestamp
       } 
