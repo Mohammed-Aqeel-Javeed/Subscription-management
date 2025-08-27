@@ -763,7 +763,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           placeholder="Enter vendor name" 
                         />
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-red-500" />
                     </FormItem>
                   )}
                 />
@@ -1096,7 +1096,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <FormField
                   control={form.control}
                   name="startDate"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel className="block text-sm font-medium text-slate-700">
                         Start Date <span className="text-red-500">*</span>
@@ -1109,16 +1109,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           onChange={e => { setStartDate(e.target.value); field.onChange(e); }} 
                         />
                       </FormControl>
-                      {fieldState.error && (
-                        <p className="text-sm text-red-500 mt-1">{fieldState.error.message}</p>
-                      )}
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
                 <FormField
                   control={form.control}
                   name="nextRenewal"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel className="block text-sm font-medium text-slate-700">
                         End Date <span className="text-red-500">*</span>
@@ -1135,9 +1133,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           }} 
                         />
                       </FormControl>
-                      {fieldState.error && (
-                        <p className="text-sm text-red-500 mt-1">{fieldState.error.message}</p>
-                      )}
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -1145,43 +1141,73 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <FormField
                   control={form.control}
-                  name="paymentMethod"
-                  render={({ field, fieldState }) => (
+                  name="reminderDays"
+                  render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">
-                        Payment Method <span className="text-red-500">*</span>
-                      </FormLabel>
-                      <Select
-                        value={field.value || ''}
-                        onValueChange={field.onChange}
-                        disabled={paymentMethodsLoading}
-                      >
-                        <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue placeholder={paymentMethodsLoading ? 'Loading...' : 'Select payment method'} />
-                        </SelectTrigger>
-                        <SelectContent className="dropdown-content">
-                          {Array.isArray(paymentMethods) && paymentMethods.length > 0 ? (
-                            paymentMethods.map((pm: any) => (
-                              <SelectItem 
-                                key={pm._id || pm.id || pm.name} 
-                                value={pm.name}
-                                className={`${field.value === pm.name ? 'selected' : ''} dropdown-item`}
-                              >
-                                {pm.name}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            <SelectItem value="no-method" disabled className="dropdown-item disabled">No payment methods found</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                      {fieldState.error && (
-                        <p className="text-sm text-red-500 mt-1">{fieldState.error.message}</p>
-                      )}
+                      <FormLabel className="block text-sm font-medium text-slate-700">Reminder Days</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          min="1"
+                          max="365"
+                          className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                          placeholder="7"
+                          {...field}
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                        />
+                      </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
-                // ...existing code for reminderPolicy field...
+                <FormField
+                  control={form.control}
+                  name="reminderPolicy"
+                  render={({ field }) => {
+                    const reminderDays = form.watch("reminderDays");
+                    const isOnlyOneTimeAllowed = reminderDays === 1;
+                    
+                    return (
+                      <FormItem>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Reminder Policy</FormLabel>
+                        <Select 
+                          onValueChange={(val: string) => {
+                            if (["One time", "Two times", "Until Renewal"].includes(val)) {
+                              field.onChange(val);
+                            } else {
+                              field.onChange("One time");
+                            }
+                          }}
+                          value={field.value && ["One time", "Two times", "Until Renewal"].includes(field.value) ? field.value : "One time"}
+                          defaultValue={field.value && ["One time", "Two times", "Until Renewal"].includes(field.value) ? field.value : "One time"}
+                          disabled={isOnlyOneTimeAllowed}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                              <SelectValue placeholder="Select policy" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent className="dropdown-content">
+                            <SelectItem value="One time" className={`${field.value === 'One time' ? 'selected' : ''} dropdown-item`}>One time</SelectItem>
+                            <SelectItem value="Two times" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Two times' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Two times</SelectItem>
+                            <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Until Renewal' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Until Renewal</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {isOnlyOneTimeAllowed && (
+                          <p className="text-sm text-red-500 font-medium">
+                            When reminder days = 1, only "One time" policy is allowed
+                          </p>
+                        )}
+                        <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
+                          <li>One time: One reminder at {reminderDays} days before renewal</li>
+                          <li>Two times: Reminders at {reminderDays ?? 7} and {Math.floor((reminderDays ?? 7)/2)} days before</li>
+                          <li>Until Renewal: Daily reminders from {reminderDays} days until renewal</li>
+                        </ul>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
               </div>
               <h2 className="text-lg font-semibold mt-6 mb-3">Notes</h2>
               <div className="grid grid-cols-1 gap-4 mb-6">
