@@ -110,7 +110,8 @@ router.get("/api/history/list", async (req, res) => {
     const collection = db.collection("history");
     
     // Multi-tenancy: filter by tenantId
-    const tenantId = req.user?.tenantId;
+  const tenantId = req.user?.tenantId;
+  console.log('TenantId in update route:', tenantId, 'User:', req.user); // Debug log
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
@@ -683,6 +684,7 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     const { id } = req.params;
     // Multi-tenancy: only allow update for current tenant
     const tenantId = req.user?.tenantId;
+    console.log('Update route tenantId:', tenantId, 'User:', req.user); // Debug log
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
@@ -702,9 +704,9 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     const update = { 
       $set: { 
         ...req.body,
-        tenantId, // Always set tenantId from user/session, not from payload
         status: req.body.status || oldDoc.status, // Preserve status if not provided
-        updatedAt: new Date()  // Add updatedAt timestamp
+        updatedAt: new Date(),  // Add updatedAt timestamp
+        tenantId // Always set tenantId from user/session, not from payload (last)
       } 
     };
     const result = await collection.updateOne({ _id: subscriptionId, tenantId }, update);

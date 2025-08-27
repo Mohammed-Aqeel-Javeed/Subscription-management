@@ -29,7 +29,8 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    req.user = decoded;
+  req.user = decoded;
+  console.log('Decoded JWT:', decoded); // Debug log
     next();
   } catch (err) {
     return res.status(403).json({ message: "Invalid or expired token" });
@@ -49,7 +50,8 @@ export const optionalAuth = (req: AuthenticatedRequest, res: Response, next: Nex
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
-      req.user = decoded;
+    req.user = decoded;
+    console.log('Decoded user in middleware:', decoded); // Debug log
     } catch (err) {
       req.user = undefined;
     }
