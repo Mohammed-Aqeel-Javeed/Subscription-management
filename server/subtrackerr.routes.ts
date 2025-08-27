@@ -701,6 +701,10 @@ router.put("/api/subscriptions/:id", async (req, res) => {
       return res.status(404).json({ message: "Subscription not found or access denied" });
     }
     // Perform the update
+    // Remove tenantId from payload if present
+    if ('tenantId' in req.body) {
+      delete req.body.tenantId;
+    }
     const update = { 
       $set: { 
         ...req.body,
