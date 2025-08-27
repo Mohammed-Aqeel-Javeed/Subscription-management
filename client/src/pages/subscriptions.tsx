@@ -14,8 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Subscription } from "@shared/schema";
 
 // Helper component to display departments
-  // Extend Subscription type locally to include department for frontend use
-  type SubscriptionWithExtras = Subscription & { department?: string };
+  // Extend Subscription type locally to include department and _id for frontend use
+  type SubscriptionWithExtras = Subscription & { department?: string; _id?: string };
   const DepartmentDisplay = ({ department }: { department?: string | string[] }) => {
     if (!department) return <span>-</span>;
     let departments: string[] = [];
@@ -183,9 +183,9 @@ export default function Subscriptions() {
     },
   });
   
-  const handleEdit = (subscription: Subscription) => {
-    // Always use id for editing
-    const subscriptionId = subscription.id?.toString();
+  const handleEdit = (subscription: SubscriptionWithExtras) => {
+    // Always use id for editing, fallback to _id if present
+    const subscriptionId = subscription.id?.toString() || subscription._id?.toString();
     if (!subscriptionId) {
       toast({
         title: "Error",
