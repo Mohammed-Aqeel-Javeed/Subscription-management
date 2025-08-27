@@ -200,7 +200,7 @@ export default function Subscriptions() {
       amount: subscription.amount !== undefined ? String(subscription.amount) : "",
       department: (subscription as any).department ?? "",
       isActive: true,
-      tenantId: tenantId,
+      tenantId: (window as any).currentTenantId || (window as any).user?.tenantId || null,
     });
     setModalOpen(true);
   };
