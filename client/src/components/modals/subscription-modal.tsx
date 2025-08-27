@@ -588,7 +588,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           description: `Subscription renewed from ${formatDate(newStartDate)} to ${formatDate(newEndDate)}`,
           className: "bg-white border border-green-500 text-green-700 font-semibold shadow-lg",
         });
-        
+        // Notify parent/card page to update dates
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent('subscription-renewed', {
+            detail: {
+              id: subId,
+              startDate: newStartDate,
+              nextRenewal: newEndDate
+            }
+          }));
+        }
         // Close the modal after successful renewal
         onOpenChange(false);
       }
