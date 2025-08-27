@@ -43,10 +43,10 @@ interface Department {
   name: string;
   visible: boolean;
 }
-// Update the form schema to handle multiple departments
+// Update the form schema to handle multiple departments and make required fields
 const formSchema = z.object({
-  startDate: z.string().optional(),
-  nextRenewal: z.string().optional(),
+  startDate: z.string().min(1, "Start date is required"),
+  nextRenewal: z.string().min(1, "End date is required"),
   paymentMethod: z.string().min(1, "Payment method is required"),
   // All other fields are optional
   serviceName: z.string().optional(),
@@ -617,12 +617,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     }
     
     .dropdown-item {
-      padding: 10px 16px;
+      padding: 10px 16px 10px 36px;
       font-size: 14px;
       color: #334155;
       cursor: pointer;
       transition: all 0.15s ease;
       border-bottom: 1px solid #f1f5f9;
+      position: relative;
     }
     
     .dropdown-item:last-child {
@@ -647,6 +648,29 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     
     .dropdown-item.disabled:hover {
       background-color: transparent;
+    }
+    
+    /* Fix checkmark positioning */
+    .dropdown-item > span.absolute.left-2 {
+      left: 12px !important;
+      top: 50% !important;
+      transform: translateY(-50%) !important;
+    }
+    
+    /* Custom checkmark for selected items */
+    .dropdown-item.selected::before {
+      content: "✓";
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #1d4ed8;
+      font-weight: bold;
+    }
+    
+    /* Hide default checkmark when using custom one */
+    .dropdown-item.selected > span.absolute.left-2 {
+      display: none;
     }
   `;
   
@@ -803,10 +827,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           <SelectValue placeholder="Select cycle" />
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
-                          <SelectItem value="monthly" className="dropdown-item">Monthly</SelectItem>
-                          <SelectItem value="yearly" className="dropdown-item">Yearly</SelectItem>
-                          <SelectItem value="quarterly" className="dropdown-item">Quarterly</SelectItem>
-                          <SelectItem value="weekly" className="dropdown-item">Weekly</SelectItem>
+                          <SelectItem value="monthly" className={`${billingCycle === 'monthly' ? 'selected' : ''} dropdown-item`}>Monthly</SelectItem>
+                          <SelectItem value="yearly" className={`${billingCycle === 'yearly' ? 'selected' : ''} dropdown-item`}>Yearly</SelectItem>
+                          <SelectItem value="quarterly" className={`${billingCycle === 'quarterly' ? 'selected' : ''} dropdown-item`}>Quarterly</SelectItem>
+                          <SelectItem value="weekly" className={`${billingCycle === 'weekly' ? 'selected' : ''} dropdown-item`}>Weekly</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -974,13 +998,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     </FormItem>
                   )}
                 />
-                {/* Payment Method field - now dynamic */}
+                {/* Payment Method field - now dynamic and mandatory */}
                 <FormField
                   control={form.control}
                   name="paymentMethod"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Payment Method</FormLabel>
+                      <FormLabel className="block text-sm font-medium text-slate-700">
+                        Payment Method <span className="text-red-500">*</span>
+                      </FormLabel>
                       <Select
                         value={field.value || ''}
                         onValueChange={field.onChange}
@@ -1071,7 +1097,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="startDate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Start Date</FormLabel>
+                      <FormLabel className="block text-sm font-medium text-slate-700">
+                        Start Date <span className="text-red-500">*</span>
+                      </FormLabel>
                       <FormControl>
                         <Input 
                           type="date" 
@@ -1089,7 +1117,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="nextRenewal"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">End Date</FormLabel>
+                      <FormLabel className="block text-sm font-medium text-slate-700">
+                        End Date <span className="text-red-500">*</span>
+                      </FormLabel>
                       <FormControl>
                         <Input 
                           type="date" 
