@@ -586,6 +586,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         toast({
           title: "Subscription Renewed",
           description: `Subscription renewed from ${formatDate(newStartDate)} to ${formatDate(newEndDate)}`,
+          className: "bg-white border border-green-500 text-green-700 font-semibold shadow-lg",
         });
         
         // Close the modal after successful renewal
@@ -596,7 +597,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       toast({
         title: "Renewal Failed",
         description: "Failed to renew subscription. Please try again.",
-        variant: "destructive",
+        className: "bg-white border border-red-500 text-red-700 font-semibold shadow-lg",
       });
     } finally {
       setIsRenewing(false);
