@@ -544,40 +544,63 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       });
       return;
     }
+    
     setIsRenewing(true);
-    setTimeout(async () => {
+    
+    try {
       // Always recalculate dates based on current endDate and billingCycle
       const { newStartDate, newEndDate } = calculateRenewalDates(endDate, billingCycle);
+      
+      // Update local state
       setStartDate(newStartDate);
       setEndDate(newEndDate);
+      setEndDateManuallySet(true);
+      
+      // Update form values
       form.setValue('startDate', newStartDate);
       form.setValue('nextRenewal', newEndDate);
-      setEndDateManuallySet(true);
-      // Save to main table
+      
+      // Prepare payload for API
       const payload = {
         ...form.getValues(),
         startDate: newStartDate,
         nextRenewal: newEndDate,
       };
-      try {
-        const subId = subscription?.id;
-        if (subId) {
-          await apiRequest("PUT", `/api/subscriptions/${subId}`, payload);
-        }
+      
+      // Save to backend
+      const subId = subscription?.id;
+      if (subId) {
+        await apiRequest("PUT", `/api/subscriptions/${subId}`, payload);
+        
         // Insert into history table
         await axios.post("/api/history", {
           subscriptionId: subId,
           data: payload,
           action: "renew"
         });
-      } catch (e) {}
-      setIsRenewing(false);
+        
+        // Invalidate queries to refresh data
+        queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+        
+        toast({
+          title: "Subscription Renewed",
+          description: `Subscription renewed from ${formatDate(newStartDate)} to ${formatDate(newEndDate)}`,
+        });
+        
+        // Close the modal after successful renewal
+        onOpenChange(false);
+      }
+    } catch (error) {
+      console.error("Renewal error:", error);
       toast({
-        title: "Subscription Renewed",
-        description: `Subscription renewed from ${formatDate(newStartDate)} to ${formatDate(newEndDate)}`,
+        title: "Renewal Failed",
+        description: "Failed to renew subscription. Please try again.",
+        variant: "destructive",
       });
-      onOpenChange(false);
-    }, 500);
+    } finally {
+      setIsRenewing(false);
+    }
   };
   
   // Format date for display
@@ -763,7 +786,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           placeholder="Enter vendor name" 
                         />
                       </FormControl>
-                      <FormMessage className="text-red-500" />
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -1032,7 +1055,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           )}
                         </SelectContent>
                       </Select>
-                      <FormMessage />
+                      <FormMessage className="text-red-500" />
                     </FormItem>
                   )}
                 />
@@ -1109,7 +1132,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           onChange={e => { setStartDate(e.target.value); field.onChange(e); }} 
                         />
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-red-500" />
                     </FormItem>
                   )}
                 />
@@ -1133,7 +1156,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           }} 
                         />
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-red-500" />
                     </FormItem>
                   )}
                 />
