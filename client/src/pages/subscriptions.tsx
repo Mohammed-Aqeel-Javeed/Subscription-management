@@ -199,6 +199,7 @@ export default function Subscriptions() {
       id: subscriptionId,
       amount: subscription.amount !== undefined ? String(subscription.amount) : "",
       department: (subscription as any).department ?? "",
+      isActive: true,
     });
     setModalOpen(true);
   };
