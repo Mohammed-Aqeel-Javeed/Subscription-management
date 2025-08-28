@@ -138,11 +138,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Track the current subscription ObjectId for History button
   const [currentSubscriptionId, setCurrentSubscriptionId] = useState<string | undefined>();
-  
+
   useEffect(() => {
     if (open) {
       if (subscription?.id) {
-        setCurrentSubscriptionId(subscription.id);
+        const validId = getValidObjectId(subscription.id);
+        setCurrentSubscriptionId(validId || undefined);
       } else {
         setCurrentSubscriptionId(undefined);
       }
@@ -446,11 +447,36 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       };
       if (isEditing) {
         // Update existing subscription
+        const validId = getValidObjectId(subscription?.id);
+        if (!validId) {
+          toast({
+            title: "Error",
+            description: "Invalid subscription ID. Cannot update history.",
+            variant: "destructive",
+          });
+          return;
+        }
         mutation.mutate({
           ...payload,
           startDate: payload.startDate instanceof Date ? payload.startDate.toISOString() : String(payload.startDate),
           nextRenewal: payload.nextRenewal instanceof Date ? payload.nextRenewal.toISOString() : String(payload.nextRenewal),
         });
+        // After update, create history record
+        try {
+          await apiRequest("POST", "/api/history", {
+            subscriptionId: validId,
+            data: payload,
+            action: "update",
+            timestamp: new Date().toISOString()
+          });
+        } catch (historyError) {
+          console.error("Failed to create history record:", historyError);
+          toast({
+            title: "Warning",
+            description: "Subscription updated, but failed to create history.",
+            variant: "destructive",
+          });
+        }
       } else {
         // Create new subscription using apiRequest helper for consistent headers
         const res = await apiRequest("POST", "/api/subscriptions", payload);
@@ -1300,4 +1326,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       </Dialog>
     </>
   );
+}
+
+// Helper to get valid ObjectId for subscription
+function getValidObjectId(id: any) {
+  return typeof id === 'string' && /^[a-f\d]{24}$/i.test(id)
+    ? id
+    : (id?.toString?.() || "");
 }
