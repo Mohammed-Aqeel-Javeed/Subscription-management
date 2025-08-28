@@ -359,8 +359,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       let res;
       const subId = subscription?.id;
       // Remove tenantId from update payload
-      delete (subscriptionData as any).tenantId;
-      // Remove tenantId from update payload
       if (isEditing && subId) {
   delete (subscriptionData as any).tenantId;
         res = await apiRequest("PUT", `/api/subscriptions/${subId}`, subscriptionData);
