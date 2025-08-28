@@ -12,11 +12,17 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  // Try to get token from localStorage, then cookies
+  let token = localStorage.getItem("token") || "";
+  if (!token && document.cookie) {
+    const match = document.cookie.match(/(?:^|; )token=([^;]*)/);
+    if (match) token = match[1];
+  }
   const res = await fetch(url, {
     method,
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+      "Authorization": `Bearer ${token}`,
     },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
