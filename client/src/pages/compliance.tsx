@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
 // Helper functions remain the same
 const mapStatus = (status: string): string => {
   return "Pending";
@@ -65,10 +66,17 @@ function getNextPeriodDates(startDate: string, endDate: string, frequency: strin
   
   return { nextStartDate: format(nextStart), nextEndDate: format(nextEnd) };
 }
+
 export default function Compliance() {
   // --- Dynamic Compliance Fields ---
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
   const [isLoadingComplianceFields, setIsLoadingComplianceFields] = useState(true);
+  
+  // State for categories and governing authorities
+  const [categories, setCategories] = useState<string[]>([]);
+  const [governingAuthorities, setGoverningAuthorities] = useState<string[]>([]);
+  const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(true);
+  
   useEffect(() => {
     const fetchComplianceFields = () => {
       setIsLoadingComplianceFields(true);
@@ -81,19 +89,48 @@ export default function Compliance() {
         .catch(() => setComplianceFields([]))
         .finally(() => setIsLoadingComplianceFields(false));
     };
+    
+    const fetchDropdownData = () => {
+      setIsLoadingDropdowns(true);
+      Promise.all([
+        fetch('/api/compliance/categories').then(res => res.json()),
+        fetch('/api/compliance/authorities').then(res => res.json())
+      ])
+      .then(([categoriesData, authoritiesData]) => {
+        if (Array.isArray(categoriesData)) setCategories(categoriesData);
+        if (Array.isArray(authoritiesData)) setGoverningAuthorities(authoritiesData);
+      })
+      .catch(() => {
+        setCategories([]);
+        setGoverningAuthorities([]);
+      })
+      .finally(() => setIsLoadingDropdowns(false));
+    };
+    
     fetchComplianceFields();
+    fetchDropdownData();
+    
     // Add event listeners for account changes
     window.addEventListener("accountChanged", fetchComplianceFields);
     window.addEventListener("logout", fetchComplianceFields);
     window.addEventListener("login", fetchComplianceFields);
+    window.addEventListener("accountChanged", fetchDropdownData);
+    window.addEventListener("logout", fetchDropdownData);
+    window.addEventListener("login", fetchDropdownData);
+    
     return () => {
       window.removeEventListener("accountChanged", fetchComplianceFields);
       window.removeEventListener("logout", fetchComplianceFields);
       window.removeEventListener("login", fetchComplianceFields);
+      window.removeEventListener("accountChanged", fetchDropdownData);
+      window.removeEventListener("logout", fetchDropdownData);
+      window.removeEventListener("login", fetchDropdownData);
     };
   }, []);
+  
   // Store dynamic field values in form state
   const [dynamicFieldValues, setDynamicFieldValues] = useState<{ [key: string]: string }>({});
+  
   type ComplianceItem = {
     _id?: string;
     id?: string | number;
@@ -114,6 +151,7 @@ export default function Compliance() {
     submittedBy?: string;
     amount?: string | number;
   };
+  
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -133,25 +171,28 @@ export default function Compliance() {
     filingRemarks: "",
     filingSubmissionDate: "",
     reminderDays: "7",
-  reminderPolicy: "One time",
-  submittedBy: "",
-  amount: "",
+    reminderPolicy: "One time",
+    submittedBy: "",
+    amount: "",
   });
+  
   // Fetch employees for the submit by dropdown with auto-refresh
-  const { data: employees = [] } = useQuery({
-    queryKey: ["/api/employees"], // Match the queryKey used in company-details.tsx
+  const { data: employees = [], isLoading: isLoadingEmployees } = useQuery({
+    queryKey: ["/api/employees"],
     queryFn: async () => {
       const response = await fetch("/api/employees");
       if (!response.ok) throw new Error("Failed to fetch employees");
       return response.json();
     },
-  refetchInterval: false, // Disable auto-refresh
-    refetchOnWindowFocus: true, // Refresh when window regains focus
-    refetchOnMount: true, // Refresh when component mounts
-    staleTime: 0 // Consider data immediately stale so it refreshes
+    refetchInterval: false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    staleTime: 0
   });
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
   const handleFormChange = (field: string, value: string) => {
     setForm((prev) => {
       const newState = { ...prev, [field]: value };
@@ -168,10 +209,12 @@ export default function Compliance() {
       return newState;
     });
   };
+  
   // For dynamic compliance fields
   const handleDynamicFieldChange = (fieldName: string, value: string) => {
     setDynamicFieldValues(prev => ({ ...prev, [fieldName]: value }));
   };
+  
   const { data: complianceItems = [], isLoading } = useQuery({
     queryKey: ["compliance"],
     queryFn: async () => {
@@ -179,11 +222,12 @@ export default function Compliance() {
       if (!response.ok) throw new Error("Failed to fetch compliance filings");
       return response.json();
     },
-  refetchInterval: false, // Disable auto-refresh
+    refetchInterval: false,
     refetchOnWindowFocus: true,
     refetchOnMount: true,
-    staleTime: 0 // Always consider data stale
+    staleTime: 0
   });
+  
   useEffect(() => {
     const invalidateCompliance = () => {
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
@@ -197,6 +241,7 @@ export default function Compliance() {
       window.removeEventListener("login", invalidateCompliance);
     };
   }, [queryClient]);
+  
   const addMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await fetch("/api/compliance/insert", {
@@ -214,6 +259,7 @@ export default function Compliance() {
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
     }
   });
+  
   const deleteMutation = useMutation({
     mutationFn: async (_id: string) => {
       const res = await fetch(`/api/compliance/${_id}`, { method: "DELETE" });
@@ -227,6 +273,7 @@ export default function Compliance() {
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
     }
   });
+  
   const editMutation = useMutation({
     mutationFn: async ({ _id, data }: { _id: string; data: any }) => {
       const res = await fetch(`/api/compliance/${_id}`, {
@@ -246,6 +293,7 @@ export default function Compliance() {
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
     }
   });
+  
   const uniqueCategories = Array.from(new Set(complianceItems.map((item: ComplianceItem) => item.category))).filter(Boolean);
   const filteredItems = complianceItems.filter((item: ComplianceItem) => {
     const matchesSearch = item.policy?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -253,6 +301,7 @@ export default function Compliance() {
     const matchesStatus = statusFilter === "all" || mapStatus(item.status) === statusFilter;
     return matchesSearch && matchesCategory && matchesStatus;
   });
+  
   // Status badge component
   const StatusBadge = ({ status }: { status: string }) => {
     const statusConfig = {
@@ -277,9 +326,11 @@ export default function Compliance() {
       </Badge>
     );
   };
+  
   // --- Summary Stats Section ---
   const total = complianceItems.length;
   const pending = complianceItems.filter((item: ComplianceItem) => mapStatus(item.status) === "Pending").length;
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-slate-50 to-indigo-100 p-4 md:p-6 relative">
       <div className="max-w-7xl mx-auto">
@@ -553,23 +604,39 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Compliance Category</label>
                 <Select value={form.filingComplianceCategory} onValueChange={(val: string) => handleFormChange("filingComplianceCategory", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder="Select category" />
+                    <SelectValue placeholder={isLoadingDropdowns ? "Loading categories..." : "Select category"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Tax">Tax</SelectItem>
-                    <SelectItem value="Legal">Legal</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
+                    {isLoadingDropdowns ? (
+                      <SelectItem value="loading" disabled>Loading categories...</SelectItem>
+                    ) : categories.length > 0 ? (
+                      categories.map((cat, idx) => (
+                        <SelectItem key={String(cat) + idx} value={String(cat)}>{String(cat)}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-categories" disabled>No categories available</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Governing Authority</label>
-                <Input 
-                  className="w-full border-slate-300 rounded-lg p-2 text-base" 
-                  value={form.filingGoverningAuthority} 
-                  onChange={e => handleFormChange("filingGoverningAuthority", e.target.value)} 
-                  placeholder="Enter governing authority" 
-                />
+                <Select value={form.filingGoverningAuthority} onValueChange={(val: string) => handleFormChange("filingGoverningAuthority", val)}>
+                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                    <SelectValue placeholder={isLoadingDropdowns ? "Loading authorities..." : "Select authority"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isLoadingDropdowns ? (
+                      <SelectItem value="loading" disabled>Loading authorities...</SelectItem>
+                    ) : governingAuthorities.length > 0 ? (
+                      governingAuthorities.map((auth, idx) => (
+                        <SelectItem key={String(auth) + idx} value={String(auth)}>{String(auth)}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-authorities" disabled>No authorities available</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
               
               {/* Dynamic Compliance Fields - Now placed after default fields */}
@@ -664,14 +731,20 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Submit By</label>
                 <Select value={form.submittedBy || ''} onValueChange={(val: string) => handleFormChange("submittedBy", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder="Select employee" />
+                    <SelectValue placeholder={isLoadingEmployees ? "Loading employees..." : "Select employee"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {employees?.map((emp: any) => (
-                      <SelectItem key={emp._id} value={emp._id}>
-                        {emp.name}
-                      </SelectItem>
-                    ))}
+                    {isLoadingEmployees ? (
+                      <SelectItem value="loading" disabled>Loading employees...</SelectItem>
+                    ) : employees.length > 0 ? (
+                      employees.map((emp: any) => (
+                        <SelectItem key={emp._id || emp.id} value={emp._id || emp.id}>
+                          {emp.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-employees" disabled>No employees available</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
