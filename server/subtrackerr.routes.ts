@@ -733,7 +733,13 @@ router.put("/api/subscriptions/:id", async (req, res) => {
         timestamp: new Date(),
         serviceName: updatedDoc?.serviceName  // Add serviceName for easier querying
       };
-      await historyCollection.insertOne(historyRecord);
+      console.log('Attempting to insert history record:', JSON.stringify(historyRecord, null, 2));
+      try {
+        const historyResult = await historyCollection.insertOne(historyRecord);
+        console.log('History insert result:', historyResult);
+      } catch (err) {
+        console.error('Error inserting history record:', err);
+      }
       res.status(200).json({ 
         message: "Subscription updated",
         subscription: updatedDoc
