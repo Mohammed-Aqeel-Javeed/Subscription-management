@@ -337,14 +337,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   useEffect(() => {
     if (startDate && billingCycle) {
-      if (!endDateManuallySet || (subscription && startDate !== (subscription.startDate ? new Date(subscription.startDate).toISOString().split('T')[0] : ""))) {
-        const calculatedEndDate = calculateEndDate(startDate, billingCycle);
-        setEndDate(calculatedEndDate);
-        form.setValue('nextRenewal', calculatedEndDate);
-        setEndDateManuallySet(false);
-      }
+      const calculatedEndDate = calculateEndDate(startDate, billingCycle);
+      setEndDate(calculatedEndDate);
+      form.setValue('nextRenewal', calculatedEndDate);
     }
-  }, [startDate, billingCycle, endDateManuallySet, form]);
+  }, [startDate, billingCycle, form]);
   
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
