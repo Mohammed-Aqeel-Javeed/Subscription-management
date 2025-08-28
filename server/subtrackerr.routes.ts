@@ -653,6 +653,7 @@ router.post("/api/subscriptions", async (req, res) => {
     // Create history record
     const historyRecord = {
       subscriptionId: subscriptionId,  // Store as ObjectId
+      tenantId, // Always include tenantId for filtering
       data: {
         ...createdSubscription,
         _id: subscriptionId
