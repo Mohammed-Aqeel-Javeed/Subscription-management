@@ -81,14 +81,11 @@ export default function Compliance() {
         .catch(() => setComplianceFields([]))
         .finally(() => setIsLoadingComplianceFields(false));
     };
-
     fetchComplianceFields();
-
     // Add event listeners for account changes
     window.addEventListener("accountChanged", fetchComplianceFields);
     window.addEventListener("logout", fetchComplianceFields);
     window.addEventListener("login", fetchComplianceFields);
-
     return () => {
       window.removeEventListener("accountChanged", fetchComplianceFields);
       window.removeEventListener("logout", fetchComplianceFields);
@@ -187,7 +184,6 @@ export default function Compliance() {
     refetchOnMount: true,
     staleTime: 0 // Always consider data stale
   });
-
   useEffect(() => {
     const invalidateCompliance = () => {
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
@@ -385,7 +381,7 @@ export default function Compliance() {
         </div>
         
         {/* Table Section */}
-        <Card className="border-slate-200 shadow-lg rounded-2xl overflow-hidden">
+        <Card className="border-slate-200 shadow-lg rounded-2xl overflow-hidden bg-white">
           <CardContent className="p-0">
             {isLoading ? (
               <div className="p-6 space-y-4">
@@ -506,8 +502,8 @@ export default function Compliance() {
       
       {/* Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-4xl min-w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0">
-          <DialogHeader className="bg-white text-slate-900 p-6 rounded-t-2xl border-b border-slate-200">
+        <DialogContent className="max-w-4xl min-w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white">
+          <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl">
             <div className="flex justify-between items-center">
               <DialogTitle className="text-xl font-bold flex items-center gap-3">
                 <FileText className="h-6 w-6" />
@@ -530,8 +526,8 @@ export default function Compliance() {
             </div>
           </DialogHeader>
           <form className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white rounded-xl p-2">
-              <div className="space-y-2 bg-white">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Filing Name</label>
                 <Input 
                   className="w-full border-slate-300 rounded-lg p-2 text-base" 
@@ -652,7 +648,7 @@ export default function Compliance() {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-              <div className="space-y-2 bg-white">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submission Status</label>
                 <Select value={form.filingSubmissionStatus} onValueChange={(val: string) => handleFormChange("filingSubmissionStatus", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
@@ -664,7 +660,7 @@ export default function Compliance() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2 bg-white">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submit By</label>
                 <Select value={form.submittedBy || ''} onValueChange={(val: string) => handleFormChange("submittedBy", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
@@ -713,7 +709,7 @@ export default function Compliance() {
             
             <h2 className="text-lg font-semibold mt-6 mb-3">Remarks</h2>
             <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2 bg-white">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Additional Notes</label>
                 <textarea 
                   className="w-full border border-slate-400 rounded-lg p-2 text-base min-h-[80px] max-h-[120px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
