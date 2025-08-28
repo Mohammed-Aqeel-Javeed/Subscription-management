@@ -617,6 +617,15 @@ export default function Compliance() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Governing Authority</label>
+                <Input
+                  className="w-full border-slate-300 rounded-lg p-2 text-base"
+                  value={form.filingGoverningAuthority}
+                  onChange={e => handleFormChange("filingGoverningAuthority", e.target.value)}
+                  placeholder="Enter governing authority"
+                />
+              </div>
               
               {/* Dynamic Compliance Fields - Now placed after default fields */}
               {isLoadingComplianceFields ? (
@@ -680,16 +689,7 @@ export default function Compliance() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Amount</label>
-                <Input
-                  className="w-full border-slate-300 rounded-lg p-2 text-base"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Enter amount"
-                  value={form.amount || ''}
-                  onChange={e => handleFormChange("amount", e.target.value)}
-                />
+                {/* Amount field removed as requested */}
               </div>
             </div>
             
