@@ -458,12 +458,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         
         if (res.ok && result) {
           const subscriptionId = result._id || result.subscription?._id;
-          
-          if (subscriptionId) {
+          // Ensure subscriptionId is a valid ObjectId string
+          const validSubscriptionId = typeof subscriptionId === 'string' && /^[a-f\d]{24}$/i.test(subscriptionId)
+            ? subscriptionId
+            : (subscriptionId?.toString?.() || "");
+          if (validSubscriptionId) {
             // Create history record using the same payload that created the subscription
             try {
               await apiRequest("POST", "/api/history", {
-                subscriptionId: subscriptionId,
+                subscriptionId: validSubscriptionId,
                 data: payload,
                 action: "create",
                 timestamp: new Date().toISOString()
@@ -577,11 +580,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Save to backend
       const subId = subscription?.id;
       if (subId) {
-        await apiRequest("PUT", `/api/subscriptions/${subId}`, payload);
-        
+        // Ensure subId is a valid ObjectId string
+        const validSubscriptionId = typeof subId === 'string' && /^[a-f\d]{24}$/i.test(subId)
+          ? subId
+          : (subId?.toString?.() || "");
+        await apiRequest("PUT", `/api/subscriptions/${validSubscriptionId}`, payload);
         // Insert into history table
         await axios.post("/api/history", {
-          subscriptionId: subId,
+          subscriptionId: validSubscriptionId,
           data: payload,
           action: "renew"
         });
