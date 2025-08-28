@@ -617,25 +617,6 @@ export default function Compliance() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Governing Authority</label>
-                <Select value={form.filingGoverningAuthority} onValueChange={(val: string) => handleFormChange("filingGoverningAuthority", val)}>
-                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder={isLoadingDropdowns ? "Loading authorities..." : "Select authority"} />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                    {isLoadingDropdowns ? (
-                      <SelectItem value="loading" disabled className="text-slate-500">Loading authorities...</SelectItem>
-                    ) : governingAuthorities.length > 0 ? (
-                      governingAuthorities.map((auth, idx) => (
-                        <SelectItem key={String(auth) + idx} value={String(auth)} className="text-slate-900 hover:bg-indigo-50">{String(auth)}</SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-authorities" disabled className="text-slate-500">No authorities available</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
               
               {/* Dynamic Compliance Fields - Now placed after default fields */}
               {isLoadingComplianceFields ? (
