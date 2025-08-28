@@ -591,12 +591,12 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Filing Frequency</label>
                 <Select value={form.filingFrequency} onValueChange={(val: string) => handleFormChange("filingFrequency", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder="Select frequency" />
+                    <SelectValue placeholder="Select frequency" className="text-base px-2" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Monthly">Monthly</SelectItem>
-                    <SelectItem value="Quarterly">Quarterly</SelectItem>
-                    <SelectItem value="Yearly">Yearly</SelectItem>
+                    <SelectItem value="Monthly" className="text-base px-3 py-2">Monthly</SelectItem>
+                    <SelectItem value="Quarterly" className="text-base px-3 py-2">Quarterly</SelectItem>
+                    <SelectItem value="Yearly" className="text-base px-3 py-2">Yearly</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -604,17 +604,17 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Compliance Category</label>
                 <Select value={form.filingComplianceCategory} onValueChange={(val: string) => handleFormChange("filingComplianceCategory", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder={isLoadingDropdowns ? "Loading categories..." : "Select category"} />
+                    <SelectValue placeholder={isLoadingDropdowns ? "Loading categories..." : "Select category"} className="text-base px-2" />
                   </SelectTrigger>
                   <SelectContent>
                     {isLoadingDropdowns ? (
-                      <SelectItem value="loading" disabled>Loading categories...</SelectItem>
+                      <SelectItem value="loading" disabled className="text-base px-3 py-2">Loading categories...</SelectItem>
                     ) : categories.length > 0 ? (
                       categories.map((cat, idx) => (
                         <SelectItem key={String(cat) + idx} value={String(cat)}>{String(cat)}</SelectItem>
                       ))
                     ) : (
-                      <SelectItem value="no-categories" disabled>No categories available</SelectItem>
+                      <SelectItem value="no-categories" disabled className="text-base px-3 py-2">No categories available</SelectItem>
                     )}
                   </SelectContent>
                 </Select>
@@ -623,7 +623,7 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Governing Authority</label>
                 <Select value={form.filingGoverningAuthority} onValueChange={(val: string) => handleFormChange("filingGoverningAuthority", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder={isLoadingDropdowns ? "Loading authorities..." : "Select authority"} />
+                    <SelectValue placeholder={isLoadingDropdowns ? "Loading authorities..." : "Select authority"} className="text-base px-2" />
                   </SelectTrigger>
                   <SelectContent>
                     {isLoadingDropdowns ? (
