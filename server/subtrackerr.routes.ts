@@ -488,7 +488,11 @@ router.get("/api/company/categories", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
-    const items = await collection.find({}).toArray();
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    const items = await collection.find({ tenantId }).toArray();
     // Only return categories with valid, non-empty names
     const categories = items
       .filter(item => typeof item.name === "string" && item.name.trim())
@@ -549,7 +553,11 @@ router.get("/api/company/departments", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
-    const items = await collection.find({}).toArray();
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    const items = await collection.find({ tenantId }).toArray();
     // Only return departments with valid, non-empty names
     const departments = items
       .filter(item => typeof item.name === "string" && item.name.trim())
