@@ -10,7 +10,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-
 // Helper functions remain the same
 const mapStatus = (status: string): string => {
   return "Pending";
@@ -66,7 +65,6 @@ function getNextPeriodDates(startDate: string, endDate: string, frequency: strin
   
   return { nextStartDate: format(nextStart), nextEndDate: format(nextEnd) };
 }
-
 export default function Compliance() {
   // --- Dynamic Compliance Fields ---
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
@@ -419,10 +417,10 @@ export default function Compliance() {
                   <SelectTrigger className="border-slate-300 bg-white text-slate-900 rounded-lg h-10 w-full">
                     <SelectValue placeholder="Category" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
+                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
+                    <SelectItem value="all" className="text-slate-900 hover:bg-indigo-50">All Categories</SelectItem>
                     {uniqueCategories.map((cat, idx) => (
-                      <SelectItem key={String(cat) + idx} value={String(cat)}>{String(cat)}</SelectItem>
+                      <SelectItem key={String(cat) + idx} value={String(cat)} className="text-slate-900 hover:bg-indigo-50">{String(cat)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -591,12 +589,12 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Filing Frequency</label>
                 <Select value={form.filingFrequency} onValueChange={(val: string) => handleFormChange("filingFrequency", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder="Select frequency" className="text-base px-2" />
+                    <SelectValue placeholder="Select frequency" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Monthly" className="text-base px-3 py-2">Monthly</SelectItem>
-                    <SelectItem value="Quarterly" className="text-base px-3 py-2">Quarterly</SelectItem>
-                    <SelectItem value="Yearly" className="text-base px-3 py-2">Yearly</SelectItem>
+                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
+                    <SelectItem value="Monthly" className="text-slate-900 hover:bg-indigo-50">Monthly</SelectItem>
+                    <SelectItem value="Quarterly" className="text-slate-900 hover:bg-indigo-50">Quarterly</SelectItem>
+                    <SelectItem value="Yearly" className="text-slate-900 hover:bg-indigo-50">Yearly</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -604,17 +602,17 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Compliance Category</label>
                 <Select value={form.filingComplianceCategory} onValueChange={(val: string) => handleFormChange("filingComplianceCategory", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder={isLoadingDropdowns ? "Loading categories..." : "Select category"} className="text-base px-2" />
+                    <SelectValue placeholder={isLoadingDropdowns ? "Loading categories..." : "Select category"} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
                     {isLoadingDropdowns ? (
-                      <SelectItem value="loading" disabled className="text-base px-3 py-2">Loading categories...</SelectItem>
+                      <SelectItem value="loading" disabled className="text-slate-500">Loading categories...</SelectItem>
                     ) : categories.length > 0 ? (
                       categories.map((cat, idx) => (
-                        <SelectItem key={String(cat) + idx} value={String(cat)}>{String(cat)}</SelectItem>
+                        <SelectItem key={String(cat) + idx} value={String(cat)} className="text-slate-900 hover:bg-indigo-50">{String(cat)}</SelectItem>
                       ))
                     ) : (
-                      <SelectItem value="no-categories" disabled className="text-base px-3 py-2">No categories available</SelectItem>
+                      <SelectItem value="no-categories" disabled className="text-slate-500">No categories available</SelectItem>
                     )}
                   </SelectContent>
                 </Select>
@@ -623,17 +621,17 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Governing Authority</label>
                 <Select value={form.filingGoverningAuthority} onValueChange={(val: string) => handleFormChange("filingGoverningAuthority", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder={isLoadingDropdowns ? "Loading authorities..." : "Select authority"} className="text-base px-2" />
+                    <SelectValue placeholder={isLoadingDropdowns ? "Loading authorities..." : "Select authority"} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
                     {isLoadingDropdowns ? (
-                      <SelectItem value="loading" disabled>Loading authorities...</SelectItem>
+                      <SelectItem value="loading" disabled className="text-slate-500">Loading authorities...</SelectItem>
                     ) : governingAuthorities.length > 0 ? (
                       governingAuthorities.map((auth, idx) => (
-                        <SelectItem key={String(auth) + idx} value={String(auth)}>{String(auth)}</SelectItem>
+                        <SelectItem key={String(auth) + idx} value={String(auth)} className="text-slate-900 hover:bg-indigo-50">{String(auth)}</SelectItem>
                       ))
                     ) : (
-                      <SelectItem value="no-authorities" disabled>No authorities available</SelectItem>
+                      <SelectItem value="no-authorities" disabled className="text-slate-500">No authorities available</SelectItem>
                     )}
                   </SelectContent>
                 </Select>
@@ -721,9 +719,9 @@ export default function Compliance() {
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Completed">Completed</SelectItem>
+                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
+                    <SelectItem value="Pending" className="text-slate-900 hover:bg-indigo-50">Pending</SelectItem>
+                    <SelectItem value="Completed" className="text-slate-900 hover:bg-indigo-50">Completed</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -733,17 +731,17 @@ export default function Compliance() {
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                     <SelectValue placeholder={isLoadingEmployees ? "Loading employees..." : "Select employee"} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
                     {isLoadingEmployees ? (
-                      <SelectItem value="loading" disabled>Loading employees...</SelectItem>
+                      <SelectItem value="loading" disabled className="text-slate-500">Loading employees...</SelectItem>
                     ) : employees.length > 0 ? (
                       employees.map((emp: any) => (
-                        <SelectItem key={emp._id || emp.id} value={emp._id || emp.id}>
+                        <SelectItem key={emp._id || emp.id} value={emp._id || emp.id} className="text-slate-900 hover:bg-indigo-50">
                           {emp.name}
                         </SelectItem>
                       ))
                     ) : (
-                      <SelectItem value="no-employees" disabled>No employees available</SelectItem>
+                      <SelectItem value="no-employees" disabled className="text-slate-500">No employees available</SelectItem>
                     )}
                   </SelectContent>
                 </Select>
@@ -767,9 +765,9 @@ export default function Compliance() {
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                     <SelectValue placeholder="Select policy" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="One time">One time</SelectItem>
-                    <SelectItem value="Repeat">Repeat</SelectItem>
+                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
+                    <SelectItem value="One time" className="text-slate-900 hover:bg-indigo-50">One time</SelectItem>
+                    <SelectItem value="Repeat" className="text-slate-900 hover:bg-indigo-50">Repeat</SelectItem>
                   </SelectContent>
                 </Select>
                 <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
