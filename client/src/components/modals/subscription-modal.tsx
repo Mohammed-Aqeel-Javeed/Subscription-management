@@ -1334,3 +1334,10 @@ function getValidObjectId(id: any) {
     ? id
     : (id?.toString?.() || "");
 }
+
+// Helper to remove tenantId from payload
+function stripTenantId(obj: any) {
+  if (!obj) return obj;
+  const { tenantId, ...rest } = obj;
+  return rest;
+}
