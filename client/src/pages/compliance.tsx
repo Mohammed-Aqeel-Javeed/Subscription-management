@@ -90,13 +90,16 @@ export default function Compliance() {
     
     const fetchDropdownData = () => {
       setIsLoadingDropdowns(true);
+      // Always fetch categories for the current tenant only
       Promise.all([
-        fetch('/api/compliance/categories').then(res => res.json()),
-        fetch('/api/compliance/authorities').then(res => res.json())
+        fetch('/api/compliance/categories', { credentials: 'include' }).then(res => res.json()),
+        fetch('/api/compliance/authorities', { credentials: 'include' }).then(res => res.json())
       ])
       .then(([categoriesData, authoritiesData]) => {
         if (Array.isArray(categoriesData)) setCategories(categoriesData);
+        else setCategories([]);
         if (Array.isArray(authoritiesData)) setGoverningAuthorities(authoritiesData);
+        else setGoverningAuthorities([]);
       })
       .catch(() => {
         setCategories([]);
@@ -104,25 +107,30 @@ export default function Compliance() {
       })
       .finally(() => setIsLoadingDropdowns(false));
     };
-    
+
     fetchComplianceFields();
     fetchDropdownData();
-    
+
     // Add event listeners for account changes
+    const clearTenantData = () => {
+      setCategories([]);
+      setGoverningAuthorities([]);
+      fetchDropdownData();
+    };
     window.addEventListener("accountChanged", fetchComplianceFields);
     window.addEventListener("logout", fetchComplianceFields);
     window.addEventListener("login", fetchComplianceFields);
-    window.addEventListener("accountChanged", fetchDropdownData);
-    window.addEventListener("logout", fetchDropdownData);
-    window.addEventListener("login", fetchDropdownData);
-    
+    window.addEventListener("accountChanged", clearTenantData);
+    window.addEventListener("logout", clearTenantData);
+    window.addEventListener("login", clearTenantData);
+
     return () => {
       window.removeEventListener("accountChanged", fetchComplianceFields);
       window.removeEventListener("logout", fetchComplianceFields);
       window.removeEventListener("login", fetchComplianceFields);
-      window.removeEventListener("accountChanged", fetchDropdownData);
-      window.removeEventListener("logout", fetchDropdownData);
-      window.removeEventListener("login", fetchDropdownData);
+      window.removeEventListener("accountChanged", clearTenantData);
+      window.removeEventListener("logout", clearTenantData);
+      window.removeEventListener("login", clearTenantData);
     };
   }, []);
   

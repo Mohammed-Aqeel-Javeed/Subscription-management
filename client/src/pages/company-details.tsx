@@ -1079,20 +1079,26 @@ logoPreview: "" as string,
 // Category configuration with visibility settings (dynamic, from backend)
 type Category = { name: string; visible: boolean; tenantId?: string };
 const queryClient = useQueryClient();
+const tenantId = localStorage.getItem("tenantId") || "";
 const { data: categories = [], isLoading: categoriesLoading, refetch: refetchCategories } = useQuery<Category[]>({
-queryKey: ["/api/company/categories"],
-initialData: [],
-refetchOnWindowFocus: true,
-refetchOnMount: true,
-staleTime: 0,
+  queryKey: ["/api/company/categories", tenantId],
+  queryFn: async () => {
+    const res = await apiRequest("GET", `/api/company/categories?tenantId=${tenantId}`);
+    return Array.isArray(res) ? res.filter(cat => cat.tenantId === tenantId) : [];
+  },
+  initialData: [],
+  refetchOnWindowFocus: true,
+  refetchOnMount: true,
+  staleTime: 0,
 });
 const addCategoryMutation = useMutation({
-mutationFn: async (newCategory: { name: string }) => {
-return await apiRequest("POST", "/api/company/categories", {
-  ...newCategory,
-  visible: true
-});
-},
+  mutationFn: async (newCategory: { name: string }) => {
+    return await apiRequest("POST", "/api/company/categories", {
+      ...newCategory,
+      visible: true,
+      tenantId,
+    });
+  },
 onSuccess: () => {
 queryClient.invalidateQueries({ queryKey: ["/api/company/categories"] });
 refetchCategories();
@@ -1116,23 +1122,28 @@ duration: 1000,
 // Department configuration with visibility settings (dynamic)
 type Department = { name: string; visible: boolean; tenantId?: string };
 const {
-data: departments = [],
-isLoading: departmentsLoading,
-refetch: refetchDepartments
+  data: departments = [],
+  isLoading: departmentsLoading,
+  refetch: refetchDepartments
 } = useQuery<Department[]>({
-queryKey: ["/api/company/departments"],
-initialData: [],
-refetchOnWindowFocus: true,
-refetchOnMount: true,
-staleTime: 0,
+  queryKey: ["/api/company/departments", tenantId],
+  queryFn: async () => {
+    const res = await apiRequest("GET", `/api/company/departments?tenantId=${tenantId}`);
+    return Array.isArray(res) ? res.filter(dept => dept.tenantId === tenantId) : [];
+  },
+  initialData: [],
+  refetchOnWindowFocus: true,
+  refetchOnMount: true,
+  staleTime: 0,
 });
 const addDepartmentMutation = useMutation({
-mutationFn: async (newDepartment: { name: string }) => {
-return await apiRequest("POST", "/api/company/departments", {
-  ...newDepartment,
-  visible: true
-});
-},
+  mutationFn: async (newDepartment: { name: string }) => {
+    return await apiRequest("POST", "/api/company/departments", {
+      ...newDepartment,
+      visible: true,
+      tenantId,
+    });
+  },
 onSuccess: () => {
 queryClient.invalidateQueries({ queryKey: ["/api/company/departments"] });
 refetchDepartments();
