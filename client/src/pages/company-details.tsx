@@ -1129,7 +1129,10 @@ const {
   queryKey: ["/api/company/departments", tenantId],
   queryFn: async () => {
     const res = await apiRequest("GET", `/api/company/departments?tenantId=${tenantId}`);
-    return Array.isArray(res) ? res.filter(dept => dept.tenantId === tenantId) : [];
+    // Show departments for current tenant, and also show departments with no tenantId (for backward compatibility)
+    return Array.isArray(res)
+      ? res.filter(dept => dept.tenantId === tenantId || !dept.tenantId)
+      : [];
   },
   initialData: [],
   refetchOnWindowFocus: true,
