@@ -250,8 +250,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       amount: subscription?.amount !== undefined && subscription?.amount !== null ? String(subscription.amount) : "",
       billingCycle: subscription?.billingCycle && subscription?.billingCycle !== "" ? subscription.billingCycle : "monthly",
       category: subscription?.category || "",
-      department: subscription?.department || "",
-      departments: parseDepartments(subscription?.department),
+  department: "",
+  departments: subscription?.departments || [],
       owner: subscription?.owner || "",
       paymentMethod: subscription?.paymentMethod || "",
       startDate: subscription?.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "",
@@ -284,7 +284,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (subscription) {
       const start = subscription.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "";
       const end = subscription.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "";
-      const depts = parseDepartments(subscription.department);
+  const depts = subscription.departments || [];
       
       setStartDate(start);
       setBillingCycle(subscription.billingCycle || "monthly");
@@ -298,7 +298,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         amount: subscription.amount !== undefined && subscription.amount !== null ? String(subscription.amount) : "",
         billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
         category: subscription.category || "",
-        department: subscription.department || "",
+        department: "",
         departments: depts,
         owner: subscription.owner || "",
         startDate: start,
