@@ -347,22 +347,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
       const { id, createdAt, ...rest } = data as any;
-      // Always include department field as JSON string
+      
+      // Store departments as array for backend
       const subscriptionData: InsertSubscription = {
         ...rest,
-        department: JSON.stringify(data.departments || []),
+        departments: data.departments || [],
         startDate: new Date(data.startDate ?? "").toISOString(),
         nextRenewal: new Date(data.nextRenewal ?? "").toISOString(),
       };
-      // Ensure department field is present in payload
-      if (!('department' in subscriptionData)) {
-        subscriptionData.department = JSON.stringify(data.departments || []);
-      }
+      
       let res;
       const subId = subscription?.id;
       // Remove tenantId from update payload
       if (isEditing && subId) {
-        delete (subscriptionData as any).tenantId;
+  delete (subscriptionData as any).tenantId;
         res = await apiRequest("PUT", `/api/subscriptions/${subId}`, subscriptionData);
       } else {
         res = await apiRequest("POST", "/api/subscriptions", subscriptionData);
@@ -437,21 +435,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Ensure amount is a number
       const amountNum = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount ?? 0;
       // Get tenantId from context, state, or user info
-      const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
-      // Always send department as JSON string and departments as array
+  const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
         ...data,
         amount: isNaN(amountNum) ? 0 : amountNum,
         departments: selectedDepartments,
-        department: JSON.stringify(selectedDepartments),
         startDate: new Date(data.startDate ?? ""),
         nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
         tenantId,
       };
-      // Ensure department field is present in payload for both create and update
-      if (!('department' in payload) || !payload.department) {
-        payload.department = JSON.stringify(selectedDepartments);
-      }
       if (isEditing) {
         // Update existing subscription
         const validId = getValidObjectId(subscription?.id);
@@ -488,6 +480,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         // Create new subscription using apiRequest helper for consistent headers
         const res = await apiRequest("POST", "/api/subscriptions", payload);
         const result = await res.json();
+        
         if (res.ok && result) {
           const subscriptionId = result._id || result.subscription?._id;
           // Ensure subscriptionId is a valid ObjectId string
@@ -503,6 +496,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 action: "create",
                 timestamp: new Date().toISOString()
               });
+              
               // Dispatch subscription creation event
               if (typeof window !== 'undefined' && window.dispatchEvent) {
                 window.dispatchEvent(new CustomEvent('subscription-created', { 
@@ -518,10 +512,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               });
             }
           }
+          
           // Invalidate queries to refresh data
           queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
           queryClient.invalidateQueries({ queryKey: ["/api/history"] });
           queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+          
           toast({
             title: "Success",
             description: "Subscription created successfully",

@@ -20,7 +20,6 @@ export const subscriptions = pgTable("subscriptions", {
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   billingCycle: text("billing_cycle").notNull(), // monthly, yearly, quarterly, weekly
   category: text("category").notNull(),
-  department: text("department"), // JSON stringified array of department names
   startDate: timestamp("start_date").notNull(),
   nextRenewal: timestamp("next_renewal").notNull(),
   status: text("status").notNull().default("Active"), // Active, Cancelled
@@ -55,7 +54,6 @@ export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
   amount: z.number(),
   startDate: z.preprocess((val) => new Date(val as string), z.date()),
   nextRenewal: z.preprocess((val) => new Date(val as string), z.date()),
-  department: z.string().optional(), // JSON stringified array
 });
 
 export const insertReminderSchema = createInsertSchema(reminders).omit({
@@ -65,7 +63,7 @@ export const insertReminderSchema = createInsertSchema(reminders).omit({
 export type InsertUser = z.infer<typeof insertUserSchema> & { tenantId: string };
 export type User = Omit<typeof users.$inferSelect, 'id'> & { id: string; tenantId: string };
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema> & { tenantId: string };
-export type Subscription = Omit<typeof subscriptions.$inferSelect, 'id'> & { id: string; tenantId: string; department?: string };
+export type Subscription = Omit<typeof subscriptions.$inferSelect, 'id'> & { id: string; tenantId: string };
 export type InsertReminder = z.infer<typeof insertReminderSchema> & { tenantId: string; subscriptionId: string };
 export type Reminder = Omit<typeof reminders.$inferSelect, 'id'> & { id: string; tenantId: string; subscriptionId: string };
 
