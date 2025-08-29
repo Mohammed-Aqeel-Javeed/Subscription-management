@@ -203,8 +203,8 @@ export default function Dashboard() {
         {/* Date Filter */}
         <div className="mb-6 flex justify-between items-center">
           <div className="flex space-x-4">
-            <Select defaultValue="6months">
-              <SelectTrigger className="w-48">
+              <Select defaultValue="6months">
+              <SelectTrigger className="w-48 bg-white shadow-sm text-gray-700 hover:border-blue-400 focus:ring-2 focus:ring-blue-200 transition duration-150">
                 <SelectValue placeholder="Last 6 months" />
               </SelectTrigger>
               <SelectContent>
@@ -213,8 +213,8 @@ export default function Dashboard() {
                 <SelectItem value="custom">Custom range</SelectItem>
               </SelectContent>
             </Select>
-            <Select defaultValue="all">
-              <SelectTrigger className="w-48">
+              <Select defaultValue="all">
+              <SelectTrigger className="w-48 bg-white shadow-sm text-gray-700 hover:border-blue-400 focus:ring-2 focus:ring-blue-200 transition duration-150">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
@@ -292,7 +292,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Upcoming Renewals</p>
                   <p className="text-3xl font-bold text-orange-600 hover:text-orange-700">
-                    {metrics?.upcomingRenewals || 0}
+                    {upcomingRenewals.length}
                   </p>
                   <p className="text-sm text-orange-600 mt-1 flex items-center">
                     <Clock className="w-4 h-4 mr-1" /> Next 30 days - Click to view
