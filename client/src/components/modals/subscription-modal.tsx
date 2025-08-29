@@ -448,6 +448,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
         tenantId,
       };
+      // Ensure department field is present in payload for both create and update
+      if (!('department' in payload) || !payload.department) {
+        payload.department = JSON.stringify(selectedDepartments);
+      }
       if (isEditing) {
         // Update existing subscription
         const validId = getValidObjectId(subscription?.id);
