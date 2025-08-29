@@ -470,8 +470,11 @@ export default function Subscriptions() {
                 </TableHeader>
                 <TableBody>
                   {filteredSubscriptions && filteredSubscriptions.length > 0 ? (
-                    filteredSubscriptions.map((subscription) => (
-                      <TableRow key={subscription.id} className="hover:bg-slate-50 transition-colors">
+                    filteredSubscriptions.map((subscription) => {
+                      // DEBUG: Log subscription object to verify departments field
+                      console.log('Subscription row:', subscription);
+                      return (
+                        <TableRow key={subscription.id} className="hover:bg-slate-50 transition-colors">
                         <TableCell className="py-3 px-4">
                           <div>
                             <div className="font-medium text-slate-900">{subscription.serviceName}</div>
@@ -495,7 +498,7 @@ export default function Subscriptions() {
                           <StatusBadge status={subscription.status} />
                         </TableCell>
                         <TableCell className="py-3 px-4">
-                          <DepartmentDisplay departments={(subscription as any).departments ?? []} />
+                          <DepartmentDisplay departments={subscription.departments ?? []} />
                         </TableCell>
                         <TableCell className="py-3 px-4">
                           <Badge className={getCategoryColor(subscription.category)}>
@@ -527,7 +530,8 @@ export default function Subscriptions() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))
+                      );
+                    })
                   ) : (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center py-12 text-slate-500">
