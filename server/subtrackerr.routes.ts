@@ -684,13 +684,7 @@ router.post("/api/subscriptions", async (req, res) => {
     const result = await collection.insertOne(subscription);
     const subscriptionId = result.insertedId;
     // Get the complete subscription document
-    let createdSubscription = await collection.findOne({ _id: subscriptionId });
-    // Always include departments field in response
-    if (createdSubscription) {
-      if (!createdSubscription.departments) {
-        createdSubscription.departments = [];
-      }
-    }
+    const createdSubscription = await collection.findOne({ _id: subscriptionId });
     // Create history record
     const historyRecord = {
       subscriptionId: subscriptionId,  // Store as ObjectId
@@ -773,13 +767,7 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     const result = await collection.updateOne({ _id: subscriptionId, tenantId }, update);
     if (result.matchedCount === 1) {
       // Get the updated document
-      let updatedDoc = await collection.findOne({ _id: subscriptionId, tenantId });
-      // Always include departments field in response
-      if (updatedDoc) {
-        if (!updatedDoc.departments) {
-          updatedDoc.departments = [];
-        }
-      }
+      const updatedDoc = await collection.findOne({ _id: subscriptionId, tenantId });
       // Create history record with tenantId
       const historyRecord = {
         subscriptionId: subscriptionId,  // Store as ObjectId
