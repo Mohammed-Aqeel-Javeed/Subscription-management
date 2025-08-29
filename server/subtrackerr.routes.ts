@@ -488,18 +488,13 @@ router.get("/api/company/categories", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
-    const items = await collection.find({ tenantId }).toArray();
+    const items = await collection.find({}).toArray();
     // Only return categories with valid, non-empty names
     const categories = items
       .filter(item => typeof item.name === "string" && item.name.trim())
       .map(item => ({
         name: item.name,
-        visible: typeof item.visible === "boolean" ? item.visible : true,
-        tenantId: item.tenantId
+        visible: typeof item.visible === "boolean" ? item.visible : true
       }));
     res.status(200).json(categories);
   } catch (error) {
@@ -511,21 +506,17 @@ router.post("/api/company/categories", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
-    const tenantId = req.user?.tenantId;
     let { name } = req.body;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Category name required" });
     }
     name = name.trim();
-    // Prevent duplicate category names for this tenant
-    const exists = await collection.findOne({ name, tenantId });
+    // Prevent duplicate category names
+    const exists = await collection.findOne({ name });
     if (exists) {
       return res.status(409).json({ message: "Category already exists" });
     }
-    const result = await collection.insertOne({ name, visible: true, tenantId });
+    const result = await collection.insertOne({ name, visible: true });
     res.status(201).json({ insertedId: result.insertedId });
   } catch (error) {
     res.status(500).json({ message: "Failed to add category", error });
@@ -558,6 +549,7 @@ router.get("/api/company/departments", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
+    // Multi-tenancy: filter by tenantId
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
@@ -568,8 +560,7 @@ router.get("/api/company/departments", async (req, res) => {
       .filter(item => typeof item.name === "string" && item.name.trim())
       .map(item => ({
         name: item.name,
-        visible: typeof item.visible === "boolean" ? item.visible : true,
-        tenantId: item.tenantId
+        visible: typeof item.visible === "boolean" ? item.visible : true
       }));
     res.status(200).json(departments);
   } catch (error) {
@@ -582,19 +573,20 @@ router.post("/api/company/departments", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
-    const tenantId = req.user?.tenantId;
     let { name } = req.body;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
-    }
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Department name required" });
     }
     name = name.trim();
-    // Prevent duplicate department names for this tenant
-    const exists = await collection.findOne({ name, tenantId });
+    // Prevent duplicate department names
+    const exists = await collection.findOne({ name });
     if (exists) {
       return res.status(409).json({ message: "Department already exists" });
+    }
+    // Multi-tenancy: set tenantId
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     const result = await collection.insertOne({ name, visible: true, tenantId });
     res.status(201).json({ insertedId: result.insertedId });
