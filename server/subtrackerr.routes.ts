@@ -659,8 +659,22 @@ router.post("/api/subscriptions", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     // Prepare subscription document with timestamps and tenantId
+    // Ensure departments is always an array
+    let departments = req.body.departments;
+    if (Array.isArray(departments)) {
+      // OK
+    } else if (typeof departments === "string") {
+      try {
+        departments = JSON.parse(departments);
+      } catch {
+        departments = departments ? [departments] : [];
+      }
+    } else {
+      departments = [];
+    }
     const subscription = {
       ...req.body,
+      departments,
       tenantId,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -726,9 +740,23 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     if ('tenantId' in req.body) {
       delete req.body.tenantId;
     }
+    // Ensure departments is always an array
+    let departments = req.body.departments;
+    if (Array.isArray(departments)) {
+      // OK
+    } else if (typeof departments === "string") {
+      try {
+        departments = JSON.parse(departments);
+      } catch {
+        departments = departments ? [departments] : [];
+      }
+    } else {
+      departments = oldDoc.departments || [];
+    }
     const update = { 
       $set: { 
         ...req.body,
+        departments,
         status: req.body.status || oldDoc.status, // Preserve status if not provided
         updatedAt: new Date(),  // Add updatedAt timestamp
         tenantId // Always set tenantId from user/session, not from payload (last)
