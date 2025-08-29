@@ -435,7 +435,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Ensure amount is a number
       const amountNum = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount ?? 0;
       // Get tenantId from context, state, or user info
-  const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
+      const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
+      // Always send department as JSON string and departments as array
       const payload = {
         ...data,
         amount: isNaN(amountNum) ? 0 : amountNum,
@@ -481,7 +482,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         // Create new subscription using apiRequest helper for consistent headers
         const res = await apiRequest("POST", "/api/subscriptions", payload);
         const result = await res.json();
-        
         if (res.ok && result) {
           const subscriptionId = result._id || result.subscription?._id;
           // Ensure subscriptionId is a valid ObjectId string
@@ -497,7 +497,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 action: "create",
                 timestamp: new Date().toISOString()
               });
-              
               // Dispatch subscription creation event
               if (typeof window !== 'undefined' && window.dispatchEvent) {
                 window.dispatchEvent(new CustomEvent('subscription-created', { 
@@ -513,12 +512,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               });
             }
           }
-          
           // Invalidate queries to refresh data
           queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
           queryClient.invalidateQueries({ queryKey: ["/api/history"] });
           queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-          
           toast({
             title: "Success",
             description: "Subscription created successfully",
