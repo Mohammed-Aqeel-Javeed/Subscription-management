@@ -20,6 +20,7 @@ export const subscriptions = pgTable("subscriptions", {
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   billingCycle: text("billing_cycle").notNull(), // monthly, yearly, quarterly, weekly
   category: text("category").notNull(),
+  departments: text("departments").array().notNull().default([]), // Array of department names
   startDate: timestamp("start_date").notNull(),
   nextRenewal: timestamp("next_renewal").notNull(),
   status: text("status").notNull().default("Active"), // Active, Cancelled
@@ -52,6 +53,7 @@ export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
   createdAt: true,
 }).extend({
   amount: z.number(),
+  departments: z.array(z.string()),
   startDate: z.preprocess((val) => new Date(val as string), z.date()),
   nextRenewal: z.preprocess((val) => new Date(val as string), z.date()),
 });
