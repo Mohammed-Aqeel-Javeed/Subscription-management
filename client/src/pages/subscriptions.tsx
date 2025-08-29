@@ -15,27 +15,9 @@ import type { Subscription } from "@shared/schema";
 
 // Helper component to display departments
   // Extend Subscription type locally to include department and _id for frontend use
-  type SubscriptionWithExtras = Subscription & { department?: string; _id?: string };
-  const DepartmentDisplay = ({ department }: { department?: string | string[] }) => {
-    if (!department) return <span>-</span>;
-    let departments: string[] = [];
-    if (Array.isArray(department)) {
-      departments = department;
-    } else {
-      try {
-        const parsed = JSON.parse(department);
-        if (Array.isArray(parsed)) {
-          departments = parsed;
-        } else if (typeof parsed === 'string') {
-          departments = [parsed];
-        }
-      } catch {
-        if (typeof department === 'string' && department.trim()) {
-          departments = [department];
-        }
-      }
-    }
-    if (!departments.length) return <span>-</span>;
+  type SubscriptionWithExtras = Subscription & { departments?: string[]; _id?: string };
+  const DepartmentDisplay = ({ departments }: { departments?: string[] }) => {
+    if (!departments || !departments.length) return <span>-</span>;
     return (
       <div className="flex flex-wrap gap-1">
         {departments.map((dept, idx) => (
@@ -198,7 +180,7 @@ export default function Subscriptions() {
       ...subscription,
       id: subscriptionId,
       amount: subscription.amount !== undefined ? String(subscription.amount) : "",
-      department: (subscription as any).department ?? "",
+      // department: removed, only use departments array
     });
     setModalOpen(true);
   };
@@ -238,36 +220,7 @@ export default function Subscriptions() {
   };
 
   // Helper to display department(s) from JSON string or array
-  const DepartmentDisplay = ({ department }: { department?: string | string[] }) => {
-    if (!department) return <span>-</span>;
-    let departments: string[] = [];
-    if (Array.isArray(department)) {
-      departments = department;
-    } else {
-      try {
-        const parsed = JSON.parse(department);
-        if (Array.isArray(parsed)) {
-          departments = parsed;
-        } else if (typeof parsed === 'string') {
-          departments = [parsed];
-        }
-      } catch {
-        if (typeof department === 'string' && department.trim()) {
-          departments = [department];
-        }
-      }
-    }
-    if (!departments.length) return <span>-</span>;
-    return (
-      <div className="flex flex-wrap gap-1">
-        {departments.map((dept, idx) => (
-          <span key={dept + idx} className="inline-block bg-indigo-100 text-indigo-700 text-xs font-medium px-2 py-0.5 rounded-full">
-            {dept}
-          </span>
-        ))}
-      </div>
-    );
-  };
+  // (Removed duplicate DepartmentDisplay definition. Use the one at the top of the file.)
   
   // Helper to format date as dd/mm/yyyy
   const formatDate = (dateVal?: string | Date) => {
@@ -542,7 +495,7 @@ export default function Subscriptions() {
                           <StatusBadge status={subscription.status} />
                         </TableCell>
                         <TableCell className="py-3 px-4">
-                          <DepartmentDisplay department={(subscription as any).department ?? ""} />
+                          <DepartmentDisplay departments={(subscription as any).departments ?? []} />
                         </TableCell>
                         <TableCell className="py-3 px-4">
                           <Badge className={getCategoryColor(subscription.category)}>
