@@ -923,8 +923,8 @@ router.post("/api/config/fields", async (req, res) => {
     }
     // Upsert a single config document for fields
     await collection.updateOne(
-      { key: "subscriptionFields" },
-      { $set: { key: "subscriptionFields", fields } },
+      { key: "subscriptionFields", tenantId: req.user?.tenantId },
+      { $set: { key: "subscriptionFields", fields, tenantId: req.user?.tenantId } },
       { upsert: true }
     );
     res.status(200).json({ message: "Fields saved" });
@@ -938,7 +938,11 @@ router.get("/api/config/fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("config");
-    const doc = await collection.findOne({ key: "subscriptionFields" });
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    const doc = await collection.findOne({ key: "subscriptionFields", tenantId });
     res.status(200).json(doc?.fields || []);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch fields", error });
@@ -973,6 +977,7 @@ router.post("/api/config/compliance-fields", async (req, res) => {
       name: name.trim(),
       enabled: true,
       fieldType: "compliance", // Changed type to fieldType
+      tenantId: req.user?.tenantId,
       createdAt: new Date(),
       updatedAt: new Date(),
       displayOrder: 0, // Added display order for UI sorting
@@ -997,7 +1002,11 @@ router.get("/api/config/compliance-fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields"); // Changed to Fields collection
-    const fields = await collection.find({ fieldType: "compliance" }).sort({ displayOrder: 1 }).toArray();
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    const fields = await collection.find({ fieldType: "compliance", tenantId }).sort({ displayOrder: 1 }).toArray();
     res.status(200).json(fields.map(field => ({
       _id: field._id,
       name: field.name,
