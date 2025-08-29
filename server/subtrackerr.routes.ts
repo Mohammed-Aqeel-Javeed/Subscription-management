@@ -488,7 +488,12 @@ router.get("/api/company/categories", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
-    const items = await collection.find({}).toArray();
+    // Multi-tenancy: filter by tenantId
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    const items = await collection.find({ tenantId }).toArray();
     // Only return categories with valid, non-empty names
     const categories = items
       .filter(item => typeof item.name === "string" && item.name.trim())
@@ -516,7 +521,12 @@ router.post("/api/company/categories", async (req, res) => {
     if (exists) {
       return res.status(409).json({ message: "Category already exists" });
     }
-    const result = await collection.insertOne({ name, visible: true });
+    // Multi-tenancy: set tenantId
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    const result = await collection.insertOne({ name, visible: true, tenantId });
     res.status(201).json({ insertedId: result.insertedId });
   } catch (error) {
     res.status(500).json({ message: "Failed to add category", error });
