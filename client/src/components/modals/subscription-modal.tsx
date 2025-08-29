@@ -56,7 +56,7 @@ const formSchema = z.object({
   billingCycle: z.string().optional(),
   category: z.string().optional(),
   department: z.string().optional(),
-  departments: z.array(z.string()).optional(),
+  departments: z.array(z.string()).min(1, "At least one department is required"),
   owner: z.string().optional(),
   status: z.string().optional(),
   reminderDays: z.number().optional(),
@@ -437,11 +437,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   const onSubmit = async (data: FormData) => {
     try {
+      // Validate department selection
+      if (!selectedDepartments || selectedDepartments.length === 0) {
+        toast({
+          title: "Department Required",
+          description: "Please select at least one department.",
+          variant: "destructive",
+        });
+        return;
+      }
       // Always include department as JSON string for backend
       // Ensure amount is a number
       const amountNum = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount ?? 0;
       // Get tenantId from context, state, or user info
-  const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
+      const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
         ...data,
         amount: isNaN(amountNum) ? 0 : amountNum,
