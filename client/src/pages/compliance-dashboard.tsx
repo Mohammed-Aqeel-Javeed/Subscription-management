@@ -188,18 +188,18 @@ export default function ComplianceDashboard() {
         <div className="flex gap-4 mb-8">
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
             <Button
-              variant={window.location.pathname === '/dashboard' ? 'default' : 'outline'}
+              className={window.location.pathname === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+              variant="outline"
               onClick={() => handleTabClick('subscription')}
-              className="transition-all duration-300"
             >
               Subscription
             </Button>
           </motion.div>
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
             <Button
-              variant={window.location.pathname === '/compliance-dashboard' ? 'default' : 'outline'}
+              className={window.location.pathname === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+              variant="outline"
               onClick={() => handleTabClick('compliance')}
-              className="transition-all duration-300"
             >
               Compliance
             </Button>
