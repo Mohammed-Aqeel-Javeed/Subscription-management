@@ -1296,14 +1296,14 @@ duration: 1000,
 };
 
 // Get visible categories for use in dropdowns and cards (as objects)
-const visibleCategoryObjects = categories.filter(cat => cat.visible);
-const hiddenCategoryObjects = categories.filter(cat => !cat.visible);
+const visibleCategoryObjects = categories.filter(cat => cat.visible === true);
+const hiddenCategoryObjects = categories.filter(cat => cat.visible === false);
 // Get visible category names (strings) for dropdowns and forms
 const visibleCategoryNames = visibleCategoryObjects.map(cat => cat.name).filter(name => typeof name === "string" && name.trim());
 
 // Get visible departments for use in dropdowns and cards
-const visibleDepartments = departments.filter(dept => dept.visible);
-const hiddenDepartments = departments.filter(dept => !dept.visible);
+const visibleDepartments = departments.filter(dept => dept.visible === true);
+const hiddenDepartments = departments.filter(dept => dept.visible === false);
 
 // Handle input changes
 const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
