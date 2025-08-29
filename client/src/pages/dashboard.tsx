@@ -13,6 +13,7 @@ import TrendsChart from "@/components/charts/trends-chart";
 import CategoryChart from "@/components/charts/category-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, Subscription } from "@shared/types";
+import { Check } from "lucide-react"; // Import the Check icon
 
 // Error boundary wrapper
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
@@ -181,17 +182,26 @@ export default function Dashboard() {
           <p className="text-gray-600 mt-2">Overview of your subscription spending and analytics</p>
         </div>
         
-        {/* Date Filter - IMPROVED DROPDOWNS */}
+        {/* Date Filter - IMPROVED DROPDOWNS WITH PROPER CHECKMARK */}
         <div className="mb-6 flex justify-between items-center">
           <div className="flex space-x-6">
             <Select defaultValue="6months">
               <SelectTrigger className="w-56 bg-white shadow-sm text-gray-700 hover:border-blue-400 focus:ring-2 focus:ring-blue-200 transition duration-150 h-10 px-4 py-2 rounded-md border border-gray-300">
                 <SelectValue placeholder="Last 6 months" />
               </SelectTrigger>
-              <SelectContent className="bg-white border border-gray-200 rounded-md shadow-lg mt-1">
-                <SelectItem value="6months" className="py-2 px-4 hover:bg-blue-50 cursor-pointer">Last 6 months</SelectItem>
-                <SelectItem value="12months" className="py-2 px-4 hover:bg-blue-50 cursor-pointer">Last 12 months</SelectItem>
-                <SelectItem value="custom" className="py-2 px-4 hover:bg-blue-50 cursor-pointer">Custom range</SelectItem>
+              <SelectContent className="bg-white border border-gray-200 rounded-md shadow-lg mt-1 w-56">
+                <SelectItem value="6months" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
+                  <span className="flex-grow">Last 6 months</span>
+                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
+                </SelectItem>
+                <SelectItem value="12months" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
+                  <span className="flex-grow">Last 12 months</span>
+                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
+                </SelectItem>
+                <SelectItem value="custom" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
+                  <span className="flex-grow">Custom range</span>
+                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
+                </SelectItem>
               </SelectContent>
             </Select>
             
@@ -199,11 +209,23 @@ export default function Dashboard() {
               <SelectTrigger className="w-56 bg-white shadow-sm text-gray-700 hover:border-blue-400 focus:ring-2 focus:ring-blue-200 transition duration-150 h-10 px-4 py-2 rounded-md border border-gray-300">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
-              <SelectContent className="bg-white border border-gray-200 rounded-md shadow-lg mt-1">
-                <SelectItem value="all" className="py-2 px-4 hover:bg-blue-50 cursor-pointer">All Categories</SelectItem>
-                <SelectItem value="software" className="py-2 px-4 hover:bg-blue-50 cursor-pointer">Software</SelectItem>
-                <SelectItem value="entertainment" className="py-2 px-4 hover:bg-blue-50 cursor-pointer">Entertainment</SelectItem>
-                <SelectItem value="business" className="py-2 px-4 hover:bg-blue-50 cursor-pointer">Business Tools</SelectItem>
+              <SelectContent className="bg-white border border-gray-200 rounded-md shadow-lg mt-1 w-56">
+                <SelectItem value="all" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
+                  <span className="flex-grow">All Categories</span>
+                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
+                </SelectItem>
+                <SelectItem value="software" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
+                  <span className="flex-grow">Software</span>
+                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
+                </SelectItem>
+                <SelectItem value="entertainment" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
+                  <span className="flex-grow">Entertainment</span>
+                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
+                </SelectItem>
+                <SelectItem value="business" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
+                  <span className="flex-grow">Business Tools</span>
+                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
