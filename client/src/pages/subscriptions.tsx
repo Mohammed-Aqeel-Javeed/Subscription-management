@@ -20,18 +20,17 @@ import type { Subscription } from "@shared/schema";
     if (!department) return <span>-</span>;
     let departments: string[] = [];
     if (Array.isArray(department)) {
-      departments = department.filter(d => typeof d === 'string' && d.trim());
-    } else if (typeof department === 'string') {
+      departments = department;
+    } else {
       try {
-        // Try to parse as JSON array
         const parsed = JSON.parse(department);
         if (Array.isArray(parsed)) {
-          departments = parsed.filter(d => typeof d === 'string' && d.trim());
-        } else if (typeof parsed === 'string' && parsed.trim()) {
+          departments = parsed;
+        } else if (typeof parsed === 'string') {
           departments = [parsed];
         }
       } catch {
-        if (department.trim()) {
+        if (typeof department === 'string' && department.trim()) {
           departments = [department];
         }
       }
