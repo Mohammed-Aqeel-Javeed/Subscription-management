@@ -227,7 +227,7 @@ export default function Dashboard() {
 
         {/* Metrics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
+          <Card className="bg-white shadow-md rounded-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -246,7 +246,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-white shadow-md rounded-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -265,7 +265,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveSubscriptionsModalOpen(true)}>
+          <Card className={`cursor-pointer hover:shadow-md transition-shadow bg-white rounded-lg ${activeSubscriptionsModalOpen ? 'border-2 border-blue-500 bg-blue-50' : ''}`} onClick={() => setActiveSubscriptionsModalOpen(true)}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -284,7 +284,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setUpcomingRenewalsModalOpen(true)}>
+          <Card className={`cursor-pointer hover:shadow-md transition-shadow bg-white rounded-lg ${upcomingRenewalsModalOpen ? 'border-2 border-blue-500 bg-blue-50' : ''}`} onClick={() => setUpcomingRenewalsModalOpen(true)}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
