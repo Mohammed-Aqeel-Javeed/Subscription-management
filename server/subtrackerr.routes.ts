@@ -672,9 +672,10 @@ router.post("/api/subscriptions", async (req, res) => {
     } else {
       departments = [];
     }
+    // Always include departments field, even if empty
     const subscription = {
       ...req.body,
-      departments,
+      departments: departments || [],
       tenantId,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -753,10 +754,11 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     } else {
       departments = oldDoc.departments || [];
     }
+    // Always include departments field, even if empty
     const update = { 
       $set: { 
         ...req.body,
-        departments,
+        departments: departments || [],
         status: req.body.status || oldDoc.status, // Preserve status if not provided
         updatedAt: new Date(),  // Add updatedAt timestamp
         tenantId // Always set tenantId from user/session, not from payload (last)
