@@ -14,6 +14,7 @@ import CategoryChart from "@/components/charts/category-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, Subscription } from "@shared/types";
 
+
 // Error boundary wrapper
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
@@ -26,6 +27,7 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
     <React.Fragment>{children}</React.Fragment>
   );
 }
+
 export default function Dashboard() {
   const location = window.location.pathname;
   const navigate = useNavigate();
@@ -83,6 +85,7 @@ export default function Dashboard() {
       return res.json();
     }
   });
+
   // ...existing code...
   if (metricsError && metricsError.message === "Unauthorized") {
     navigate("/login");
@@ -104,6 +107,7 @@ export default function Dashboard() {
       </div>
     );
   }
+
   const handleLogout = async () => {
     try {
       await fetch("/api/logout", { method: "POST", credentials: "include" });
@@ -118,6 +122,7 @@ export default function Dashboard() {
       navigate('/compliance-dashboard');
     }
   };
+
   // Filter active subscriptions
   const activeSubscriptions = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active") : [];
   
@@ -134,6 +139,7 @@ export default function Dashboard() {
     thirtyDaysDate.setHours(23, 59, 59, 999);
     return renewalDate <= thirtyDaysDate && renewalDate >= nowDate;
   });
+
   if (metricsLoading) {
     return (
       <div className="p-8">
@@ -149,15 +155,18 @@ export default function Dashboard() {
       </div>
     );
   }
+
   const getGrowthIcon = (growth: number) => {
     if (growth > 0) return <TrendingUp className="w-4 h-4" />;
     return <TrendingUp className="w-4 h-4 rotate-180" />;
   };
+
   const getGrowthColor = (growth: number) => {
     if (growth > 0) return "text-red-600";
     if (growth < 0) return "text-green-600";
     return "text-gray-600";
   };
+
   return (
     <ErrorBoundary>
       <div className="p-8">
@@ -172,14 +181,12 @@ export default function Dashboard() {
         {/* Top tab buttons */}
         <div className="flex gap-4 mb-8">
           <Button
-            className={location === '/dashboard' ? 'bg-blue-500 text-white' : ''}
             variant={location === '/dashboard' ? 'default' : 'outline'}
             onClick={() => handleTabClick('subscription')}
           >
             Subscription
           </Button>
           <Button
-            className={location === '/compliance-dashboard' ? 'bg-blue-500 text-white' : ''}
             variant={location === '/compliance-dashboard' ? 'default' : 'outline'}
             onClick={() => handleTabClick('compliance')}
           >
@@ -190,6 +197,7 @@ export default function Dashboard() {
           <h2 className="text-3xl font-bold text-gray-900">Dashboard</h2>
           <p className="text-gray-600 mt-2">Overview of your subscription spending and analytics</p>
         </div>
+
         {/* Date Filter */}
         <div className="mb-6 flex justify-between items-center">
           <div className="flex space-x-4">
@@ -216,6 +224,7 @@ export default function Dashboard() {
             </Select>
           </div>
         </div>
+
         {/* Metrics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card className="bg-white shadow-md rounded-lg">
@@ -236,6 +245,7 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
+
           <Card className="bg-white shadow-md rounded-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -254,7 +264,8 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-          <Card className={`cursor-pointer hover:shadow-md transition-shadow bg-white rounded-lg ${activeSubscriptionsModalOpen ? 'border-2 border-blue-500' : ''}`} onClick={() => setActiveSubscriptionsModalOpen(true)}>
+
+          <Card className={`cursor-pointer hover:shadow-md transition-shadow bg-white rounded-lg ${activeSubscriptionsModalOpen ? 'border-2 border-blue-500 bg-blue-50' : ''}`} onClick={() => setActiveSubscriptionsModalOpen(true)}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -272,7 +283,8 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-          <Card className={`cursor-pointer hover:shadow-md transition-shadow bg-white rounded-lg ${upcomingRenewalsModalOpen ? 'border-2 border-blue-500' : ''}`} onClick={() => setUpcomingRenewalsModalOpen(true)}>
+
+          <Card className={`cursor-pointer hover:shadow-md transition-shadow bg-white rounded-lg ${upcomingRenewalsModalOpen ? 'border-2 border-blue-500 bg-blue-50' : ''}`} onClick={() => setUpcomingRenewalsModalOpen(true)}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -291,6 +303,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           <Card>
@@ -309,6 +322,7 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Category Breakdown</CardTitle>
@@ -326,9 +340,10 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
         {/* Active Subscriptions Modal */}
         <Dialog open={activeSubscriptionsModalOpen} onOpenChange={setActiveSubscriptionsModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
             <DialogHeader>
               <DialogTitle>Active Subscriptions ({activeSubscriptions.length})</DialogTitle>
             </DialogHeader>
@@ -366,9 +381,10 @@ export default function Dashboard() {
             </div>
           </DialogContent>
         </Dialog>
+
         {/* Upcoming Renewals Modal */}
         <Dialog open={upcomingRenewalsModalOpen} onOpenChange={setUpcomingRenewalsModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
             <DialogHeader>
               <DialogTitle>Upcoming Renewals - Next 30 Days ({upcomingRenewals.length})</DialogTitle>
             </DialogHeader>
@@ -416,4 +432,5 @@ export default function Dashboard() {
       </div>
     </ErrorBoundary>
   );
+
 }
