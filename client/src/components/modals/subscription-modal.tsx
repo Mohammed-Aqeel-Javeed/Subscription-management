@@ -347,20 +347,22 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
       const { id, createdAt, ...rest } = data as any;
-      
-      // Convert departments array to JSON string for storage
+      // Always include department field as JSON string
       const subscriptionData: InsertSubscription = {
         ...rest,
         department: JSON.stringify(data.departments || []),
         startDate: new Date(data.startDate ?? "").toISOString(),
         nextRenewal: new Date(data.nextRenewal ?? "").toISOString(),
       };
-      
+      // Ensure department field is present in payload
+      if (!('department' in subscriptionData)) {
+        subscriptionData.department = JSON.stringify(data.departments || []);
+      }
       let res;
       const subId = subscription?.id;
       // Remove tenantId from update payload
       if (isEditing && subId) {
-  delete (subscriptionData as any).tenantId;
+        delete (subscriptionData as any).tenantId;
         res = await apiRequest("PUT", `/api/subscriptions/${subId}`, subscriptionData);
       } else {
         res = await apiRequest("POST", "/api/subscriptions", subscriptionData);
