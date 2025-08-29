@@ -188,7 +188,7 @@ export default function Subscriptions() {
       ...subscription,
       id: subscriptionId,
       amount: subscription.amount !== undefined ? String(subscription.amount) : "",
-      // department: removed, only use departments array
+      departments: subscription.departments ?? [],
     });
     setModalOpen(true);
   };
