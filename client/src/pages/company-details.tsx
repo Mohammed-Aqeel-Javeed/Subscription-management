@@ -1084,7 +1084,9 @@ const { data: categories = [], isLoading: categoriesLoading, refetch: refetchCat
   queryKey: ["/api/company/categories", tenantId],
   queryFn: async () => {
     const res = await apiRequest("GET", `/api/company/categories?tenantId=${tenantId}`);
-    return Array.isArray(res) ? res.filter(cat => cat.tenantId === tenantId) : [];
+    return Array.isArray(res)
+      ? res.filter(cat => cat.tenantId === tenantId || cat.tenantId === undefined || cat.tenantId === null)
+      : [];
   },
   initialData: [],
   refetchOnWindowFocus: true,
@@ -1131,7 +1133,7 @@ const {
     const res = await apiRequest("GET", `/api/company/departments?tenantId=${tenantId}`);
     // Show departments for current tenant, and also show departments with no tenantId (for backward compatibility)
     return Array.isArray(res)
-      ? res.filter(dept => dept.tenantId === tenantId || !dept.tenantId)
+      ? res.filter(dept => dept.tenantId === tenantId || dept.tenantId === undefined || dept.tenantId === null)
       : [];
   },
   initialData: [],
