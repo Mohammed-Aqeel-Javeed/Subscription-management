@@ -284,14 +284,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (subscription) {
       const start = subscription.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "";
       const end = subscription.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "";
-  const depts = subscription.departments || [];
-      
+      // Ensure departments is always an array
+      let depts: string[] = [];
+      if (Array.isArray(subscription.departments)) {
+        depts = subscription.departments.filter(Boolean);
+      } else if (
+        typeof subscription.departments === 'string' &&
+        (subscription.departments as string).trim() !== ''
+      ) {
+        depts = [subscription.departments as string];
+      }
       setStartDate(start);
       setBillingCycle(subscription.billingCycle || "monthly");
       setEndDate(end);
       setEndDateManuallySet(!!end);
       setSelectedDepartments(depts);
-      
       form.reset({
         serviceName: subscription.serviceName || "",
         vendor: subscription.vendor || "",
@@ -315,7 +322,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setEndDate("");
       setEndDateManuallySet(false);
       setSelectedDepartments([]);
-      
       form.reset({
         serviceName: "",
         vendor: "",
