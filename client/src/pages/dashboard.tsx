@@ -181,13 +181,15 @@ export default function Dashboard() {
         {/* Top tab buttons */}
         <div className="flex gap-4 mb-8">
           <Button
-            variant={location === '/dashboard' ? 'default' : 'outline'}
+            className={location === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+            variant="outline"
             onClick={() => handleTabClick('subscription')}
           >
             Subscription
           </Button>
           <Button
-            variant={location === '/compliance-dashboard' ? 'default' : 'outline'}
+            className={location === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+            variant="outline"
             onClick={() => handleTabClick('compliance')}
           >
             Compliance
