@@ -498,7 +498,8 @@ router.get("/api/company/categories", async (req, res) => {
       .filter(item => typeof item.name === "string" && item.name.trim())
       .map(item => ({
         name: item.name,
-        visible: typeof item.visible === "boolean" ? item.visible : true
+        visible: typeof item.visible === "boolean" ? item.visible : true,
+        tenantId: item.tenantId
       }));
     res.status(200).json(categories);
   } catch (error) {
@@ -567,7 +568,8 @@ router.get("/api/company/departments", async (req, res) => {
       .filter(item => typeof item.name === "string" && item.name.trim())
       .map(item => ({
         name: item.name,
-        visible: typeof item.visible === "boolean" ? item.visible : true
+        visible: typeof item.visible === "boolean" ? item.visible : true,
+        tenantId: item.tenantId
       }));
     res.status(200).json(departments);
   } catch (error) {
