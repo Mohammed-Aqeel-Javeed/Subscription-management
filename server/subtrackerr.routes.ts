@@ -655,7 +655,10 @@ router.post("/api/subscriptions", async (req, res) => {
     const historyCollection = db.collection("history");
     // Multi-tenancy: set tenantId
     const tenantId = req.user?.tenantId;
+    console.log('[DEBUG] Incoming subscription create request:', JSON.stringify(req.body, null, 2));
+    console.log('[DEBUG] User context:', JSON.stringify(req.user, null, 2));
     if (!tenantId) {
+      console.error('[ERROR] Missing tenantId in user context');
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     // Prepare subscription document with timestamps and tenantId
@@ -680,6 +683,7 @@ router.post("/api/subscriptions", async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date()
     };
+    console.log('[DEBUG] Subscription document to insert:', JSON.stringify(subscription, null, 2));
     // Create the subscription
     const result = await collection.insertOne(subscription);
     const subscriptionId = result.insertedId;
