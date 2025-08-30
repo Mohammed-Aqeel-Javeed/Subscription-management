@@ -184,27 +184,11 @@ export default function Subscriptions() {
       });
       return;
     }
-    // Ensure departments is always an array
-    let departmentsArr: string[] = [];
-    if (Array.isArray(subscription.departments)) {
-      departmentsArr = subscription.departments.filter(Boolean);
-    } else if (
-      typeof subscription.departments === 'string' &&
-      subscription.departments && (subscription.departments as string).trim() !== ''
-    ) {
-      departmentsArr = [subscription.departments as string];
-    } else if (
-      (subscription as any).department &&
-      typeof (subscription as any).department === 'string' &&
-      ((subscription as any).department as string).trim() !== ''
-    ) {
-      departmentsArr = [(subscription as any).department as string];
-    }
     setEditingSubscription({
       ...subscription,
       id: subscriptionId,
       amount: subscription.amount !== undefined ? String(subscription.amount) : "",
-      departments: departmentsArr,
+      // department: removed, only use departments array
     });
     setModalOpen(true);
   };
