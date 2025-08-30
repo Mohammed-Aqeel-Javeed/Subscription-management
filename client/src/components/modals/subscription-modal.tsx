@@ -372,11 +372,37 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       if (subscription?.id) {
         setCurrentSubscriptionId(subscription.id);
       }
-      
+
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
-  // ...existing code...
+
+      // Restore history logging for create/update
+      try {
+        const subId = subscription?.id || data.insertedId;
+        if (subId) {
+          await fetch("/api/history", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subscriptionId: subId.toString(),
+              data: {
+                ...variables,
+                serviceName: variables.serviceName,
+                owner: variables.owner,
+                startDate: variables.startDate,
+                nextRenewal: variables.nextRenewal,
+                status: variables.status,
+              },
+              timestamp: new Date().toISOString(),
+              action: isEditing ? "update" : "save"
+            })
+          });
+        }
+      } catch (e) {
+        console.error("Failed to save history:", e);
+      }
+
       toast({
         title: "Success",
         description: `Subscription ${isEditing ? 'updated' : 'created'} successfully`,
