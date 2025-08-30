@@ -655,10 +655,7 @@ router.post("/api/subscriptions", async (req, res) => {
     const historyCollection = db.collection("history");
     // Multi-tenancy: set tenantId
     const tenantId = req.user?.tenantId;
-    console.log('[DEBUG] Incoming subscription create request:', JSON.stringify(req.body, null, 2));
-    console.log('[DEBUG] User context:', JSON.stringify(req.user, null, 2));
     if (!tenantId) {
-      console.error('[ERROR] Missing tenantId in user context');
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     // Prepare subscription document with timestamps and tenantId
@@ -683,30 +680,26 @@ router.post("/api/subscriptions", async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    console.log('[DEBUG] Subscription document to insert:', JSON.stringify(subscription, null, 2));
     // Create the subscription
     const result = await collection.insertOne(subscription);
     const subscriptionId = result.insertedId;
     // Get the complete subscription document
     const createdSubscription = await collection.findOne({ _id: subscriptionId });
-    // Create history record (ensure all required fields)
+    // Create history record
     const historyRecord = {
       subscriptionId: subscriptionId,  // Store as ObjectId
-      tenantId: tenantId, // Always include tenantId for filtering
-      action: "create",
-      timestamp: new Date(),
-      serviceName: createdSubscription?.serviceName || subscription.serviceName || "",
-      data: createdSubscription ? {
+      tenantId, // Always include tenantId for filtering
+      data: {
         ...createdSubscription,
         _id: subscriptionId
-      } : undefined,
-      updatedFields: undefined // No updatedFields on create
+      },
+      action: "save",
+      timestamp: new Date(),
+      serviceName: subscription.serviceName  // Add serviceName for easier querying
     };
-    console.log("[DEBUG] Creating history record on subscription create:", JSON.stringify(historyRecord, null, 2));
     await historyCollection.insertOne(historyRecord);
     res.status(201).json({ 
       message: "Subscription created",
-      _id: subscriptionId.toString(),
       subscription: createdSubscription 
     });
   } catch (error: unknown) {
