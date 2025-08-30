@@ -56,7 +56,7 @@ const formSchema = z.object({
   billingCycle: z.string().optional(),
   category: z.string().optional(),
   department: z.string().optional(),
-  departments: z.array(z.string()).min(1, "At least one department is required"),
+  departments: z.array(z.string()).optional(),
   owner: z.string().optional(),
   status: z.string().optional(),
   reminderDays: z.number().optional(),
@@ -284,21 +284,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (subscription) {
       const start = subscription.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "";
       const end = subscription.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "";
-      // Ensure departments is always an array
-      let depts: string[] = [];
-      if (Array.isArray(subscription.departments)) {
-        depts = subscription.departments.filter(Boolean);
-      } else if (
-        typeof subscription.departments === 'string' &&
-        (subscription.departments as string).trim() !== ''
-      ) {
-        depts = [subscription.departments as string];
-      }
+  const depts = subscription.departments || [];
+      
       setStartDate(start);
       setBillingCycle(subscription.billingCycle || "monthly");
       setEndDate(end);
       setEndDateManuallySet(!!end);
       setSelectedDepartments(depts);
+      
       form.reset({
         serviceName: subscription.serviceName || "",
         vendor: subscription.vendor || "",
@@ -322,6 +315,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setEndDate("");
       setEndDateManuallySet(false);
       setSelectedDepartments([]);
+      
       form.reset({
         serviceName: "",
         vendor: "",
@@ -437,20 +431,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   const onSubmit = async (data: FormData) => {
     try {
-      // Validate department selection
-      if (!selectedDepartments || selectedDepartments.length === 0) {
-        toast({
-          title: "Department Required",
-          description: "Please select at least one department.",
-          variant: "destructive",
-        });
-        return;
-      }
       // Always include department as JSON string for backend
       // Ensure amount is a number
       const amountNum = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount ?? 0;
       // Get tenantId from context, state, or user info
-      const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
+  const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
         ...data,
         amount: isNaN(amountNum) ? 0 : amountNum,

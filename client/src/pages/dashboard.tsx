@@ -13,7 +13,7 @@ import TrendsChart from "@/components/charts/trends-chart";
 import CategoryChart from "@/components/charts/category-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, Subscription } from "@shared/types";
-import { Check } from "lucide-react"; // Import the Check icon
+
 
 // Error boundary wrapper
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
@@ -35,7 +35,6 @@ export default function Dashboard() {
   console.log("[Dashboard] Component mounted");
   const [activeSubscriptionsModalOpen, setActiveSubscriptionsModalOpen] = useState(false);
   const [upcomingRenewalsModalOpen, setUpcomingRenewalsModalOpen] = useState(false);
-  
   // Use dashboard metrics query for auth check and data
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery<DashboardMetrics>({
     queryKey: ["/api/analytics/dashboard"],
@@ -48,7 +47,6 @@ export default function Dashboard() {
       return res.json();
     }
   });
-  
   const { data: trends, isLoading: trendsLoading } = useQuery<SpendingTrend[]>({
     queryKey: ["/api/analytics/trends"],
     queryFn: async () => {
@@ -59,7 +57,6 @@ export default function Dashboard() {
       return res.json();
     }
   });
-  
   const { data: categories, isLoading: categoriesLoading } = useQuery<CategoryBreakdown[]>({
     queryKey: ["/api/analytics/categories"],
     queryFn: async () => {
@@ -70,7 +67,14 @@ export default function Dashboard() {
       return res.json();
     }
   });
-  
+  // Activity query removed as it's not currently used in the dashboard
+  // const { data: activity, isLoading: activityLoading } = useQuery<RecentActivity[]>({
+  //   queryKey: ["/api/analytics/activity"],
+  //   queryFn: async () => {
+  //     const res = await fetch("/api/analytics/activity", { credentials: "include" });
+  //     return res.json();
+  //   }
+  // });
   const { data: subscriptions, isLoading: subscriptionsLoading } = useQuery<Subscription[]>({
     queryKey: ["/api/subscriptions"],
     queryFn: async () => {
@@ -82,11 +86,11 @@ export default function Dashboard() {
     }
   });
 
+  // ...existing code...
   if (metricsError && metricsError.message === "Unauthorized") {
     navigate("/login");
     return null;
   }
-
   // Show skeletons while loading any data
   if (metricsLoading || trendsLoading || categoriesLoading || subscriptionsLoading) {
     return (
@@ -110,7 +114,6 @@ export default function Dashboard() {
     } catch {}
     navigate("/login");
   };
-
   // Tab navigation handler
   const handleTabClick = (tab: 'subscription' | 'compliance') => {
     if (tab === 'subscription') {
@@ -128,6 +131,7 @@ export default function Dashboard() {
   const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   const upcomingRenewals = activeSubscriptions.filter(sub => {
     const renewalDate = new Date(sub.nextRenewal);
+    // Reset time portions to compare only dates
     renewalDate.setHours(0, 0, 0, 0);
     const nowDate = new Date(now);
     nowDate.setHours(0, 0, 0, 0);
@@ -135,6 +139,22 @@ export default function Dashboard() {
     thirtyDaysDate.setHours(23, 59, 59, 999);
     return renewalDate <= thirtyDaysDate && renewalDate >= nowDate;
   });
+
+  if (metricsLoading) {
+    return (
+      <div className="p-8">
+        <div className="mb-8">
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   const getGrowthIcon = (growth: number) => {
     if (growth > 0) return <TrendingUp className="w-4 h-4" />;
@@ -158,7 +178,6 @@ export default function Dashboard() {
             Logout
           </button>
         </div>
-        
         {/* Top tab buttons */}
         <div className="flex gap-4 mb-8">
           <Button
@@ -176,61 +195,38 @@ export default function Dashboard() {
             Compliance
           </Button>
         </div>
-        
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900">Dashboard</h2>
           <p className="text-gray-600 mt-2">Overview of your subscription spending and analytics</p>
         </div>
-        
-        {/* Date Filter - IMPROVED DROPDOWNS WITH PROPER CHECKMARK */}
+
+        {/* Date Filter */}
         <div className="mb-6 flex justify-between items-center">
-          <div className="flex space-x-6">
-            <Select defaultValue="6months">
-              <SelectTrigger className="w-56 bg-white shadow-sm text-gray-700 hover:border-blue-400 focus:ring-2 focus:ring-blue-200 transition duration-150 h-10 px-4 py-2 rounded-md border border-gray-300">
+          <div className="flex space-x-4">
+              <Select defaultValue="6months">
+              <SelectTrigger className="w-48 bg-white shadow-sm text-gray-700 hover:border-blue-400 focus:ring-2 focus:ring-blue-200 transition duration-150">
                 <SelectValue placeholder="Last 6 months" />
               </SelectTrigger>
-              <SelectContent className="bg-white border border-gray-200 rounded-md shadow-lg mt-1 w-56">
-                <SelectItem value="6months" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
-                  <span className="flex-grow">Last 6 months</span>
-                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
-                </SelectItem>
-                <SelectItem value="12months" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
-                  <span className="flex-grow">Last 12 months</span>
-                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
-                </SelectItem>
-                <SelectItem value="custom" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
-                  <span className="flex-grow">Custom range</span>
-                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
-                </SelectItem>
+              <SelectContent>
+                <SelectItem value="6months">Last 6 months</SelectItem>
+                <SelectItem value="12months">Last 12 months</SelectItem>
+                <SelectItem value="custom">Custom range</SelectItem>
               </SelectContent>
             </Select>
-            
-            <Select defaultValue="all">
-              <SelectTrigger className="w-56 bg-white shadow-sm text-gray-700 hover:border-blue-400 focus:ring-2 focus:ring-blue-200 transition duration-150 h-10 px-4 py-2 rounded-md border border-gray-300">
+              <Select defaultValue="all">
+              <SelectTrigger className="w-48 bg-white shadow-sm text-gray-700 hover:border-blue-400 focus:ring-2 focus:ring-blue-200 transition duration-150">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
-              <SelectContent className="bg-white border border-gray-200 rounded-md shadow-lg mt-1 w-56">
-                <SelectItem value="all" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
-                  <span className="flex-grow">All Categories</span>
-                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
-                </SelectItem>
-                <SelectItem value="software" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
-                  <span className="flex-grow">Software</span>
-                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
-                </SelectItem>
-                <SelectItem value="entertainment" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
-                  <span className="flex-grow">Entertainment</span>
-                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
-                </SelectItem>
-                <SelectItem value="business" className="py-2 px-4 hover:bg-blue-50 cursor-pointer flex items-center">
-                  <span className="flex-grow">Business Tools</span>
-                  <Check className="h-4 w-4 text-blue-600 opacity-0 group-data-[state=checked]:opacity-100" />
-                </SelectItem>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="software">Software</SelectItem>
+                <SelectItem value="entertainment">Entertainment</SelectItem>
+                <SelectItem value="business">Business Tools</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
-        
+
         {/* Metrics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card className="bg-white shadow-md rounded-lg">
@@ -251,7 +247,7 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-white shadow-md rounded-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -270,7 +266,7 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className={`cursor-pointer hover:shadow-md transition-shadow bg-white rounded-lg ${activeSubscriptionsModalOpen ? 'border-2 border-blue-500 bg-blue-50' : ''}`} onClick={() => setActiveSubscriptionsModalOpen(true)}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -289,7 +285,7 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className={`cursor-pointer hover:shadow-md transition-shadow bg-white rounded-lg ${upcomingRenewalsModalOpen ? 'border-2 border-blue-500 bg-blue-50' : ''}`} onClick={() => setUpcomingRenewalsModalOpen(true)}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -309,7 +305,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-        
+
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           <Card>
@@ -328,7 +324,7 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader>
               <CardTitle>Category Breakdown</CardTitle>
@@ -346,10 +342,10 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-        
+
         {/* Active Subscriptions Modal */}
         <Dialog open={activeSubscriptionsModalOpen} onOpenChange={setActiveSubscriptionsModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
+    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
             <DialogHeader>
               <DialogTitle>Active Subscriptions ({activeSubscriptions.length})</DialogTitle>
             </DialogHeader>
@@ -387,10 +383,10 @@ export default function Dashboard() {
             </div>
           </DialogContent>
         </Dialog>
-        
+
         {/* Upcoming Renewals Modal */}
         <Dialog open={upcomingRenewalsModalOpen} onOpenChange={setUpcomingRenewalsModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
+    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
             <DialogHeader>
               <DialogTitle>Upcoming Renewals - Next 30 Days ({upcomingRenewals.length})</DialogTitle>
             </DialogHeader>
@@ -438,4 +434,5 @@ export default function Dashboard() {
       </div>
     </ErrorBoundary>
   );
+
 }
