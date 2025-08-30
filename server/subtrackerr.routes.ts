@@ -685,18 +685,20 @@ router.post("/api/subscriptions", async (req, res) => {
     const subscriptionId = result.insertedId;
     // Get the complete subscription document
     const createdSubscription = await collection.findOne({ _id: subscriptionId });
-    // Create history record
+    // Create history record (ensure all required fields)
     const historyRecord = {
       subscriptionId: subscriptionId,  // Store as ObjectId
-      tenantId, // Always include tenantId for filtering
-      data: {
-        ...createdSubscription,
-        _id: subscriptionId
-      },
+      tenantId: tenantId, // Always include tenantId for filtering
       action: "create",
       timestamp: new Date(),
-      serviceName: subscription.serviceName  // Add serviceName for easier querying
+      serviceName: createdSubscription?.serviceName || subscription.serviceName || "",
+      data: createdSubscription ? {
+        ...createdSubscription,
+        _id: subscriptionId
+      } : undefined,
+      updatedFields: undefined // No updatedFields on create
     };
+    console.log("[DEBUG] Creating history record on subscription create:", JSON.stringify(historyRecord, null, 2));
     await historyCollection.insertOne(historyRecord);
     res.status(201).json({ 
       message: "Subscription created",
