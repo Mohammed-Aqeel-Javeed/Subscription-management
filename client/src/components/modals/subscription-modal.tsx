@@ -376,29 +376,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
-      // Insert into history table
-      try {
-        const subId = subscription?.id || data.insertedId;
-        // Only create history record if we have a subscription ID
-        if (subId) {
-          await axios.post("/api/history", {
-            subscriptionId: subId.toString(),
-            data: {
-              ...variables,
-              serviceName: variables.serviceName,
-              owner: variables.owner,
-              startDate: variables.startDate,
-              nextRenewal: variables.nextRenewal,
-              status: variables.status,
-            },
-            timestamp: new Date().toISOString(),
-            action: isEditing ? "update" : "create"
-          });
-        }
-      } catch (e) {
-        // Optionally show a toast if history fails
-        console.error("Failed to save history:", e);
-      }
+  // ...existing code...
       toast({
         title: "Success",
         description: `Subscription ${isEditing ? 'updated' : 'created'} successfully`,
@@ -460,22 +438,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           startDate: payload.startDate instanceof Date ? payload.startDate.toISOString() : String(payload.startDate),
           nextRenewal: payload.nextRenewal instanceof Date ? payload.nextRenewal.toISOString() : String(payload.nextRenewal),
         });
-        // After update, create history record
-        try {
-          await apiRequest("POST", "/api/history", {
-            subscriptionId: validId,
-            data: payload,
-            action: "update",
-            timestamp: new Date().toISOString()
-          });
-        } catch (historyError) {
-          console.error("Failed to create history record:", historyError);
-          toast({
-            title: "Warning",
-            description: "Subscription updated, but failed to create history.",
-            variant: "destructive",
-          });
-        }
       } else {
         // Create new subscription using apiRequest helper for consistent headers
         const res = await apiRequest("POST", "/api/subscriptions", payload);
@@ -578,12 +540,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           ? subId
           : (subId?.toString?.() || "");
         await apiRequest("PUT", `/api/subscriptions/${validSubscriptionId}`, payload);
-        // Insert into history table
-        await axios.post("/api/history", {
-          subscriptionId: validSubscriptionId,
-          data: payload,
-          action: "renew"
-        });
         
         // Invalidate queries to refresh data
         queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
