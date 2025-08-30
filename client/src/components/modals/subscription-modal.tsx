@@ -493,7 +493,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               await apiRequest("POST", "/api/history", {
                 subscriptionId: validSubscriptionId,
                 data: payload,
-                action: "create",
+                action: "save",
                 timestamp: new Date().toISOString()
               });
               
