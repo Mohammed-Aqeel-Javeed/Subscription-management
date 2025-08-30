@@ -16,19 +16,11 @@ import type { Subscription } from "@shared/schema";
 // Helper component to display departments
   // Extend Subscription type locally to include department and _id for frontend use
   type SubscriptionWithExtras = Subscription & { departments?: string[]; _id?: string };
-  const DepartmentDisplay = ({ departments }: { departments?: any }) => {
-    // Handle array, string, or missing
-    let deptList: string[] = [];
-    if (Array.isArray(departments)) {
-      deptList = departments.filter(Boolean);
-    } else if (typeof departments === 'string' && departments.trim() !== '') {
-      // If backend sends a single string
-      deptList = [departments];
-    }
-    if (!deptList.length) return <span>-</span>;
+  const DepartmentDisplay = ({ departments }: { departments?: string[] }) => {
+    if (!departments || !departments.length) return <span>-</span>;
     return (
       <div className="flex flex-wrap gap-1">
-        {deptList.map((dept, idx) => (
+        {departments.map((dept, idx) => (
           <span key={dept + idx} className="inline-block bg-indigo-100 text-indigo-700 text-xs font-medium px-2 py-0.5 rounded-full">
             {dept}
           </span>

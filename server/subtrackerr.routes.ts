@@ -685,7 +685,7 @@ router.post("/api/subscriptions", async (req, res) => {
     const subscriptionId = result.insertedId;
     // Get the complete subscription document
     const createdSubscription = await collection.findOne({ _id: subscriptionId });
-    // Create history record (match update logic)
+    // Create history record
     const historyRecord = {
       subscriptionId: subscriptionId,  // Store as ObjectId
       tenantId, // Always include tenantId for filtering
@@ -693,18 +693,11 @@ router.post("/api/subscriptions", async (req, res) => {
         ...createdSubscription,
         _id: subscriptionId
       },
-      updatedFields: null, // For creation, no updated fields
       action: "create",
       timestamp: new Date(),
       serviceName: subscription.serviceName  // Add serviceName for easier querying
     };
-    console.log('[DEBUG] Attempting to insert history record:', JSON.stringify(historyRecord, null, 2));
-    try {
-      const historyResult = await historyCollection.insertOne(historyRecord);
-      console.log('[DEBUG] History insert result:', historyResult);
-    } catch (err) {
-      console.error('[ERROR] Failed to insert history record:', err);
-    }
+    await historyCollection.insertOne(historyRecord);
     res.status(201).json({ 
       message: "Subscription created",
       subscription: createdSubscription 
