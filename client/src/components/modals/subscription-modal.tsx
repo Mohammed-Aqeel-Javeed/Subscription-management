@@ -481,43 +481,43 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         const res = await apiRequest("POST", "/api/subscriptions", payload);
         const result = await res.json();
         
-        if (res.ok && result) {
-          const subscriptionId = result._id || result.subscription?._id;
-          // Ensure subscriptionId is a valid ObjectId string
-          const validSubscriptionId = typeof subscriptionId === 'string' && /^[a-f\d]{24}$/i.test(subscriptionId)
-            ? subscriptionId
-            : (subscriptionId?.toString?.() || "");
-          if (validSubscriptionId) {
-            // Create history record using the same payload that created the subscription
-            try {
-              await apiRequest("POST", "/api/history", {
-                subscriptionId: validSubscriptionId,
-                data: payload,
-                action: "create",
-                timestamp: new Date().toISOString()
-              });
-              
-              // Dispatch subscription creation event
-              if (typeof window !== 'undefined' && window.dispatchEvent) {
-                window.dispatchEvent(new CustomEvent('subscription-created', { 
-                  detail: { ...payload, _id: subscriptionId }
-                }));
-              }
-            } catch (historyError) {
-              console.error("Failed to create history record:", historyError);
-              toast({
-                title: "Warning",
-                description: "Subscription saved, but failed to create history.",
-                variant: "destructive",
-              });
+        // Try to get the subscriptionId from result
+        let subscriptionId = result._id || result.subscription?._id || result.insertedId;
+        // If still not found, try to get from result.subscription.id
+        if (!subscriptionId && result.subscription && result.subscription.id) {
+          subscriptionId = result.subscription.id;
+        }
+        // Ensure subscriptionId is a valid ObjectId string
+        const validSubscriptionId = typeof subscriptionId === 'string' && /^[a-f\d]{24}$/i.test(subscriptionId)
+          ? subscriptionId
+          : (subscriptionId?.toString?.() || "");
+        if (res.ok && validSubscriptionId) {
+          // Create history record using the same payload that created the subscription
+          try {
+            await apiRequest("POST", "/api/history", {
+              subscriptionId: validSubscriptionId,
+              data: payload,
+              action: "create",
+              timestamp: new Date().toISOString()
+            });
+            // Dispatch subscription creation event
+            if (typeof window !== 'undefined' && window.dispatchEvent) {
+              window.dispatchEvent(new CustomEvent('subscription-created', { 
+                detail: { ...payload, _id: validSubscriptionId }
+              }));
             }
+          } catch (historyError) {
+            console.error("Failed to create history record:", historyError);
+            toast({
+              title: "Warning",
+              description: "Subscription saved, but failed to create history.",
+              variant: "destructive",
+            });
           }
-          
           // Invalidate queries to refresh data
           queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
           queryClient.invalidateQueries({ queryKey: ["/api/history"] });
           queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-          
           toast({
             title: "Success",
             description: "Subscription created successfully",
