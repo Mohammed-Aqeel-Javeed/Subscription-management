@@ -112,8 +112,6 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
   }
 }
 
-const router = Router();
-
 // JWT middleware to set req.user and req.user.tenantId
 router.use((req, res, next) => {
   let token;
