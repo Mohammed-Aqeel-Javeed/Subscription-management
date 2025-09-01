@@ -97,6 +97,8 @@ return (
 </div>
 );
 }
+const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+const [showComplianceModal, setShowComplianceModal] = useState(false);
 return (
 <div className="p-6">
 	<div className="flex items-center justify-between mb-6">
@@ -108,8 +110,12 @@ return (
 			</Badge>
 		</div>
 		<div className="flex gap-4">
-			<Button variant="default" className="px-6 py-2 font-semibold rounded-lg shadow-sm">Subscription Notification</Button>
-			<Button variant="outline" className="px-6 py-2 font-semibold rounded-lg">Compliance Notification</Button>
+			<Button variant="default" className="px-6 py-2 font-semibold rounded-lg shadow-sm" onClick={() => setShowSubscriptionModal(true)}>
+				Subscription Notification
+			</Button>
+			<Button variant="outline" className="px-6 py-2 font-semibold rounded-lg" onClick={() => setShowComplianceModal(true)}>
+				Compliance Notification
+			</Button>
 		</div>
 	</div>
 {notifications.length === 0 ? (
@@ -254,6 +260,14 @@ createdAt: selectedSubscription.createdAt ? new Date(selectedSubscription.create
 } : undefined}
 />
 )}
+{showSubscriptionModal && (
+  <SubscriptionModal
+    open={showSubscriptionModal}
+    onOpenChange={setShowSubscriptionModal}
+    subscription={undefined}
+  />
+)}
+
 {/* Refetch notifications and subscriptions instantly after modal closes */}
 {modalJustClosed && (() => {
 setModalJustClosed(false);
