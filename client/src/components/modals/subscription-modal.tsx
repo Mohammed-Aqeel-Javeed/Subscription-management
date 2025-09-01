@@ -376,29 +376,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
-      // Insert into history table
-      try {
-  const subId = subscription?.id || data._id;
-        // Only create history record if we have a subscription ID
-        if (subId) {
-          await axios.post("/api/history", {
-            subscriptionId: subId.toString(),
-            data: {
-              ...variables,
-              serviceName: variables.serviceName,
-              owner: variables.owner,
-              startDate: variables.startDate,
-              nextRenewal: variables.nextRenewal,
-              status: variables.status,
-            },
-            timestamp: new Date().toISOString(),
-            action: isEditing ? "update" : "create"
-          });
-        }
-      } catch (e) {
-        // Optionally show a toast if history fails
-        console.error("Failed to save history:", e);
-      }
+      
       toast({
         title: "Success",
         description: `Subscription ${isEditing ? 'updated' : 'created'} successfully`,
@@ -461,22 +439,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           startDate: payload.startDate instanceof Date ? payload.startDate.toISOString() : String(payload.startDate),
           nextRenewal: payload.nextRenewal instanceof Date ? payload.nextRenewal.toISOString() : String(payload.nextRenewal),
         });
-        // After update, create history record
-        try {
-          await apiRequest("POST", "/api/history", {
-            subscriptionId: validId,
-            data: payload,
-            action: "update",
-            timestamp: new Date().toISOString()
-          });
-        } catch (historyError) {
-          console.error("Failed to create history record:", historyError);
-          toast({
-            title: "Warning",
-            description: "Subscription updated, but failed to create history.",
-            variant: "destructive",
-          });
-        }
       } else {
         // Create new subscription using apiRequest helper for consistent headers
         const res = await apiRequest("POST", "/api/subscriptions", payload);
@@ -484,34 +446,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         
         if (res.ok && result) {
           const subscriptionId = result._id || result.subscription?._id;
-          // Ensure subscriptionId is a valid ObjectId string
-          const validSubscriptionId = typeof subscriptionId === 'string' && /^[a-f\d]{24}$/i.test(subscriptionId)
-            ? subscriptionId
-            : (subscriptionId?.toString?.() || "");
-          if (validSubscriptionId) {
-            // Create history record using the same payload that created the subscription
-            try {
-              await apiRequest("POST", "/api/history", {
-                subscriptionId: validSubscriptionId,
-                data: payload,
-                action: "create",
-                timestamp: new Date().toISOString()
-              });
-              
-              // Dispatch subscription creation event
-              if (typeof window !== 'undefined' && window.dispatchEvent) {
-                window.dispatchEvent(new CustomEvent('subscription-created', { 
-                  detail: { ...payload, _id: subscriptionId }
-                }));
-              }
-            } catch (historyError) {
-              console.error("Failed to create history record:", historyError);
-              toast({
-                title: "Warning",
-                description: "Subscription saved, but failed to create history.",
-                variant: "destructive",
-              });
-            }
+          
+          // Dispatch subscription creation event
+          if (typeof window !== 'undefined' && window.dispatchEvent) {
+            window.dispatchEvent(new CustomEvent('subscription-created', { 
+              detail: { ...payload, _id: subscriptionId }
+            }));
           }
           
           // Invalidate queries to refresh data
