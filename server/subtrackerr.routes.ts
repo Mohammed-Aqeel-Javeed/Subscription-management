@@ -469,14 +469,14 @@ router.get("/api/subscriptions", async (req, res) => {
   }
 });
 
-// Delete a subscription and its reminders
-router.delete("/api/subtrackerr/:id", async (req, res) => {
+// Delete a subscription and its reminders (main route that frontend uses)
+router.delete("/api/subscriptions/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const { ObjectId } = await import("mongodb");
     const collection = db.collection("subscriptions");
     
-    // Multi-tenancy: filter by tenantId
+    // Multi-tenancy: only allow delete for current tenant
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
@@ -488,15 +488,36 @@ router.delete("/api/subtrackerr/:id", async (req, res) => {
     } catch {
       filter = { id: req.params.id, tenantId };
     }
+    
     const result = await collection.deleteOne(filter);
     if (result.deletedCount === 1) {
       // Cascade delete reminders for this subscription
-      await db.collection("reminders").deleteMany({ 
-        $or: [ 
-          { subscriptionId: req.params.id, tenantId }, 
-          { subscriptionId: new ObjectId(req.params.id), tenantId } 
-        ] 
-      });
+      await db.collection("reminders").deleteMany({ $or: [ { subscriptionId: req.params.id }, { subscriptionId: new ObjectId(req.params.id) } ] });
+      res.status(200).json({ message: "Subscription and related reminders deleted" });
+    } else {
+      res.status(404).json({ message: "Subscription not found or access denied" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete subscription", error });
+  }
+});
+
+// Delete a subscription and its reminders (legacy route)
+router.delete("/api/subtrackerr/:id", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { ObjectId } = await import("mongodb");
+    const collection = db.collection("subscriptions");
+    let filter;
+    try {
+      filter = { _id: new ObjectId(req.params.id) };
+    } catch {
+      filter = { id: req.params.id };
+    }
+    const result = await collection.deleteOne(filter);
+    if (result.deletedCount === 1) {
+      // Cascade delete reminders for this subscription
+      await db.collection("reminders").deleteMany({ $or: [ { subscriptionId: req.params.id }, { subscriptionId: new ObjectId(req.params.id) } ] });
       res.status(200).json({ message: "Subscription and related reminders deleted" });
     } else {
       res.status(404).json({ message: "Subscription not found" });
