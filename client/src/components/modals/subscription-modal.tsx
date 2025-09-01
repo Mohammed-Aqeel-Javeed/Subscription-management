@@ -250,8 +250,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       amount: subscription?.amount !== undefined && subscription?.amount !== null ? String(subscription.amount) : "",
       billingCycle: subscription?.billingCycle && subscription?.billingCycle !== "" ? subscription.billingCycle : "monthly",
       category: subscription?.category || "",
-  department: "",
-  departments: subscription?.departments || [],
+      department: subscription?.department || "",
+      departments: parseDepartments(subscription?.department),
       owner: subscription?.owner || "",
       paymentMethod: subscription?.paymentMethod || "",
       startDate: subscription?.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "",
@@ -284,7 +284,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (subscription) {
       const start = subscription.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "";
       const end = subscription.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "";
-  const depts = subscription.departments || [];
+      const depts = parseDepartments(subscription.department);
       
       setStartDate(start);
       setBillingCycle(subscription.billingCycle || "monthly");
@@ -298,7 +298,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         amount: subscription.amount !== undefined && subscription.amount !== null ? String(subscription.amount) : "",
         billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
         category: subscription.category || "",
-        department: "",
+        department: subscription.department || "",
         departments: depts,
         owner: subscription.owner || "",
         startDate: start,
@@ -348,10 +348,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     mutationFn: async (data: FormData) => {
       const { id, createdAt, ...rest } = data as any;
       
-      // Store departments as array for backend
+      // Convert departments array to JSON string for storage
       const subscriptionData: InsertSubscription = {
         ...rest,
-        departments: data.departments || [],
+        department: JSON.stringify(data.departments || []),
         startDate: new Date(data.startDate ?? "").toISOString(),
         nextRenewal: new Date(data.nextRenewal ?? "").toISOString(),
       };
@@ -440,6 +440,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         ...data,
         amount: isNaN(amountNum) ? 0 : amountNum,
         departments: selectedDepartments,
+        department: JSON.stringify(selectedDepartments),
         startDate: new Date(data.startDate ?? ""),
         nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
         tenantId,
