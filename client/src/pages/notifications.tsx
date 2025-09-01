@@ -99,15 +99,19 @@ return (
 }
 return (
 <div className="p-6">
-<div className="flex items-center justify-between mb-6">
-<div className="flex items-center gap-2">
-<Bell className="h-6 w-6" />
-<h1 className="text-2xl font-bold">Notifications</h1>
-<Badge variant="secondary" className="ml-2">
-{notifications.length} Active
-</Badge>
-</div>
-</div>
+	<div className="flex items-center justify-between mb-6">
+		<div className="flex items-center gap-2">
+			<Bell className="h-6 w-6" />
+			<h1 className="text-2xl font-bold">Notifications</h1>
+			<Badge variant="secondary" className="ml-2">
+				{notifications.length} Active
+			</Badge>
+		</div>
+		<div className="flex gap-4">
+			<Button variant="default" className="px-6 py-2 font-semibold rounded-lg shadow-sm">Subscription Notification</Button>
+			<Button variant="outline" className="px-6 py-2 font-semibold rounded-lg">Compliance Notification</Button>
+		</div>
+	</div>
 {notifications.length === 0 ? (
 <Card>
 <CardContent className="flex flex-col items-center justify-center py-12">
@@ -241,7 +245,13 @@ if (!open) {
 setModalJustClosed(true);
 }
 }}
-subscription={selectedSubscription}
+subscription={selectedSubscription ? {
+...selectedSubscription,
+amount: String(selectedSubscription.amount),
+startDate: new Date(selectedSubscription.startDate),
+nextRenewal: new Date(selectedSubscription.nextRenewal),
+createdAt: selectedSubscription.createdAt ? new Date(selectedSubscription.createdAt) : undefined
+} : undefined}
 />
 )}
 {/* Refetch notifications and subscriptions instantly after modal closes */}
