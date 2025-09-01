@@ -6,6 +6,18 @@ declare global {
     }
   }
 }
+
+// MongoDB History Record Interface
+export interface HistoryRecord {
+  _id?: any; // MongoDB ObjectId
+  subscriptionId: any; // ObjectId or string
+  tenantId: string;
+  action: "create" | "update" | "delete" | string;
+  timestamp: Date;
+  data?: any; // Full subscription document for create
+  updatedFields?: any; // Updated subscription document for update
+  serviceName?: string;
+}
 // --- History API ---
 // List all history records
 
