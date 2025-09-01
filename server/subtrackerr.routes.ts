@@ -42,6 +42,78 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 
 const router = Router();
 
+// Helper function to generate reminders for a subscription
+async function generateRemindersForSubscription(subscription: any, tenantId: string, db: any) {
+  const subscriptionId = subscription._id ? subscription._id.toString() : (typeof subscription.id === 'string' ? subscription.id : undefined);
+  if (!subscriptionId) return;
+
+  // Remove all old reminders for this subscription
+  await db.collection("reminders").deleteMany({ subscriptionId });
+
+  // Only generate if subscription has a nextRenewal or endDate
+  const renewalDate = subscription.nextRenewal || subscription.endDate;
+  if (!renewalDate) return;
+
+  // Use reminderDays from subscription, default to 7 if not set
+  const reminderDays = Number(subscription.reminderDays) || 7;
+  const reminderPolicy = subscription.reminderPolicy || "One time";
+
+  let remindersToInsert = [];
+
+  if (reminderPolicy === "One time") {
+    const reminderDate = new Date(renewalDate);
+    reminderDate.setDate(reminderDate.getDate() - reminderDays);
+    remindersToInsert.push({
+      type: `Before ${reminderDays} days`,
+      date: reminderDate.toISOString().slice(0, 10),
+    });
+  } else if (reminderPolicy === "Two times") {
+    const firstDate = new Date(renewalDate);
+    firstDate.setDate(firstDate.getDate() - reminderDays);
+    const secondDays = Math.floor(reminderDays / 2);
+    const secondDate = new Date(renewalDate);
+    secondDate.setDate(secondDate.getDate() - secondDays);
+    remindersToInsert.push({
+      type: `Before ${reminderDays} days`,
+      date: firstDate.toISOString().slice(0, 10),
+    });
+    if (secondDays > 0 && secondDays !== reminderDays) {
+      remindersToInsert.push({
+        type: `Before ${secondDays} days`,
+        date: secondDate.toISOString().slice(0, 10),
+      });
+    }
+  } else if (reminderPolicy === "Until Renewal") {
+    // Daily reminders from (renewalDate - reminderDays) to renewalDate
+    const startDate = new Date(renewalDate);
+    startDate.setDate(startDate.getDate() - reminderDays);
+    let current = new Date(startDate);
+    const end = new Date(renewalDate);
+    while (current <= end) {
+      remindersToInsert.push({
+        type: `Daily`,
+        date: current.toISOString().slice(0, 10),
+      });
+      current.setDate(current.getDate() + 1);
+    }
+  }
+
+  // Insert all reminders
+  for (const reminder of remindersToInsert) {
+    await db.collection("reminders").insertOne({
+      subscriptionId,
+      reminderType: reminder.type,
+      reminderDate: reminder.date,
+      sent: false,
+      status: subscription.status || "Active",
+      createdAt: new Date(),
+      tenantId,
+    });
+  }
+}
+
+const router = Router();
+
 // JWT middleware to set req.user and req.user.tenantId
 router.use((req, res, next) => {
   let token;
@@ -743,6 +815,10 @@ router.post("/api/subscriptions", async (req, res) => {
     };
     console.log('[HISTORY DEBUG] Inserting history record:', JSON.stringify(historyRecord, null, 2));
     await historyCollection.insertOne(historyRecord);
+
+    // Generate reminders for the new subscription
+    await generateRemindersForSubscription(createdSubscription, tenantId, db);
+
     res.status(201).json({ 
       message: "Subscription created",
       _id: subscriptionId,
@@ -822,6 +898,10 @@ router.put("/api/subscriptions/:id", async (req, res) => {
       } catch (err) {
         console.error('Error inserting history record:', err);
       }
+
+      // Update reminders for the subscription
+      await generateRemindersForSubscription(updatedDoc, tenantId, db);
+
       res.status(200).json({ 
         message: "Subscription updated",
         subscription: updatedDoc

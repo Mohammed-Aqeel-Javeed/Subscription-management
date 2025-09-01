@@ -51,9 +51,17 @@ dates = eachDayOfInterval({ start: startDate, end: endDate }).filter(d => d >= n
 // Only future dates
 return dates;
 }
-const { data: notifications = [], isLoading, refetch } = useQuery<NotificationItem[]>({
+const { data: notifications = [], isLoading, refetch, error } = useQuery<NotificationItem[]>({
 queryKey: ['/api/notifications'],
 refetchInterval: false, // Disable auto-refresh
+});
+
+// Debug logging
+console.log('Notifications query status:', { 
+  isLoading, 
+  error, 
+  notifications: notifications?.length || 0,
+  notificationsData: notifications
 });
 const { data: subscriptions = [], refetch: refetchSubscriptions } = useQuery<Subscription[]>({
 queryKey: ['/api/subscriptions'],
@@ -97,8 +105,6 @@ return (
 </div>
 );
 }
-const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-const [showComplianceModal, setShowComplianceModal] = useState(false);
 return (
 <div className="p-6">
 	<div className="flex items-center justify-between mb-6">
@@ -110,12 +116,8 @@ return (
 			</Badge>
 		</div>
 		<div className="flex gap-4">
-			<Button variant="default" className="px-6 py-2 font-semibold rounded-lg shadow-sm" onClick={() => setShowSubscriptionModal(true)}>
-				Subscription Notification
-			</Button>
-			<Button variant="outline" className="px-6 py-2 font-semibold rounded-lg" onClick={() => setShowComplianceModal(true)}>
-				Compliance Notification
-			</Button>
+			<Button variant="default" className="px-6 py-2 font-semibold rounded-lg shadow-sm">Subscription Notification</Button>
+			<Button variant="outline" className="px-6 py-2 font-semibold rounded-lg">Compliance Notification</Button>
 		</div>
 	</div>
 {notifications.length === 0 ? (
@@ -260,14 +262,6 @@ createdAt: selectedSubscription.createdAt ? new Date(selectedSubscription.create
 } : undefined}
 />
 )}
-{showSubscriptionModal && (
-  <SubscriptionModal
-    open={showSubscriptionModal}
-    onOpenChange={setShowSubscriptionModal}
-    subscription={undefined}
-  />
-)}
-
 {/* Refetch notifications and subscriptions instantly after modal closes */}
 {modalJustClosed && (() => {
 setModalJustClosed(false);
