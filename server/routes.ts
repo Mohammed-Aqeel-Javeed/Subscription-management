@@ -68,6 +68,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   });
 
+  // Register subtrackerr router FIRST to ensure history-enabled routes take precedence
+  app.use(subtrackerrRouter);
+
   // Allow CORS
   app.use(
     cors({
@@ -359,7 +362,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== Analytics =====
-  app.use(subtrackerrRouter);
   app.use(analyticsRouter);
 
   // ===== Reminders =====
