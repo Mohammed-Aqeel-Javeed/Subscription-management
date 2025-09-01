@@ -57,26 +57,26 @@ router.use((req, res, next) => {
 // Add a new history record
 router.post("/api/history", async (req, res) => {
   try {
+    console.log('POST /api/history called');
+    console.log('Request body:', req.body);
     const db = await connectToDatabase();
     const historyCollection = db.collection("history");
     const { subscriptionId, action, data, updatedFields } = req.body;
-    
     if (!subscriptionId) {
+      console.log('No subscriptionId provided');
       return res.status(400).json({ message: "subscriptionId is required" });
     }
-
     console.log(`Creating history record for subscriptionId: ${subscriptionId}`);
-
     // Always store subscriptionId as ObjectId for consistency (like complianceId in ledger)
     let subscriptionObjId;
     try {
       subscriptionObjId = new ObjectId(subscriptionId);
       console.log(`Converted to ObjectId successfully: ${subscriptionObjId}`);
     } catch (err) {
+      console.log('Invalid subscriptionId format:', subscriptionId);
       // If not a valid ObjectId, do not create history record
       return res.status(400).json({ message: "Invalid subscriptionId format" });
     }
-
     // Multi-tenancy: set tenantId
     const tenantId = req.user?.tenantId;
     if (!tenantId) {

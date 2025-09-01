@@ -378,7 +378,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
       // Insert into history table
       try {
-        const subId = subscription?.id || data.insertedId;
+  const subId = subscription?.id || data._id;
         // Only create history record if we have a subscription ID
         if (subId) {
           await axios.post("/api/history", {
