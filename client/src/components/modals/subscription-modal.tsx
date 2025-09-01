@@ -755,7 +755,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <Input 
                           className="w-full border-slate-300 rounded-lg p-2 text-base" 
                           {...field} 
-                          placeholder="Enter service name" 
+                          
                         />
                       </FormControl>
                       <FormMessage />
@@ -772,7 +772,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <Input 
                           className="w-full border-slate-300 rounded-lg p-2 text-base" 
                           {...field} 
-                          placeholder="Enter vendor name" 
+                          
                         />
                       </FormControl>
                       <FormMessage />
@@ -790,7 +790,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         onValueChange={field.onChange}
                       >
                         <SelectTrigger className="w-full bg-white border border-blue-300 rounded-lg shadow-sm p-2 text-base focus:ring-2 focus:ring-blue-500">
-                          <SelectValue placeholder="Select currency" />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
                           {currencies && currencies.length > 0 ? (
@@ -822,7 +822,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           step="0.01" 
                           className="w-full border-slate-300 rounded-lg p-2 text-base text-right font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
                           {...field} 
-                          placeholder="0.00" 
+                          
                         />
                       </FormControl>
                       <FormMessage />
@@ -837,7 +837,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       <FormLabel className="block text-sm font-medium text-slate-700">Billing Cycle</FormLabel>
                       <Select value={billingCycle} onValueChange={(val: string) => { setBillingCycle(val); field.onChange(val); }}>
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue placeholder="Select cycle" />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
                           <SelectItem value="monthly" className={`${billingCycle === 'monthly' ? 'selected' : ''} dropdown-item`}>Monthly</SelectItem>
@@ -859,7 +859,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                            <SelectValue placeholder="Select status" />
+                            <SelectValue />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent className="dropdown-content">
@@ -883,7 +883,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         disabled={categoriesLoading}
                       >
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue placeholder={categoriesLoading ? "Loading..." : "Select category"} />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
                           {Array.isArray(categories) && categories.length > 0 ? (
@@ -989,7 +989,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         disabled={employeesLoading}
                       >
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue placeholder={employeesLoading ? 'Loading employees...' : 'Select owner'} />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
                           {Array.isArray(employees) && employees.length > 0 ? (
@@ -1026,7 +1026,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         disabled={paymentMethodsLoading}
                       >
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue placeholder={paymentMethodsLoading ? 'Loading...' : 'Select payment method'} />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
                           {Array.isArray(paymentMethods) && paymentMethods.length > 0 ? (
@@ -1077,7 +1077,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                       ? ""
                                       : formField.value
                                   }
-                                  placeholder={`Enter ${field.name}`}
+                                  
                                 />
                               ) : (
                                 <Input
@@ -1091,7 +1091,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                       ? ""
                                       : formField.value
                                   }
-                                  placeholder={`Enter ${field.name}`}
+                                  
                                 />
                               )}
                             </FormControl>
@@ -1163,7 +1163,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           min="1"
                           max="365"
                           className="w-full border-slate-300 rounded-lg p-2 text-base" 
-                          placeholder="7"
+                          
                           {...field}
                           onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
                         />
@@ -1196,7 +1196,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         >
                           <FormControl>
                             <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                              <SelectValue placeholder="Select policy" />
+                              <SelectValue />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent className="dropdown-content">
@@ -1232,7 +1232,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       <FormControl>
                         <Textarea 
                           className="w-full border border-slate-400 rounded-lg p-2 text-base min-h-[80px] max-h-[120px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
-                          placeholder="Enter any additional notes about this subscription..." 
+                          
                           rows={3}
                           {...field} 
                           value={field.value || ''}
