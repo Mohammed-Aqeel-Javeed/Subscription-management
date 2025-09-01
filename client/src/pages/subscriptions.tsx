@@ -14,8 +14,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Subscription } from "@shared/schema";
 
 // Helper component to display departments
-  // Extend Subscription type locally to include department and _id for frontend use
-  type SubscriptionWithExtras = Subscription & { departments?: string[]; _id?: string };
+// Extend Subscription type locally to include department and _id for frontend use
+type SubscriptionWithExtras = Subscription & { 
+  departments?: string[]; 
+  _id?: string; 
+};
   const DepartmentDisplay = ({ departments }: { departments?: string[] }) => {
     if (!departments || !departments.length) return <span>-</span>;
     return (
@@ -42,7 +45,7 @@ export default function Subscriptions() {
   const queryClient = useQueryClient();
   
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
-  const { data: subscriptions, isLoading, refetch } = useQuery<Subscription[]>({
+  const { data: subscriptions, isLoading, refetch } = useQuery<SubscriptionWithExtras[]>({
   queryKey: ["/api/subscriptions", tenantId],
   refetchOnWindowFocus: "always",
   refetchOnReconnect: "always",
@@ -473,8 +476,9 @@ export default function Subscriptions() {
                     filteredSubscriptions.map((subscription) => {
                       // DEBUG: Log subscription object to verify departments field
                       console.log('Subscription row:', subscription);
+                      console.log('Subscription ID fields:', { id: subscription.id, _id: subscription._id });
                       return (
-                        <TableRow key={subscription.id} className="hover:bg-slate-50 transition-colors">
+                        <TableRow key={subscription._id || subscription.id} className="hover:bg-slate-50 transition-colors">
                         <TableCell className="py-3 px-4">
                           <div>
                             <div className="font-medium text-slate-900">{subscription.serviceName}</div>
@@ -521,7 +525,7 @@ export default function Subscriptions() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDelete(subscription.id)}
+                              onClick={() => handleDelete(subscription._id || subscription.id)}
                               className="text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg p-2 h-8 w-8"
                               disabled={deleteMutation.isPending}
                             >

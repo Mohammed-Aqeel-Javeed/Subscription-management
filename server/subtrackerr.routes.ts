@@ -463,7 +463,15 @@ router.get("/api/subscriptions", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     const subscriptions = await collection.find({ tenantId }).toArray();
-    res.status(200).json(subscriptions);
+    
+    // Transform MongoDB documents to have consistent id field
+    const transformedSubscriptions = subscriptions.map(sub => ({
+      ...sub,
+      id: sub._id?.toString(), // Add id field from _id
+      _id: sub._id?.toString()  // Convert _id to string
+    }));
+    
+    res.status(200).json(transformedSubscriptions);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch subscriptions", error });
   }
@@ -476,6 +484,12 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
     const { ObjectId } = await import("mongodb");
     const collection = db.collection("subscriptions");
     
+    // Check if ID is valid
+    const id = req.params.id;
+    if (!id || id === 'undefined' || id === 'null') {
+      return res.status(400).json({ message: "Invalid subscription ID provided" });
+    }
+    
     // Multi-tenancy: only allow delete for current tenant
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
@@ -484,15 +498,15 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
     
     let filter;
     try {
-      filter = { _id: new ObjectId(req.params.id), tenantId };
+      filter = { _id: new ObjectId(id), tenantId };
     } catch {
-      filter = { id: req.params.id, tenantId };
+      filter = { id: id, tenantId };
     }
     
     const result = await collection.deleteOne(filter);
     if (result.deletedCount === 1) {
       // Cascade delete reminders for this subscription
-      await db.collection("reminders").deleteMany({ $or: [ { subscriptionId: req.params.id }, { subscriptionId: new ObjectId(req.params.id) } ] });
+      await db.collection("reminders").deleteMany({ $or: [ { subscriptionId: id }, { subscriptionId: new ObjectId(id) } ] });
       res.status(200).json({ message: "Subscription and related reminders deleted" });
     } else {
       res.status(404).json({ message: "Subscription not found or access denied" });
