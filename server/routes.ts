@@ -340,21 +340,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = req.params.id;
       const deleted = await storage.deleteSubscription(id, tenantId);
-      if (!deleted) {
-        return res.status(404).json({ message: "Subscription not found" });
+      if (!deleted.success) {
+        return res.status(404).json({ message: deleted.message || "Subscription not found" });
       }
-      const db = await storage["getDb"]();
-      let objectId;
-      try {
-        objectId = new ObjectId(id);
-      } catch {
-        objectId = id;
-      }
-      await db.collection("reminders").deleteMany({ subscriptionId: objectId });
-      await db.collection("notifications").deleteMany({ subscriptionId: objectId });
       res.json({
-        message:
-          "Subscription and related reminders/notifications deleted successfully"
+        message: "Subscription and related reminders/notifications deleted successfully"
       });
     } catch {
       res.status(500).json({ message: "Failed to delete subscription" });
