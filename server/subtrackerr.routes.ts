@@ -662,11 +662,13 @@ router.delete("/api/company/departments/:name", async (req, res) => {
 // Create a new subscription (with history log)
 router.post("/api/subscriptions", async (req, res) => {
   try {
+    console.log('[CREATE DEBUG] POST /api/subscriptions called');
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
     const historyCollection = db.collection("history");
     // Multi-tenancy: set tenantId
     const tenantId = req.user?.tenantId;
+    console.log('[CREATE DEBUG] TenantId:', tenantId);
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
@@ -677,11 +679,14 @@ router.post("/api/subscriptions", async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date()
     };
+    console.log('[CREATE DEBUG] About to insert subscription:', subscription.serviceName);
     // Create the subscription
     const result = await collection.insertOne(subscription);
     const subscriptionId = result.insertedId;
+    console.log('[CREATE DEBUG] Subscription created with ID:', subscriptionId);
     // Get the complete subscription document
     const createdSubscription = await collection.findOne({ _id: subscriptionId });
+    console.log('[CREATE DEBUG] Retrieved created subscription:', createdSubscription?.serviceName);
     // Create history record
     const historyRecord = {
       subscriptionId: subscriptionId,  // Store as ObjectId
@@ -695,7 +700,8 @@ router.post("/api/subscriptions", async (req, res) => {
       serviceName: subscription.serviceName  // Add serviceName for easier querying
     };
     console.log('[HISTORY DEBUG] Inserting history record:', JSON.stringify(historyRecord, null, 2));
-    await historyCollection.insertOne(historyRecord);
+    const historyResult = await historyCollection.insertOne(historyRecord);
+    console.log('[HISTORY DEBUG] History insert result:', historyResult.insertedId);
     res.status(201).json({ 
       message: "Subscription created",
       _id: subscriptionId,
