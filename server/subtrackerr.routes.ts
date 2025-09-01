@@ -685,6 +685,7 @@ router.post("/api/subscriptions", async (req, res) => {
     await historyCollection.insertOne(historyRecord);
     res.status(201).json({ 
       message: "Subscription created",
+      _id: subscriptionId,
       subscription: createdSubscription 
     });
   } catch (error: unknown) {
