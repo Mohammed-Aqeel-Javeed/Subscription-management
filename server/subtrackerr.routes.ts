@@ -47,12 +47,23 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
   const subscriptionId = subscription._id ? subscription._id.toString() : (typeof subscription.id === 'string' ? subscription.id : undefined);
   if (!subscriptionId) return;
 
+  console.log('[REMINDER DEBUG] Generating reminders for subscription:', {
+    subscriptionId,
+    serviceName: subscription.serviceName,
+    nextRenewal: subscription.nextRenewal,
+    reminderDays: subscription.reminderDays,
+    reminderPolicy: subscription.reminderPolicy
+  });
+
   // Remove all old reminders for this subscription
   await db.collection("reminders").deleteMany({ subscriptionId });
 
-  // Only generate if subscription has a nextRenewal or endDate
-  const renewalDate = subscription.nextRenewal || subscription.endDate;
-  if (!renewalDate) return;
+  // Use nextRenewal as the target date for reminders
+  const renewalDate = subscription.nextRenewal;
+  if (!renewalDate) {
+    console.log('[REMINDER DEBUG] No nextRenewal date found, skipping reminder generation');
+    return;
+  }
 
   // Use reminderDays from subscription, default to 7 if not set
   const reminderDays = Number(subscription.reminderDays) || 7;
@@ -98,9 +109,11 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
     }
   }
 
+  console.log('[REMINDER DEBUG] Reminders to insert:', remindersToInsert);
+
   // Insert all reminders
   for (const reminder of remindersToInsert) {
-    await db.collection("reminders").insertOne({
+    const reminderDoc = {
       subscriptionId,
       reminderType: reminder.type,
       reminderDate: reminder.date,
@@ -108,8 +121,12 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
       status: subscription.status || "Active",
       createdAt: new Date(),
       tenantId,
-    });
+    };
+    console.log('[REMINDER DEBUG] Inserting reminder:', reminderDoc);
+    await db.collection("reminders").insertOne(reminderDoc);
   }
+
+  console.log('[REMINDER DEBUG] Successfully generated', remindersToInsert.length, 'reminders');
 }
 
 // JWT middleware to set req.user and req.user.tenantId
