@@ -682,6 +682,7 @@ router.post("/api/subscriptions", async (req, res) => {
       timestamp: new Date(),
       serviceName: subscription.serviceName  // Add serviceName for easier querying
     };
+    console.log('[HISTORY DEBUG] Inserting history record:', JSON.stringify(historyRecord, null, 2));
     await historyCollection.insertOne(historyRecord);
     res.status(201).json({ 
       message: "Subscription created",
