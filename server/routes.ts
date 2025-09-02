@@ -426,6 +426,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/notifications/compliance", async (req, res) => {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
+    try {
+      const notifications = await storage.getComplianceNotifications(tenantId);
+      res.json(notifications);
+    } catch {
+      res.status(500).json({ message: "Failed to fetch compliance notifications" });
+    }
+  });
+
   app.delete("/api/notifications/:id", async (req, res) => {
     const { id } = req.params;
     try {

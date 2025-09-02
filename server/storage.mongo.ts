@@ -770,8 +770,79 @@ export class MongoStorage implements IStorage {
         reminderTriggerDate: reminderTriggeredDate ? reminderTriggeredDate.toISOString().slice(0, 10) : reminderObj?.reminderDate,
         subscriptionEndDate: subscription?.nextRenewal || subscription?.endDate || "",
         status: reminderObj?.status || subscription?.status || "Active",
+        type: 'subscription',
       });
     }
+    return notifications;
+  }
+
+  async getComplianceNotifications(tenantId: string): Promise<NotificationItem[]> {
+    const db = await this.getDb();
+    const { ObjectId } = await import("mongodb");
+    const notifications: NotificationItem[] = [];
+    const today = new Date();
+    
+    // Get all compliance items for the tenant
+    const complianceItems = await db.collection("compliance").find({ tenantId }).toArray();
+    
+    for (const compliance of complianceItems) {
+      if (!compliance.submissionDeadline || !compliance.reminderPolicy) continue;
+      
+      const reminderPolicy = compliance.reminderPolicy || "One time";
+      const reminderDays = Number(compliance.reminderDays) || 7;
+      const deadlineDate = new Date(compliance.submissionDeadline);
+      
+      let reminderTriggeredDate = null;
+      let shouldShowNotification = false;
+      
+      if (reminderPolicy === "One time") {
+        const trigger = new Date(deadlineDate);
+        trigger.setDate(trigger.getDate() - reminderDays);
+        if (trigger <= today && deadlineDate >= today) {
+          reminderTriggeredDate = trigger;
+          shouldShowNotification = true;
+        }
+      } else if (reminderPolicy === "Two times") {
+        const first = new Date(deadlineDate);
+        first.setDate(first.getDate() - reminderDays);
+        const secondDays = Math.floor(reminderDays / 2);
+        const second = new Date(deadlineDate);
+        second.setDate(second.getDate() - secondDays);
+        
+        if ((first <= today && deadlineDate >= today) || (second <= today && deadlineDate >= today)) {
+          if (first <= today && second > today) {
+            reminderTriggeredDate = first;
+          } else if (second <= today) {
+            reminderTriggeredDate = second;
+          }
+          shouldShowNotification = true;
+        }
+      } else if (reminderPolicy === "Until Renewal") {
+        const start = new Date(deadlineDate);
+        start.setDate(start.getDate() - reminderDays);
+        if (start <= today && deadlineDate >= today) {
+          reminderTriggeredDate = today >= start ? today : start;
+          shouldShowNotification = true;
+        }
+      }
+      
+      if (shouldShowNotification) {
+        notifications.push({
+          id: compliance._id?.toString() || compliance.id || Math.random().toString(),
+          complianceId: compliance._id?.toString() || compliance.id,
+          filingName: compliance.policy || "Unknown Filing",
+          complianceCategory: compliance.complianceCategory || "",
+          reminderTriggerDate: reminderTriggeredDate ? reminderTriggeredDate.toISOString().slice(0, 10) : null,
+          submissionDeadline: compliance.submissionDeadline || "",
+          status: compliance.status || "Pending",
+          type: 'compliance',
+          message: `Compliance reminder for ${compliance.policy || 'Unknown Filing'}`,
+          read: false,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+    
     return notifications;
   }
 }
