@@ -35,6 +35,7 @@ export interface IStorage {
 
   // Notifications
   getNotifications(tenantId: string): Promise<NotificationItem[]>;
+  getComplianceNotifications(tenantId: string): Promise<NotificationItem[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -363,10 +364,16 @@ export class MemStorage implements IStorage {
         reminderTriggerDate: new Date().toISOString(),
         subscriptionEndDate: sub?.nextRenewal ? sub.nextRenewal.toISOString() : "",
         status: (sub?.status === "Active" ? "active" : (sub?.status === "Pending" ? "pending" : (sub?.status === "Completed" ? "completed" : "active"))),
+        type: 'subscription',
       });
     });
     // Sort by reminderTriggerDate asc
     return notifications.sort((a, b) => new Date(a.reminderTriggerDate).getTime() - new Date(b.reminderTriggerDate).getTime());
+  }
+
+  async getComplianceNotifications(tenantId: string): Promise<NotificationItem[]> {
+    // For MemStorage, return empty array since we don't store compliance data
+    return [];
   }
 }
 

@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bell, Eye, Calendar, Clock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import type { NotificationItem } from "@shared/types";
-import { format, addDays, subDays, eachDayOfInterval } from "date-fns";
+import type { NotificationItem, ComplianceItem } from "@shared/types";
+import { format, subDays } from "date-fns";
 import { useState, useEffect } from "react";
 import SubscriptionModal from "@/components/modals/subscription-modal";
 import { apiRequest } from "@/lib/queryClient";
@@ -19,6 +19,7 @@ import type { Subscription } from "@shared/types";
 export default function Notifications() {
 // State to force daily refresh
 const [today, setToday] = useState(new Date());
+const [notificationType, setNotificationType] = useState<'subscription' | 'compliance'>('subscription');
 useEffect(() => {
 const timer = setInterval(() => {
 setToday(new Date());
@@ -26,33 +27,13 @@ setToday(new Date());
 return () => clearInterval(timer);
 }, []);
 const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
+const [selectedCompliance, setSelectedCompliance] = useState<ComplianceItem | null>(null);
 const [isModalOpen, setIsModalOpen] = useState(false);
 // Track modal close to trigger notifications refetch
 const [modalJustClosed, setModalJustClosed] = useState(false);
-// Helper to calculate notification dates
-function getNotificationDates(reminderPolicy: string, reminderDays: number, renewalDate: string) {
-if (!isValidDate(renewalDate) || !reminderDays) return [];
-const endDate = new Date(renewalDate);
-let dates: Date[] = [];
-if (reminderPolicy === "One time") {
-dates = [subDays(endDate, reminderDays)];
-} else if (reminderPolicy === "Two times") {
-const first = subDays(endDate, reminderDays);
-const second = subDays(endDate, Math.floor(reminderDays / 2));
-dates = [first, second].filter(d => d <= endDate && d >= new Date());
-// If both dates are invalid, fallback to one time
-if (dates.length === 0) {
-dates = [subDays(endDate, reminderDays)].filter(d => d <= endDate && d >= new Date());
-}
-} else if (reminderPolicy === "Until Renewal") {
-const startDate = subDays(endDate, reminderDays);
-dates = eachDayOfInterval({ start: startDate, end: endDate }).filter(d => d >= new Date());
-}
-// Only future dates
-return dates;
-}
+
 const { data: notifications = [], isLoading, refetch, error } = useQuery<NotificationItem[]>({
-queryKey: ['/api/notifications'],
+queryKey: [notificationType === 'subscription' ? '/api/notifications' : '/api/notifications/compliance'],
 refetchInterval: false, // Disable auto-refresh
 });
 
@@ -61,10 +42,15 @@ console.log('Notifications query status:', {
   isLoading, 
   error, 
   notifications: notifications?.length || 0,
-  notificationsData: notifications
+  notificationsData: notifications,
+  notificationType
 });
 const { data: subscriptions = [], refetch: refetchSubscriptions } = useQuery<Subscription[]>({
 queryKey: ['/api/subscriptions'],
+});
+
+const { data: complianceItems = [], refetch: refetchCompliance } = useQuery<ComplianceItem[]>({
+queryKey: ['/api/compliance/list'],
 });
 const handleViewSubscription = async (subscriptionId: string | number) => {
 // Convert to string for backend lookup
@@ -85,11 +71,31 @@ setSelectedSubscription(subscription);
 setIsModalOpen(true);
 }
 };
-const getBadgeVariant = (reminderType: string) => {
-if (reminderType.includes('Daily')) return 'destructive';
-if (reminderType.includes('Second')) return 'secondary';
-return 'default';
+const handleViewCompliance = async (complianceId: string | number) => {
+// Convert to string for backend lookup
+const idStr = String(complianceId);
+try {
+const res = await apiRequest('GET', `/api/compliance/list`);
+const allCompliance = await res.json();
+const complianceItem = allCompliance.find((item: ComplianceItem) => 
+	String(item.id) === idStr || String(item._id ?? '') === idStr
+);
+if (complianceItem) {
+setSelectedCompliance(complianceItem);
+setIsModalOpen(true);
+return;
+}
+} catch {}
+// fallback to cached
+const complianceItem = complianceItems.find(item => 
+String(item.id) === idStr || String(item._id ?? '') === idStr
+);
+if (complianceItem) {
+setSelectedCompliance(complianceItem);
+setIsModalOpen(true);
+}
 };
+
 if (isLoading) {
 return (
 <div className="p-6">
@@ -116,17 +122,33 @@ return (
 			</Badge>
 		</div>
 		<div className="flex gap-4">
-			<Button variant="default" className="px-6 py-2 font-semibold rounded-lg shadow-sm">Subscription Notification</Button>
-			<Button variant="outline" className="px-6 py-2 font-semibold rounded-lg">Compliance Notification</Button>
+			<Button 
+				variant={notificationType === 'subscription' ? "default" : "outline"} 
+				className="px-6 py-2 font-semibold rounded-lg shadow-sm"
+				onClick={() => setNotificationType('subscription')}
+			>
+				Subscription Notification
+			</Button>
+			<Button 
+				variant={notificationType === 'compliance' ? "default" : "outline"} 
+				className="px-6 py-2 font-semibold rounded-lg"
+				onClick={() => setNotificationType('compliance')}
+			>
+				Compliance Notification
+			</Button>
 		</div>
 	</div>
 {notifications.length === 0 ? (
 <Card>
 <CardContent className="flex flex-col items-center justify-center py-12">
 <Bell className="h-12 w-12 text-gray-400 mb-4" />
-<h3 className="text-lg font-semibold text-gray-600 mb-2">No Active Notifications</h3>
+<h3 className="text-lg font-semibold text-gray-600 mb-2">
+{notificationType === 'subscription' ? 'No Active Subscription Notifications' : 'No Active Compliance Notifications'}
+</h3>
 <p className="text-gray-500 text-center">
-All your subscription reminders are up to date. New notifications will appear here when reminders are triggered.
+{notificationType === 'subscription' 
+? 'All your subscription reminders are up to date. New notifications will appear here when reminders are triggered.'
+: 'All your compliance reminders are up to date. New notifications will appear here when submission deadlines approach.'}
 </p>
 </CardContent>
 </Card>
@@ -144,15 +166,22 @@ return dateB - dateA;
 <CardHeader className="pb-3">
 <div className="flex items-center justify-between">
 <div className="flex items-center gap-3">
-<div className="p-2 bg-orange-100 rounded-lg">
-<Bell className="h-4 w-4 text-orange-600" />
+<div className={`p-2 rounded-lg ${notification.type === 'compliance' ? 'bg-blue-100' : 'bg-orange-100'}`}>
+<Bell className={`h-4 w-4 ${notification.type === 'compliance' ? 'text-blue-600' : 'text-orange-600'}`} />
 </div>
 <div>
-<CardTitle className="text-lg">{notification.subscriptionName || 'Unknown Subscription'}</CardTitle>
+<CardTitle className="text-lg">
+{notification.type === 'compliance' 
+? (notification.filingName || 'Unknown Compliance Filing')
+: (notification.subscriptionName || 'Unknown Subscription')}
+</CardTitle>
 <div className="flex items-center gap-2 mt-1">
 <Badge variant="outline" className="text-xs">
-{notification.category}
+{notification.type === 'compliance' 
+? (notification.complianceCategory || 'Compliance')
+: (notification.category || 'Subscription')}
 </Badge>
+{notification.type === 'subscription' && (
 <Badge variant="default" className="text-xs bg-blue-600 text-white font-semibold px-3 py-1 rounded-full">
 {(() => {
 const subscription = subscriptions.find(sub => sub.id === notification.subscriptionId);
@@ -170,13 +199,25 @@ return `Reminder`;
 }
 })()}
 </Badge>
+)}
+{notification.type === 'compliance' && (
+<Badge variant="default" className="text-xs bg-green-600 text-white font-semibold px-3 py-1 rounded-full">
+Compliance Reminder
+</Badge>
+)}
 </div>
 </div>
 </div>
 <Button
 variant="outline"
 size="sm"
-onClick={() => handleViewSubscription(notification.subscriptionId ?? '')}
+onClick={() => {
+if (notification.type === 'compliance') {
+handleViewCompliance(notification.complianceId ?? '');
+} else {
+handleViewSubscription(notification.subscriptionId ?? '');
+}
+}}
 className="flex items-center gap-2"
 >
 <Eye className="h-4 w-4" />
@@ -190,7 +231,12 @@ View
 <Clock className="h-4 w-4" />
 <span>Reminder Triggered:</span>
 <span className="font-medium">
-{notification.reminderTriggerDate && isValidDate(notification.reminderTriggerDate)
+{notification.type === 'compliance' ? (
+notification.reminderTriggerDate && isValidDate(notification.reminderTriggerDate)
+? format(new Date(notification.reminderTriggerDate ?? ''), 'MMM dd, yyyy')
+: 'N/A'
+) : (
+notification.reminderTriggerDate && isValidDate(notification.reminderTriggerDate)
 ? format(new Date(notification.reminderTriggerDate ?? ''), 'MMM dd, yyyy')
 : (() => {
 const subscription = subscriptions.find(sub => sub.id === notification.subscriptionId);
@@ -216,28 +262,41 @@ if (startDate && today < new Date(renewalDate ?? '')) {
 }
 return triggerDate ? format(triggerDate, 'MMM dd, yyyy') : 'N/A';
 })()
-}
+)}
 </span>
 </div>
 <div className="flex items-center gap-2 text-gray-600">
 <Calendar className="h-4 w-4" />
-<span>Renewal Date:</span>
+<span>{notification.type === 'compliance' ? 'Submission Deadline:' : 'Renewal Date:'}</span>
 <span className="font-medium">
-{isValidDate(notification.subscriptionEndDate)
+{notification.type === 'compliance' ? (
+isValidDate(notification.submissionDeadline)
+? format(new Date(notification.submissionDeadline ?? ''), 'MMM dd, yyyy')
+: 'N/A'
+) : (
+isValidDate(notification.subscriptionEndDate)
 ? format(new Date(notification.subscriptionEndDate ?? ''), 'MMM dd, yyyy')
-: 'N/A'}
+: 'N/A'
+)}
 </span>
 </div>
 </div>
-<div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-<p className="text-sm text-amber-800">
-<strong>Action Required:</strong> Your {notification.subscriptionName || 'Unknown Subscription'} subscription
+<div className={`mt-4 p-3 border rounded-lg ${notification.type === 'compliance' ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
+<p className={`text-sm ${notification.type === 'compliance' ? 'text-blue-800' : 'text-amber-800'}`}>
+<strong>Action Required:</strong> 
+{notification.type === 'compliance' ? (
+<>Your {notification.filingName || 'compliance filing'} submission deadline is {isValidDate(notification.submissionDeadline)
+? format(new Date(notification.submissionDeadline ?? ''), 'MMMM dd, yyyy')
+: 'approaching'}.
+Please review and submit your compliance filing on time.</>
+) : (
+<>Your {notification.subscriptionName || 'Unknown Subscription'} subscription
 will renew on {isValidDate(notification.subscriptionEndDate)
 ? format(new Date(notification.subscriptionEndDate ?? ''), 'MMMM dd, yyyy')
 : 'N/A'}.
-Please review and take necessary action if needed.
+Please review and take necessary action if needed.</>
+)}
 </p>
-{/* Removed Upcoming Notification Dates section as requested */}
 </div>
 </CardContent>
 </Card>
@@ -246,11 +305,12 @@ Please review and take necessary action if needed.
 )}
 {selectedSubscription && (
 <SubscriptionModal
-open={isModalOpen}
+open={isModalOpen && notificationType === 'subscription'}
 onOpenChange={(open) => {
 setIsModalOpen(open);
 if (!open) {
 setModalJustClosed(true);
+setSelectedSubscription(null);
 }
 }}
 subscription={selectedSubscription ? {
@@ -262,11 +322,40 @@ createdAt: selectedSubscription.createdAt ? new Date(selectedSubscription.create
 } : undefined}
 />
 )}
+
+{selectedCompliance && notificationType === 'compliance' && (
+<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+<div className="bg-white p-6 rounded-lg max-w-2xl w-full mx-4">
+<h2 className="text-xl font-bold mb-4">Compliance Filing Details</h2>
+<div className="space-y-3">
+<div><strong>Filing Name:</strong> {selectedCompliance.policy}</div>
+<div><strong>Category:</strong> {selectedCompliance.complianceCategory}</div>
+<div><strong>Authority:</strong> {selectedCompliance.governingAuthority}</div>
+<div><strong>Frequency:</strong> {selectedCompliance.filingFrequency}</div>
+<div><strong>Submission Deadline:</strong> {format(new Date(selectedCompliance.submissionDeadline), 'MMM dd, yyyy')}</div>
+<div><strong>Status:</strong> {selectedCompliance.status}</div>
+{selectedCompliance.remarks && <div><strong>Remarks:</strong> {selectedCompliance.remarks}</div>}
+</div>
+<div className="flex justify-end mt-6">
+<Button onClick={() => {
+setIsModalOpen(false);
+setSelectedCompliance(null);
+}}>
+Close
+</Button>
+</div>
+</div>
+</div>
+)}
+
 {/* Refetch notifications and subscriptions instantly after modal closes */}
 {modalJustClosed && (() => {
 setModalJustClosed(false);
 refetch();
 refetchSubscriptions();
+if (notificationType === 'compliance') {
+refetchCompliance();
+}
 return null;
 })()}
 </div>

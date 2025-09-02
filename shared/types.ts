@@ -33,6 +33,32 @@ export type NotificationItem = {
 	category?: string;
 	subscriptionId?: string;
 	subscriptionEndDate?: string;
+	// Compliance notification fields
+	complianceId?: string;
+	filingName?: string;
+	complianceCategory?: string;
+	submissionDeadline?: string;
+	type?: 'subscription' | 'compliance';
+};
+
+export type ComplianceItem = {
+	id?: string;
+	_id?: string;
+	tenantId: string;
+	policy: string; // Filing Name
+	filingFrequency: string;
+	complianceCategory: string;
+	governingAuthority: string;
+	startDate: string;
+	endDate: string;
+	submissionDeadline: string;
+	submissionDate?: string;
+	status: string;
+	reminderPolicy?: string;
+	reminderDays?: number;
+	remarks?: string;
+	isActive?: boolean;
+	createdAt?: string;
 };
 
 export type Subscription = {
