@@ -328,7 +328,7 @@ createdAt: selectedSubscription.createdAt ? new Date(selectedSubscription.create
 <div className="bg-white p-6 rounded-lg max-w-2xl w-full mx-4">
 <h2 className="text-xl font-bold mb-4">Compliance Filing Details</h2>
 <div className="space-y-3">
-<div><strong>Filing Name:</strong> {selectedCompliance.policy}</div>
+<div><strong>Filing Name:</strong> {selectedCompliance.filingName}</div>
 <div><strong>Category:</strong> {selectedCompliance.complianceCategory}</div>
 <div><strong>Authority:</strong> {selectedCompliance.governingAuthority}</div>
 <div><strong>Frequency:</strong> {selectedCompliance.filingFrequency}</div>
