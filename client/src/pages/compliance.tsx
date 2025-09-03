@@ -602,18 +602,15 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Compliance Category</label>
                 <Select value={form.filingComplianceCategory} onValueChange={(val: string) => handleFormChange("filingComplianceCategory", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder={isLoadingDropdowns ? "Loading categories..." : "Select category"} />
+                    <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                    {isLoadingDropdowns ? (
-                      <SelectItem value="loading" disabled className="text-slate-500">Loading categories...</SelectItem>
-                    ) : categories.length > 0 ? (
-                      categories.map((cat, idx) => (
-                        <SelectItem key={String(cat) + idx} value={String(cat)} className="text-slate-900 hover:bg-indigo-50">{String(cat)}</SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-categories" disabled className="text-slate-500">No categories available</SelectItem>
-                    )}
+                    <SelectItem value="Tax" className="text-slate-900 hover:bg-indigo-50">Tax</SelectItem>
+                    <SelectItem value="Payroll" className="text-slate-900 hover:bg-indigo-50">Payroll</SelectItem>
+                    <SelectItem value="Regulatory" className="text-slate-900 hover:bg-indigo-50">Regulatory</SelectItem>
+                    <SelectItem value="Legal" className="text-slate-900 hover:bg-indigo-50">Legal</SelectItem>
+                    <SelectItem value="Environmental" className="text-slate-900 hover:bg-indigo-50">Environmental</SelectItem>
+                    <SelectItem value="Other" className="text-slate-900 hover:bg-indigo-50">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
