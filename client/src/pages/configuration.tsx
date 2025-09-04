@@ -687,7 +687,7 @@ export default function Configuration() {
                         </div>
                         
                         <Dialog open={addCurrencyOpen} onOpenChange={setAddCurrencyOpen}>
-                          <DialogContent className="max-w-md">
+                          <DialogContent className="max-w-md bg-white">
                             <DialogHeader className="flex flex-col space-y-4">
                               <div className="flex justify-between items-center">
                                 <DialogTitle>Add New Currency</DialogTitle>
@@ -703,7 +703,7 @@ export default function Configuration() {
                                 </Button>
                                 {/* Exchange Rate Dialog */}
                                 <Dialog open={exchangeRateOpen} onOpenChange={setExchangeRateOpen}>
-                                  <DialogContent className="sm:max-w-[900px]">
+                                  <DialogContent className="sm:max-w-[900px] bg-white">
                                     <DialogHeader>
                                       <div className="flex items-center gap-2 mb-4">
                                         <h1 className="text-2xl font-bold flex items-center gap-2">
