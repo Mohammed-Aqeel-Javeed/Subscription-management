@@ -176,15 +176,16 @@ return dateB - dateA;
 							: (notification.subscriptionName || 'Unknown Subscription')}
 					</CardTitle>
 					<div className="flex items-center gap-2 mt-1">
-						<Badge variant="outline" className="text-xs">
-							{notification.type === 'compliance'
-								? (notification.complianceCategory || 'Compliance')
-								: (notification.category || 'Subscription')}
-						</Badge>
+									{/* Category badge - always shown, styled like subscription */}
+									<Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 font-semibold px-3 py-1 rounded-full">
+										{notification.type === 'compliance'
+											? (notification.complianceCategory || 'Compliance')
+											: (notification.category || 'Subscription')}
+									</Badge>
+									{/* Reminder badge - always shown, styled like subscription */}
 									<Badge variant="default" className="text-xs bg-blue-600 text-white font-semibold px-3 py-1 rounded-full">
 										{(() => {
 											if (notification.type === 'compliance') {
-												// Try direct property, fallback to complianceItems lookup
 												const reminderPolicy = (notification as any).reminderPolicy ?? complianceItems.find(ci => ci.id === notification.complianceId)?.reminderPolicy;
 												const reminderDays = Number((notification as any).reminderDays ?? complianceItems.find(ci => ci.id === notification.complianceId)?.reminderDays);
 												if (reminderPolicy === "Until Renewal" && reminderDays > 0) {
