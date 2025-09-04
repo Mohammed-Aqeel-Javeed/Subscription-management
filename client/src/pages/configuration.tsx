@@ -674,7 +674,7 @@ export default function Configuration() {
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <Card className="p-6">
+                      <Card className="p-6 bg-white">
                         <div className="flex justify-between items-center mb-6">
                           <div className="flex gap-2 items-center">
                             <DollarSign className="w-5 h-5" />
@@ -714,7 +714,7 @@ export default function Configuration() {
                                     
                                     <div className="space-y-6">
                                       {/* Currency Details */}
-                                      <div className="bg-gray-50 p-6 rounded-lg">
+                                      <div className="bg-white p-6 rounded-lg">
                                         <h2 className="text-lg font-semibold mb-4">Currency Details</h2>
                                         <div className="grid grid-cols-4 gap-6">
                                           <div>
