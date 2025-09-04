@@ -176,55 +176,75 @@ return dateB - dateA;
 							: (notification.subscriptionName || 'Unknown Subscription')}
 					</CardTitle>
 					<div className="flex items-center gap-2 mt-1">
-									{/* Category badge - always shown, styled like subscription */}
-															<Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 font-semibold px-3 py-1 rounded-full">
-																{notification.type === 'compliance'
-																	? (() => {
-																			// Try notification property, fallback to complianceItems lookup
-																			const category = notification.complianceCategory;
-																			if (category && category.trim()) return category;
-																			const compliance = complianceItems.find(ci => ci.id === notification.complianceId);
-																			return compliance?.complianceCategory || 'Compliance';
-																		})()
-																	: (notification.category || 'Subscription')}
-															</Badge>
-									{/* Reminder badge - always shown, styled like subscription */}
-															<Badge variant="default" className="text-xs bg-blue-600 text-white font-semibold px-3 py-1 rounded-full">
-																{(() => {
-																	if (notification.type === 'compliance') {
-																		// Try notification property, fallback to complianceItems lookup
-																		let reminderPolicy = (notification as any).reminderPolicy;
-																		let reminderDays = Number((notification as any).reminderDays);
-																		if (!reminderPolicy || !reminderDays) {
-																			const compliance = complianceItems.find(ci => ci.id === notification.complianceId);
-																			reminderPolicy = reminderPolicy || compliance?.reminderPolicy;
-																			reminderDays = reminderDays || Number(compliance?.reminderDays);
-																		}
-																		if (reminderPolicy === "Until Renewal" && reminderDays > 0) {
-																			return `Daily reminder (${reminderDays} days until deadline)`;
-																		} else if (reminderPolicy === "One time" && reminderDays > 0) {
-																			return `One-time reminder (${reminderDays} days before)`;
-																		} else if (reminderPolicy === "Two times" && reminderDays > 0) {
-																			return `Two-time reminder (${reminderDays} & ${Math.floor(reminderDays/2)} days before)`;
-																		} else {
-																			return `Reminder`;
-																		}
-																	} else {
-																		const subscription = subscriptions.find(sub => sub.id === notification.subscriptionId);
-																		const reminderPolicy = subscription?.reminderPolicy;
-																		const reminderDays = Number(subscription?.reminderDays);
-																		if (reminderPolicy === "Until Renewal" && reminderDays > 0) {
-																			return `Daily reminder (${reminderDays} days until renewal)`;
-																		} else if (reminderPolicy === "One time" && reminderDays > 0) {
-																			return `One-time reminder (${reminderDays} days before)`;
-																		} else if (reminderPolicy === "Two times" && reminderDays > 0) {
-																			return `Two-time reminder (${reminderDays} & ${Math.floor(reminderDays/2)} days before)`;
-																		} else {
-																			return `Reminder`;
-																		}
-																	}
-																})()}
-															</Badge>
+									{/* Category badge */}
+									<Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 font-semibold px-3 py-1 rounded-full">
+										{notification.type === 'compliance'
+											? (() => {
+													// Try multiple fallback sources for compliance category
+													let category = (notification as any).complianceCategory || 
+																  (notification as any).category;
+													if (!category || !category.trim()) {
+														const compliance = complianceItems.find(ci => 
+															String(ci.id) === String(notification.complianceId) || 
+															String(ci._id) === String(notification.complianceId)
+														);
+														category = compliance?.complianceCategory;
+													}
+													return category || 'Compliance';
+												})()
+											: (notification.category || 'Subscription')}
+									</Badge>
+									
+									{/* Reminder badge */}
+									<Badge variant="default" className="text-xs bg-blue-600 text-white font-semibold px-3 py-1 rounded-full">
+										{(() => {
+											if (notification.type === 'compliance') {
+												// Try multiple fallback sources for compliance reminder info
+												let reminderPolicy = (notification as any).reminderPolicy;
+												let reminderDays = Number((notification as any).reminderDays || 0);
+												
+												if (!reminderPolicy || reminderDays === 0) {
+													const compliance = complianceItems.find(ci => 
+														String(ci.id) === String(notification.complianceId) || 
+														String(ci._id) === String(notification.complianceId)
+													);
+													reminderPolicy = reminderPolicy || compliance?.reminderPolicy;
+													reminderDays = reminderDays || Number(compliance?.reminderDays || 0);
+												}
+												
+												if (reminderPolicy === "Until Renewal" && reminderDays > 0) {
+													return `Daily reminder (${reminderDays} days until deadline)`;
+												} else if (reminderPolicy === "One time" && reminderDays > 0) {
+													return `One-time reminder (${reminderDays} days before)`;
+												} else if (reminderPolicy === "Two times" && reminderDays > 0) {
+													return `Two-time reminder (${reminderDays} & ${Math.floor(reminderDays/2)} days before)`;
+												} else if (reminderDays > 0) {
+													return `Reminder (${reminderDays} days before)`;
+												} else {
+													return `Reminder`;
+												}
+											} else {
+												const subscription = subscriptions.find(sub => 
+													String(sub.id) === String(notification.subscriptionId) || 
+													String((sub as any)._id) === String(notification.subscriptionId)
+												);
+												const reminderPolicy = subscription?.reminderPolicy;
+												const reminderDays = Number(subscription?.reminderDays || 0);
+												
+												if (reminderPolicy === "Until Renewal" && reminderDays > 0) {
+													return `Daily reminder (${reminderDays} days until renewal)`;
+												} else if (reminderPolicy === "One time" && reminderDays > 0) {
+													return `One-time reminder (${reminderDays} days before)`;
+												} else if (reminderPolicy === "Two times" && reminderDays > 0) {
+													return `Two-time reminder (${reminderDays} & ${Math.floor(reminderDays/2)} days before)`;
+												} else if (reminderDays > 0) {
+													return `Reminder (${reminderDays} days before)`;
+												} else {
+													return `Reminder`;
+												}
+											}
+										})()}
+									</Badge>
 					</div>
 				</div>
 			</div>
