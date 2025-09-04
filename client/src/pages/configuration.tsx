@@ -812,7 +812,6 @@ export default function Configuration() {
                                                         updatedRates[index] = { ...rate, relCurrency: e.target.value };
                                                         setExchangeRates(updatedRates);
                                                       }}
-                                                      placeholder="e.g., SGD"
                                                       className="h-8"
                                                     />
                                                   </td>
@@ -825,7 +824,6 @@ export default function Configuration() {
                                                         updatedRates[index] = { ...rate, rate: e.target.value };
                                                         setExchangeRates(updatedRates);
                                                       }}
-                                                      placeholder="e.g., 1"
                                                       className="h-8"
                                                     />
                                                   </td>
@@ -838,7 +836,6 @@ export default function Configuration() {
                                                         updatedRates[index] = { ...rate, relRate: e.target.value };
                                                         setExchangeRates(updatedRates);
                                                       }}
-                                                      placeholder="e.g., 1.35"
                                                       className="h-8"
                                                     />
                                                     <Button
@@ -869,7 +866,6 @@ export default function Configuration() {
                               <div className="space-y-2">
                                 <Label>Currency Code</Label>
                                 <Input
-                                  placeholder="e.g., USD, EUR"
                                   value={newCurrency.code}
                                   onChange={(e) => setNewCurrency({...newCurrency, code: e.target.value})}
                                 />
@@ -877,7 +873,6 @@ export default function Configuration() {
                               <div className="space-y-2">
                                 <Label>Description</Label>
                                 <Input
-                                  placeholder="e.g., United States Dollar"
                                   value={newCurrency.name}
                                   onChange={(e) => setNewCurrency({...newCurrency, name: e.target.value})}
                                 />
@@ -885,7 +880,6 @@ export default function Configuration() {
                               <div className="space-y-2">
                                 <Label>ISO Number</Label>
                                 <Input
-                                  placeholder="e.g., 840"
                                   value={newCurrency.isoNumber}
                                   onChange={(e) => setNewCurrency({...newCurrency, isoNumber: e.target.value})}
                                 />
@@ -893,7 +887,6 @@ export default function Configuration() {
                               <div className="space-y-2">
                                 <Label>Symbol</Label>
                                 <Input
-                                  placeholder="e.g., $"
                                   value={newCurrency.symbol}
                                   onChange={(e) => setNewCurrency({...newCurrency, symbol: e.target.value})}
                                 />
@@ -1000,7 +993,6 @@ export default function Configuration() {
                   <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                       <Input
-                        placeholder="Search payment methods..."
                         className="w-full md:w-1/2 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
                       />
                       <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
@@ -1051,7 +1043,7 @@ export default function Configuration() {
                         <form onSubmit={handleEditPaymentMethod} className="space-y-5">
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Title (*)</Label>
-                            <Input required placeholder="Title" value={paymentForm.title} onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))} />
+                            <Input required value={paymentForm.title} onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))} />
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Type (*)</Label>
@@ -1065,7 +1057,7 @@ export default function Configuration() {
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Description</Label>
-                            <Input placeholder="Description" value={paymentForm.description} onChange={e => setPaymentForm(f => ({ ...f, description: e.target.value }))} />
+                            <Input value={paymentForm.description} onChange={e => setPaymentForm(f => ({ ...f, description: e.target.value }))} />
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Card Image</Label>
@@ -1085,7 +1077,7 @@ export default function Configuration() {
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Managed by</Label>
-                            <Input placeholder="Manager name" value={paymentForm.manager} onChange={e => setPaymentForm(f => ({ ...f, manager: e.target.value }))} />
+                            <Input value={paymentForm.manager} onChange={e => setPaymentForm(f => ({ ...f, manager: e.target.value }))} />
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Expires at</Label>
@@ -1113,7 +1105,7 @@ export default function Configuration() {
                         <form onSubmit={handleAddPaymentMethod} className="space-y-5">
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Title (*)</Label>
-                            <Input required placeholder="Title" value={paymentForm.title} onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))} />
+                            <Input required value={paymentForm.title} onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))} />
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Type (*)</Label>
@@ -1127,7 +1119,7 @@ export default function Configuration() {
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Description</Label>
-                            <Input placeholder="Description" value={paymentForm.description} onChange={e => setPaymentForm(f => ({ ...f, description: e.target.value }))} />
+                            <Input value={paymentForm.description} onChange={e => setPaymentForm(f => ({ ...f, description: e.target.value }))} />
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Card Image</Label>
@@ -1147,7 +1139,7 @@ export default function Configuration() {
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Managed by</Label>
-                            <Input placeholder="Manager name" value={paymentForm.manager} onChange={e => setPaymentForm(f => ({ ...f, manager: e.target.value }))} />
+                            <Input value={paymentForm.manager} onChange={e => setPaymentForm(f => ({ ...f, manager: e.target.value }))} />
                           </div>
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Expires at</Label>
@@ -1219,7 +1211,6 @@ export default function Configuration() {
                       {/* Add New Field */}
                       <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
                         <Input
-                          placeholder="Enter new field name"
                           value={newFieldName}
                           onChange={(e) => setNewFieldName(e.target.value)}
                           className="flex-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
@@ -1348,7 +1339,6 @@ export default function Configuration() {
                       {/* Add New Compliance Field */}
                       <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
                         <Input
-                          placeholder="Enter new compliance field name"
                           value={newComplianceFieldName}
                           onChange={(e) => setNewComplianceFieldName(e.target.value)}
                           className="flex-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
