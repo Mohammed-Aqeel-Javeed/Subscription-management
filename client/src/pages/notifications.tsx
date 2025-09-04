@@ -163,68 +163,75 @@ return dateB - dateA;
 })
 .map((notification) => (
 <Card key={notification.id} className="hover:shadow-md transition-shadow">
-<CardHeader className="pb-3">
-<div className="flex items-center justify-between">
-<div className="flex items-center gap-3">
-<div className={`p-2 rounded-lg ${notification.type === 'compliance' ? 'bg-blue-100' : 'bg-orange-100'}`}>
-<Bell className={`h-4 w-4 ${notification.type === 'compliance' ? 'text-blue-600' : 'text-orange-600'}`} />
-</div>
-<div>
-<CardTitle className="text-lg">
-{notification.type === 'compliance' 
-? (notification.filingName || 'Unknown Compliance Filing')
-: (notification.subscriptionName || 'Unknown Subscription')}
-</CardTitle>
-<div className="flex items-center gap-2 mt-1">
-<Badge variant="outline" className="text-xs">
-{notification.type === 'compliance' 
-? (notification.complianceCategory || 'Compliance')
-: (notification.category || 'Subscription')}
-</Badge>
-{notification.type === 'subscription' && (
-<Badge variant="default" className="text-xs bg-blue-600 text-white font-semibold px-3 py-1 rounded-full">
-{(() => {
-const subscription = subscriptions.find(sub => sub.id === notification.subscriptionId);
-if (!subscription) return 'Reminder';
-const reminderPolicy = subscription.reminderPolicy;
-const reminderDays = Number(subscription.reminderDays);
-if (reminderPolicy === "Until Renewal" && reminderDays > 0) {
-return `Daily reminder (${reminderDays} days until renewal)`;
-} else if (reminderPolicy === "One time" && reminderDays > 0) {
-return `One-time reminder (${reminderDays} days before)`;
-} else if (reminderPolicy === "Two times" && reminderDays > 0) {
-return `Two-time reminder (${reminderDays} & ${Math.floor(reminderDays/2)} days before)`;
-} else {
-return `Reminder`;
-}
-})()}
-</Badge>
-)}
-{notification.type === 'compliance' && (
-<Badge variant="default" className="text-xs bg-green-600 text-white font-semibold px-3 py-1 rounded-full">
-Compliance Reminder
-</Badge>
-)}
-</div>
-</div>
-</div>
-<Button
-variant="outline"
-size="sm"
-onClick={() => {
-if (notification.type === 'compliance') {
-handleViewCompliance(notification.complianceId ?? '');
-} else {
-handleViewSubscription(notification.subscriptionId ?? '');
-}
-}}
-className="flex items-center gap-2"
->
-<Eye className="h-4 w-4" />
-View
-</Button>
-</div>
-</CardHeader>
+	<CardHeader className="pb-3">
+		<div className="flex items-center justify-between">
+			<div className="flex items-center gap-3">
+				<div className="p-2 bg-orange-100 rounded-lg">
+					<Bell className="h-4 w-4 text-orange-600" />
+				</div>
+				<div>
+					<CardTitle className="text-lg">
+						{notification.type === 'compliance'
+							? (notification.filingName || 'Unknown Compliance Filing')
+							: (notification.subscriptionName || 'Unknown Subscription')}
+					</CardTitle>
+					<div className="flex items-center gap-2 mt-1">
+						<Badge variant="outline" className="text-xs">
+							{notification.type === 'compliance'
+								? (notification.complianceCategory || 'Compliance')
+								: (notification.category || 'Subscription')}
+						</Badge>
+									<Badge variant="default" className="text-xs bg-blue-600 text-white font-semibold px-3 py-1 rounded-full">
+										{(() => {
+											if (notification.type === 'compliance') {
+												// Try direct property, fallback to complianceItems lookup
+												const reminderPolicy = (notification as any).reminderPolicy ?? complianceItems.find(ci => ci.id === notification.complianceId)?.reminderPolicy;
+												const reminderDays = Number((notification as any).reminderDays ?? complianceItems.find(ci => ci.id === notification.complianceId)?.reminderDays);
+												if (reminderPolicy === "Until Renewal" && reminderDays > 0) {
+													return `Daily reminder (${reminderDays} days until renewal)`;
+												} else if (reminderPolicy === "One time" && reminderDays > 0) {
+													return `One-time reminder (${reminderDays} days before)`;
+												} else if (reminderPolicy === "Two times" && reminderDays > 0) {
+													return `Two-time reminder (${reminderDays} & ${Math.floor(reminderDays/2)} days before)`;
+												} else {
+													return `Reminder`;
+												}
+											} else {
+												const subscription = subscriptions.find(sub => sub.id === notification.subscriptionId);
+												const reminderPolicy = subscription?.reminderPolicy;
+												const reminderDays = Number(subscription?.reminderDays);
+												if (reminderPolicy === "Until Renewal" && reminderDays > 0) {
+													return `Daily reminder (${reminderDays} days until renewal)`;
+												} else if (reminderPolicy === "One time" && reminderDays > 0) {
+													return `One-time reminder (${reminderDays} days before)`;
+												} else if (reminderPolicy === "Two times" && reminderDays > 0) {
+													return `Two-time reminder (${reminderDays} & ${Math.floor(reminderDays/2)} days before)`;
+												} else {
+													return `Reminder`;
+												}
+											}
+										})()}
+									</Badge>
+					</div>
+				</div>
+			</div>
+			<Button
+				variant="outline"
+				size="sm"
+				onClick={() => {
+					if (notification.type === 'compliance') {
+						handleViewCompliance(notification.complianceId ?? '');
+					} else {
+						handleViewSubscription(notification.subscriptionId ?? '');
+					}
+				}}
+				className="flex items-center gap-2"
+			>
+				<Eye className="h-4 w-4" />
+				View
+			</Button>
+		</div>
+	</CardHeader>
 <CardContent>
 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
 <div className="flex items-center gap-2 text-gray-600">

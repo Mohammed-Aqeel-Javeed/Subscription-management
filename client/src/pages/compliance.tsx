@@ -406,16 +406,16 @@ export default function Compliance() {
               <div className="relative w-1/2">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
                 <Input
-                  placeholder="Search compliance policies..."
+                  
                   value={searchTerm}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                  className="pl-10 border-slate-300 bg-white text-slate-900 placeholder-slate-400 rounded-lg h-10"
+                  className="pl-10 border-slate-300 bg-white text-slate-900 rounded-lg h-10"
                 />
               </div>
               <div className="w-1/2">
                 <Select value={categoryFilter} onValueChange={(value: string) => setCategoryFilter(value)}>
                   <SelectTrigger className="border-slate-300 bg-white text-slate-900 rounded-lg h-10 w-full">
-                    <SelectValue placeholder="Category" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
                     <SelectItem value="all" className="text-slate-900 hover:bg-indigo-50">All Categories</SelectItem>
@@ -582,14 +582,14 @@ export default function Compliance() {
                   className="w-full border-slate-300 rounded-lg p-2 text-base" 
                   value={form.filingName} 
                   onChange={e => handleFormChange("filingName", e.target.value)} 
-                  placeholder="Enter filing name" 
+                  
                 />
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Filing Frequency</label>
                 <Select value={form.filingFrequency} onValueChange={(val: string) => handleFormChange("filingFrequency", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder="Select frequency" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
                     <SelectItem value="Monthly" className="text-slate-900 hover:bg-indigo-50">Monthly</SelectItem>
@@ -602,7 +602,7 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Compliance Category</label>
                 <Select value={form.filingComplianceCategory} onValueChange={(val: string) => handleFormChange("filingComplianceCategory", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder="Select category" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
                     <SelectItem value="Tax" className="text-slate-900 hover:bg-indigo-50">Tax</SelectItem>
@@ -620,7 +620,7 @@ export default function Compliance() {
                   className="w-full border-slate-300 rounded-lg p-2 text-base"
                   value={form.filingGoverningAuthority}
                   onChange={e => handleFormChange("filingGoverningAuthority", e.target.value)}
-                  placeholder="Enter governing authority"
+                  
                 />
               </div>
               
@@ -639,7 +639,7 @@ export default function Compliance() {
                       className="w-full border-slate-300 rounded-lg p-2 text-base"
                       value={dynamicFieldValues[field.name] || ''}
                       onChange={e => handleDynamicFieldChange(field.name, e.target.value)}
-                      placeholder={field.placeholder || `Enter ${field.name}`}
+                      
                       required={!!field.required}
                     />
                   </div>
@@ -695,7 +695,7 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Submission Status</label>
                 <Select value={form.filingSubmissionStatus} onValueChange={(val: string) => handleFormChange("filingSubmissionStatus", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder="Select status" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
                     <SelectItem value="Pending" className="text-slate-900 hover:bg-indigo-50">Pending</SelectItem>
@@ -707,7 +707,7 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Submit By</label>
                 <Select value={form.submittedBy || ''} onValueChange={(val: string) => handleFormChange("submittedBy", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder={isLoadingEmployees ? "Loading employees..." : "Select employee"} />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
                     {isLoadingEmployees ? (
@@ -734,14 +734,14 @@ export default function Compliance() {
                   type="number" 
                   value={form.reminderDays} 
                   onChange={e => handleFormChange("reminderDays", e.target.value)} 
-                  placeholder="Days before reminder" 
+                  
                 />
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Reminder Policy</label>
                 <Select value={form.reminderPolicy} onValueChange={(val: string) => handleFormChange("reminderPolicy", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder="Select policy" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
                     <SelectItem value="One time" className="text-slate-900 hover:bg-indigo-50">One time</SelectItem>
@@ -765,7 +765,7 @@ export default function Compliance() {
                   className="w-full border border-slate-400 rounded-lg p-2 text-base min-h-[80px] max-h-[120px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
                   value={form.filingRemarks} 
                   onChange={e => handleFormChange("filingRemarks", e.target.value)} 
-                  placeholder="Enter any additional remarks or notes" 
+                  
                 />
               </div>
             </div>
