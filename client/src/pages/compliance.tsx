@@ -609,7 +609,7 @@ export default function Compliance() {
                     <SelectItem value="Payroll" className="text-slate-900 hover:bg-indigo-50">Payroll</SelectItem>
                     <SelectItem value="Regulatory" className="text-slate-900 hover:bg-indigo-50">Regulatory</SelectItem>
                     <SelectItem value="Legal" className="text-slate-900 hover:bg-indigo-50">Legal</SelectItem>
-                    <SelectItem value="Environmental" className="text-slate-900 hover:bg-indigo-50">Environmental</SelectItem>
+                    
                     <SelectItem value="Other" className="text-slate-900 hover:bg-indigo-50">Other</SelectItem>
                   </SelectContent>
                 </Select>
@@ -745,7 +745,8 @@ export default function Compliance() {
                   </SelectTrigger>
                   <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
                     <SelectItem value="One time" className="text-slate-900 hover:bg-indigo-50">One time</SelectItem>
-                    <SelectItem value="Repeat" className="text-slate-900 hover:bg-indigo-50">Repeat</SelectItem>
+                    <SelectItem value="Two times" className="text-slate-900 hover:bg-indigo-50">Two times</SelectItem>
+                    <SelectItem value="Until Renewal" className="text-slate-900 hover:bg-indigo-50">Until Renewal</SelectItem>
                   </SelectContent>
                 </Select>
                 <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
