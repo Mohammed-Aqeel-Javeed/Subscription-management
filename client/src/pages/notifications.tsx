@@ -26,6 +26,13 @@ setToday(new Date());
 }, 1000 * 60 * 60); // Refresh every hour (can change to 24h for production)
 return () => clearInterval(timer);
 }, []);
+
+// Refresh data when notification type changes
+useEffect(() => {
+refetch();
+refetchSubscriptions();
+refetchCompliance();
+}, [notificationType]);
 const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
 const [selectedCompliance, setSelectedCompliance] = useState<ComplianceItem | null>(null);
 const [isModalOpen, setIsModalOpen] = useState(false);
@@ -34,7 +41,7 @@ const [modalJustClosed, setModalJustClosed] = useState(false);
 
 const { data: notifications = [], isLoading, refetch, error } = useQuery<NotificationItem[]>({
 queryKey: [notificationType === 'subscription' ? '/api/notifications' : '/api/notifications/compliance'],
-refetchInterval: false, // Disable auto-refresh
+refetchInterval: 30000, // Refresh every 30 seconds to update badges
 });
 
 // Debug logging
@@ -180,15 +187,16 @@ return dateB - dateA;
 									<Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 font-semibold px-3 py-1 rounded-full">
 										{notification.type === 'compliance'
 											? (() => {
-													// Try multiple fallback sources for compliance category
-													let category = (notification as any).complianceCategory || 
+													// For compliance, show the filing name as category, not "Compliance"
+													let category = notification.filingName || 
+																  (notification as any).complianceCategory || 
 																  (notification as any).category;
 													if (!category || !category.trim()) {
 														const compliance = complianceItems.find(ci => 
 															String(ci.id) === String(notification.complianceId) || 
 															String(ci._id) === String(notification.complianceId)
 														);
-														category = compliance?.complianceCategory;
+														category = compliance?.filingName || compliance?.complianceCategory;
 													}
 													return category || 'Compliance';
 												})()
