@@ -7,7 +7,7 @@ return d instanceof Date && !isNaN(d.getTime());
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell, Eye, Calendar, Clock } from "lucide-react";
+import { Bell, Eye, Calendar, Clock, Filter } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { NotificationItem, ComplianceItem } from "@shared/types";
 import { format, subDays } from "date-fns";
@@ -15,11 +15,18 @@ import { useState, useEffect } from "react";
 import SubscriptionModal from "@/components/modals/subscription-modal";
 import { apiRequest } from "@/lib/queryClient";
 import type { Subscription } from "@shared/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Notifications() {
 // State to force daily refresh
 const [today, setToday] = useState(new Date());
 const [notificationType, setNotificationType] = useState<'subscription' | 'compliance'>('subscription');
+const [statusFilter, setStatusFilter] = useState<'all' | 'renewal' | 'created' | 'deleted'>('all');
 useEffect(() => {
 const timer = setInterval(() => {
 setToday(new Date());
@@ -59,6 +66,59 @@ queryKey: ['/api/subscriptions'],
 const { data: complianceItems = [], refetch: refetchCompliance } = useQuery<ComplianceItem[]>({
 queryKey: ['/api/compliance/list'],
 });
+
+// Filter notifications based on the selected status
+const getFilteredNotifications = () => {
+	if (statusFilter === 'all') {
+		return notifications;
+	}
+	
+	return notifications.filter(notification => {
+		if (notification.type === 'subscription') {
+			// For subscriptions, get the actual subscription data to check status
+			const subscription = subscriptions.find(sub => 
+				String(sub.id) === String(notification.subscriptionId) || 
+				String((sub as any)._id) === String(notification.subscriptionId)
+			);
+			
+			if (!subscription) return false;
+			
+			switch (statusFilter) {
+				case 'renewal':
+					return subscription.status?.toLowerCase() === 'active' || subscription.isActive;
+				case 'created':
+					return subscription.status?.toLowerCase() === 'active' && subscription.isActive;
+				case 'deleted':
+					return subscription.status?.toLowerCase() === 'cancelled' || subscription.status?.toLowerCase() === 'inactive' || !subscription.isActive;
+				default:
+					return true;
+			}
+		} else if (notification.type === 'compliance') {
+			// For compliance, get the actual compliance data to check status
+			const compliance = complianceItems.find(item => 
+				String(item.id) === String(notification.complianceId) || 
+				String(item._id) === String(notification.complianceId)
+			);
+			
+			if (!compliance) return false;
+			
+			switch (statusFilter) {
+				case 'renewal':
+					return compliance.status?.toLowerCase() === 'pending' || compliance.status?.toLowerCase() === 'active';
+				case 'created':
+					return compliance.status?.toLowerCase() === 'active';
+				case 'deleted':
+					return compliance.status?.toLowerCase() === 'completed' || compliance.status?.toLowerCase() === 'cancelled';
+				default:
+					return true;
+			}
+		}
+		
+		return true;
+	});
+};
+
+const filteredNotifications = getFilteredNotifications();
 const handleViewSubscription = async (subscriptionId: string | number) => {
 // Convert to string for backend lookup
 const idStr = String(subscriptionId);
@@ -125,10 +185,32 @@ return (
 			<Bell className="h-6 w-6" />
 			<h1 className="text-2xl font-bold">Notifications</h1>
 			<Badge variant="secondary" className="ml-2">
-				{notifications.length} Active
+				{filteredNotifications.length} Active
 			</Badge>
 		</div>
-		<div className="flex gap-4">
+		<div className="flex gap-4 items-center">
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button variant="outline" size="sm" className="flex items-center gap-2">
+						<Filter className="h-4 w-4" />
+						Filter: {statusFilter === 'all' ? 'All' : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end">
+					<DropdownMenuItem onClick={() => setStatusFilter('all')}>
+						All Notifications
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => setStatusFilter('renewal')}>
+						Renewal Notifications
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => setStatusFilter('created')}>
+						Created Notifications
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => setStatusFilter('deleted')}>
+						Deleted Notifications
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
 			<Button 
 				variant={notificationType === 'subscription' ? "default" : "outline"} 
 				className={`px-6 py-2 font-semibold rounded-lg shadow-sm transition-colors ${
@@ -153,23 +235,27 @@ return (
 			</Button>
 		</div>
 	</div>
-{notifications.length === 0 ? (
+{filteredNotifications.length === 0 ? (
 <Card>
 <CardContent className="flex flex-col items-center justify-center py-12">
 <Bell className="h-12 w-12 text-gray-400 mb-4" />
 <h3 className="text-lg font-semibold text-gray-600 mb-2">
-{notificationType === 'subscription' ? 'No Active Subscription Notifications' : 'No Active Compliance Notifications'}
+{statusFilter === 'all' 
+	? (notificationType === 'subscription' ? 'No Active Subscription Notifications' : 'No Active Compliance Notifications')
+	: `No ${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Notifications`}
 </h3>
 <p className="text-gray-500 text-center">
-{notificationType === 'subscription' 
-? 'All your subscription reminders are up to date. New notifications will appear here when reminders are triggered.'
-: 'All your compliance reminders are up to date. New notifications will appear here when submission deadlines approach.'}
+{statusFilter === 'all' 
+	? (notificationType === 'subscription' 
+		? 'All your subscription reminders are up to date. New notifications will appear here when reminders are triggered.'
+		: 'All your compliance reminders are up to date. New notifications will appear here when submission deadlines approach.')
+	: `No notifications found for the ${statusFilter} filter.`}
 </p>
 </CardContent>
 </Card>
 ) : (
 <div className="space-y-4">
-{[...notifications]
+{[...filteredNotifications]
 .sort((a, b) => {
 // Sort by reminderTriggerDate descending (newest first)
 const dateA = isValidDate(a.reminderTriggerDate) ? new Date(a.reminderTriggerDate ?? '').getTime() : 0;
