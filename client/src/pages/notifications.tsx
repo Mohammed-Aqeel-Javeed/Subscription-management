@@ -131,14 +131,22 @@ return (
 		<div className="flex gap-4">
 			<Button 
 				variant={notificationType === 'subscription' ? "default" : "outline"} 
-				className="px-6 py-2 font-semibold rounded-lg shadow-sm"
+				className={`px-6 py-2 font-semibold rounded-lg shadow-sm transition-colors ${
+					notificationType === 'subscription' 
+						? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600' 
+						: 'bg-white hover:bg-blue-50 text-gray-700 border-gray-300 hover:border-blue-300'
+				}`}
 				onClick={() => setNotificationType('subscription')}
 			>
 				Subscription Notification
 			</Button>
 			<Button 
 				variant={notificationType === 'compliance' ? "default" : "outline"} 
-				className="px-6 py-2 font-semibold rounded-lg"
+				className={`px-6 py-2 font-semibold rounded-lg transition-colors ${
+					notificationType === 'compliance' 
+						? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600' 
+						: 'bg-white hover:bg-blue-50 text-gray-700 border-gray-300 hover:border-blue-300'
+				}`}
 				onClick={() => setNotificationType('compliance')}
 			>
 				Compliance Notification
