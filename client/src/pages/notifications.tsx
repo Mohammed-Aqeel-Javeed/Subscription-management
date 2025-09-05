@@ -21,12 +21,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 
 export default function Notifications() {
 // State to force daily refresh
 const [today, setToday] = useState(new Date());
 const [notificationType, setNotificationType] = useState<'subscription' | 'compliance'>('subscription');
-const [statusFilter, setStatusFilter] = useState<'all' | 'renewal' | 'created' | 'deleted'>('all');
+const [statusFilter, setStatusFilter] = useState<string>('all');
 useEffect(() => {
 const timer = setInterval(() => {
 setToday(new Date());
@@ -69,55 +70,46 @@ queryKey: ['/api/compliance/list'],
 
 // Filter notifications based on the selected status
 const getFilteredNotifications = () => {
-	if (statusFilter === 'all') {
-		return notifications;
-	}
-	
-	return notifications.filter(notification => {
-		if (notification.type === 'subscription') {
-			// For subscriptions, get the actual subscription data to check status
-			const subscription = subscriptions.find(sub => 
-				String(sub.id) === String(notification.subscriptionId) || 
-				String((sub as any)._id) === String(notification.subscriptionId)
-			);
-			
-			if (!subscription) return false;
-			
-			switch (statusFilter) {
-				case 'renewal':
-					return subscription.status?.toLowerCase() === 'active' || subscription.isActive;
-				case 'created':
-					return subscription.status?.toLowerCase() === 'active' && subscription.isActive;
-				case 'deleted':
-					return subscription.status?.toLowerCase() === 'cancelled' || subscription.status?.toLowerCase() === 'inactive' || !subscription.isActive;
-				default:
-					return true;
-			}
-		} else if (notification.type === 'compliance') {
-			// For compliance, get the actual compliance data to check status
-			const compliance = complianceItems.find(item => 
-				String(item.id) === String(notification.complianceId) || 
-				String(item._id) === String(notification.complianceId)
-			);
-			
-			if (!compliance) return false;
-			
-			switch (statusFilter) {
-				case 'renewal':
-					return compliance.status?.toLowerCase() === 'pending' || compliance.status?.toLowerCase() === 'active';
-				case 'created':
-					return compliance.status?.toLowerCase() === 'active';
-				case 'deleted':
-					return compliance.status?.toLowerCase() === 'completed' || compliance.status?.toLowerCase() === 'cancelled';
-				default:
-					return true;
-			}
-		}
-		
-		return true;
-	});
+    if (statusFilter === 'all') {
+        return notifications;
+    }
+    return notifications.filter(notification => {
+        if (notification.type === 'subscription') {
+            const subscription = subscriptions.find(sub => 
+                String(sub.id) === String(notification.subscriptionId) || 
+                String((sub as any)._id) === String(notification.subscriptionId)
+            );
+            if (!subscription) return false;
+            switch (statusFilter) {
+                case 'renewal':
+                    return subscription.status?.toLowerCase() === 'active' || subscription.isActive;
+                case 'created':
+                    return subscription.status?.toLowerCase() === 'active' && subscription.isActive;
+                case 'deleted':
+                    return subscription.status?.toLowerCase() === 'cancelled' || subscription.status?.toLowerCase() === 'inactive' || !subscription.isActive;
+                default:
+                    return true;
+            }
+        } else if (notification.type === 'compliance') {
+            const compliance = complianceItems.find(item => 
+                String(item.id) === String(notification.complianceId) || 
+                String(item._id) === String(notification.complianceId)
+            );
+            if (!compliance) return false;
+            switch (statusFilter) {
+                case 'pending':
+                    return compliance.status?.toLowerCase() === 'pending' || compliance.status?.toLowerCase() === 'active';
+                case 'created':
+                    return compliance.status?.toLowerCase() === 'active';
+                case 'deleted':
+                    return compliance.status?.toLowerCase() === 'completed' || compliance.status?.toLowerCase() === 'cancelled';
+                default:
+                    return true;
+            }
+        }
+        return true;
+    });
 };
-
 const filteredNotifications = getFilteredNotifications();
 const handleViewSubscription = async (subscriptionId: string | number) => {
 // Convert to string for backend lookup
@@ -189,28 +181,22 @@ return (
 			</Badge>
 		</div>
 		<div className="flex gap-4 items-center">
-			<DropdownMenu>
-				<DropdownMenuTrigger asChild>
-					<Button variant="outline" size="sm" className="flex items-center gap-2">
-						<Filter className="h-4 w-4" />
-						Filter: {statusFilter === 'all' ? 'All' : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
-					</Button>
-				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end">
-					<DropdownMenuItem onClick={() => setStatusFilter('all')}>
-						All Notifications
-					</DropdownMenuItem>
-					<DropdownMenuItem onClick={() => setStatusFilter('renewal')}>
-						Renewal Notifications
-					</DropdownMenuItem>
-					<DropdownMenuItem onClick={() => setStatusFilter('created')}>
-						Created Notifications
-					</DropdownMenuItem>
-					<DropdownMenuItem onClick={() => setStatusFilter('deleted')}>
-						Deleted Notifications
-					</DropdownMenuItem>
-				</DropdownMenuContent>
-			</DropdownMenu>
+			<Select value={statusFilter} onValueChange={setStatusFilter}>
+				<SelectTrigger className="w-48">
+					<Filter className="h-4 w-4 mr-2 text-gray-500" />
+					<SelectValue placeholder="Filter" />
+				</SelectTrigger>
+				<SelectContent>
+					<SelectItem value="all">All Notifications</SelectItem>
+					{notificationType === 'subscription' ? (
+						<SelectItem value="renewal">Renewal Notifications</SelectItem>
+					) : (
+						<SelectItem value="pending">Pending Filings</SelectItem>
+					)}
+					<SelectItem value="created">Created Notifications</SelectItem>
+					<SelectItem value="deleted">Deleted Notifications</SelectItem>
+				</SelectContent>
+			</Select>
 			<Button 
 				variant={notificationType === 'subscription' ? "default" : "outline"} 
 				className={`px-6 py-2 font-semibold rounded-lg shadow-sm transition-colors ${
