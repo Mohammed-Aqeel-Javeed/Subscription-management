@@ -69,11 +69,21 @@ queryKey: ['/api/compliance/list'],
 });
 
 // Filter notifications based on the selected status
+const todayDate = new Date();
 const getFilteredNotifications = () => {
     if (statusFilter === 'all') {
-        return notifications;
+        return notifications.filter(n => {
+            if (!n.reminderTriggerDate) return true;
+            const triggerDate = new Date(n.reminderTriggerDate);
+            return triggerDate <= todayDate;
+        });
     }
     return notifications.filter(notification => {
+        // Only show notifications with reminderTriggerDate <= today
+        if (notification.reminderTriggerDate) {
+            const triggerDate = new Date(notification.reminderTriggerDate);
+            if (triggerDate > todayDate) return false;
+        }
         if (notification.type === 'subscription') {
             const subscription = subscriptions.find(sub => 
                 String(sub.id) === String(notification.subscriptionId) || 
