@@ -71,54 +71,66 @@ queryKey: ['/api/compliance/list'],
 // Filter notifications based on the selected status
 const todayDate = new Date();
 const getFilteredNotifications = () => {
-    if (statusFilter === 'all') {
-        return notifications.filter(n => {
-            if (!n.reminderTriggerDate) return true;
-            const triggerDate = new Date(n.reminderTriggerDate);
-            return triggerDate <= todayDate;
-        });
-    }
-    return notifications.filter(notification => {
-        // Only show notifications with reminderTriggerDate <= today
-        if (notification.reminderTriggerDate) {
-            const triggerDate = new Date(notification.reminderTriggerDate);
-            if (triggerDate > todayDate) return false;
-        }
-        if (notification.type === 'subscription') {
-            const subscription = subscriptions.find(sub => 
-                String(sub.id) === String(notification.subscriptionId) || 
-                String((sub as any)._id) === String(notification.subscriptionId)
-            );
-            if (!subscription) return false;
-            switch (statusFilter) {
-                case 'renewal':
-                    return subscription.status?.toLowerCase() === 'active' || subscription.isActive;
-                case 'created':
-                    return subscription.status?.toLowerCase() === 'active' && subscription.isActive;
-                case 'deleted':
-                    return subscription.status?.toLowerCase() === 'cancelled' || subscription.status?.toLowerCase() === 'inactive' || !subscription.isActive;
-                default:
-                    return true;
-            }
-        } else if (notification.type === 'compliance') {
-            const compliance = complianceItems.find(item => 
-                String(item.id) === String(notification.complianceId) || 
-                String(item._id) === String(notification.complianceId)
-            );
-            if (!compliance) return false;
-            switch (statusFilter) {
-                case 'pending':
-                    return compliance.status?.toLowerCase() === 'pending' || compliance.status?.toLowerCase() === 'active';
-                case 'created':
-                    return compliance.status?.toLowerCase() === 'active';
-                case 'deleted':
-                    return compliance.status?.toLowerCase() === 'completed' || compliance.status?.toLowerCase() === 'cancelled';
-                default:
-                    return true;
-            }
-        }
-        return true;
-    });
+	if (statusFilter === 'all') {
+		return notifications.filter(n => {
+			if (!n.reminderTriggerDate) return true;
+			const triggerDate = new Date(n.reminderTriggerDate);
+			return triggerDate <= todayDate;
+		});
+	}
+	return notifications.filter(notification => {
+		// Only show notifications with reminderTriggerDate <= today
+		if (notification.reminderTriggerDate) {
+			const triggerDate = new Date(notification.reminderTriggerDate);
+			if (triggerDate > todayDate) return false;
+		}
+
+		// Support eventType for created/deleted notifications
+		if (statusFilter === 'created' && notification.eventType === 'created') return true;
+		if (statusFilter === 'deleted' && notification.eventType === 'deleted') return true;
+
+		if (notification.type === 'subscription') {
+			const subscription = subscriptions.find(sub => 
+				String(sub.id) === String(notification.subscriptionId) || 
+				String((sub as any)._id) === String(notification.subscriptionId)
+			);
+			// If subscription is missing, check if notification itself marks as deleted
+			if (!subscription) {
+				if (statusFilter === 'deleted') return true;
+				return false;
+			}
+			switch (statusFilter) {
+				case 'renewal':
+					return subscription.status?.toLowerCase() === 'active' || subscription.isActive;
+				case 'created':
+					return subscription.status?.toLowerCase() === 'active' && subscription.isActive;
+				case 'deleted':
+					return subscription.status?.toLowerCase() === 'cancelled' || subscription.status?.toLowerCase() === 'inactive' || !subscription.isActive;
+				default:
+					return true;
+			}
+		} else if (notification.type === 'compliance') {
+			const compliance = complianceItems.find(item => 
+				String(item.id) === String(notification.complianceId) || 
+				String(item._id) === String(notification.complianceId)
+			);
+			if (!compliance) {
+				if (statusFilter === 'deleted') return true;
+				return false;
+			}
+			switch (statusFilter) {
+				case 'pending':
+					return compliance.status?.toLowerCase() === 'pending' || compliance.status?.toLowerCase() === 'active';
+				case 'created':
+					return compliance.status?.toLowerCase() === 'active';
+				case 'deleted':
+					return compliance.status?.toLowerCase() === 'completed' || compliance.status?.toLowerCase() === 'cancelled';
+				default:
+					return true;
+			}
+		}
+		return true;
+	});
 };
 const filteredNotifications = getFilteredNotifications();
 const handleViewSubscription = async (subscriptionId: string | number) => {
