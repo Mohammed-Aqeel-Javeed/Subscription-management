@@ -92,7 +92,14 @@ const getFilteredNotifications = () => {
     }
     
     return notifications.filter(notification => {
-        // Only show notifications with reminderTriggerDate <= today
+        // For renewal/pending filters, exclude event-based notifications
+        if (statusFilter === 'renewal' || statusFilter === 'pending') {
+            if (notification.eventType === 'created' || notification.eventType === 'deleted') {
+                return false;
+            }
+        }
+        
+        // Only show notifications with reminderTriggerDate <= today for reminder-based notifications
         if (notification.reminderTriggerDate) {
             const triggerDate = new Date(notification.reminderTriggerDate);
             if (triggerDate > todayDate) return false;
@@ -106,7 +113,8 @@ const getFilteredNotifications = () => {
             if (!subscription) return false;
             switch (statusFilter) {
                 case 'renewal':
-                    return subscription.status?.toLowerCase() === 'active' || subscription.isActive;
+                    // Only show reminder-based notifications for active subscriptions
+                    return !notification.eventType && (subscription.status?.toLowerCase() === 'active' || subscription.isActive);
                 default:
                     return true;
             }
@@ -118,7 +126,8 @@ const getFilteredNotifications = () => {
             if (!compliance) return false;
             switch (statusFilter) {
                 case 'pending':
-                    return compliance.status?.toLowerCase() === 'pending' || compliance.status?.toLowerCase() === 'active';
+                    // Only show reminder-based notifications for pending/active compliance
+                    return !notification.eventType && (compliance.status?.toLowerCase() === 'pending' || compliance.status?.toLowerCase() === 'active');
                 default:
                     return true;
             }
@@ -205,12 +214,12 @@ return (
 				<SelectContent>
 					<SelectItem value="all">All Notifications</SelectItem>
 					{notificationType === 'subscription' ? (
-						<SelectItem value="renewal">Renewal Notifications</SelectItem>
+						<SelectItem value="renewal">Renewal Reminders Only</SelectItem>
 					) : (
-						<SelectItem value="pending">Pending Filings</SelectItem>
+						<SelectItem value="pending">Deadline Reminders Only</SelectItem>
 					)}
-					<SelectItem value="created">Created Notifications</SelectItem>
-					<SelectItem value="deleted">Deleted Notifications</SelectItem>
+					<SelectItem value="created">Creation Events Only</SelectItem>
+					<SelectItem value="deleted">Deletion Events Only</SelectItem>
 				</SelectContent>
 			</Select>
 			<Button 
@@ -244,6 +253,10 @@ return (
 <h3 className="text-lg font-semibold text-gray-600 mb-2">
 {statusFilter === 'all' 
 	? (notificationType === 'subscription' ? 'No Active Subscription Notifications' : 'No Active Compliance Notifications')
+	: statusFilter === 'renewal' ? 'No Active Renewal Reminders'
+	: statusFilter === 'pending' ? 'No Active Deadline Reminders'
+	: statusFilter === 'created' ? 'No Creation Events'
+	: statusFilter === 'deleted' ? 'No Deletion Events'
 	: `No ${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Notifications`}
 </h3>
 <p className="text-gray-500 text-center">
@@ -251,6 +264,10 @@ return (
 	? (notificationType === 'subscription' 
 		? 'All your subscription reminders are up to date. New notifications will appear here when reminders are triggered.'
 		: 'All your compliance reminders are up to date. New notifications will appear here when submission deadlines approach.')
+	: statusFilter === 'renewal' ? 'No active subscription renewal reminders. Renewal reminders will appear here based on your subscription reminder settings.'
+	: statusFilter === 'pending' ? 'No active compliance deadline reminders. Deadline reminders will appear here when submission deadlines approach.'
+	: statusFilter === 'created' ? 'No creation events found. Creation events appear when new subscriptions or compliance items are added.'
+	: statusFilter === 'deleted' ? 'No deletion events found. Deletion events appear when subscriptions or compliance items are removed.'
 	: `No notifications found for the ${statusFilter} filter.`}
 </p>
 </CardContent>
