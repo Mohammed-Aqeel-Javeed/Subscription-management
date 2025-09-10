@@ -71,66 +71,60 @@ queryKey: ['/api/compliance/list'],
 // Filter notifications based on the selected status
 const todayDate = new Date();
 const getFilteredNotifications = () => {
-	if (statusFilter === 'all') {
-		return notifications.filter(n => {
-			if (!n.reminderTriggerDate) return true;
-			const triggerDate = new Date(n.reminderTriggerDate);
-			return triggerDate <= todayDate;
-		});
-	}
-	return notifications.filter(notification => {
-		// Only show notifications with reminderTriggerDate <= today
-		if (notification.reminderTriggerDate) {
-			const triggerDate = new Date(notification.reminderTriggerDate);
-			if (triggerDate > todayDate) return false;
-		}
-
-		// Support eventType for created/deleted notifications
-		if (statusFilter === 'created' && notification.eventType === 'created') return true;
-		if (statusFilter === 'deleted' && notification.eventType === 'deleted') return true;
-
-		if (notification.type === 'subscription') {
-			const subscription = subscriptions.find(sub => 
-				String(sub.id) === String(notification.subscriptionId) || 
-				String((sub as any)._id) === String(notification.subscriptionId)
-			);
-			// If subscription is missing, check if notification itself marks as deleted
-			if (!subscription) {
-				if (statusFilter === 'deleted') return true;
-				return false;
-			}
-			switch (statusFilter) {
-				case 'renewal':
-					return subscription.status?.toLowerCase() === 'active' || subscription.isActive;
-				case 'created':
-					return subscription.status?.toLowerCase() === 'active' && subscription.isActive;
-				case 'deleted':
-					return subscription.status?.toLowerCase() === 'cancelled' || subscription.status?.toLowerCase() === 'inactive' || !subscription.isActive;
-				default:
-					return true;
-			}
-		} else if (notification.type === 'compliance') {
-			const compliance = complianceItems.find(item => 
-				String(item.id) === String(notification.complianceId) || 
-				String(item._id) === String(notification.complianceId)
-			);
-			if (!compliance) {
-				if (statusFilter === 'deleted') return true;
-				return false;
-			}
-			switch (statusFilter) {
-				case 'pending':
-					return compliance.status?.toLowerCase() === 'pending' || compliance.status?.toLowerCase() === 'active';
-				case 'created':
-					return compliance.status?.toLowerCase() === 'active';
-				case 'deleted':
-					return compliance.status?.toLowerCase() === 'completed' || compliance.status?.toLowerCase() === 'cancelled';
-				default:
-					return true;
-			}
-		}
-		return true;
-	});
+    if (statusFilter === 'all') {
+        return notifications.filter(n => {
+            // For event-based notifications, show all
+            if (n.eventType === 'created' || n.eventType === 'deleted') return true;
+            // For reminder-based notifications, check trigger date
+            if (!n.reminderTriggerDate) return true;
+            const triggerDate = new Date(n.reminderTriggerDate);
+            return triggerDate <= todayDate;
+        });
+    }
+    
+    // Handle specific filters
+    if (statusFilter === 'created') {
+        return notifications.filter(n => n.eventType === 'created');
+    }
+    
+    if (statusFilter === 'deleted') {
+        return notifications.filter(n => n.eventType === 'deleted');
+    }
+    
+    return notifications.filter(notification => {
+        // Only show notifications with reminderTriggerDate <= today
+        if (notification.reminderTriggerDate) {
+            const triggerDate = new Date(notification.reminderTriggerDate);
+            if (triggerDate > todayDate) return false;
+        }
+        
+        if (notification.type === 'subscription') {
+            const subscription = subscriptions.find(sub => 
+                String(sub.id) === String(notification.subscriptionId) || 
+                String((sub as any)._id) === String(notification.subscriptionId)
+            );
+            if (!subscription) return false;
+            switch (statusFilter) {
+                case 'renewal':
+                    return subscription.status?.toLowerCase() === 'active' || subscription.isActive;
+                default:
+                    return true;
+            }
+        } else if (notification.type === 'compliance') {
+            const compliance = complianceItems.find(item => 
+                String(item.id) === String(notification.complianceId) || 
+                String(item._id) === String(notification.complianceId)
+            );
+            if (!compliance) return false;
+            switch (statusFilter) {
+                case 'pending':
+                    return compliance.status?.toLowerCase() === 'pending' || compliance.status?.toLowerCase() === 'active';
+                default:
+                    return true;
+            }
+        }
+        return true;
+    });
 };
 const filteredNotifications = getFilteredNotifications();
 const handleViewSubscription = async (subscriptionId: string | number) => {
@@ -305,9 +299,22 @@ return dateB - dateA;
 											: (notification.category || 'Subscription')}
 									</Badge>
 									
-									{/* Reminder badge */}
-									<Badge variant="default" className="text-xs bg-blue-600 text-white font-semibold px-3 py-1 rounded-full">
+									{/* Reminder/Event badge */}
+									<Badge variant="default" className={`text-xs font-semibold px-3 py-1 rounded-full ${
+										notification.eventType === 'created' ? 'bg-green-600 text-white' :
+										notification.eventType === 'deleted' ? 'bg-red-600 text-white' :
+										'bg-blue-600 text-white'
+									}`}>
 										{(() => {
+											// Handle event-based notifications
+											if (notification.eventType === 'created') {
+												return notification.type === 'compliance' ? 'Compliance Created' : 'Subscription Created';
+											}
+											if (notification.eventType === 'deleted') {
+												return notification.type === 'compliance' ? 'Compliance Deleted' : 'Subscription Deleted';
+											}
+											
+											// Handle reminder-based notifications
 											if (notification.type === 'compliance') {
 												// Try multiple fallback sources for compliance reminder info
 												let reminderPolicy = (notification as any).reminderPolicy;
@@ -379,9 +386,16 @@ return dateB - dateA;
 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
 <div className="flex items-center gap-2 text-gray-600">
 <Clock className="h-4 w-4" />
-<span>Reminder Triggered:</span>
+<span>{notification.eventType ? 'Event Date:' : 'Reminder Triggered:'}</span>
 <span className="font-medium">
-{notification.type === 'compliance' ? (
+{notification.eventType ? (
+	// For event-based notifications, show the creation/deletion date
+	notification.createdAt && isValidDate(notification.createdAt)
+		? format(new Date(notification.createdAt), 'MMM dd, yyyy')
+		: (notification.timestamp && isValidDate(notification.timestamp)
+			? format(new Date(notification.timestamp), 'MMM dd, yyyy')
+			: 'N/A')
+) : notification.type === 'compliance' ? (
 notification.reminderTriggerDate && isValidDate(notification.reminderTriggerDate)
 ? format(new Date(notification.reminderTriggerDate ?? ''), 'MMM dd, yyyy')
 : 'N/A'
@@ -415,6 +429,7 @@ return triggerDate ? format(triggerDate, 'MMM dd, yyyy') : 'N/A';
 )}
 </span>
 </div>
+{!notification.eventType && (
 <div className="flex items-center gap-2 text-gray-600">
 <Calendar className="h-4 w-4" />
 <span>{notification.type === 'compliance' ? 'Submission Deadline:' : 'Renewal Date:'}</span>
@@ -430,11 +445,36 @@ isValidDate(notification.subscriptionEndDate)
 )}
 </span>
 </div>
+)}
 </div>
-<div className={`mt-4 p-3 border rounded-lg ${notification.type === 'compliance' ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
-<p className={`text-sm ${notification.type === 'compliance' ? 'text-blue-800' : 'text-amber-800'}`}>
-<strong>Action Required:</strong> 
-{notification.type === 'compliance' ? (
+<div className={`mt-4 p-3 border rounded-lg ${
+	notification.eventType === 'created' ? 'bg-green-50 border-green-200' :
+	notification.eventType === 'deleted' ? 'bg-red-50 border-red-200' :
+	notification.type === 'compliance' ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'
+}`}>
+<p className={`text-sm ${
+	notification.eventType === 'created' ? 'text-green-800' :
+	notification.eventType === 'deleted' ? 'text-red-800' :
+	notification.type === 'compliance' ? 'text-blue-800' : 'text-amber-800'
+}`}>
+<strong>
+	{notification.eventType === 'created' ? 'Created:' :
+	 notification.eventType === 'deleted' ? 'Deleted:' :
+	 'Action Required:'}
+</strong> 
+{notification.eventType === 'created' ? (
+	notification.type === 'compliance' ? (
+		<>The compliance filing "{notification.filingName || 'Unknown Filing'}" has been successfully created.</>
+	) : (
+		<>The subscription "{notification.subscriptionName || 'Unknown Subscription'}" has been successfully created.</>
+	)
+) : notification.eventType === 'deleted' ? (
+	notification.type === 'compliance' ? (
+		<>The compliance filing "{notification.filingName || 'Unknown Filing'}" has been deleted.</>
+	) : (
+		<>The subscription "{notification.subscriptionName || 'Unknown Subscription'}" has been deleted.</>
+	)
+) : notification.type === 'compliance' ? (
 <>Your {notification.filingName || 'compliance filing'} submission deadline is {isValidDate(notification.submissionDeadline)
 ? format(new Date(notification.submissionDeadline ?? ''), 'MMMM dd, yyyy')
 : 'approaching'}.
