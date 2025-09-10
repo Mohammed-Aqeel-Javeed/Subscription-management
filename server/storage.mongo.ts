@@ -956,15 +956,12 @@ export class MongoStorage implements IStorage {
 
   async getNotificationEvents(tenantId: string): Promise<NotificationItem[]> {
     const db = await this.getDb();
-    console.log(`🔍 Querying notification_events with tenantId: "${tenantId}"`);
-    
     const events = await db.collection("notification_events")
       .find({ tenantId })
       .sort({ createdAt: -1 })
       .toArray();
     
     console.log(`📋 Found ${events.length} notification events for tenant ${tenantId}`);
-    console.log(`📋 Sample tenantIds in collection:`, await db.collection("notification_events").distinct("tenantId"));
     
     return events.map(event => ({
       id: event._id.toString(),
