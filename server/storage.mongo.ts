@@ -910,6 +910,8 @@ export class MongoStorage implements IStorage {
       .sort({ createdAt: -1 })
       .toArray();
     
+    console.log(`📋 Found ${events.length} notification events for tenant ${tenantId}`);
+    
     return events.map(event => ({
       id: event._id.toString(),
       type: event.type,
