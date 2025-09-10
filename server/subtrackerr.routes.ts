@@ -590,8 +590,40 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
       filter = { id: id, tenantId };
     }
     
+    // Get subscription data before deleting for notification event
+    const subscriptionToDelete = await collection.findOne(filter);
+    
     const result = await collection.deleteOne(filter);
     if (result.deletedCount === 1) {
+      // Create notification event for subscription deletion
+      if (subscriptionToDelete) {
+        try {
+          console.log(`🔄 [SUBTRACKERR] Creating deletion notification event for subscription: ${subscriptionToDelete.serviceName}`);
+          
+          const notificationEvent = {
+            _id: new ObjectId(),
+            tenantId,
+            type: 'subscription',
+            eventType: 'deleted',
+            subscriptionId: id,
+            subscriptionName: subscriptionToDelete.serviceName,
+            category: subscriptionToDelete.category || 'Software',
+            message: `Subscription ${subscriptionToDelete.serviceName} deleted`,
+            read: false,
+            timestamp: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            reminderTriggerDate: new Date().toISOString().slice(0, 10)
+          };
+          
+          console.log(`🔄 [SUBTRACKERR] Attempting to insert deletion notification event:`, notificationEvent);
+          const notificationResult = await db.collection("notification_events").insertOne(notificationEvent);
+          console.log(`✅ [SUBTRACKERR] Deletion notification event created successfully with ID: ${notificationResult.insertedId}`);
+        } catch (notificationError) {
+          console.error(`❌ [SUBTRACKERR] Failed to create deletion notification event for ${subscriptionToDelete.serviceName}:`, notificationError);
+          // Don't throw - let deletion succeed even if notification fails
+        }
+      }
+      
       // Cascade delete reminders for this subscription
       await db.collection("reminders").deleteMany({ $or: [ { subscriptionId: id }, { subscriptionId: new ObjectId(id) } ] });
       res.status(200).json({ message: "Subscription and related reminders deleted" });
@@ -830,6 +862,34 @@ router.post("/api/subscriptions", async (req, res) => {
     };
     console.log('[HISTORY DEBUG] Inserting history record:', JSON.stringify(historyRecord, null, 2));
     await historyCollection.insertOne(historyRecord);
+
+    // Create notification event for subscription creation
+    try {
+      console.log(`🔄 [SUBTRACKERR] Creating notification event for subscription: ${subscription.serviceName}`);
+      const { ObjectId } = await import("mongodb");
+      
+      const notificationEvent = {
+        _id: new ObjectId(),
+        tenantId,
+        type: 'subscription',
+        eventType: 'created',
+        subscriptionId: subscriptionId.toString(),
+        subscriptionName: subscription.serviceName,
+        category: subscription.category || 'Software',
+        message: `Subscription ${subscription.serviceName} created`,
+        read: false,
+        timestamp: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        reminderTriggerDate: new Date().toISOString().slice(0, 10)
+      };
+      
+      console.log(`🔄 [SUBTRACKERR] Attempting to insert notification event:`, notificationEvent);
+      const notificationResult = await db.collection("notification_events").insertOne(notificationEvent);
+      console.log(`✅ [SUBTRACKERR] Notification event created successfully with ID: ${notificationResult.insertedId}`);
+    } catch (notificationError) {
+      console.error(`❌ [SUBTRACKERR] Failed to create notification event for ${subscription.serviceName}:`, notificationError);
+      // Don't throw - let subscription creation succeed even if notification fails
+    }
 
     // Generate reminders for the new subscription
     await generateRemindersForSubscription(createdSubscription, tenantId, db);
