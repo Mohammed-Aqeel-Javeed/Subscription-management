@@ -73,6 +73,24 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   const server = await registerRoutes(app);
 
+  // Schedule daily cleanup of old notifications
+  const { storage } = await import("./storage.mongo.js");
+  
+  const cleanupOldNotifications = async () => {
+    try {
+      await storage.cleanupOldNotifications();
+      log("Old notifications cleaned up successfully", "cleanup");
+    } catch (error) {
+      log(`Failed to cleanup old notifications: ${error}`, "cleanup");
+    }
+  };
+
+  // Run cleanup immediately on startup
+  cleanupOldNotifications();
+  
+  // Schedule cleanup to run every 24 hours
+  setInterval(cleanupOldNotifications, 24 * 60 * 60 * 1000);
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

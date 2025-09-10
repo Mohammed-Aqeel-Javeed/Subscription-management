@@ -282,6 +282,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subscriptionData,
         tenantId
       );
+      
+      // Create notification event for subscription creation
+      await storage.createNotificationEvent(
+        tenantId,
+        'created',
+        subscription.id,
+        subscription.serviceName,
+        subscription.category
+      );
+      
       // Destructure to avoid duplicate property issue
       const { id: subId, amount, ...restWithoutId } = subscription;
       res.status(201).json({
@@ -339,10 +349,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
       const id = req.params.id;
+      
+      // Get subscription info before deleting for notification
+      const subscription = await storage.getSubscription(id, tenantId);
+      
       const deleted = await storage.deleteSubscription(id, tenantId);
       if (!deleted) {
         return res.status(404).json({ message: "Subscription not found" });
       }
+      
+      // Create notification event for subscription deletion
+      if (subscription) {
+        await storage.createNotificationEvent(
+          tenantId,
+          'deleted',
+          id,
+          subscription.serviceName,
+          subscription.category
+        );
+      }
+      
       const db = await storage["getDb"]();
       let objectId;
       try {
@@ -419,8 +445,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
-      const notifications = await storage.getNotifications(tenantId);
-      res.json(notifications);
+      // Get both reminder-based notifications and event-based notifications
+      const reminderNotifications = await storage.getNotifications(tenantId);
+      const eventNotifications = await storage.getNotificationEvents(tenantId);
+      
+      // Combine and sort by timestamp
+      const allNotifications = [...reminderNotifications, ...eventNotifications]
+        .sort((a, b) => new Date(b.timestamp || b.createdAt || '').getTime() - new Date(a.timestamp || a.createdAt || '').getTime());
+      
+      res.json(allNotifications);
     } catch {
       res.status(500).json({ message: "Failed to fetch notifications" });
     }
@@ -434,6 +467,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(notifications);
     } catch {
       res.status(500).json({ message: "Failed to fetch compliance notifications" });
+    }
+  });
+
+  // Cleanup old notifications (run daily)
+  app.post("/api/notifications/cleanup", async (req, res) => {
+    try {
+      await storage.cleanupOldNotifications();
+      res.json({ message: "Old notifications cleaned up successfully" });
+    } catch {
+      res.status(500).json({ message: "Failed to cleanup notifications" });
     }
   });
 

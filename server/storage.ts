@@ -36,6 +36,12 @@ export interface IStorage {
   // Notifications
   getNotifications(tenantId: string): Promise<NotificationItem[]>;
   getComplianceNotifications(tenantId: string): Promise<NotificationItem[]>;
+  
+  // Notification events
+  createNotificationEvent(tenantId: string, eventType: 'created' | 'deleted', subscriptionId: string, subscriptionName: string, category: string): Promise<void>;
+  createComplianceNotificationEvent(tenantId: string, eventType: 'created' | 'deleted', complianceId: string, filingName: string, complianceCategory: string): Promise<void>;
+  getNotificationEvents(tenantId: string): Promise<NotificationItem[]>;
+  cleanupOldNotifications(): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -374,6 +380,23 @@ export class MemStorage implements IStorage {
   async getComplianceNotifications(tenantId: string): Promise<NotificationItem[]> {
     // For MemStorage, return empty array since we don't store compliance data
     return [];
+  }
+
+  async createNotificationEvent(tenantId: string, eventType: 'created' | 'deleted', subscriptionId: string, subscriptionName: string, category: string): Promise<void> {
+    // For MemStorage, this is a no-op
+  }
+
+  async createComplianceNotificationEvent(tenantId: string, eventType: 'created' | 'deleted', complianceId: string, filingName: string, complianceCategory: string): Promise<void> {
+    // For MemStorage, this is a no-op
+  }
+
+  async getNotificationEvents(tenantId: string): Promise<NotificationItem[]> {
+    // For MemStorage, return empty array
+    return [];
+  }
+
+  async cleanupOldNotifications(): Promise<void> {
+    // For MemStorage, this is a no-op
   }
 }
 

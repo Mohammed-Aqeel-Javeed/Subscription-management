@@ -39,7 +39,9 @@ export type NotificationItem = {
 	complianceCategory?: string;
 	submissionDeadline?: string;
 	type?: 'subscription' | 'compliance';
-	eventType?: 'created' | 'deleted'; // Added for filter support
+	// Event tracking fields
+	eventType?: 'created' | 'deleted' | 'reminder';
+	createdAt?: string;
 };
 
 export type ComplianceItem = {

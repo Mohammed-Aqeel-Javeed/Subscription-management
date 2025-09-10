@@ -845,6 +845,98 @@ export class MongoStorage implements IStorage {
     
     return notifications;
   }
+
+  // Notification event tracking
+  async createNotificationEvent(
+    tenantId: string,
+    eventType: 'created' | 'deleted',
+    subscriptionId: string,
+    subscriptionName: string,
+    category: string
+  ): Promise<void> {
+    const db = await this.getDb();
+    const { ObjectId } = await import("mongodb");
+    
+    const notification = {
+      _id: new ObjectId(),
+      tenantId,
+      type: 'subscription',
+      eventType,
+      subscriptionId,
+      subscriptionName,
+      category,
+      message: `Subscription ${subscriptionName} ${eventType}`,
+      read: false,
+      timestamp: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      reminderTriggerDate: new Date().toISOString().slice(0, 10)
+    };
+    
+    await db.collection("notification_events").insertOne(notification);
+  }
+
+  async createComplianceNotificationEvent(
+    tenantId: string,
+    eventType: 'created' | 'deleted',
+    complianceId: string,
+    filingName: string,
+    complianceCategory: string
+  ): Promise<void> {
+    const db = await this.getDb();
+    const { ObjectId } = await import("mongodb");
+    
+    const notification = {
+      _id: new ObjectId(),
+      tenantId,
+      type: 'compliance',
+      eventType,
+      complianceId,
+      filingName,
+      complianceCategory,
+      message: `Compliance filing ${filingName} ${eventType}`,
+      read: false,
+      timestamp: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      reminderTriggerDate: new Date().toISOString().slice(0, 10)
+    };
+    
+    await db.collection("notification_events").insertOne(notification);
+  }
+
+  async getNotificationEvents(tenantId: string): Promise<NotificationItem[]> {
+    const db = await this.getDb();
+    const events = await db.collection("notification_events")
+      .find({ tenantId })
+      .sort({ createdAt: -1 })
+      .toArray();
+    
+    return events.map(event => ({
+      id: event._id.toString(),
+      type: event.type,
+      eventType: event.eventType,
+      subscriptionId: event.subscriptionId,
+      subscriptionName: event.subscriptionName,
+      complianceId: event.complianceId,
+      filingName: event.filingName,
+      category: event.category || event.complianceCategory,
+      message: event.message,
+      read: event.read,
+      timestamp: event.timestamp,
+      createdAt: event.createdAt,
+      reminderTriggerDate: event.reminderTriggerDate
+    }));
+  }
+
+  async cleanupOldNotifications(): Promise<void> {
+    const db = await this.getDb();
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+    
+    // Clean up old notification events
+    await db.collection("notification_events").deleteMany({
+      createdAt: { $lt: sixtyDaysAgo.toISOString() }
+    });
+  }
 }
 
 export const storage = new MongoStorage();
