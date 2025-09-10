@@ -182,6 +182,9 @@ export class MongoStorage implements IStorage {
   }
 
   async createSubscription(subscription: InsertSubscription, tenantId: string): Promise<Subscription> {
+    console.log(`🚀 CREATESUBSCRIPTION CALLED - Enhanced logging version active!`);
+    console.log(`🚀 Creating subscription: ${subscription.serviceName} for tenant: ${tenantId}`);
+    
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
     // Don't destructure updatedAt, just spread subscription
