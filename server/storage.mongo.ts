@@ -191,18 +191,15 @@ export class MongoStorage implements IStorage {
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
     
     // Create notification event for subscription creation
-    try {
-      await this.createNotificationEvent(
-        tenantId,
-        'created',
-        doc._id.toString(),
-        doc.serviceName,
-        doc.category
-      );
-      console.log(`✅ Created notification event for subscription: ${doc.serviceName}`);
-    } catch (error) {
-      console.error(`❌ Failed to create notification event:`, error);
-    }
+    console.log(`🔄 About to create notification event for subscription: ${doc.serviceName}`);
+    await this.createNotificationEvent(
+      tenantId,
+      'created',
+      doc._id.toString(),
+      doc.serviceName,
+      doc.category
+    );
+    console.log(`✅ Notification event creation completed for subscription: ${doc.serviceName}`);
     
       return {
         id: doc._id?.toString() || '',
@@ -349,18 +346,15 @@ export class MongoStorage implements IStorage {
       
       // Create notification event for subscription deletion
       if (subscription) {
-        try {
-          await this.createNotificationEvent(
-            tenantId,
-            'deleted',
-            id,
-            subscription.serviceName,
-            subscription.category
-          );
-          console.log(`✅ Created deletion notification event for subscription: ${subscription.serviceName}`);
-        } catch (error) {
-          console.error(`❌ Failed to create deletion notification event:`, error);
-        }
+        console.log(`🔄 About to create deletion notification event for subscription: ${subscription.serviceName}`);
+        await this.createNotificationEvent(
+          tenantId,
+          'deleted',
+          id,
+          subscription.serviceName,
+          subscription.category
+        );
+        console.log(`✅ Deletion notification event created for subscription: ${subscription.serviceName}`);
       }
       
       return { success: true, message: "Subscription deleted successfully" };
@@ -890,25 +884,32 @@ export class MongoStorage implements IStorage {
     subscriptionName: string,
     category: string
   ): Promise<void> {
-    const db = await this.getDb();
-    const { ObjectId } = await import("mongodb");
-    
-    const notification = {
-      _id: new ObjectId(),
-      tenantId,
-      type: 'subscription',
-      eventType,
-      subscriptionId,
-      subscriptionName,
-      category,
-      message: `Subscription ${subscriptionName} ${eventType}`,
-      read: false,
-      timestamp: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      reminderTriggerDate: new Date().toISOString().slice(0, 10)
-    };
-    
-    await db.collection("notification_events").insertOne(notification);
+    try {
+      const db = await this.getDb();
+      const { ObjectId } = await import("mongodb");
+      
+      const notification = {
+        _id: new ObjectId(),
+        tenantId,
+        type: 'subscription',
+        eventType,
+        subscriptionId,
+        subscriptionName,
+        category,
+        message: `Subscription ${subscriptionName} ${eventType}`,
+        read: false,
+        timestamp: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        reminderTriggerDate: new Date().toISOString().slice(0, 10)
+      };
+      
+      console.log(`🔄 Attempting to create notification event:`, notification);
+      const result = await db.collection("notification_events").insertOne(notification);
+      console.log(`✅ Notification event created successfully with ID: ${result.insertedId}`);
+    } catch (error) {
+      console.error(`❌ Error creating notification event:`, error);
+      throw error;
+    }
   }
 
   async createComplianceNotificationEvent(
