@@ -283,20 +283,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId
       );
       
-      // Create notification event for subscription creation
-      try {
-        await storage.createNotificationEvent(
-          tenantId,
-          'created',
-          subscription.id,
-          subscription.serviceName,
-          subscription.category
-        );
-        console.log(`✅ Created notification event for subscription: ${subscription.serviceName}`);
-      } catch (error) {
-        console.error(`❌ Failed to create notification event:`, error);
-      }
-      
       // Destructure to avoid duplicate property issue
       const { id: subId, amount, ...restWithoutId } = subscription;
       res.status(201).json({
@@ -355,28 +341,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = req.params.id;
       
-      // Get subscription info before deleting for notification
-      const subscription = await storage.getSubscription(id, tenantId);
-      
       const deleted = await storage.deleteSubscription(id, tenantId);
-      if (!deleted) {
+      if (!deleted.success) {
         return res.status(404).json({ message: "Subscription not found" });
-      }
-      
-      // Create notification event for subscription deletion
-      if (subscription) {
-        try {
-          await storage.createNotificationEvent(
-            tenantId,
-            'deleted',
-            id,
-            subscription.serviceName,
-            subscription.category
-          );
-          console.log(`✅ Created deletion notification event for subscription: ${subscription.serviceName}`);
-        } catch (error) {
-          console.error(`❌ Failed to create deletion notification event:`, error);
-        }
       }
       
       const db = await storage["getDb"]();
@@ -389,8 +356,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.collection("reminders").deleteMany({ subscriptionId: objectId });
       await db.collection("notifications").deleteMany({ subscriptionId: objectId });
       res.json({
-        message:
-          "Subscription and related reminders/notifications deleted successfully"
+        message: deleted.message
       });
     } catch {
       res.status(500).json({ message: "Failed to delete subscription" });
