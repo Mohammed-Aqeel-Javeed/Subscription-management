@@ -284,13 +284,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       // Create notification event for subscription creation
-      await storage.createNotificationEvent(
-        tenantId,
-        'created',
-        subscription.id,
-        subscription.serviceName,
-        subscription.category
-      );
+      try {
+        await storage.createNotificationEvent(
+          tenantId,
+          'created',
+          subscription.id,
+          subscription.serviceName,
+          subscription.category
+        );
+        console.log(`✅ Created notification event for subscription: ${subscription.serviceName}`);
+      } catch (error) {
+        console.error(`❌ Failed to create notification event:`, error);
+      }
       
       // Destructure to avoid duplicate property issue
       const { id: subId, amount, ...restWithoutId } = subscription;
@@ -360,13 +365,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create notification event for subscription deletion
       if (subscription) {
-        await storage.createNotificationEvent(
-          tenantId,
-          'deleted',
-          id,
-          subscription.serviceName,
-          subscription.category
-        );
+        try {
+          await storage.createNotificationEvent(
+            tenantId,
+            'deleted',
+            id,
+            subscription.serviceName,
+            subscription.category
+          );
+          console.log(`✅ Created deletion notification event for subscription: ${subscription.serviceName}`);
+        } catch (error) {
+          console.error(`❌ Failed to create deletion notification event:`, error);
+        }
       }
       
       const db = await storage["getDb"]();
@@ -449,12 +459,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const reminderNotifications = await storage.getNotifications(tenantId);
       const eventNotifications = await storage.getNotificationEvents(tenantId);
       
+      console.log(`📈 Reminder notifications: ${reminderNotifications.length}, Event notifications: ${eventNotifications.length}`);
+      
       // Combine and sort by timestamp
       const allNotifications = [...reminderNotifications, ...eventNotifications]
         .sort((a, b) => new Date(b.timestamp || b.createdAt || '').getTime() - new Date(a.timestamp || a.createdAt || '').getTime());
       
       res.json(allNotifications);
-    } catch {
+    } catch (error) {
+      console.error("❌ Error fetching notifications:", error);
       res.status(500).json({ message: "Failed to fetch notifications" });
     }
   });
