@@ -452,8 +452,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Test endpoint to manually create a notification event
   app.post("/api/notifications/test-create", async (req, res) => {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
+    
     try {
-      const tenantId = req.user?.tenantId || "default";
       console.log(`🧪 TEST: Creating notification event for tenant: ${tenantId}`);
       
       // Try to call createNotificationEvent directly
@@ -466,7 +468,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       console.log(`🧪 TEST: Notification event created successfully`);
-      res.json({ message: "Test notification event created successfully" });
+      res.json({ message: "Test notification event created successfully", tenantId });
     } catch (error) {
       console.error(`🧪 TEST: Error creating notification event:`, error);
       res.status(500).json({ 
