@@ -449,6 +449,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test endpoint to manually create a notification event
+  app.post("/api/notifications/test-create", async (req, res) => {
+    try {
+      const tenantId = req.user?.tenantId || "default";
+      console.log(`🧪 TEST: Creating notification event for tenant: ${tenantId}`);
+      
+      // Try to call createNotificationEvent directly
+      await storage.createNotificationEvent(
+        tenantId,
+        'created',
+        'test-subscription-id',
+        'Test Subscription',
+        'Test Category'
+      );
+      
+      console.log(`🧪 TEST: Notification event created successfully`);
+      res.json({ message: "Test notification event created successfully" });
+    } catch (error) {
+        console.error(`🧪 TEST: Error creating notification event:`, error);
+        res.status(500).json({ 
+          message: "Failed to create test notification event", 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+    }
+  });
+
   // Cleanup old notifications (run daily)
   app.post("/api/notifications/cleanup", async (req, res) => {
     try {
