@@ -291,12 +291,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
       });
     } catch (error) {
+      console.error("❌ Error in subscription creation:", error);
       if (error instanceof z.ZodError) {
         return res
           .status(400)
           .json({ message: "Invalid subscription data", errors: error.issues });
       }
-      res.status(500).json({ message: "Failed to create subscription" });
+      res.status(500).json({ message: "Failed to create subscription", error: error instanceof Error ? error.message : String(error) });
     }
   });
 
