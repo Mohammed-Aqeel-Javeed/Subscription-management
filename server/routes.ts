@@ -468,14 +468,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🧪 TEST: Notification event created successfully`);
       res.json({ message: "Test notification event created successfully" });
     } catch (error) {
-        console.error(`🧪 TEST: Error creating notification event:`, error);
-        res.status(500).json({ 
-          message: "Failed to create test notification event", 
-          error: error instanceof Error ? error.message : String(error) 
-        });
+      console.error(`🧪 TEST: Error creating notification event:`, error);
+      res.status(500).json({ 
+        message: "Failed to create test notification event", 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
   });
 
+  // Cleanup old notifications (run daily)
   // Cleanup old notifications (run daily)
   app.post("/api/notifications/cleanup", async (req, res) => {
     try {
