@@ -189,6 +189,21 @@ export class MongoStorage implements IStorage {
     await db.collection("subscriptions").insertOne(doc);
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
+    
+    // Create notification event for subscription creation
+    try {
+      await this.createNotificationEvent(
+        tenantId,
+        'created',
+        doc._id.toString(),
+        doc.serviceName,
+        doc.category
+      );
+      console.log(`✅ Created notification event for subscription: ${doc.serviceName}`);
+    } catch (error) {
+      console.error(`❌ Failed to create notification event:`, error);
+    }
+    
       return {
         id: doc._id?.toString() || '',
         tenantId: doc.tenantId || tenantId,
@@ -318,15 +333,36 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
     let filter: any = { $or: [ { _id: new ObjectId(id), tenantId }, { id, tenantId } ] };
+    
+    // Get subscription info before deleting for notification
+    const subscription = await db.collection("subscriptions").findOne(filter);
+    
     const result = await db.collection("subscriptions").findOneAndDelete(filter);
     if (result && result.value) {
-    const subscriptionId = (result.value as any)._id?.toString();
+      const subscriptionId = (result.value as any)._id?.toString();
       if (subscriptionId) {
         await db.collection("reminders").deleteMany({ $or: [ { subscriptionId }, { subscriptionId: new ObjectId(subscriptionId) } ] });
       }
       if (subscriptionId) {
         await db.collection("notifications").deleteMany({ $or: [ { subscriptionId }, { subscriptionId: new ObjectId(subscriptionId) } ] });
       }
+      
+      // Create notification event for subscription deletion
+      if (subscription) {
+        try {
+          await this.createNotificationEvent(
+            tenantId,
+            'deleted',
+            id,
+            subscription.serviceName,
+            subscription.category
+          );
+          console.log(`✅ Created deletion notification event for subscription: ${subscription.serviceName}`);
+        } catch (error) {
+          console.error(`❌ Failed to create deletion notification event:`, error);
+        }
+      }
+      
       return { success: true, message: "Subscription deleted successfully" };
     }
     return { success: false, message: "Subscription not found" };
