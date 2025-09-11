@@ -789,16 +789,18 @@ export class MongoStorage implements IStorage {
           const start = new Date(renewalDate);
           start.setDate(start.getDate() - reminderDays);
           const end = new Date(renewalDate);
-          let found = null;
-          let current = new Date(start);
-          while (current <= end) {
-            if (current >= today) {
-              found = new Date(current);
-              break;
-            }
-            current.setDate(current.getDate() + 1);
+          
+          // For "Until Renewal", show notifications if we're within the reminder window
+          // (from start date until renewal date)
+          const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+          const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+          
+          if (todayDate >= startDate && todayDate <= endDate) {
+            reminderTriggeredDate = todayDate;
+          } else {
+            reminderTriggeredDate = null;
           }
-          reminderTriggeredDate = found;
         }
       }
       let reminderObj = subReminders.find((r: any) => r.reminderDate === (reminderTriggeredDate ? reminderTriggeredDate.toISOString().slice(0, 10) : null));
