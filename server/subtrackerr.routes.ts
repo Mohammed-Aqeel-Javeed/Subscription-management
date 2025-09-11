@@ -135,6 +135,9 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
       status: subscription.status || "Active",
       createdAt: new Date(),
       tenantId,
+      // Add filingName for compliance reminders
+      filingName: subscription.policy || subscription.filingName || subscription.complianceName || subscription.name || undefined,
+      complianceCategory: subscription.complianceCategory || subscription.category || undefined
     };
     console.log('[REMINDER DEBUG] Inserting reminder:', reminderDoc);
     await db.collection("reminders").insertOne(reminderDoc);
@@ -514,8 +517,8 @@ router.delete("/api/compliance/:id", async (req, res) => {
       // Create notification event for compliance deletion
       if (complianceToDelete) {
         try {
-          const complianceName = complianceToDelete.complianceName || complianceToDelete.name || 'Unnamed Filing';
-          console.log(`🔄 [COMPLIANCE] Creating deletion notification event for compliance filing: ${complianceName}`);
+          const filingName = complianceToDelete.policy || complianceToDelete.filingName || complianceToDelete.complianceName || complianceToDelete.name || 'Compliance Filing';
+          console.log(`🔄 [COMPLIANCE] Creating deletion notification event for compliance filing: ${filingName}`);
           
           const notificationEvent = {
             _id: new ObjectId(),
@@ -523,10 +526,10 @@ router.delete("/api/compliance/:id", async (req, res) => {
             type: 'compliance',
             eventType: 'deleted',
             complianceId: id,
-            complianceName: complianceName,
-            filingName: complianceName,
+            complianceName: filingName,
+            filingName: filingName,
             category: complianceToDelete.complianceCategory || complianceToDelete.category || 'General',
-            message: `Compliance filing ${complianceName} deleted`,
+            message: `Compliance filing ${filingName} deleted`,
             read: false,
             timestamp: new Date().toISOString(),
             createdAt: new Date().toISOString(),
