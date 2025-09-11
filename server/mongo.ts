@@ -31,3 +31,31 @@ export async function closeDatabase() {
     db = null;
   }
 }
+
+export async function ensureTTLIndexes() {
+  const db = await connectToDatabase();
+  // 60 days in seconds
+  const expireAfterSeconds = 60 * 24 * 60 * 60;
+
+  // Notification events TTL
+  await db.collection("notification_events").createIndex(
+    { createdAt: 1 },
+    { expireAfterSeconds }
+  );
+
+  // Reminders TTL
+  await db.collection("reminders").createIndex(
+    { createdAt: 1 },
+    { expireAfterSeconds }
+  );
+
+  // Compliance notifications TTL (if used)
+  try {
+    await db.collection("compliance_notifications").createIndex(
+      { createdAt: 1 },
+      { expireAfterSeconds }
+    );
+  } catch (err) {
+    // Collection may not exist, ignore error
+  }
+}
