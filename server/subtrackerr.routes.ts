@@ -524,7 +524,8 @@ router.delete("/api/compliance/:id", async (req, res) => {
             eventType: 'deleted',
             complianceId: id,
             complianceName: complianceName,
-            category: complianceToDelete.category || 'General',
+            filingName: complianceName,
+            category: complianceToDelete.complianceCategory || complianceToDelete.category || 'General',
             message: `Compliance filing ${complianceName} deleted`,
             read: false,
             timestamp: new Date().toISOString(),
@@ -574,9 +575,10 @@ router.post("/api/compliance/insert", async (req, res) => {
         type: 'compliance',
         eventType: 'created',
         complianceId: result.insertedId.toString(),
-        complianceName: complianceData.complianceName || complianceData.name || 'Compliance Filing',
-        category: complianceData.category || 'General',
-        message: `Compliance filing ${complianceData.complianceName || complianceData.name || 'Unnamed Filing'} created`,
+        complianceName: complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing',
+        filingName: complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing',
+        category: complianceData.complianceCategory || complianceData.category || 'General',
+        message: `Compliance filing ${complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'} created`,
         read: false,
         timestamp: new Date().toISOString(),
         createdAt: new Date().toISOString(),
@@ -616,7 +618,7 @@ router.put("/api/compliance/:id", async (req, res) => {
     if (result.matchedCount === 1) {
       // Create notification event for compliance update
       try {
-        const complianceName = updateData.complianceName || updateData.name || oldDoc?.complianceName || oldDoc?.name || 'Unnamed Filing';
+        const complianceName = updateData.filingName || updateData.complianceName || updateData.name || oldDoc?.filingName || oldDoc?.complianceName || oldDoc?.name || 'Unnamed Filing';
         console.log(`🔄 [COMPLIANCE] Creating update notification event for compliance filing: ${complianceName}`);
         
         const notificationEvent = {
@@ -626,7 +628,8 @@ router.put("/api/compliance/:id", async (req, res) => {
           eventType: 'updated',
           complianceId: id,
           complianceName: complianceName,
-          category: updateData.category || oldDoc?.category || 'General',
+          filingName: complianceName,
+          category: updateData.complianceCategory || updateData.category || oldDoc?.complianceCategory || oldDoc?.category || 'General',
           message: `Compliance filing ${complianceName} updated`,
           read: false,
           timestamp: new Date().toISOString(),
