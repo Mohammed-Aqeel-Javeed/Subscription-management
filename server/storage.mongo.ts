@@ -871,16 +871,24 @@ export class MongoStorage implements IStorage {
       }
       
       if (shouldShowNotification) {
+        const displayName = (
+          compliance.filingName ||
+          compliance.complianceName ||
+          compliance.policy ||
+          compliance.name ||
+          'Compliance Filing'
+        );
+
         notifications.push({
           id: compliance._id?.toString() || compliance.id || Math.random().toString(),
           complianceId: compliance._id?.toString() || compliance.id,
-          filingName: compliance.policy || "Unknown Filing",
-          complianceCategory: compliance.complianceCategory || "",
+          filingName: displayName,
+          complianceCategory: compliance.complianceCategory || compliance.category || "",
           reminderTriggerDate: reminderTriggeredDate ? reminderTriggeredDate.toISOString().slice(0, 10) : null,
           submissionDeadline: compliance.submissionDeadline || "",
           status: compliance.status || "Pending",
           type: 'compliance',
-          message: `Compliance reminder for ${compliance.policy || 'Unknown Filing'}`,
+          message: `Compliance reminder for ${displayName}`,
           read: false,
           timestamp: new Date().toISOString(),
         });
