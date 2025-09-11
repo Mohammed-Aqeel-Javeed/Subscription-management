@@ -126,46 +126,47 @@ const getFilteredNotifications = () => {
     
     return notifications.filter(notification => {
         // For renewal/pending filters, exclude event-based notifications
-        if (statusFilter === 'renewal' || statusFilter === 'pending') {
-            if (notification.eventType === 'created' || notification.eventType === 'deleted') {
-                return false;
-            }
-        }
-        
-        // Only show notifications with reminderTriggerDate <= today for reminder-based notifications
-        if (notification.reminderTriggerDate) {
-            const triggerDate = new Date(notification.reminderTriggerDate);
-            if (triggerDate > todayDate) return false;
-        }
-        
-        if (notification.type === 'subscription') {
-            const subscription = subscriptions.find(sub => 
-                String(sub.id) === String(notification.subscriptionId) || 
-                String((sub as any)._id) === String(notification.subscriptionId)
-            );
-            if (!subscription) return false;
-            switch (statusFilter) {
-                case 'renewal':
-                    // Only show reminder-based notifications for active subscriptions
-                    return !notification.eventType && (subscription.status?.toLowerCase() === 'active' || subscription.isActive);
-                default:
-                    return true;
-            }
-        } else if (notification.type === 'compliance') {
-            const compliance = complianceItems.find(item => 
-                String(item.id) === String(notification.complianceId) || 
-                String(item._id) === String(notification.complianceId)
-            );
-            if (!compliance) return false;
-            switch (statusFilter) {
-                case 'pending':
-                    // Only show reminder-based notifications for pending/active compliance
-                    return !notification.eventType && (compliance.status?.toLowerCase() === 'pending' || compliance.status?.toLowerCase() === 'active');
-                default:
-                    return true;
-            }
-        }
-        return true;
+		if (statusFilter === 'renewal' || statusFilter === 'pending') {
+			// Exclude event-based notifications
+			if (notification.eventType === 'created' || notification.eventType === 'deleted') {
+				return false;
+			}
+		}
+
+		// Only show notifications with reminderTriggerDate <= today for reminder-based notifications
+		if (notification.reminderTriggerDate) {
+			const triggerDate = new Date(notification.reminderTriggerDate);
+			if (triggerDate > todayDate) return false;
+		}
+
+		if (notification.type === 'subscription') {
+			const subscription = subscriptions.find(sub => 
+				String(sub.id) === String(notification.subscriptionId) || 
+				String((sub as any)._id) === String(notification.subscriptionId)
+			);
+			if (!subscription) return false;
+			switch (statusFilter) {
+				case 'renewal':
+					// Only show reminder-based notifications for active subscriptions
+					return !notification.eventType && (subscription.status?.toLowerCase() === 'active' || subscription.isActive);
+				default:
+					return true;
+			}
+		} else if (notification.type === 'compliance') {
+			const compliance = complianceItems.find(item => 
+				String(item.id) === String(notification.complianceId) || 
+				String(item._id) === String(notification.complianceId)
+			);
+			if (!compliance) return false;
+			switch (statusFilter) {
+				case 'pending':
+					// Show reminder-based notifications for compliance with status 'pending' or 'active' and valid trigger date
+					return !notification.eventType && (['pending','active'].includes((compliance.status||'').toLowerCase())) && notification.reminderTriggerDate && new Date(notification.reminderTriggerDate) <= todayDate;
+				default:
+					return true;
+			}
+		}
+		return true;
     });
 };
 const filteredNotifications = getFilteredNotifications();
@@ -331,7 +332,7 @@ return dateB - dateA;
 		 											const compliance = complianceItems.find(item =>
 		 												String(item.id) === String(notification.complianceId) || String(item._id) === String(notification.complianceId)
 		 											);
-		 											return compliance?.policy || compliance?.filingName || 'Compliance Filing';
+		 											return compliance?.filingName || compliance?.policy || 'Compliance Filing';
 		 										})()
 		 									)
 		 									: (notification.subscriptionName || 'Unknown Subscription')}
