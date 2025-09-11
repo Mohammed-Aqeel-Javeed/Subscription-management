@@ -9,7 +9,26 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bell, Eye, Calendar, Clock, Filter } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import type { NotificationItem, ComplianceItem } from "@shared/types";
+type NotificationItem = {
+	id?: string;
+	type: 'subscription' | 'compliance';
+	eventType?: 'created' | 'deleted' | 'updated';
+	filingName?: string;
+	complianceName?: string;
+	name?: string;
+	category?: string;
+	complianceCategory?: string;
+	subscriptionName?: string;
+	reminderTriggerDate?: string;
+	createdAt?: string;
+	timestamp?: string;
+	complianceId?: string;
+	subscriptionId?: string;
+	submissionDeadline?: string;
+	subscriptionEndDate?: string;
+	[key: string]: any;
+};
+import type { ComplianceItem } from "@shared/types";
 import { format, subDays } from "date-fns";
 import { useState, useEffect } from "react";
 import SubscriptionModal from "@/components/modals/subscription-modal";
@@ -304,30 +323,17 @@ return dateB - dateA;
 					<Bell className="h-4 w-4 text-orange-600" />
 				</div>
 				<div>
-					<CardTitle className="text-lg">
-						{notification.type === 'compliance'
-							? (notification.filingName || 'Unknown Compliance Filing')
-							: (notification.subscriptionName || 'Unknown Subscription')}
-					</CardTitle>
+ 									<CardTitle className="text-lg">
+ 										{notification.type === 'compliance'
+ 											? (notification.filingName || notification.complianceName || notification.name || 'Compliance Filing')
+ 											: (notification.subscriptionName || 'Unknown Subscription')}
+ 									</CardTitle>
 					<div className="flex items-center gap-2 mt-1">
 									{/* Category badge */}
 									<Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 font-semibold px-3 py-1 rounded-full">
-										{notification.type === 'compliance'
-											? (() => {
-													// For compliance, show the filing name as category, not "Compliance"
-													let category = notification.filingName || 
-																  (notification as any).complianceCategory || 
-																  (notification as any).category;
-													if (!category || !category.trim()) {
-														const compliance = complianceItems.find(ci => 
-															String(ci.id) === String(notification.complianceId) || 
-															String(ci._id) === String(notification.complianceId)
-														);
-														category = compliance?.filingName || compliance?.complianceCategory;
-													}
-													return category || 'Compliance';
-												})()
-											: (notification.category || 'Subscription')}
+ 												{notification.type === 'compliance'
+ 													? (notification.complianceCategory || notification.category || notification.filingName || notification.complianceName || notification.name || 'Compliance')
+ 													: (notification.category || 'Subscription')}
 									</Badge>
 									
 									{/* Reminder/Event badge */}
