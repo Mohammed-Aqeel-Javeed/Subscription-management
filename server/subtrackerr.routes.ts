@@ -569,16 +569,17 @@ router.post("/api/compliance/insert", async (req, res) => {
     try {
       console.log(`🔄 [COMPLIANCE] Creating notification event for compliance filing: ${complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
       
+      const filingName = complianceData.policy || complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing';
       const notificationEvent = {
         _id: new ObjectId(),
         tenantId,
         type: 'compliance',
         eventType: 'created',
         complianceId: result.insertedId.toString(),
-        complianceName: complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing',
-        filingName: complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing',
+        complianceName: filingName,
+        filingName: filingName,
         category: complianceData.complianceCategory || complianceData.category || 'General',
-        message: `Compliance filing ${complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'} created`,
+        message: `Compliance filing ${filingName} created`,
         read: false,
         timestamp: new Date().toISOString(),
         createdAt: new Date().toISOString(),
