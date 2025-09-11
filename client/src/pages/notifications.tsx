@@ -35,12 +35,6 @@ setToday(new Date());
 return () => clearInterval(timer);
 }, []);
 
-// Refresh data when notification type changes
-useEffect(() => {
-refetch();
-refetchSubscriptions();
-refetchCompliance();
-}, [notificationType]);
 const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
 const [selectedCompliance, setSelectedCompliance] = useState<ComplianceItem | null>(null);
 const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,7 +43,7 @@ const [modalJustClosed, setModalJustClosed] = useState(false);
 
 const { data: notifications = [], isLoading, refetch, error } = useQuery<NotificationItem[]>({
 queryKey: [notificationType === 'subscription' ? '/api/notifications' : '/api/notifications/compliance'],
-refetchInterval: 30000, // Refresh every 30 seconds to update badges
+refetchInterval: 5000, // Refresh every 5 seconds for automatic updates
 });
 
 // Debug logging
@@ -67,6 +61,26 @@ queryKey: ['/api/subscriptions'],
 const { data: complianceItems = [], refetch: refetchCompliance } = useQuery<ComplianceItem[]>({
 queryKey: ['/api/compliance/list'],
 });
+
+// Refresh data when notification type changes
+useEffect(() => {
+refetch();
+refetchSubscriptions();
+refetchCompliance();
+}, [notificationType, refetch, refetchSubscriptions, refetchCompliance]);
+
+// Auto-refresh when coming back to the page
+useEffect(() => {
+const handleVisibilityChange = () => {
+  if (!document.hidden) {
+    refetch();
+    refetchSubscriptions();
+    refetchCompliance();
+  }
+};
+document.addEventListener('visibilitychange', handleVisibilityChange);
+return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+}, [refetch, refetchSubscriptions, refetchCompliance]);
 
 // Filter notifications based on the selected status
 const todayDate = new Date();
@@ -216,10 +230,10 @@ return (
 					{notificationType === 'subscription' ? (
 						<SelectItem value="renewal">Renewal Reminders Only</SelectItem>
 					) : (
-						<SelectItem value="pending">Deadline Reminders Only</SelectItem>
+						<SelectItem value="pending">Pending Compliance</SelectItem>
 					)}
-					<SelectItem value="created">Creation Events Only</SelectItem>
-					<SelectItem value="deleted">Deletion Events Only</SelectItem>
+					<SelectItem value="created">{notificationType === 'compliance' ? 'Created Compliance' : 'Creation Events Only'}</SelectItem>
+					<SelectItem value="deleted">{notificationType === 'compliance' ? 'Deleted Compliance' : 'Deletion Events Only'}</SelectItem>
 				</SelectContent>
 			</Select>
 			<Button 
