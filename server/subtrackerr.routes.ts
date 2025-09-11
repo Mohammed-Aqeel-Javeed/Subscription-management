@@ -135,9 +135,9 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
       status: subscription.status || "Active",
       createdAt: new Date(),
       tenantId,
-      // Add filingName for compliance reminders
-      filingName: subscription.policy || subscription.filingName || subscription.complianceName || subscription.name || undefined,
-      complianceCategory: subscription.complianceCategory || subscription.category || undefined
+  // Subscription-specific metadata only
+  subscriptionName: subscription.serviceName || subscription.name || undefined,
+  category: subscription.category || undefined
     };
     console.log('[REMINDER DEBUG] Inserting reminder:', reminderDoc);
     await db.collection("reminders").insertOne(reminderDoc);

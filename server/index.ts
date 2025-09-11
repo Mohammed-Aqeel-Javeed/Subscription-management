@@ -62,6 +62,19 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   const { ensureTTLIndexes } = await import("./mongo.js");
   await ensureTTLIndexes();
 
+  // One-time cleanup: remove compliance-only fields from subscription reminders
+  try {
+    const { connectToDatabase } = await import("./mongo.js");
+    const db = await connectToDatabase();
+    const result = await db.collection("reminders").updateMany(
+      {},
+      { $unset: { filingName: "", complianceCategory: "" } }
+    );
+    log(`Reminder cleanup: unset compliance fields in ${result.modifiedCount} docs`, "startup");
+  } catch (e) {
+    log(`Reminder cleanup failed: ${e}`, "startup");
+  }
+
   // Example: Secure cookie setup in login route (adjust as needed)
   // app.post("/api/login", (req, res) => {
   //   // ...login logic...
