@@ -1,4 +1,3 @@
-
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 // @ts-ignore
@@ -59,6 +58,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 (async () => {
+  // Ensure TTL indexes for notifications, reminders, compliance_notifications
+  const { ensureTTLIndexes } = await import("./mongo.js");
+  await ensureTTLIndexes();
 
   // Example: Secure cookie setup in login route (adjust as needed)
   // app.post("/api/login", (req, res) => {

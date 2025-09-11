@@ -984,11 +984,26 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const sixtyDaysAgo = new Date();
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-    
+
     // Clean up old notification events
     await db.collection("notification_events").deleteMany({
       createdAt: { $lt: sixtyDaysAgo.toISOString() }
     });
+
+    // Clean up old reminders (reminderDate or createdAt older than 60 days)
+    await db.collection("reminders").deleteMany({
+      $or: [
+        { createdAt: { $lt: sixtyDaysAgo } },
+        { reminderDate: { $lt: sixtyDaysAgo.toISOString().slice(0, 10) } }
+      ]
+    });
+
+    // Clean up old compliance notifications (if stored in a collection)
+    if (db.collection("compliance_notifications")) {
+      await db.collection("compliance_notifications").deleteMany({
+        createdAt: { $lt: sixtyDaysAgo.toISOString() }
+      });
+    }
   }
 }
 
