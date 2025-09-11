@@ -324,9 +324,17 @@ return dateB - dateA;
 				</div>
 				<div>
  									<CardTitle className="text-lg">
- 										{notification.type === 'compliance'
- 											? (notification.filingName || notification.complianceName || notification.name || 'Compliance Filing')
- 											: (notification.subscriptionName || 'Unknown Subscription')}
+		 								{notification.type === 'compliance'
+		 									? (
+		 										notification.filingName
+		 										|| (() => {
+		 											const compliance = complianceItems.find(item =>
+		 												String(item.id) === String(notification.complianceId) || String(item._id) === String(notification.complianceId)
+		 											);
+		 											return compliance?.policy || compliance?.filingName || 'Compliance Filing';
+		 										})()
+		 									)
+		 									: (notification.subscriptionName || 'Unknown Subscription')}
  									</CardTitle>
 					<div className="flex items-center gap-2 mt-1">
 									{/* Category badge */}
