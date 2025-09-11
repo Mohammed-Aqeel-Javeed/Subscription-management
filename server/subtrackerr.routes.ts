@@ -561,30 +561,30 @@ router.post("/api/compliance/insert", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    
+    // Require filingName for compliance creation
+    if (!req.body.filingName || typeof req.body.filingName !== "string" || !req.body.filingName.trim()) {
+      return res.status(400).json({ message: "filingName is required for compliance filings" });
+    }
     const complianceData = { ...req.body, tenantId, createdAt: new Date(), updatedAt: new Date() };
     const result = await collection.insertOne(complianceData);
-    
     // Create notification event for compliance creation
     try {
-      console.log(`🔄 [COMPLIANCE] Creating notification event for compliance filing: ${complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
-      
+      console.log(`🔄 [COMPLIANCE] Creating notification event for compliance filing: ${complianceData.filingName}`);
       const notificationEvent = {
         _id: new ObjectId(),
         tenantId,
         type: 'compliance',
         eventType: 'created',
         complianceId: result.insertedId.toString(),
-        complianceName: complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing',
-        filingName: complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing',
+        complianceName: complianceData.filingName,
+        filingName: complianceData.filingName,
         category: complianceData.complianceCategory || complianceData.category || 'General',
-        message: `Compliance filing ${complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'} created`,
+        message: `Compliance filing ${complianceData.filingName} created`,
         read: false,
         timestamp: new Date().toISOString(),
         createdAt: new Date().toISOString(),
         reminderTriggerDate: new Date().toISOString().slice(0, 10)
       };
-      
       console.log(`🔄 [COMPLIANCE] Attempting to insert notification event:`, notificationEvent);
       const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
       console.log(`✅ [COMPLIANCE] Notification event created successfully with ID: ${notificationResult.insertedId}`);
@@ -592,7 +592,6 @@ router.post("/api/compliance/insert", async (req, res) => {
       console.error(`❌ [COMPLIANCE] Failed to create notification event:`, notificationError);
       // Don't throw - let compliance creation succeed even if notification fails
     }
-    
     res.status(201).json({ insertedId: result.insertedId });
   } catch (error) {
     res.status(500).json({ message: "Failed to save compliance data", error });
@@ -605,22 +604,22 @@ router.put("/api/compliance/:id", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("compliance");
     const { id } = req.params;
-    
+    // Require filingName for compliance update
+    if (!req.body.filingName || typeof req.body.filingName !== "string" || !req.body.filingName.trim()) {
+      return res.status(400).json({ message: "filingName is required for compliance filings" });
+    }
     // Get the document before update for notification
     const oldDoc = await collection.findOne({ _id: new ObjectId(id) });
-    
     const updateData = { ...req.body, updatedAt: new Date() };
     const result = await collection.updateOne(
       { _id: new ObjectId(id) },
       { $set: updateData }
     );
-    
     if (result.matchedCount === 1) {
       // Create notification event for compliance update
       try {
-        const complianceName = updateData.filingName || updateData.complianceName || updateData.name || oldDoc?.filingName || oldDoc?.complianceName || oldDoc?.name || 'Unnamed Filing';
+        const complianceName = updateData.filingName;
         console.log(`🔄 [COMPLIANCE] Creating update notification event for compliance filing: ${complianceName}`);
-        
         const notificationEvent = {
           _id: new ObjectId(),
           tenantId: req.user?.tenantId,
@@ -636,7 +635,6 @@ router.put("/api/compliance/:id", async (req, res) => {
           createdAt: new Date().toISOString(),
           reminderTriggerDate: new Date().toISOString().slice(0, 10)
         };
-        
         console.log(`🔄 [COMPLIANCE] Attempting to insert update notification event:`, notificationEvent);
         const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
         console.log(`✅ [COMPLIANCE] Update notification event created successfully with ID: ${notificationResult.insertedId}`);
@@ -644,7 +642,6 @@ router.put("/api/compliance/:id", async (req, res) => {
         console.error(`❌ [COMPLIANCE] Failed to create update notification event:`, notificationError);
         // Don't throw - let compliance update succeed even if notification fails
       }
-      
       res.status(200).json({ message: "Compliance filing updated" });
     } else {
       res.status(404).json({ message: "Compliance filing not found" });
