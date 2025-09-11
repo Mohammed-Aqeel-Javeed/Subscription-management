@@ -1,3 +1,17 @@
+// --- Compliance Notifications API ---
+// Get all compliance notifications for the current tenant
+
+// Place this route after router is declared
+
+// ...existing code...
+
+// ...existing code...
+// Removed duplicate router declaration
+
+// Compliance Notifications route
+
+
+// ...rest of your routes and logic...
 declare global {
   namespace Express {
     interface User {
@@ -1289,6 +1303,23 @@ router.delete("/api/config/compliance-fields/:id", async (req, res) => {
     res.status(200).json({ message: "Field deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete compliance field", error });
+  }
+});
+
+// --- Compliance Notifications API ---
+// Get all compliance notifications for the current tenant
+router.get("/api/notifications/compliance", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    // Fetch compliance notifications for the tenant
+    const notifications = await db.collection("compliance_notifications").find({ tenantId }).sort({ createdAt: -1 }).toArray();
+    res.status(200).json(notifications);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch compliance notifications", error });
   }
 });
 
