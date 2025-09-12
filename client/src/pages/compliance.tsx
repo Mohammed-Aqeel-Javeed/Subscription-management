@@ -616,12 +616,34 @@ export default function Compliance() {
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Governing Authority</label>
-                <Input
-                  className="w-full border-slate-300 rounded-lg p-2 text-base"
-                  value={form.filingGoverningAuthority}
-                  onChange={e => handleFormChange("filingGoverningAuthority", e.target.value)}
-                  
-                />
+                <Select 
+                  value={form.filingGoverningAuthority} 
+                  onValueChange={(val: string) => {
+                    if (val === '__custom__') {
+                      const manual = prompt('Enter custom Governing Authority');
+                      if (manual && manual.trim()) {
+                        handleFormChange('filingGoverningAuthority', manual.trim());
+                      }
+                      return;
+                    }
+                    handleFormChange('filingGoverningAuthority', val);
+                  }}
+                >
+                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                    <SelectValue placeholder="Select Authority" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md max-h-60 overflow-y-auto">
+                    <SelectItem value="IRAS" className="text-slate-900 hover:bg-indigo-50">IRAS</SelectItem>
+                    <SelectItem value="ACRA" className="text-slate-900 hover:bg-indigo-50">ACRA</SelectItem>
+                    <SelectItem value="CPF" className="text-slate-900 hover:bg-indigo-50">CPF</SelectItem>
+                    <SelectItem value="AGD" className="text-slate-900 hover:bg-indigo-50">AGD</SelectItem>
+                    <SelectItem value="MOM" className="text-slate-900 hover:bg-indigo-50">MOM</SelectItem>
+                    {form.filingGoverningAuthority && !['IRAS','ACRA','CPF','AGD','MOM'].includes(form.filingGoverningAuthority) && (
+                      <SelectItem value={form.filingGoverningAuthority} className="text-slate-900 hover:bg-indigo-50">{form.filingGoverningAuthority}</SelectItem>
+                    )}
+                    <SelectItem value="__custom__" className="text-slate-900 hover:bg-indigo-50 font-medium">+ Custom...</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               
               {/* Dynamic Compliance Fields - Now placed after default fields */}
