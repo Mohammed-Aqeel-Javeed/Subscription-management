@@ -662,7 +662,7 @@ router.post("/api/compliance/insert", async (req, res) => {
     
     // Generate reminders for compliance
     try {
-      console.log(`🔄 [COMPLIANCE] Generating reminders for compliance filing: ${complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
+      console.log(`🔄 [COMPLIANCE] Generating reminders for compliance filing: ${complianceData.policy || complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
       await generateRemindersForCompliance(createdCompliance, tenantId, db);
       console.log(`✅ [COMPLIANCE] Reminders generated successfully for compliance ${result.insertedId}`);
     } catch (reminderError) {
@@ -672,7 +672,7 @@ router.post("/api/compliance/insert", async (req, res) => {
     
     // Create notification event for compliance creation
     try {
-      console.log(`🔄 [COMPLIANCE] Creating notification event for compliance filing: ${complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
+      console.log(`🔄 [COMPLIANCE] Creating notification event for compliance filing: ${complianceData.policy || complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
       
       const filingName = complianceData.policy || complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing';
       const notificationEvent = {
