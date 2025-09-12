@@ -57,6 +57,95 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 const router = Router();
 
 // Helper function to generate reminders for a subscription
+async function generateRemindersForCompliance(compliance: any, tenantId: string, db: any) {
+  const complianceId = compliance._id ? compliance._id.toString() : (typeof compliance.id === 'string' ? compliance.id : undefined);
+  if (!complianceId) return;
+
+  console.log('[COMPLIANCE REMINDER DEBUG] Generating reminders for compliance:', {
+    complianceId,
+    filingName: compliance.filingName,
+    submissionDeadline: compliance.submissionDeadline,
+    reminderDays: compliance.reminderDays,
+    reminderPolicy: compliance.reminderPolicy
+  });
+
+  // Remove all old reminders for this compliance
+  await db.collection("reminders").deleteMany({ complianceId });
+
+  // Use submissionDeadline as the target date for reminders
+  const deadlineDate = compliance.submissionDeadline;
+  if (!deadlineDate) {
+    console.log('[COMPLIANCE REMINDER DEBUG] No submissionDeadline found, skipping reminder generation');
+    return;
+  }
+
+  // Use reminderDays from compliance, default to 7 if not set
+  const reminderDays = Number(compliance.reminderDays) || 7;
+  const reminderPolicy = compliance.reminderPolicy || "One time";
+
+  let remindersToInsert = [];
+
+  if (reminderPolicy === "One time") {
+    const reminderDate = new Date(deadlineDate);
+    reminderDate.setDate(reminderDate.getDate() - reminderDays);
+    remindersToInsert.push({
+      type: `Before ${reminderDays} days`,
+      date: reminderDate.toISOString().slice(0, 10),
+    });
+  } else if (reminderPolicy === "Two times") {
+    const firstDate = new Date(deadlineDate);
+    firstDate.setDate(firstDate.getDate() - reminderDays);
+    const secondDays = Math.floor(reminderDays / 2);
+    const secondDate = new Date(deadlineDate);
+    secondDate.setDate(secondDate.getDate() - secondDays);
+    remindersToInsert.push({
+      type: `Before ${reminderDays} days`,
+      date: firstDate.toISOString().slice(0, 10),
+    });
+    if (secondDays > 0 && secondDays !== reminderDays) {
+      remindersToInsert.push({
+        type: `Before ${secondDays} days`,
+        date: secondDate.toISOString().slice(0, 10),
+      });
+    }
+  } else if (reminderPolicy === "Until Renewal") {
+    // Daily reminders from (deadlineDate - reminderDays) to deadlineDate
+    const startDate = new Date(deadlineDate);
+    startDate.setDate(startDate.getDate() - reminderDays);
+    let current = new Date(startDate);
+    const end = new Date(deadlineDate);
+    while (current <= end) {
+      remindersToInsert.push({
+        type: `Daily`,
+        date: current.toISOString().slice(0, 10),
+      });
+      current.setDate(current.getDate() + 1);
+    }
+  }
+
+  console.log('[COMPLIANCE REMINDER DEBUG] Reminders to insert:', remindersToInsert);
+
+  // Insert all reminders
+  for (const reminder of remindersToInsert) {
+    const reminderDoc = {
+      complianceId,
+      reminderType: reminder.type,
+      reminderDate: reminder.date,
+      sent: false,
+      status: compliance.status || "Active",
+      createdAt: new Date(),
+      tenantId,
+      // Compliance-specific metadata
+      filingName: compliance.filingName || compliance.complianceName || compliance.policy || compliance.name || 'Compliance Filing',
+      complianceCategory: compliance.complianceCategory || compliance.category || undefined
+    };
+    console.log('[COMPLIANCE REMINDER DEBUG] Inserting reminder:', reminderDoc);
+    await db.collection("reminders").insertOne(reminderDoc);
+  }
+
+  console.log('[COMPLIANCE REMINDER DEBUG] Successfully generated', remindersToInsert.length, 'reminders for compliance', complianceId);
+}
+
 async function generateRemindersForSubscription(subscription: any, tenantId: string, db: any) {
   const subscriptionId = subscription._id ? subscription._id.toString() : (typeof subscription.id === 'string' ? subscription.id : undefined);
   if (!subscriptionId) return;
@@ -568,6 +657,19 @@ router.post("/api/compliance/insert", async (req, res) => {
     const complianceData = { ...req.body, tenantId, createdAt: new Date(), updatedAt: new Date() };
     const result = await collection.insertOne(complianceData);
     
+    // Get the created compliance document with its _id
+    const createdCompliance = { ...complianceData, _id: result.insertedId };
+    
+    // Generate reminders for compliance
+    try {
+      console.log(`🔄 [COMPLIANCE] Generating reminders for compliance filing: ${complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
+      await generateRemindersForCompliance(createdCompliance, tenantId, db);
+      console.log(`✅ [COMPLIANCE] Reminders generated successfully for compliance ${result.insertedId}`);
+    } catch (reminderError) {
+      console.error(`❌ [COMPLIANCE] Failed to generate reminders:`, reminderError);
+      // Don't throw - let compliance creation succeed even if reminder generation fails
+    }
+    
     // Create notification event for compliance creation
     try {
       console.log(`🔄 [COMPLIANCE] Creating notification event for compliance filing: ${complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
@@ -620,6 +722,23 @@ router.put("/api/compliance/:id", async (req, res) => {
     );
     
     if (result.matchedCount === 1) {
+      // Get the updated document for reminder generation
+      const updatedDoc = await collection.findOne({ _id: new ObjectId(id) });
+      
+      // Regenerate reminders for compliance
+      try {
+        const tenantId = req.user?.tenantId;
+        if (tenantId) {
+          const complianceName = updatedDoc?.filingName || updatedDoc?.complianceName || updatedDoc?.name || 'Unnamed Filing';
+          console.log(`🔄 [COMPLIANCE] Regenerating reminders for updated compliance filing: ${complianceName}`);
+          await generateRemindersForCompliance(updatedDoc, tenantId, db);
+          console.log(`✅ [COMPLIANCE] Reminders regenerated successfully for compliance ${id}`);
+        }
+      } catch (reminderError) {
+        console.error(`❌ [COMPLIANCE] Failed to regenerate reminders:`, reminderError);
+        // Don't throw - let compliance update succeed even if reminder generation fails
+      }
+      
       // Create notification event for compliance update
       try {
         const complianceName = updateData.filingName || updateData.complianceName || updateData.name || oldDoc?.filingName || oldDoc?.complianceName || oldDoc?.name || 'Unnamed Filing';
