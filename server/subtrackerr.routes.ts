@@ -164,8 +164,9 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
       eventType: undefined, // No eventType for reminders
       reminderType: reminder.type,
       reminderDate: reminder.date,
+      reminderTriggerDate: reminder.date, // ensure frontend filter works
       sent: false,
-  status: compliance.status || "Pending",
+      status: compliance.status || "Active",
       createdAt: new Date(),
       tenantId,
       type: 'compliance',

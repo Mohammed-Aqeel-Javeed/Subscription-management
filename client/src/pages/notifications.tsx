@@ -160,8 +160,14 @@ const getFilteredNotifications = () => {
 			if (!compliance) return false;
 			switch (statusFilter) {
 				case 'pending':
-					// Show reminder-based notifications for compliance with status 'pending' or 'active' and valid trigger date
-					return !notification.eventType && (['pending','active'].includes((compliance.status||'').toLowerCase())) && notification.reminderTriggerDate && new Date(notification.reminderTriggerDate) <= todayDate;
+					// Show reminder notifications (no eventType) for compliances still pending/active.
+					// Accept either reminderTriggerDate or reminderDate (backend may provide either) and allow those already due.
+					if (notification.eventType) return false; // exclude created/deleted
+					const compStatus = (compliance.status||'').toLowerCase();
+					if (!['pending','active','non-compliant'].includes(compStatus)) return false;
+					const trigger = notification.reminderTriggerDate || notification.reminderDate;
+					if (!trigger) return true; // if no trigger date, still show as active reminder
+					return new Date(trigger) <= todayDate;
 				default:
 					return true;
 			}
