@@ -157,23 +157,24 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
 
   console.log('[COMPLIANCE REMINDER DEBUG] Reminders to insert:', remindersToInsert);
 
-  // Insert all reminders
+  // Insert all reminders as notifications in compliance_notifications
   for (const reminder of remindersToInsert) {
-    const reminderDoc = {
+    const notificationDoc = {
       complianceId,
+      eventType: undefined, // No eventType for reminders
       reminderType: reminder.type,
       reminderDate: reminder.date,
       sent: false,
       status: compliance.status || "Active",
       createdAt: new Date(),
       tenantId,
-      // Compliance-specific metadata
+      type: 'compliance',
       filingName: compliance.policy || compliance.filingName || compliance.complianceName || compliance.name || 'Compliance Filing',
       complianceCategory: compliance.category || compliance.complianceCategory || undefined,
       submissionDeadline: deadlineDate // Add submission deadline for frontend display
     };
-    console.log('[COMPLIANCE REMINDER DEBUG] Inserting reminder:', reminderDoc);
-    await db.collection("reminders").insertOne(reminderDoc);
+    console.log('[COMPLIANCE REMINDER DEBUG] Inserting reminder as notification:', notificationDoc);
+    await db.collection("compliance_notifications").insertOne(notificationDoc);
   }
 
   console.log('[COMPLIANCE REMINDER DEBUG] Successfully generated', remindersToInsert.length, 'reminders for compliance', complianceId);
