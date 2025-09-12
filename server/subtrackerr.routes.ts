@@ -87,8 +87,16 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
     reminderPolicy: compliance.reminderPolicy
   });
 
-  // Remove all old reminders for this compliance
-  await db.collection("reminders").deleteMany({ complianceId });
+  // Remove all old reminders for this compliance (legacy collection + new storage in compliance_notifications)
+  try {
+    await db.collection("reminders").deleteMany({ complianceId });
+  } catch {}
+  try {
+    // Delete only reminder-type notifications (those without eventType or eventType === null)
+    await db.collection("compliance_notifications").deleteMany({ complianceId, $or: [ { eventType: { $exists: false } }, { eventType: null } ] });
+  } catch (err) {
+    console.warn('[COMPLIANCE REMINDER DEBUG] Failed to prune existing reminder notifications', err);
+  }
 
   // Use submissionDeadline as the target date for reminders
   // Normalize deadline to ISO format if provided in dd-mm-yyyy etc.
@@ -786,33 +794,35 @@ router.put("/api/compliance/:id", async (req, res) => {
         // Don't throw - let compliance update succeed even if reminder generation fails
       }
       
-      // Create notification event for compliance update
+      // Create notification event for compliance update ONLY if important fields changed (deadline / reminder settings / status)
       try {
-        const complianceName = updateData.policy || updateData.filingName || updateData.complianceName || updateData.name || oldDoc?.policy || oldDoc?.filingName || oldDoc?.complianceName || oldDoc?.name || 'Compliance Filing';
-        console.log(`🔄 [COMPLIANCE] Creating update notification event for compliance filing: ${complianceName}`);
-        
-        const notificationEvent = {
-          _id: new ObjectId(),
-          tenantId: req.user?.tenantId,
-          type: 'compliance',
-          eventType: 'updated',
-          complianceId: id,
-          complianceName: complianceName,
-          filingName: complianceName,
-          category: updateData.complianceCategory || updateData.category || oldDoc?.complianceCategory || oldDoc?.category || 'General',
-          message: `Compliance filing ${complianceName} updated`,
-          read: false,
-          timestamp: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
-          reminderTriggerDate: new Date().toISOString().slice(0, 10)
-        };
-        
-        console.log(`🔄 [COMPLIANCE] Attempting to insert update notification event:`, notificationEvent);
-        const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
-        console.log(`✅ [COMPLIANCE] Update notification event created successfully with ID: ${notificationResult.insertedId}`);
+        const importantFields = ['submissionDeadline','reminderDays','reminderPolicy','status'];
+        const changedImportant = importantFields.some(f => String(oldDoc?.[f] ?? '') !== String(updateData?.[f] ?? ''));
+        if (changedImportant) {
+          const complianceName = updateData.policy || updateData.filingName || updateData.complianceName || updateData.name || oldDoc?.policy || oldDoc?.filingName || oldDoc?.complianceName || oldDoc?.name || 'Compliance Filing';
+          console.log(`🔄 [COMPLIANCE] Creating update notification event for compliance filing (significant changes): ${complianceName}`);
+          const notificationEvent = {
+            _id: new ObjectId(),
+            tenantId: req.user?.tenantId,
+            type: 'compliance',
+            eventType: 'updated',
+            complianceId: id,
+            complianceName: complianceName,
+            filingName: complianceName,
+            category: updateData.complianceCategory || updateData.category || oldDoc?.complianceCategory || oldDoc?.category || 'General',
+            message: `Compliance filing ${complianceName} updated`,
+            read: false,
+            timestamp: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            reminderTriggerDate: new Date().toISOString().slice(0, 10)
+          };
+          const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
+          console.log(`✅ [COMPLIANCE] Update notification event created (significant) with ID: ${notificationResult.insertedId}`);
+        } else {
+          console.log('[COMPLIANCE] Skipping update notification event (no significant field changes)');
+        }
       } catch (notificationError) {
-        console.error(`❌ [COMPLIANCE] Failed to create update notification event:`, notificationError);
-        // Don't throw - let compliance update succeed even if notification fails
+        console.error(`❌ [COMPLIANCE] Failed to create conditional update notification event:`, notificationError);
       }
       
       res.status(200).json({ message: "Compliance filing updated" });
@@ -1589,14 +1599,13 @@ router.get("/api/notifications/compliance", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     
-    // Fetch compliance event notifications (created, updated, deleted)
-    const eventNotifications = await db.collection("compliance_notifications").find({ tenantId }).sort({ createdAt: -1 }).toArray();
+  // Fetch compliance event notifications (created, deleted) and reminder notifications (no eventType)
+  const rawNotifications = await db.collection("compliance_notifications").find({ tenantId }).sort({ createdAt: -1 }).toArray();
+  const eventNotifications = rawNotifications.filter(n => n.eventType === 'created' || n.eventType === 'deleted');
+  const updateEventsSkipped = rawNotifications.filter(n => n.eventType === 'updated').length;
     
     // Fetch compliance reminders and transform them to notification format
-    const complianceReminders = await db.collection("reminders").find({ 
-      tenantId,
-      complianceId: { $exists: true } 
-    }).sort({ createdAt: -1 }).toArray();
+    const complianceReminders = rawNotifications.filter(n => !n.eventType); // now stored in same collection
     
     // Transform reminders to notification format
     const reminderNotifications = complianceReminders.map(reminder => ({
@@ -1622,7 +1631,7 @@ router.get("/api/notifications/compliance", async (req, res) => {
   const filteredReminders = reminderNotifications.filter(n => n.filingName && n.filingName !== 'Compliance Filing');
   const allNotifications = [...filteredEvents, ...filteredReminders];
   allNotifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  console.log(`[COMPLIANCE NOTIFICATIONS] Returning ${filteredEvents.length} events + ${filteredReminders.length} reminders = ${allNotifications.length} total (filtered)`);
+  console.log(`[COMPLIANCE NOTIFICATIONS] Returning ${filteredEvents.length} events + ${filteredReminders.length} reminders = ${allNotifications.length} total (filtered). Skipped ${updateEventsSkipped} update events.`);
   res.status(200).json(allNotifications);
   } catch (error) {
     console.error('[COMPLIANCE NOTIFICATIONS] Error:', error);
