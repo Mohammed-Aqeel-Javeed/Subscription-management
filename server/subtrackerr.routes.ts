@@ -56,6 +56,24 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 
 const router = Router();
 
+// Helper to normalize incoming date strings (supports dd-mm-yyyy and yyyy-mm-dd)
+function normalizeDateString(value: any): any {
+  if (!value || typeof value !== 'string') return value;
+  // Already ISO (yyyy-mm-dd)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  // dd-mm-yyyy -> yyyy-mm-dd
+  if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+    const [dd, mm, yyyy] = value.split('-');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  // dd/mm/yyyy -> yyyy-mm-dd
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+    const [dd, mm, yyyy] = value.split('/');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return value;
+}
+
 // Helper function to generate reminders for a subscription
 async function generateRemindersForCompliance(compliance: any, tenantId: string, db: any) {
   const complianceId = compliance._id ? compliance._id.toString() : (typeof compliance.id === 'string' ? compliance.id : undefined);
@@ -73,7 +91,9 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
   await db.collection("reminders").deleteMany({ complianceId });
 
   // Use submissionDeadline as the target date for reminders
-  const deadlineDate = compliance.submissionDeadline;
+  // Normalize deadline to ISO format if provided in dd-mm-yyyy etc.
+  const rawDeadline = compliance.submissionDeadline;
+  const deadlineDate = normalizeDateString(rawDeadline);
   if (!deadlineDate) {
     console.log('[COMPLIANCE REMINDER DEBUG] No submissionDeadline found, skipping reminder generation');
     return;
@@ -87,6 +107,10 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
 
   if (reminderPolicy === "One time") {
     const reminderDate = new Date(deadlineDate);
+    if (isNaN(reminderDate.getTime())) {
+      console.warn('[COMPLIANCE REMINDER DEBUG] Invalid submissionDeadline for one-time policy, raw value:', rawDeadline);
+      return;
+    }
     reminderDate.setDate(reminderDate.getDate() - reminderDays);
     remindersToInsert.push({
       type: `Before ${reminderDays} days`,
@@ -94,6 +118,10 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
     });
   } else if (reminderPolicy === "Two times") {
     const firstDate = new Date(deadlineDate);
+    if (isNaN(firstDate.getTime())) {
+      console.warn('[COMPLIANCE REMINDER DEBUG] Invalid submissionDeadline for two-times policy, raw value:', rawDeadline);
+      return;
+    }
     firstDate.setDate(firstDate.getDate() - reminderDays);
     const secondDays = Math.floor(reminderDays / 2);
     const secondDate = new Date(deadlineDate);
@@ -111,6 +139,10 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
   } else if (reminderPolicy === "Until Renewal") {
     // Daily reminders from (deadlineDate - reminderDays) to deadlineDate
     const startDate = new Date(deadlineDate);
+    if (isNaN(startDate.getTime())) {
+      console.warn('[COMPLIANCE REMINDER DEBUG] Invalid submissionDeadline for until-renewal policy, raw value:', rawDeadline);
+      return;
+    }
     startDate.setDate(startDate.getDate() - reminderDays);
     let current = new Date(startDate);
     const end = new Date(deadlineDate);
@@ -653,8 +685,20 @@ router.post("/api/compliance/insert", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    
-    const complianceData = { ...req.body, tenantId, createdAt: new Date(), updatedAt: new Date() };
+    // Normalize date fields before inserting so reminder generation works immediately
+    const normalizedSubmissionDeadline = normalizeDateString(req.body.submissionDeadline);
+    const normalizedStart = normalizeDateString(req.body.lastAudit || req.body.startDate);
+    const normalizedEnd = normalizeDateString(req.body.endDate);
+
+    const complianceData = { 
+      ...req.body, 
+      submissionDeadline: normalizedSubmissionDeadline,
+      lastAudit: normalizedStart,
+      endDate: normalizedEnd,
+      tenantId, 
+      createdAt: new Date(), 
+      updatedAt: new Date() 
+    };
     const result = await collection.insertOne(complianceData);
     
     // Get the created compliance document with its _id
@@ -662,7 +706,7 @@ router.post("/api/compliance/insert", async (req, res) => {
     
     // Generate reminders for compliance
     try {
-      console.log(`🔄 [COMPLIANCE] Generating reminders for compliance filing: ${complianceData.policy || complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
+      console.log(`🔄 [COMPLIANCE] Generating reminders for compliance filing: ${complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
       await generateRemindersForCompliance(createdCompliance, tenantId, db);
       console.log(`✅ [COMPLIANCE] Reminders generated successfully for compliance ${result.insertedId}`);
     } catch (reminderError) {
@@ -672,7 +716,7 @@ router.post("/api/compliance/insert", async (req, res) => {
     
     // Create notification event for compliance creation
     try {
-      console.log(`🔄 [COMPLIANCE] Creating notification event for compliance filing: ${complianceData.policy || complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
+      console.log(`🔄 [COMPLIANCE] Creating notification event for compliance filing: ${complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
       
       const filingName = complianceData.policy || complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing';
       const notificationEvent = {
