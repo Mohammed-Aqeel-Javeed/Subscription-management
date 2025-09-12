@@ -832,8 +832,7 @@ export class MongoStorage implements IStorage {
     // Fetch compliance reminders from the reminders collection
     const complianceReminders = await db.collection("reminders").find({
       tenantId,
-      complianceId: { $exists: true },
-      status: "Active"
+      complianceId: { $exists: true }
     }).toArray();
 
     console.log(`[DEBUG] Found ${complianceReminders.length} compliance reminders in database`);
