@@ -1585,9 +1585,37 @@ router.get("/api/notifications/compliance", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    // Fetch compliance notifications for the tenant
-    const notifications = await db.collection("compliance_notifications").find({ tenantId }).sort({ createdAt: -1 }).toArray();
-    res.status(200).json(notifications);
+    // Fetch compliance event notifications
+    const eventNotifications = await db.collection("compliance_notifications").find({ tenantId }).toArray();
+
+    // Fetch compliance reminders
+    const reminders = await db.collection("reminders").find({ tenantId, complianceId: { $exists: true } }).toArray();
+
+    // Format reminders as notifications for frontend
+    const reminderNotifications = reminders.map(reminder => ({
+      id: reminder._id?.toString(),
+      type: 'compliance',
+      eventType: undefined,
+      filingName: reminder.filingName,
+      complianceName: reminder.filingName,
+      category: reminder.complianceCategory || 'General',
+      complianceCategory: reminder.complianceCategory || 'General',
+      complianceId: reminder.complianceId,
+      reminderTriggerDate: reminder.reminderDate,
+      submissionDeadline: reminder.submissionDeadline,
+      createdAt: reminder.createdAt,
+      timestamp: reminder.createdAt,
+      message: `Your ${reminder.filingName} submission deadline is approaching. Please review and submit your compliance filing on time.`
+    }));
+
+    // Merge and sort by reminderTriggerDate/createdAt descending
+    const allNotifications = [...eventNotifications, ...reminderNotifications].sort((a, b) => {
+      const dateA = new Date(a.reminderTriggerDate || a.createdAt || a.timestamp);
+      const dateB = new Date(b.reminderTriggerDate || b.createdAt || b.timestamp);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    res.status(200).json(allNotifications);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch compliance notifications", error });
   }
