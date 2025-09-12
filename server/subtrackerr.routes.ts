@@ -169,7 +169,8 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
       tenantId,
       // Compliance-specific metadata
       filingName: compliance.policy || compliance.filingName || compliance.complianceName || compliance.name || 'Compliance Filing',
-      complianceCategory: compliance.category || compliance.complianceCategory || undefined
+      complianceCategory: compliance.category || compliance.complianceCategory || undefined,
+      submissionDeadline: deadlineDate // Add submission deadline for frontend display
     };
     console.log('[COMPLIANCE REMINDER DEBUG] Inserting reminder:', reminderDoc);
     await db.collection("reminders").insertOne(reminderDoc);
@@ -1585,38 +1586,44 @@ router.get("/api/notifications/compliance", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    // Fetch compliance event notifications
-    const eventNotifications = await db.collection("compliance_notifications").find({ tenantId }).toArray();
-
-    // Fetch compliance reminders
-    const reminders = await db.collection("reminders").find({ tenantId, complianceId: { $exists: true } }).toArray();
-
-    // Format reminders as notifications for frontend
-    const reminderNotifications = reminders.map(reminder => ({
-      id: reminder._id?.toString(),
+    
+    // Fetch compliance event notifications (created, updated, deleted)
+    const eventNotifications = await db.collection("compliance_notifications").find({ tenantId }).sort({ createdAt: -1 }).toArray();
+    
+    // Fetch compliance reminders and transform them to notification format
+    const complianceReminders = await db.collection("reminders").find({ 
+      tenantId,
+      complianceId: { $exists: true } 
+    }).sort({ createdAt: -1 }).toArray();
+    
+    // Transform reminders to notification format
+    const reminderNotifications = complianceReminders.map(reminder => ({
+      _id: reminder._id,
+      tenantId: reminder.tenantId,
       type: 'compliance',
-      eventType: undefined,
-      filingName: reminder.filingName,
-      complianceName: reminder.filingName,
-      category: reminder.complianceCategory || 'General',
-      complianceCategory: reminder.complianceCategory || 'General',
+      // No eventType for reminders (distinguishes from event notifications)
       complianceId: reminder.complianceId,
+      complianceName: reminder.filingName,
+      filingName: reminder.filingName,
+      category: reminder.complianceCategory || 'General',
+      message: `Your ${reminder.filingName || 'compliance filing'} submission deadline is approaching. Please review and submit your compliance filing on time.`,
+      read: false,
+      timestamp: reminder.createdAt ? reminder.createdAt.toISOString() : new Date().toISOString(),
+      createdAt: reminder.createdAt ? reminder.createdAt.toISOString() : new Date().toISOString(),
       reminderTriggerDate: reminder.reminderDate,
-      submissionDeadline: reminder.submissionDeadline,
-      createdAt: reminder.createdAt,
-      timestamp: reminder.createdAt,
-      message: `Your ${reminder.filingName} submission deadline is approaching. Please review and submit your compliance filing on time.`
+      submissionDeadline: reminder.submissionDeadline || undefined,
+      reminderType: reminder.reminderType
     }));
-
-    // Merge and sort by reminderTriggerDate/createdAt descending
-    const allNotifications = [...eventNotifications, ...reminderNotifications].sort((a, b) => {
-      const dateA = new Date(a.reminderTriggerDate || a.createdAt || a.timestamp);
-      const dateB = new Date(b.reminderTriggerDate || b.createdAt || b.timestamp);
-      return dateB.getTime() - dateA.getTime();
-    });
-
+    
+    // Combine and sort all notifications by creation time
+    const allNotifications = [...eventNotifications, ...reminderNotifications];
+    allNotifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    console.log(`[COMPLIANCE NOTIFICATIONS] Returning ${eventNotifications.length} events + ${reminderNotifications.length} reminders = ${allNotifications.length} total`);
+    
     res.status(200).json(allNotifications);
   } catch (error) {
+    console.error('[COMPLIANCE NOTIFICATIONS] Error:', error);
     res.status(500).json({ message: "Failed to fetch compliance notifications", error });
   }
 });
