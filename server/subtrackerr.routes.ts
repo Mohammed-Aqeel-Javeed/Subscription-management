@@ -63,7 +63,7 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
 
   console.log('[COMPLIANCE REMINDER DEBUG] Generating reminders for compliance:', {
     complianceId,
-    filingName: compliance.filingName,
+    filingName: compliance.policy || compliance.filingName || compliance.complianceName || compliance.name || 'Compliance Filing',
     submissionDeadline: compliance.submissionDeadline,
     reminderDays: compliance.reminderDays,
     reminderPolicy: compliance.reminderPolicy
@@ -136,8 +136,8 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
       createdAt: new Date(),
       tenantId,
       // Compliance-specific metadata
-      filingName: compliance.filingName || compliance.complianceName || compliance.policy || compliance.name || 'Compliance Filing',
-      complianceCategory: compliance.complianceCategory || compliance.category || undefined
+      filingName: compliance.policy || compliance.filingName || compliance.complianceName || compliance.name || 'Compliance Filing',
+      complianceCategory: compliance.category || compliance.complianceCategory || undefined
     };
     console.log('[COMPLIANCE REMINDER DEBUG] Inserting reminder:', reminderDoc);
     await db.collection("reminders").insertOne(reminderDoc);
@@ -741,7 +741,7 @@ router.put("/api/compliance/:id", async (req, res) => {
       
       // Create notification event for compliance update
       try {
-        const complianceName = updateData.filingName || updateData.complianceName || updateData.name || oldDoc?.filingName || oldDoc?.complianceName || oldDoc?.name || 'Unnamed Filing';
+        const complianceName = updateData.policy || updateData.filingName || updateData.complianceName || updateData.name || oldDoc?.policy || oldDoc?.filingName || oldDoc?.complianceName || oldDoc?.name || 'Compliance Filing';
         console.log(`🔄 [COMPLIANCE] Creating update notification event for compliance filing: ${complianceName}`);
         
         const notificationEvent = {
