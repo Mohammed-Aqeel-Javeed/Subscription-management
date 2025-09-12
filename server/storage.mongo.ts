@@ -829,64 +829,38 @@ export class MongoStorage implements IStorage {
     // Get all compliance items for the tenant
     const complianceItems = await db.collection("compliance").find({ tenantId }).toArray();
     
-    for (const compliance of complianceItems) {
-      if (!compliance.submissionDeadline || !compliance.reminderPolicy) continue;
-      
-      const reminderPolicy = compliance.reminderPolicy || "One time";
-      const reminderDays = Number(compliance.reminderDays) || 7;
-      const deadlineDate = new Date(compliance.submissionDeadline);
-      
-      let reminderTriggeredDate = null;
-      let shouldShowNotification = false;
-      
-      if (reminderPolicy === "One time") {
-        const trigger = new Date(deadlineDate);
-        trigger.setDate(trigger.getDate() - reminderDays);
-        if (trigger <= today && deadlineDate >= today) {
-          reminderTriggeredDate = trigger;
-          shouldShowNotification = true;
-        }
-      } else if (reminderPolicy === "Two times") {
-        const first = new Date(deadlineDate);
-        first.setDate(first.getDate() - reminderDays);
-        const secondDays = Math.floor(reminderDays / 2);
-        const second = new Date(deadlineDate);
-        second.setDate(second.getDate() - secondDays);
-        
-        if ((first <= today && deadlineDate >= today) || (second <= today && deadlineDate >= today)) {
-          if (first <= today && second > today) {
-            reminderTriggeredDate = first;
-          } else if (second <= today) {
-            reminderTriggeredDate = second;
-          }
-          shouldShowNotification = true;
-        }
-      } else if (reminderPolicy === "Until Renewal") {
-        const start = new Date(deadlineDate);
-        start.setDate(start.getDate() - reminderDays);
-        if (start <= today && deadlineDate >= today) {
-          reminderTriggeredDate = today >= start ? today : start;
-          shouldShowNotification = true;
-        }
-      }
-      
-      if (shouldShowNotification) {
+    // Fetch compliance reminders from the reminders collection
+    const complianceReminders = await db.collection("reminders").find({
+      tenantId,
+      complianceId: { $exists: true },
+      status: "Active"
+    }).toArray();
+
+    console.log(`[DEBUG] Found ${complianceReminders.length} compliance reminders in database`);
+
+    for (const reminder of complianceReminders) {
+      const reminderDate = new Date(reminder.reminderDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      reminderDate.setHours(0, 0, 0, 0);
+
+      // Show reminders that are due (today or earlier)
+      if (reminderDate <= today) {
+        console.log(`[DEBUG] Processing compliance reminder for ${reminder.complianceId}, reminderDate: ${reminder.reminderDate}`);
+
         const displayName = (
-          compliance.filingName ||
-          compliance.complianceName ||
-          compliance.policy ||
-          compliance.name ||
+          reminder.filingName ||
           'Compliance Filing'
         );
 
         notifications.push({
-          id: compliance._id?.toString() || compliance.id || Math.random().toString(),
-          complianceId: compliance._id?.toString() || compliance.id,
+          id: reminder._id?.toString() || Math.random().toString(),
+          complianceId: reminder.complianceId,
           filingName: displayName,
-          complianceCategory: compliance.complianceCategory || compliance.category || "",
-          reminderTriggerDate: reminderTriggeredDate ? reminderTriggeredDate.toISOString().slice(0, 10) : null,
-          submissionDeadline: compliance.submissionDeadline || "",
-          status: compliance.status || "Pending",
+          complianceCategory: reminder.complianceCategory || "",
+          reminderTriggerDate: reminder.reminderDate,
+          submissionDeadline: "", // Will be filled by frontend if needed
+          status: reminder.status || "Active",
           type: 'compliance',
           message: `Compliance reminder for ${displayName}`,
           read: false,
