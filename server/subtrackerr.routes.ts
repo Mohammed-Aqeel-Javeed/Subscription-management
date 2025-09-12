@@ -1615,13 +1615,13 @@ router.get("/api/notifications/compliance", async (req, res) => {
       reminderType: reminder.reminderType
     }));
     
-    // Combine and sort all notifications by creation time
-    const allNotifications = [...eventNotifications, ...reminderNotifications];
-    allNotifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
-    console.log(`[COMPLIANCE NOTIFICATIONS] Returning ${eventNotifications.length} events + ${reminderNotifications.length} reminders = ${allNotifications.length} total`);
-    
-    res.status(200).json(allNotifications);
+  // Filter out static/demo notifications (filingName === 'Compliance Filing')
+  const filteredEvents = eventNotifications.filter(n => n.filingName && n.filingName !== 'Compliance Filing');
+  const filteredReminders = reminderNotifications.filter(n => n.filingName && n.filingName !== 'Compliance Filing');
+  const allNotifications = [...filteredEvents, ...filteredReminders];
+  allNotifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  console.log(`[COMPLIANCE NOTIFICATIONS] Returning ${filteredEvents.length} events + ${filteredReminders.length} reminders = ${allNotifications.length} total (filtered)`);
+  res.status(200).json(allNotifications);
   } catch (error) {
     console.error('[COMPLIANCE NOTIFICATIONS] Error:', error);
     res.status(500).json({ message: "Failed to fetch compliance notifications", error });
