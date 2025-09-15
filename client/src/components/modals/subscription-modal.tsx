@@ -1027,7 +1027,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           variant="outline"
                           className="h-7 w-7 p-0 flex items-center justify-center border-slate-300"
                           title="Add Payment Method"
-                          onClick={() => window.location.href = "/setup-configuration?tab=payment-methods"}
+                          onClick={() => window.location.href = "/setup-configuration?tab=payment-method"}
                         >
                           <span className="sr-only">Add Payment Method</span>
                           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3.333v9.334M3.333 8h9.334" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/></svg>
