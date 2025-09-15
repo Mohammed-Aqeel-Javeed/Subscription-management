@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -597,13 +598,25 @@ export default function Configuration() {
     { value: 'other', label: 'Other', img: cardImages.other },
   ];
   
+  // Tab selection logic from query param
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const validTabs = ["currency", "payment", "reminder", "subscription", "compliance"];
+  let initialTab = "currency";
+  if (tabParam === "payment") initialTab = "payment";
+  else if (tabParam === "reminder") initialTab = "reminder";
+  else if (tabParam === "subscription") initialTab = "subscription";
+  else if (tabParam === "compliance") initialTab = "compliance";
+  // fallback to currency if not valid
+  const [activeTab, setActiveTab] = useState(initialTab);
+
   return (
     <div className="min-h-screen p-4 bg-gray-50">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Setup & Configuration</h2>
         <p className="text-base text-gray-600 mt-1 font-light">Configure your subscription settings, currencies, and payment methods</p>
         <div className="mt-4">
-          <Tabs defaultValue="currency" className="mb-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
             <TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6">
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
                 <TabsTrigger
