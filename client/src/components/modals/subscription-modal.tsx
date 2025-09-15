@@ -1017,25 +1017,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="paymentMethod"
                   render={({ field }) => (
                     <FormItem>
-                      <div className="flex items-center gap-2">
-                        <FormLabel className="block text-sm font-medium text-slate-700">
-                          Payment Method <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className="h-7 w-7 p-0 flex items-center justify-center border-slate-300"
-                          title="Add Payment Method"
-                          onClick={() => window.location.href = "/configuration?tab=payment"}
-                        >
-                          <span className="sr-only">Add Payment Method</span>
-                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3.333v9.334M3.333 8h9.334" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/></svg>
-                        </Button>
-                      </div>
+                      <FormLabel className="block text-sm font-medium text-slate-700">
+                        Payment Method <span className="text-red-500">*</span>
+                      </FormLabel>
                       <Select
                         value={field.value || ''}
-                        onValueChange={field.onChange}
+                        onValueChange={(value) => {
+                          if (value === "add-new-payment-method") {
+                            window.location.href = "/configuration?tab=payment";
+                          } else {
+                            field.onChange(value);
+                          }
+                        }}
                         disabled={paymentMethodsLoading}
                       >
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
@@ -1052,7 +1045,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 {pm.name}
                               </SelectItem>
                             ))
-                          ) : (
+                          ) : null}
+                          {/* Add Payment Method option at the end */}
+                          <SelectItem 
+                            value="add-new-payment-method" 
+                            className="dropdown-item flex items-center gap-2 text-indigo-600 font-medium border-t border-gray-200 mt-1 pt-2"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M8 3.333v9.334M3.333 8h9.334" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                            Add Payment Method
+                          </SelectItem>
+                          {Array.isArray(paymentMethods) && paymentMethods.length === 0 && (
                             <SelectItem value="no-method" disabled className="dropdown-item disabled">No payment methods found</SelectItem>
                           )}
                         </SelectContent>
