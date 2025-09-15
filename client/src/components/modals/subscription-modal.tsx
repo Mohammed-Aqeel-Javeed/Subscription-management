@@ -887,23 +887,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="category"
                   render={({ field }) => (
                     <FormItem>
-                      <div className="flex items-center gap-2">
-                        <FormLabel className="block text-sm font-medium text-slate-700">Category</FormLabel>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className="h-7 w-7 p-0 flex items-center justify-center border-slate-300"
-                          title="Add Category"
-                          onClick={() => window.location.href = "/company-details?tab=subscription-category"}
-                        >
-                          <span className="sr-only">Add Category</span>
-                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3.333v9.334M3.333 8h9.334" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/></svg>
-                        </Button>
-                      </div>
+                      <FormLabel className="block text-sm font-medium text-slate-700">Category</FormLabel>
                       <Select
                         value={field.value || ""}
-                        onValueChange={field.onChange}
+                        onValueChange={(value) => {
+                          if (value === "add-new-category") {
+                            window.location.href = "/company-details?tab=subscription-category";
+                          } else {
+                            field.onChange(value);
+                          }
+                        }}
                         disabled={categoriesLoading}
                       >
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
@@ -916,7 +909,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               .map(cat => (
                                 <SelectItem key={cat.name} value={cat.name} className={`${field.value === cat.name ? 'selected' : ''} dropdown-item`}>{cat.name}</SelectItem>
                               ))
-                          ) : (
+                          ) : null}
+                          {/* Add Category option at the end */}
+                          <SelectItem 
+                            value="add-new-category" 
+                            className="dropdown-item flex items-center gap-2 text-indigo-600 font-medium border-t border-gray-200 mt-1 pt-2"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M8 3.333v9.334M3.333 8h9.334" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                            + New
+                          </SelectItem>
+                          {Array.isArray(categories) && categories.filter(cat => cat.visible).length === 0 && (
                             <SelectItem value="no-category" disabled className="dropdown-item disabled">No categories found</SelectItem>
                           )}
                         </SelectContent>
@@ -930,20 +934,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="departments"
                   render={() => (
                     <FormItem>
-                      <div className="flex items-center gap-2">
-                        <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className="h-7 w-7 p-0 flex items-center justify-center border-slate-300"
-                          title="Add Department"
-                          onClick={() => window.location.href = "/company-details?tab=department"}
-                        >
-                          <span className="sr-only">Add Department</span>
-                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3.333v9.334M3.333 8h9.334" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/></svg>
-                        </Button>
-                      </div>
+                      <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
                       <div className="space-y-2">
                         <Popover open={isPopoverOpen} onOpenChange={handlePopoverOpenChange}>
                           <PopoverTrigger asChild>
@@ -983,7 +974,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                       )}
                                     </div>
                                   ))
-                              ) : (
+                              ) : null}
+                              {/* Add Department option at the end */}
+                              <div className="border-t border-gray-200 mt-1 pt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => window.location.href = "/company-details?tab=department"}
+                                  className="w-full flex items-center gap-2 px-2 py-2 text-indigo-600 font-medium hover:bg-indigo-50 rounded-md transition-colors"
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M8 3.333v9.334M3.333 8h9.334" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/>
+                                  </svg>
+                                  + New
+                                </button>
+                              </div>
+                              {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
                                 <div className="px-2 py-2 text-sm text-gray-500">No departments found</div>
                               )}
                             </div>
@@ -1054,7 +1059,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M8 3.333v9.334M3.333 8h9.334" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/>
                             </svg>
-                            Add Payment Method
+                            + New
                           </SelectItem>
                           {Array.isArray(paymentMethods) && paymentMethods.length === 0 && (
                             <SelectItem value="no-method" disabled className="dropdown-item disabled">No payment methods found</SelectItem>
