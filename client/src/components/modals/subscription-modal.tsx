@@ -32,7 +32,7 @@ type SubscriptionModalData = Partial<Subscription> & {
   paymentMethod?: string;
 };
 import { z } from "zod";
-import { CreditCard, X, ChevronDown, Check, History, RefreshCw } from "lucide-react";
+import { CreditCard, X, ChevronDown, Check, History, RefreshCw, Maximize2, Minimize2 } from "lucide-react";
 // Define the Category interface
 interface Category {
   name: string;
@@ -135,6 +135,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEditing = !!subscription;
+  // Fullscreen toggle state
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Track the current subscription ObjectId for History button
   const [currentSubscriptionId, setCurrentSubscriptionId] = useState<string | undefined>();
@@ -690,8 +692,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   return (
     <>
       <style>{animationStyles}</style>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl min-w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white">
+      <Dialog open={open} onOpenChange={(v) => { if (!v) setIsFullscreen(false); onOpenChange(v); }}>
+        <DialogContent className={`$${''} ${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}> 
           <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl flex flex-row items-center justify-between">
             <div className="flex items-center gap-3">
               <CreditCard className="h-6 w-6" />
@@ -700,6 +702,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               </DialogTitle>
             </div>
             <div className="flex gap-3 items-center ml-auto mr-6">
+              <Button
+                type="button"
+                variant="outline"
+                title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
+                className={`bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-3 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center`}
+                onClick={() => setIsFullscreen(f => !f)}
+              >
+                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
