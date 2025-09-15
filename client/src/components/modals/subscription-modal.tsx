@@ -1024,7 +1024,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         value={field.value || ''}
                         onValueChange={(value) => {
                           if (value === "add-new-payment-method") {
-                            window.location.href = "/configuration?tab=payment";
+                            window.location.href = "/reminders?tab=payment";
                           } else {
                             field.onChange(value);
                           }
