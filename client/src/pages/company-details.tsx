@@ -19,32 +19,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
 // ...existing code...
-  // Tab selection logic for query param
-  const getTabFromQuery = () => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const tab = params.get('tab');
-      if (tab === 'department') return 'department';
-      if (tab === 'subscription-category') return 'subscription';
-      if (tab === 'employee') return 'employee';
-      if (tab === 'users') return 'users';
-    }
-    return 'company';
-  };
-
-  const [activeTab, setActiveTab] = React.useState(getTabFromQuery());
-
-  React.useEffect(() => {
-    const handlePopState = () => {
-      setActiveTab(getTabFromQuery());
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  React.useEffect(() => {
-    setActiveTab(getTabFromQuery());
-  }, [window.location.search]);
 import type { User as UserType, InsertUser } from "@shared/types";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1347,7 +1321,7 @@ return (
 <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Company Details</h2>
 <p className="text-base text-gray-600 mt-1 font-light">Manage company information, departments, employees, and system settings</p>
 <div className="mt-4">
-  <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+<Tabs defaultValue="company" className="mb-6">
 <TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6">
 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
 <TabsTrigger
