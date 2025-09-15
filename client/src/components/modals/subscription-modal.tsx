@@ -705,15 +705,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <Button
                 type="button"
                 variant="outline"
-                title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
-                className={`bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-3 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center`}
-                onClick={() => setIsFullscreen(f => !f)}
-              >
-                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
                 className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-5 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 min-w-[90px] border-indigo-200"
                 onClick={() => window.location.href = "/subscription-user"}
               >
@@ -749,6 +740,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               >
                 <History className="h-4 w-4" />
                 View
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
+                className={`bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-3 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center`}
+                onClick={() => setIsFullscreen(f => !f)}
+              >
+                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
               </Button>
             </div>
           </DialogHeader>
@@ -887,7 +887,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="category"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Category</FormLabel>
+                      <div className="flex items-center gap-2">
+                        <FormLabel className="block text-sm font-medium text-slate-700">Category</FormLabel>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7 p-0 flex items-center justify-center border-slate-300"
+                          title="Add Category"
+                          onClick={() => window.location.href = "/company/categories"}
+                        >
+                          <span className="sr-only">Add Category</span>
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3.333v9.334M3.333 8h9.334" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/></svg>
+                        </Button>
+                      </div>
                       <Select
                         value={field.value || ""}
                         onValueChange={field.onChange}
@@ -917,7 +930,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="departments"
                   render={() => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
+                      <div className="flex items-center gap-2">
+                        <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7 p-0 flex items-center justify-center border-slate-300"
+                          title="Add Department"
+                          onClick={() => window.location.href = "/company/departments"}
+                        >
+                          <span className="sr-only">Add Department</span>
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3.333v9.334M3.333 8h9.334" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/></svg>
+                        </Button>
+                      </div>
                       <div className="space-y-2">
                         <Popover open={isPopoverOpen} onOpenChange={handlePopoverOpenChange}>
                           <PopoverTrigger asChild>
@@ -963,7 +989,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             </div>
                           </PopoverContent>
                         </Popover>
-                        
                         {/* Display selected departments as badges */}
                         {selectedDepartments.length > 0 && (
                           <div className="flex flex-wrap gap-2 mt-2">
@@ -982,42 +1007,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           </div>
                         )}
                       </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                {/* Owner field as dynamic dropdown */}
-                <FormField
-                  control={form.control}
-                  name="owner"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Owner</FormLabel>
-                      <Select
-                        value={field.value || ''}
-                        onValueChange={field.onChange}
-                        disabled={employeesLoading}
-                      >
-                        <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="dropdown-content">
-                          {Array.isArray(employees) && employees.length > 0 ? (
-                            employees.map(emp => (
-                              <SelectItem 
-                                key={emp.id || emp._id || emp.name} 
-                                value={emp.name}
-                                className={`${field.value === emp.name ? 'selected' : ''} dropdown-item`}
-                              >
-                                {emp.name}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            <SelectItem value="no-employee" disabled className="dropdown-item disabled">No employees found</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
