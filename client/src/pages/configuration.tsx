@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,23 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 export default function Configuration() {
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  
+  // Handle tab switching from URL parameters
+  const [activeTab, setActiveTab] = useState(() => {
+    const tabParam = searchParams.get('tab');
+    return tabParam || 'currency';
+  });
+  
+  // Update tab when URL changes
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+  
   const [addCurrencyOpen, setAddCurrencyOpen] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | null>(null);
   const [exchangeRates, setExchangeRates] = useState<Array<{
@@ -603,7 +620,7 @@ export default function Configuration() {
         <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Setup & Configuration</h2>
         <p className="text-base text-gray-600 mt-1 font-light">Configure your subscription settings, currencies, and payment methods</p>
         <div className="mt-4">
-          <Tabs defaultValue="currency" className="mb-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
             <TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6">
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
                 <TabsTrigger
