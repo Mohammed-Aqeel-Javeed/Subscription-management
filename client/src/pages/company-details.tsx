@@ -1,5 +1,6 @@
 // import { insertUserSchema } from "@shared/schema";
 import React, { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -1309,19 +1310,31 @@ logoPreview: URL.createObjectURL(file)
 
 // Handle form submission
 const handleSubmit = (e: React.FormEvent) => {
-e.preventDefault();
-// Here you would typically send the data to your backend
-console.log("Company Information:", companyInfo);
-alert("Company information saved successfully!");
+  e.preventDefault();
+  // Here you would typically send the data to your backend
+  console.log("Company Information:", companyInfo);
+  alert("Company information saved successfully!");
 };
 
+// Tab selection logic from query param
+const [searchParams] = useSearchParams();
+const tabParam = searchParams.get("tab");
+const validTabs = ["company", "department", "employee", "subscription", "users", "subscription-category"];
+let initialTab = "company";
+if (tabParam === "department") initialTab = "department";
+else if (tabParam === "employee") initialTab = "employee";
+else if (tabParam === "users") initialTab = "users";
+else if (tabParam === "subscription-category" || tabParam === "subscription") initialTab = "subscription";
+// fallback to company if not valid
+const [activeTab, setActiveTab] = useState(initialTab);
+
 return (
-<div className="min-h-screen p-4 bg-gray-50">
-<div className="mb-6">
-<h2 className="text-2xl font-bold text-gray-900 tracking-tight">Company Details</h2>
-<p className="text-base text-gray-600 mt-1 font-light">Manage company information, departments, employees, and system settings</p>
-<div className="mt-4">
-<Tabs defaultValue="company" className="mb-6">
+  <div className="min-h-screen p-4 bg-gray-50">
+    <div className="mb-6">
+      <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Company Details</h2>
+      <p className="text-base text-gray-600 mt-1 font-light">Manage company information, departments, employees, and system settings</p>
+      <div className="mt-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
 <TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6">
 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
 <TabsTrigger
