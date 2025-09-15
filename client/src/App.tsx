@@ -51,6 +51,7 @@ function AppWithSidebar() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/subscriptions" element={<Subscriptions />} />
           <Route path="/notifications" element={<Notifications />} />
+          <Route path="/configuration" element={<Configuration />} />
           <Route path="/reminders" element={<Configuration />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/subscription-history" element={<SubscriptionHistory />} />
