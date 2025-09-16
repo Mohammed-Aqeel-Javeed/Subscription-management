@@ -842,24 +842,24 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 />
                 <FormField
                   control={form.control}
-                  name="billingCycle"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Billing Cycle</FormLabel>
-                      <Select value={billingCycle} onValueChange={(val: string) => { setBillingCycle(val); field.onChange(val); }}>
-                        <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="dropdown-content">
-                          <SelectItem value="monthly" className={`${billingCycle === 'monthly' ? 'selected' : ''} dropdown-item`}>Monthly</SelectItem>
-                          <SelectItem value="yearly" className={`${billingCycle === 'yearly' ? 'selected' : ''} dropdown-item`}>Yearly</SelectItem>
-                          <SelectItem value="quarterly" className={`${billingCycle === 'quarterly' ? 'selected' : ''} dropdown-item`}>Quarterly</SelectItem>
-                          <SelectItem value="weekly" className={`${billingCycle === 'weekly' ? 'selected' : ''} dropdown-item`}>Weekly</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                    name="billingCycle"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Commitment cycle</FormLabel>
+                        <Select value={billingCycle} onValueChange={(val: string) => { setBillingCycle(val); field.onChange(val); }}>
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="dropdown-content">
+                            <SelectItem value="monthly" className={`${billingCycle === 'monthly' ? 'selected' : ''} dropdown-item`}>Monthly</SelectItem>
+                            <SelectItem value="yearly" className={`${billingCycle === 'yearly' ? 'selected' : ''} dropdown-item`}>Yearly</SelectItem>
+                            <SelectItem value="quarterly" className={`${billingCycle === 'quarterly' ? 'selected' : ''} dropdown-item`}>Quarterly</SelectItem>
+                            <SelectItem value="weekly" className={`${billingCycle === 'weekly' ? 'selected' : ''} dropdown-item`}>Weekly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                 />
                 <FormField
                   control={form.control}
@@ -1124,27 +1124,27 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 />
                 <FormField
                   control={form.control}
-                  name="nextRenewal"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">
-                        End Date <span className="text-red-500">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="date" 
-                          className="w-full border-slate-300 rounded-lg p-2 text-base" 
-                          value={endDate} 
-                          onChange={e => {
-                            setEndDateManuallySet(true);
-                            setEndDate(e.target.value);
-                            field.onChange(e);
-                          }} 
-                        />
-                      </FormControl>
-                      <FormMessage className="text-red-500" />
-                    </FormItem>
-                  )}
+                    name="nextRenewal"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="block text-sm font-medium text-slate-700">
+                          Next Renewal Date <span className="text-red-500">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="date" 
+                            className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                            value={endDate} 
+                            onChange={e => {
+                              setEndDateManuallySet(true);
+                              setEndDate(e.target.value);
+                              field.onChange(e);
+                            }} 
+                          />
+                        </FormControl>
+                        <FormMessage className="text-red-500" />
+                      </FormItem>
+                    )}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
