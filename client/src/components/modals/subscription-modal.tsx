@@ -962,13 +962,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 ))
                             ) : null}
                             {/* Add Department option at the end */}
-                            <SelectItem 
-                              value="add-new-department" 
-                              className="dropdown-item font-medium border-t border-gray-200 mt-1 pt-2 text-black"
+                            <div
+                              className="dropdown-item font-medium border-t border-gray-200 mt-1 pt-2 text-black cursor-pointer px-2 py-2"
                               onClick={() => window.location.href = "/company-details?tab=department"}
                             >
                               + New
-                            </SelectItem>
+                            </div>
                             {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
                               <SelectItem value="no-department" disabled className="dropdown-item disabled">No departments found</SelectItem>
                             )}
