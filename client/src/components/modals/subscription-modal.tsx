@@ -59,6 +59,7 @@ const formSchema = z.object({
   departments: z.array(z.string()).optional(),
   owner: z.string().optional(),
   status: z.string().optional(),
+  paymentFrequency: z.string().optional(),
   reminderDays: z.number().optional(),
   reminderPolicy: z.string().optional(),
   notes: z.string().optional(),
@@ -955,6 +956,28 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       </FormItem>
                     )}
                 />
+                {/* Payment frequency dropdown */}
+                <FormField
+                  control={form.control}
+                  name="paymentFrequency"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="block text-sm font-medium text-slate-700">Payment frequency</FormLabel>
+                      <Select value={field.value || "monthly"} onValueChange={field.onChange}>
+                        <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="dropdown-content">
+                          <SelectItem value="monthly" className="dropdown-item">Monthly</SelectItem>
+                          <SelectItem value="weekly" className="dropdown-item">Weekly</SelectItem>
+                          <SelectItem value="quarterly" className="dropdown-item">Quarterly</SelectItem>
+                          <SelectItem value="yearly" className="dropdown-item">Yearly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="status"
@@ -1141,11 +1164,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 />
                 
                 {/* Dynamic Fields from Configuration - now rendered after all static fields */}
-                {fieldsLoading ? (
-                  <div className="col-span-full flex justify-center py-4">
-                    <span className="text-gray-500 text-sm">Loading fields...</span>
-                  </div>
-                ) : dynamicFields.length > 0 && (
+                {dynamicFields.length > 0 && (
                   <>
                     {dynamicFields.map((field) => (
                       <FormField
