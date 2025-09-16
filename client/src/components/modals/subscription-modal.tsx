@@ -1208,7 +1208,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <Input 
                           type="date" 
                           className="w-full border-slate-300 rounded-lg p-2 text-base" 
-                          value={startDate} 
+                          value={startDate || ''} 
                           onChange={e => { setStartDate(e.target.value); field.onChange(e); }} 
                         />
                       </FormControl>
@@ -1218,27 +1218,27 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 />
                 <FormField
                   control={form.control}
-                    name="nextRenewal"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">
-                          Next Renewal Date <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="date" 
-                            className="w-full border-slate-300 rounded-lg p-2 text-base" 
-                            value={endDate} 
-                            onChange={e => {
-                              setEndDateManuallySet(true);
-                              setEndDate(e.target.value);
-                              field.onChange(e);
-                            }} 
-                          />
-                        </FormControl>
-                        <FormMessage className="text-red-500" />
-                      </FormItem>
-                    )}
+                  name="nextRenewal"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="block text-sm font-medium text-slate-700">
+                        Next Renewal Date <span className="text-red-500">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="date" 
+                          className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                          value={endDate || ''} 
+                          onChange={e => {
+                            setEndDateManuallySet(true);
+                            setEndDate(e.target.value);
+                            field.onChange(e);
+                          }} 
+                        />
+                      </FormControl>
+                      <FormMessage className="text-red-500" />
+                    </FormItem>
+                  )}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
