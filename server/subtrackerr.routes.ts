@@ -1323,6 +1323,142 @@ router.post("/api/subscriptions", async (req, res) => {
 });
 // Note: Duplicate route was removed here. The route is defined earlier in the file.
 
+// Save subscription as draft
+router.post("/api/subscriptions/draft", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("subscriptions");
+    
+    // Multi-tenancy: set tenantId
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    // Prepare draft subscription document
+    const draftSubscription = {
+      ...req.body,
+      tenantId,
+      isDraft: true,
+      status: "Draft",
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // Create the draft subscription (no reminders or notifications for drafts)
+    const result = await collection.insertOne(draftSubscription);
+    const subscriptionId = result.insertedId;
+
+    // Get the complete draft subscription document
+    const createdDraft = await collection.findOne({ _id: subscriptionId });
+
+    res.status(201).json({ 
+      message: "Draft saved successfully",
+      _id: subscriptionId,
+      subscription: createdDraft 
+    });
+  } catch (error: unknown) {
+    console.error("Draft creation error:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to save draft", error: errorMessage });
+  }
+});
+
+// Convert draft to active subscription
+router.post("/api/subscriptions/draft/:id/activate", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("subscriptions");
+    const historyCollection = db.collection("history");
+    const { ObjectId } = await import("mongodb");
+    
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const subscriptionId = new ObjectId(req.params.id);
+    
+    // Find the draft subscription
+    const draftSubscription = await collection.findOne({ 
+      _id: subscriptionId, 
+      tenantId,
+      isDraft: true 
+    });
+    
+    if (!draftSubscription) {
+      return res.status(404).json({ message: "Draft subscription not found" });
+    }
+
+    // Update draft to active subscription
+    const updateData = {
+      ...req.body,
+      isDraft: false,
+      status: "Active",
+      updatedAt: new Date()
+    };
+
+    const result = await collection.updateOne(
+      { _id: subscriptionId, tenantId },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Draft subscription not found" });
+    }
+
+    // Get the updated subscription
+    const activatedSubscription = await collection.findOne({ _id: subscriptionId });
+
+    // Create history record for activation
+    const historyRecord = {
+      subscriptionId: subscriptionId,
+      tenantId,
+      data: activatedSubscription,
+      action: "activate_draft",
+      timestamp: new Date(),
+      serviceName: activatedSubscription?.serviceName
+    };
+    await historyCollection.insertOne(historyRecord);
+
+    // Generate reminders for the activated subscription
+    await generateRemindersForSubscription(activatedSubscription, tenantId, db);
+
+    res.status(200).json({ 
+      message: "Draft activated successfully",
+      subscription: activatedSubscription 
+    });
+  } catch (error: unknown) {
+    console.error("Draft activation error:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to activate draft", error: errorMessage });
+  }
+});
+
+// Get all draft subscriptions
+router.get("/api/subscriptions/drafts", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("subscriptions");
+    
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const drafts = await collection.find({ 
+      tenantId,
+      isDraft: true 
+    }).sort({ createdAt: -1 }).toArray();
+
+    res.status(200).json(drafts);
+  } catch (error: unknown) {
+    console.error("Error fetching drafts:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to fetch drafts", error: errorMessage });
+  }
+});
+
 
 // Update an existing subscription
 router.put("/api/subscriptions/:id", async (req, res) => {
