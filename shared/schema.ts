@@ -24,6 +24,7 @@ export const subscriptions = pgTable("subscriptions", {
   startDate: timestamp("start_date").notNull(),
   nextRenewal: timestamp("next_renewal").notNull(),
   status: text("status").notNull().default("Active"), // Active, Cancelled
+  isDraft: boolean("is_draft").notNull().default(false), // Draft status
   reminderDays: integer("reminder_days").notNull().default(7),
   reminderPolicy: text("reminder_policy").notNull().default("One time"), // One time, Two times, Until Renewal
   notes: text("notes"),

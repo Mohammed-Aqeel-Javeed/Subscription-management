@@ -408,6 +408,82 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       }
     },
   });
+
+  // Draft mutation for saving drafts
+  const draftMutation = useMutation({
+    mutationFn: async (data: FormData) => {
+      const { id, createdAt, ...rest } = data as any;
+      
+      // Convert departments array to JSON string for storage
+      const draftData: InsertSubscription = {
+        ...rest,
+        department: JSON.stringify(data.departments || []),
+        startDate: new Date(data.startDate ?? "").toISOString(),
+        nextRenewal: new Date(data.nextRenewal ?? "").toISOString(),
+      };
+      
+      const res = await apiRequest("POST", "/api/subscriptions/draft", draftData);
+      return res.json();
+    },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions/drafts"] });
+      
+      toast({
+        title: "Draft Saved",
+        description: "Subscription saved as draft successfully",
+      });
+      onOpenChange(false);
+      setTimeout(() => {
+        form.reset();
+      }, 300);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.response?.data?.message || error.message || `Failed to save draft`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Handle save draft function
+  const handleSaveDraft = async () => {
+    const currentValues = form.getValues();
+    
+    // Basic validation for required fields
+    if (!currentValues.serviceName?.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Service name is required to save as draft",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const amountNum = typeof currentValues.amount === 'string' ? parseFloat(currentValues.amount) : currentValues.amount ?? 0;
+      const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
+      
+      const payload = {
+        ...currentValues,
+        amount: amountNum,
+        tenantId,
+        departments: currentValues.departments || [],
+        startDate: currentValues.startDate || new Date().toISOString().split('T')[0],
+        nextRenewal: currentValues.nextRenewal || new Date().toISOString().split('T')[0],
+      };
+
+      draftMutation.mutate(payload as FormData);
+    } catch (error) {
+      console.error("Draft save error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save draft",
+        variant: "destructive",
+      });
+    }
+  };
   
   const onSubmit = async (data: FormData) => {
     try {
@@ -1267,19 +1343,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 >
                   Cancel
                 </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="bg-slate-200 text-slate-700 font-medium px-4 py-2 hover:bg-slate-300"
-                  onClick={() => {
-                    // Save draft logic here
-                    toast({
-                      title: "Draft Saved",
-                      description: "Subscription draft has been saved.",
-                    });
-                  }}
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="border-blue-300 text-blue-700 hover:bg-blue-50 font-medium px-4 py-2"
+                  onClick={() => handleSaveDraft()}
+                  disabled={draftMutation.isPending}
                 >
-                  Save Draft
+                  {draftMutation.isPending ? 'Saving Draft...' : 'Save Draft'}
                 </Button>
                 <Button 
                   type="submit" 
