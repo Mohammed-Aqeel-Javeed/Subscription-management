@@ -826,17 +826,26 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="amount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Amount</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          step="0.01" 
-                          className="w-full border-slate-300 rounded-lg p-2 text-base text-right font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
-                          {...field} 
-                          
-                        />
-                      </FormControl>
-                      <FormMessage />
+                        <FormLabel className="block text-sm font-medium text-slate-700">Amount</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            step="0.01" 
+                            min="0"
+                            className="w-full border-slate-300 rounded-lg p-2 text-base text-right font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
+                            value={field.value}
+                            onChange={e => {
+                              // Limit to 2 decimal places
+                              let val = e.target.value;
+                              if (val && val.includes('.')) {
+                                const [intPart, decPart] = val.split('.');
+                                val = intPart + '.' + decPart.slice(0,2);
+                              }
+                              field.onChange(val);
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
                     </FormItem>
                   )}
                 />
