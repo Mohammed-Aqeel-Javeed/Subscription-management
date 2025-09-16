@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, RefreshCw } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 // Helper functions remain the same
@@ -74,6 +74,9 @@ export default function Compliance() {
   const [categories, setCategories] = useState<string[]>([]);
   const [governingAuthorities, setGoverningAuthorities] = useState<string[]>([]);
   const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(true);
+  
+  // Fullscreen toggle state
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   useEffect(() => {
     const fetchComplianceFields = () => {
@@ -550,29 +553,24 @@ export default function Compliance() {
       </div>
       
       {/* Modal */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-4xl min-w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white">
+      <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setModalOpen(v); }}>
+        <DialogContent className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
           <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl">
             <div className="flex justify-between items-center">
               <DialogTitle className="text-xl font-bold flex items-center gap-3">
                 <FileText className="h-6 w-6" />
                 {editIndex !== null ? "Edit Compliance" : "Add New Compliance"}
               </DialogTitle>
-              {editIndex !== null && complianceItems[editIndex]?._id && (
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="bg-white text-indigo-600 hover:bg-indigo-50 border-white font-semibold px-4 py-2 flex items-center gap-2 shadow-md transition-all duration-300"
-                    onClick={() => {
-                      // Handle extend functionality
-                      console.log('Extend compliance item');
-                    }}
-                    title="Extend"
-                  >
-                    <RefreshCw size={16} />
-                    Extend
-                  </Button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="text-white hover:bg-white/10 p-2 rounded-lg transition-colors"
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
+                  onClick={() => setIsFullscreen(f => !f)}
+                >
+                  {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+                </button>
+                {editIndex !== null && complianceItems[editIndex]?._id && (
                   <Button
                     type="button"
                     variant="default"
@@ -585,8 +583,8 @@ export default function Compliance() {
                     <ExternalLink size={16} />
                     View Ledger
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </DialogHeader>
           <form className="p-6">
