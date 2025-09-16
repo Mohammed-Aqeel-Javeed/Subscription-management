@@ -1267,6 +1267,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 >
                   Cancel
                 </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="bg-slate-200 text-slate-700 font-medium px-4 py-2 hover:bg-slate-300"
+                  onClick={() => {
+                    // Save draft logic here
+                    toast({
+                      title: "Draft Saved",
+                      description: "Subscription draft has been saved.",
+                    });
+                  }}
+                >
+                  Save Draft
+                </Button>
                 <Button 
                   type="submit" 
                   className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-4 py-2 shadow-md hover:shadow-lg"
