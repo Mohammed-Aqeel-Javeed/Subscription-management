@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Fragment } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -7,11 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2 } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 // Helper functions remain the same
-const mapStatus = (_status: string): string => {
+const mapStatus = (status: string): string => {
   return "Pending";
 };
 const calculateEndDate = (start: string, freq: string): string => {
@@ -42,16 +42,38 @@ const formatDate = (dateStr?: string): string => {
   const yyyy = String(d.getFullYear());
   return `${dd}/${mm}/${yyyy}`;
 };
-// getNextPeriodDates removed (unused)
+function getNextPeriodDates(startDate: string, endDate: string, frequency: string): { nextStartDate: string; nextEndDate: string } {
+  const start = new Date(endDate);
+  let nextStart = new Date(start);
+  let nextEnd = new Date(start);
+  
+  nextStart.setDate(start.getDate() + 1);
+  
+  if (frequency === "Monthly") {
+    nextEnd.setMonth(nextStart.getMonth() + 1);
+    nextEnd.setDate(nextEnd.getDate() - 1);
+  } else if (frequency === "Quarterly") {
+    nextEnd.setMonth(nextStart.getMonth() + 3);
+    nextEnd.setDate(nextEnd.getDate() - 1);
+  } else if (frequency === "Yearly") {
+    nextEnd.setFullYear(nextStart.getFullYear() + 1);
+    nextEnd.setDate(nextEnd.getDate() - 1);
+  }
+  
+  const format = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  
+  return { nextStartDate: format(nextStart), nextEndDate: format(nextEnd) };
+}
 export default function Compliance() {
-  // Fullscreen modal state
-  const [isFullscreen, setIsFullscreen] = useState(false);
   // --- Dynamic Compliance Fields ---
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
   const [isLoadingComplianceFields, setIsLoadingComplianceFields] = useState(true);
   
   // State for categories and governing authorities
-  // Removed unused dropdown state (categories, authorities, loading)
+  const [categories, setCategories] = useState<string[]>([]);
+  const [governingAuthorities, setGoverningAuthorities] = useState<string[]>([]);
+  const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(true);
   
   useEffect(() => {
     const fetchComplianceFields = () => {
@@ -66,17 +88,41 @@ export default function Compliance() {
         .finally(() => setIsLoadingComplianceFields(false));
     };
     
+    const fetchDropdownData = () => {
+      setIsLoadingDropdowns(true);
+      Promise.all([
+        fetch('/api/compliance/categories').then(res => res.json()),
+        fetch('/api/compliance/authorities').then(res => res.json())
+      ])
+      .then(([categoriesData, authoritiesData]) => {
+        if (Array.isArray(categoriesData)) setCategories(categoriesData);
+        if (Array.isArray(authoritiesData)) setGoverningAuthorities(authoritiesData);
+      })
+      .catch(() => {
+        setCategories([]);
+        setGoverningAuthorities([]);
+      })
+      .finally(() => setIsLoadingDropdowns(false));
+    };
+    
     fetchComplianceFields();
+    fetchDropdownData();
     
     // Add event listeners for account changes
     window.addEventListener("accountChanged", fetchComplianceFields);
     window.addEventListener("logout", fetchComplianceFields);
     window.addEventListener("login", fetchComplianceFields);
+    window.addEventListener("accountChanged", fetchDropdownData);
+    window.addEventListener("logout", fetchDropdownData);
+    window.addEventListener("login", fetchDropdownData);
     
     return () => {
       window.removeEventListener("accountChanged", fetchComplianceFields);
       window.removeEventListener("logout", fetchComplianceFields);
       window.removeEventListener("login", fetchComplianceFields);
+      window.removeEventListener("accountChanged", fetchDropdownData);
+      window.removeEventListener("logout", fetchDropdownData);
+      window.removeEventListener("login", fetchDropdownData);
     };
   }, []);
   
@@ -106,7 +152,7 @@ export default function Compliance() {
   
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   
@@ -504,43 +550,46 @@ export default function Compliance() {
       </div>
       
       {/* Modal */}
-      <Dialog open={modalOpen} onOpenChange={(open) => { setModalOpen(open); if (!open) setIsFullscreen(false); }}>
-        <DialogContent className={isFullscreen ? "fixed inset-0 z-50 bg-white rounded-none shadow-none p-0" : "max-w-4xl min-w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white"}>
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-4xl min-w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white">
           <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl">
-            <div className="flex justify-between items-center gap-4">
+            <div className="flex justify-between items-center">
               <DialogTitle className="text-xl font-bold flex items-center gap-3">
-                <FileText className="h-6 w-6" /> {editIndex !== null ? "Edit Compliance" : "Add New Compliance"}
+                <FileText className="h-6 w-6" />
+                {editIndex !== null ? "Edit Compliance" : "Add New Compliance"}
               </DialogTitle>
-              <div className="flex items-center gap-2">
-                {editIndex !== null && complianceItems[editIndex]?._id && (
+              {editIndex !== null && complianceItems[editIndex]?._id && (
+                <div className="flex gap-2">
                   <Button
                     type="button"
-                    variant="secondary"
-                    className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-3 py-2 flex items-center gap-2 shadow-sm border border-indigo-200"
+                    variant="outline"
+                    className="bg-white text-indigo-600 hover:bg-indigo-50 border-white font-semibold px-4 py-2 flex items-center gap-2 shadow-md transition-all duration-300"
+                    onClick={() => {
+                      // Handle extend functionality
+                      console.log('Extend compliance item');
+                    }}
+                    title="Extend"
+                  >
+                    <RefreshCw size={16} />
+                    Extend
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 flex items-center gap-2 shadow-md transition-all duration-300"
                     onClick={() => {
                       window.location.href = `/compliance-ledger?id=${complianceItems[editIndex]._id}`;
                     }}
                     title="View Ledger"
                   >
                     <ExternalLink size={16} />
-                    Ledger
+                    View Ledger
                   </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-lg bg-white/95 hover:bg-white text-indigo-600 shadow border border-indigo-200"
-                  aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-                  onClick={() => setIsFullscreen(f => !f)}
-                  title={isFullscreen ? "Exit Fullscreen" : "Expand"}
-                >
-                  <Maximize2 className="w-5 h-5" />
-                </Button>
-              </div>
+                </div>
+              )}
             </div>
           </DialogHeader>
-          <form className="p-6 space-y-6" onSubmit={e => { e.preventDefault(); }}>
+          <form className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Filing Name</label>
@@ -585,13 +634,6 @@ export default function Compliance() {
                 <Select 
                   value={form.filingGoverningAuthority} 
                   onValueChange={(val: string) => {
-                    if (val === '__custom__') {
-                      const manual = prompt('Enter custom Governing Authority');
-                      if (manual && manual.trim()) {
-                        handleFormChange('filingGoverningAuthority', manual.trim());
-                      }
-                      return;
-                    }
                     handleFormChange('filingGoverningAuthority', val);
                   }}
                 >
