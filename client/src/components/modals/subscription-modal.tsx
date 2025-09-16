@@ -933,15 +933,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     <FormItem>
                         <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
                         <Select
-                          value={selectedDepartments[0] || ""}
-                          onValueChange={(value) => {
-                            if (value === "add-new-department") {
-                              window.location.href = "/company-details?tab=department";
-                            } else {
-                              setSelectedDepartments([value]);
-                              form.setValue("departments", [value]);
-                            }
-                          }}
+                          value={selectedDepartments.length > 0 ? selectedDepartments.join(',') : ''}
+                          onValueChange={() => {}}
                           disabled={departmentsLoading}
                         >
                           <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
@@ -952,13 +945,27 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               departments
                                 .filter(dept => dept.visible)
                                 .map(dept => (
-                                  <SelectItem key={dept.name} value={dept.name} className={`${selectedDepartments[0] === dept.name ? 'selected' : ''} dropdown-item`}>{dept.name}</SelectItem>
+                                  <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                                    <Checkbox
+                                      id={`dept-${dept.name}`}
+                                      checked={selectedDepartments.includes(dept.name)}
+                                      onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
+                                      disabled={departmentsLoading}
+                                    />
+                                    <label
+                                      htmlFor={`dept-${dept.name}`}
+                                      className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                                    >
+                                      {dept.name}
+                                    </label>
+                                  </div>
                                 ))
                             ) : null}
                             {/* Add Department option at the end */}
                             <SelectItem 
                               value="add-new-department" 
                               className="dropdown-item font-medium border-t border-gray-200 mt-1 pt-2 text-black"
+                              onClick={() => window.location.href = "/company-details?tab=department"}
                             >
                               + New
                             </SelectItem>
@@ -967,6 +974,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             )}
                           </SelectContent>
                         </Select>
+                        {/* Display selected departments as badges */}
+                        {selectedDepartments.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {selectedDepartments.map((dept) => (
+                              <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200">
+                                {dept}
+                                <button
+                                  type="button"
+                                  onClick={() => removeDepartment(dept)}
+                                  className="ml-1 rounded-full hover:bg-indigo-300"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                         <FormMessage />
                     </FormItem>
                   )}
