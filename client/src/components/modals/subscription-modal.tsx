@@ -931,82 +931,43 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="departments"
                   render={() => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
-                      <div className="space-y-2">
-                        <Popover open={isPopoverOpen} onOpenChange={handlePopoverOpenChange}>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              aria-expanded={isPopoverOpen}
-                              className="w-full justify-between border-slate-300 rounded-lg p-2 text-base h-10"
+                        <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
+                        <Select
+                          value={selectedDepartments[0] || ""}
+                          onValueChange={(value) => {
+                            if (value === "add-new-department") {
+                              window.location.href = "/company-details?tab=department";
+                            } else {
+                              setSelectedDepartments([value]);
+                              form.setValue("departments", [value]);
+                            }
+                          }}
+                          disabled={departmentsLoading}
+                        >
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="dropdown-content">
+                            {Array.isArray(departments) && departments.length > 0 ? (
+                              departments
+                                .filter(dept => dept.visible)
+                                .map(dept => (
+                                  <SelectItem key={dept.name} value={dept.name} className={`${selectedDepartments[0] === dept.name ? 'selected' : ''} dropdown-item`}>{dept.name}</SelectItem>
+                                ))
+                            ) : null}
+                            {/* Add Department option at the end */}
+                            <SelectItem 
+                              value="add-new-department" 
+                              className="dropdown-item font-medium border-t border-gray-200 mt-1 pt-2 text-black"
                             >
-                              {selectedDepartments.length > 0 
-                                ? `${selectedDepartments.length} department${selectedDepartments.length > 1 ? 's' : ''} selected`
-                                : "Select departments"}
-                              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-full p-0 dropdown-content">
-                            <div className="max-h-60 overflow-auto p-2">
-                              {Array.isArray(departments) && departments.length > 0 ? (
-                                departments
-                                  .filter(dept => dept.visible)
-                                  .map(dept => (
-                                    <div key={dept.name} className="flex items-center space-x-2 px-2 py-2 hover:bg-slate-100 rounded-md">
-                                      <Checkbox
-                                        id={`dept-${dept.name}`}
-                                        checked={selectedDepartments.includes(dept.name)}
-                                        onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
-                                        disabled={departmentsLoading}
-                                      />
-                                      <label
-                                        htmlFor={`dept-${dept.name}`}
-                                        className="text-sm font-medium cursor-pointer flex-1"
-                                      >
-                                        {dept.name}
-                                      </label>
-                                      {selectedDepartments.includes(dept.name) && (
-                                        <Check className="h-4 w-4 text-indigo-600" />
-                                      )}
-                                    </div>
-                                  ))
-                              ) : null}
-                                {/* Add Department option at the end */}
-                                <div className="border-t border-gray-200 mt-1 pt-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => window.location.href = "/company-details?tab=department"}
-                                    className="w-full px-2 py-2 font-medium hover:bg-indigo-50 rounded-md transition-colors text-black text-left"
-                                  >
-                                    + New
-                                  </button>
-                                </div>
-                              {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
-                                <div className="px-2 py-2 text-sm text-gray-500">No departments found</div>
-                              )}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                        {/* Display selected departments as badges */}
-                        {selectedDepartments.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {selectedDepartments.map((dept) => (
-                              <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200">
-                                {dept}
-                                <button
-                                  type="button"
-                                  onClick={() => removeDepartment(dept)}
-                                  className="ml-1 rounded-full hover:bg-indigo-300"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <FormMessage />
+                              + New
+                            </SelectItem>
+                            {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
+                              <SelectItem value="no-department" disabled className="dropdown-item disabled">No departments found</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
                     </FormItem>
                   )}
                 />
