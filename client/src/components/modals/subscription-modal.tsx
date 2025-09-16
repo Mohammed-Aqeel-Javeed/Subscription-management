@@ -807,7 +807,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           {currencies && currencies.length > 0 ? (
                             currencies.map((curr: any) => (
                               <SelectItem key={curr.code} value={curr.code} className="dropdown-item">
-                                {curr.symbol} {curr.code} - {curr.name}
+                                {curr.code}
                               </SelectItem>
                             ))
                           ) : (
