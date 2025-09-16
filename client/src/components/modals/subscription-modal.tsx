@@ -815,6 +815,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               No currencies configured
                             </SelectItem>
                           )}
+                          <div className="border-t">
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
+                              onClick={() => window.location.href = '/configuration?tab=currency'}
+                            >
+                              + New
+                            </button>
+                          </div>
                         </SelectContent>
                       </Select>
                       <FormMessage />

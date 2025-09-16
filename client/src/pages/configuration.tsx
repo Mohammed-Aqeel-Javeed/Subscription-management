@@ -13,6 +13,7 @@ import { cardImages } from "@/assets/card-icons/cardImages";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
+import { API_BASE_URL } from "@/lib/config";
 export default function Configuration() {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -135,18 +136,9 @@ export default function Configuration() {
       .catch(() => setPaymentMethods([]));
   }, []);
   
-  // Delete currency handler
-  const deleteCurrency = (code: string) => {
-    setCurrencies(prev => prev.filter(c => c.code !== code));
-    toast({
-      title: "Currency Deleted",
-      description: `Currency with code ${code} has been deleted.`,
-      variant: "destructive",
-    });
-  };
-  
-  // Currencies state and handlers (restore if missing)
+  // Currencies state and handlers
   interface Currency {
+    _id?: string;
     name: string;
     code: string;
     symbol: string;
@@ -155,6 +147,7 @@ export default function Configuration() {
     visible: boolean;
     created: string;
   }
+  
   const [newCurrency, setNewCurrency] = useState<Currency>({
     name: '',
     code: '',
@@ -164,12 +157,59 @@ export default function Configuration() {
     visible: true,
     created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
   });
-  const [currencies, setCurrencies] = useState<Currency[]>([]);
   
-  const updateCurrencyVisibility = (code: string, visible: boolean) => {
-    setCurrencies(prev => prev.map(c =>
-      c.code === code ? { ...c, visible } : c
-    ));
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [currenciesLoading, setCurrenciesLoading] = useState(true);
+  
+  // Fetch currencies from backend on mount
+  useEffect(() => {
+    fetchCurrencies();
+  }, [open]);
+  
+  const fetchCurrencies = async () => {
+    try {
+      setCurrenciesLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
+      const data = await res.json();
+      setCurrencies(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error fetching currencies:", error);
+      setCurrencies([]);
+      toast({
+        title: "Error",
+        description: "Failed to load currencies",
+        variant: "destructive",
+      });
+    } finally {
+      setCurrenciesLoading(false);
+    }
+  };
+  
+  const updateCurrencyVisibility = async (code: string, visible: boolean) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/currencies/${code}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ visible }),
+      });
+      
+      if (res.ok) {
+        setCurrencies(prev => prev.map(c =>
+          c.code === code ? { ...c, visible } : c
+        ));
+        toast({
+          title: "Currency Updated",
+          description: `Currency ${code} visibility updated`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update currency visibility",
+        variant: "destructive",
+      });
+    }
   };
   
   const saveCurrencySettings = () => {
@@ -179,35 +219,97 @@ export default function Configuration() {
     });
   };
   
-  // Add new currency handler (restore if missing)
-  const addNewCurrency = () => {
+  // Add new currency handler
+  const addNewCurrency = async () => {
     if (
       newCurrency.name.trim() &&
       newCurrency.code.trim() &&
       newCurrency.symbol.trim() &&
       !currencies.find(c => c.code.toLowerCase() === newCurrency.code.toLowerCase())
     ) {
-      setCurrencies(prev => [
-        ...prev,
-        {
-          ...newCurrency,
-          name: newCurrency.name.trim(),
-          code: newCurrency.code.trim(),
-          symbol: newCurrency.symbol.trim(),
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/currencies`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            name: newCurrency.name.trim(),
+            code: newCurrency.code.trim().toUpperCase(),
+            symbol: newCurrency.symbol.trim(),
+            isoNumber: newCurrency.isoNumber.trim(),
+            exchangeRate: newCurrency.exchangeRate.trim(),
+          }),
+        });
+        
+        if (res.ok) {
+          const result = await res.json();
+          await fetchCurrencies(); // Refresh the list
+          setNewCurrency({
+            name: '',
+            code: '',
+            symbol: '',
+            isoNumber: '',
+            exchangeRate: '',
+            visible: true,
+            created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+          });
+          setAddCurrencyOpen(false);
+          toast({
+            title: "Currency Added",
+            description: `${newCurrency.name} currency has been added successfully`,
+          });
+        } else {
+          const error = await res.json();
+          toast({
+            title: "Error",
+            description: error.message || "Failed to add currency",
+            variant: "destructive",
+          });
         }
-      ]);
-      setNewCurrency({
-        name: '',
-        code: '',
-        symbol: '',
-        isoNumber: '',
-        exchangeRate: '',
-        visible: true,
-        created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-      });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to add currency",
+          variant: "destructive",
+        });
+      }
+    } else {
       toast({
-        title: "Currency Added",
-        description: `${newCurrency.name} currency has been added successfully`,
+        title: "Validation Error",
+        description: "Please fill all required fields and ensure currency code is unique",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Delete currency handler
+  const deleteCurrency = async (code: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/currencies/${code}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      
+      if (res.ok) {
+        await fetchCurrencies(); // Refresh the list
+        toast({
+          title: "Currency Deleted",
+          description: `Currency with code ${code} has been deleted.`,
+          variant: "destructive",
+        });
+      } else {
+        const error = await res.json();
+        toast({
+          title: "Error",
+          description: error.message || "Failed to delete currency",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete currency",
+        variant: "destructive",
       });
     }
   };
@@ -918,7 +1020,12 @@ export default function Configuration() {
                             </DialogFooter>
                           </DialogContent>
                         </Dialog>
-                        <div className="space-y-6">
+                        {currenciesLoading ? (
+                          <div className="flex items-center justify-center py-12">
+                            <div className="text-gray-500">Loading currencies...</div>
+                          </div>
+                        ) : (
+                          <div className="space-y-6">
                           <div className="rounded-md border">
                             <table className="w-full">
                               <thead className="bg-gray-50">
@@ -933,7 +1040,14 @@ export default function Configuration() {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-200 bg-white">
-                                {currencies.map((currency) => (
+                                {currencies.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={7} className="py-8 text-center text-gray-500">
+                                      No currencies found. Add your first currency to get started.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  currencies.map((currency) => (
                                   <tr key={currency.code}>
                                     <td className="py-3 px-4 text-sm text-gray-900">{currency.code}</td>
                                     <td className="py-3 px-4 text-sm text-gray-900">{currency.name}</td>
@@ -953,8 +1067,9 @@ export default function Configuration() {
                                           variant="ghost"
                                           size="sm"
                                           className="h-8 w-8 p-0"
+                                          onClick={() => updateCurrencyVisibility(currency.code, !currency.visible)}
                                         >
-                                          <Eye className="h-4 w-4" />
+                                          {currency.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                                         </Button>
                                         <Button
                                           variant="ghost"
@@ -974,7 +1089,8 @@ export default function Configuration() {
                                       </div>
                                     </td>
                                   </tr>
-                                ))}
+                                  ))
+                                )}
                               </tbody>
                             </table>
                           </div>
@@ -996,6 +1112,7 @@ export default function Configuration() {
                             </motion.div>
                           </div>
                         </div>
+                        )}
                       </Card>
                     </motion.div>
                   </TabsContent>

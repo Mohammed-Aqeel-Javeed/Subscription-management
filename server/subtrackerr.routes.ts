@@ -957,6 +957,125 @@ router.delete("/api/subtrackerr/:id", async (req, res) => {
   }
 });
 
+// --- Currency API ---
+// List all currencies
+router.get("/api/currencies", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("currencies");
+    // Multi-tenancy: filter by tenantId
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    const items = await collection.find({ tenantId }).toArray();
+    res.status(200).json(items);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch currencies", error });
+  }
+});
+
+// Add a new currency
+router.post("/api/currencies", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("currencies");
+    const { code, name, symbol, isoNumber, exchangeRate } = req.body;
+    
+    // Validate required fields
+    if (!code || !name || !symbol) {
+      return res.status(400).json({ message: "Code, name, and symbol are required" });
+    }
+    
+    // Multi-tenancy: set tenantId
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    
+    // Check if currency code already exists for this tenant
+    const existingCurrency = await collection.findOne({ code: code.toUpperCase(), tenantId });
+    if (existingCurrency) {
+      return res.status(409).json({ message: "Currency code already exists" });
+    }
+    
+    const currency = {
+      code: code.toUpperCase(),
+      name: name.trim(),
+      symbol: symbol.trim(),
+      isoNumber: isoNumber || "",
+      exchangeRate: exchangeRate || "",
+      visible: true,
+      created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+      createdAt: new Date(),
+      tenantId
+    };
+    
+    const result = await collection.insertOne(currency);
+    res.status(201).json({ insertedId: result.insertedId, currency });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to add currency", error });
+  }
+});
+
+// Update a currency
+router.put("/api/currencies/:code", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("currencies");
+    const { code } = req.params;
+    const tenantId = req.user?.tenantId;
+    
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    
+    const update = { 
+      $set: { 
+        ...req.body,
+        updatedAt: new Date()
+      } 
+    };
+    
+    const result = await collection.updateOne(
+      { code: code.toUpperCase(), tenantId }, 
+      update
+    );
+    
+    if (result.matchedCount === 1) {
+      res.status(200).json({ message: "Currency updated" });
+    } else {
+      res.status(404).json({ message: "Currency not found" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update currency", error });
+  }
+});
+
+// Delete a currency
+router.delete("/api/currencies/:code", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("currencies");
+    const { code } = req.params;
+    const tenantId = req.user?.tenantId;
+    
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    
+    const result = await collection.deleteOne({ code: code.toUpperCase(), tenantId });
+    
+    if (result.deletedCount === 1) {
+      res.status(200).json({ message: "Currency deleted" });
+    } else {
+      res.status(404).json({ message: "Currency not found" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete currency", error });
+  }
+});
+
 // --- Category API ---
 // List all categories
 router.get("/api/company/categories", async (req, res) => {
