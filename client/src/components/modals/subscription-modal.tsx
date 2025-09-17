@@ -802,18 +802,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               </DialogTitle>
             </div>
             <div className="flex gap-3 items-center ml-auto mr-6">
-              {/* Active/Cancel Status Toggle Button */}
-              <Button
-                type="button"
-                className={`font-semibold px-4 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 min-w-[80px] ${
-                  status === 'Active' 
-                    ? 'bg-green-500 hover:bg-green-600 text-white' 
-                    : 'bg-red-500 hover:bg-red-600 text-white'
+              {/* Status Pill (read-only) */}
+              <span
+                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold shadow-sm ${
+                  status === 'Active' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
                 }`}
-                onClick={() => setStatus(status === 'Active' ? 'Cancelled' : 'Active')}
               >
                 {status}
-              </Button>
+              </span>
               <Button
                 type="button"
                 variant="outline"
@@ -1225,21 +1221,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   )}
                 />
                 
-                {/* Auto Renewal Toggle */}
-                <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg bg-slate-50">
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Auto Renewal</label>
-                    <p className="text-xs text-slate-500">Automatically renew this subscription when it expires</p>
-                  </div>
+                {/* Auto Renewal Toggle (compact) */}
+                <div className="flex items-center justify-between py-2">
+                  <label className="text-sm font-medium text-slate-700">Auto Renewal</label>
                   <button
                     type="button"
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                      autoRenewal ? 'bg-indigo-600' : 'bg-gray-200'
+                    className={`relative inline-flex h-6 w-12 items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${
+                      autoRenewal ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'
                     }`}
                     onClick={() => setAutoRenewal(!autoRenewal)}
+                    aria-pressed={autoRenewal}
+                    aria-label="Toggle auto renewal"
                   >
                     <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
                         autoRenewal ? 'translate-x-6' : 'translate-x-1'
                       }`}
                     />
