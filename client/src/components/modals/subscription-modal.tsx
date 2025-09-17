@@ -6,6 +6,65 @@ interface SubscriptionField {
   enabled: boolean;
   type?: string;
 }
+
+// Helper function to calculate next renewal date based on billing cycle
+const calculateNextRenewalDate = (startDate: string, billingCycle: string): string => {
+  if (!startDate || !billingCycle) return '';
+  
+  const start = new Date(startDate);
+  const today = new Date();
+  let nextRenewal = new Date(start);
+  
+  // Calculate based on billing cycle
+  switch (billingCycle.toLowerCase()) {
+    case 'monthly':
+      // Add months until we get a future date
+      while (nextRenewal <= today) {
+        nextRenewal.setMonth(nextRenewal.getMonth() + 1);
+      }
+      break;
+    case 'quarterly':
+      // Add 3 months until we get a future date
+      while (nextRenewal <= today) {
+        nextRenewal.setMonth(nextRenewal.getMonth() + 3);
+      }
+      break;
+    case 'semi-annually':
+    case 'semi-annual':
+      // Add 6 months until we get a future date
+      while (nextRenewal <= today) {
+        nextRenewal.setMonth(nextRenewal.getMonth() + 6);
+      }
+      break;
+    case 'annually':
+    case 'yearly':
+      // Add years until we get a future date
+      while (nextRenewal <= today) {
+        nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
+      }
+      break;
+    case 'weekly':
+      // Add weeks until we get a future date
+      while (nextRenewal <= today) {
+        nextRenewal.setDate(nextRenewal.getDate() + 7);
+      }
+      break;
+    case 'daily':
+      // Add days until we get a future date
+      while (nextRenewal <= today) {
+        nextRenewal.setDate(nextRenewal.getDate() + 1);
+      }
+      break;
+    default:
+      // Default to monthly if billing cycle is not recognized
+      while (nextRenewal <= today) {
+        nextRenewal.setMonth(nextRenewal.getMonth() + 1);
+      }
+      break;
+  }
+  
+  return nextRenewal.toISOString().split('T')[0];
+};
 // ...existing code...
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "../ui/button";
@@ -972,7 +1031,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="block text-sm font-medium text-slate-700">Commitment cycle</FormLabel>
-                        <Select value={billingCycle} onValueChange={(val: string) => { setBillingCycle(val); field.onChange(val); }}>
+                        <Select value={billingCycle} onValueChange={(val: string) => { 
+                          setBillingCycle(val); 
+                          field.onChange(val);
+                          
+                          // Auto-update next renewal date if Auto Renewal is enabled
+                          if (autoRenewal) {
+                            const startDate = form.watch("startDate");
+                            if (startDate) {
+                              const nextDate = calculateNextRenewalDate(startDate, val);
+                              if (nextDate) {
+                                form.setValue("nextRenewal", nextDate);
+                              }
+                            }
+                          }
+                        }}>
                           <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                             <SelectValue />
                           </SelectTrigger>
@@ -1221,26 +1294,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   )}
                 />
                 
-                {/* Auto Renewal Toggle (compact) */}
-                <div className="flex items-center justify-between py-2">
-                  <label className="text-sm font-medium text-slate-700">Auto Renewal</label>
-                  <button
-                    type="button"
-                    className={`relative inline-flex h-6 w-12 items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${
-                      autoRenewal ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'
-                    }`}
-                    onClick={() => setAutoRenewal(!autoRenewal)}
-                    aria-pressed={autoRenewal}
-                    aria-label="Toggle auto renewal"
-                  >
-                    <span
-                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
-                        autoRenewal ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-                
                 {/* Dynamic Fields from Configuration - now rendered after all static fields */}
                 {dynamicFields.length > 0 && (
                   <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
@@ -1306,7 +1359,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           type="date" 
                           className="w-full border-slate-300 rounded-lg p-2 text-base" 
                           value={startDate || ''} 
-                          onChange={e => { setStartDate(e.target.value); field.onChange(e); }} 
+                          onChange={e => { 
+                            setStartDate(e.target.value); 
+                            field.onChange(e);
+                            
+                            // Auto-update next renewal date if Auto Renewal is enabled
+                            if (autoRenewal && e.target.value) {
+                              const billingCycle = form.watch("billingCycle");
+                              if (billingCycle) {
+                                const nextDate = calculateNextRenewalDate(e.target.value, billingCycle);
+                                if (nextDate) {
+                                  form.setValue("nextRenewal", nextDate);
+                                }
+                              }
+                            }
+                          }} 
                         />
                       </FormControl>
                       <FormMessage className="text-red-500" />
@@ -1408,6 +1475,42 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     );
                   }}
                 />
+                
+                {/* Auto Renewal Toggle */}
+                <div className="flex items-center justify-between py-2">
+                  <label className="text-sm font-medium text-slate-700">Auto Renewal</label>
+                  <button
+                    type="button"
+                    className={`relative inline-flex h-6 w-12 items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${
+                      autoRenewal ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'
+                    }`}
+                    onClick={() => {
+                      const newAutoRenewal = !autoRenewal;
+                      setAutoRenewal(newAutoRenewal);
+                      
+                      // Auto-update next renewal date when enabled
+                      if (newAutoRenewal) {
+                        const billingCycle = form.watch("billingCycle");
+                        const startDate = form.watch("startDate");
+                        
+                        if (billingCycle && startDate) {
+                          const nextDate = calculateNextRenewalDate(startDate, billingCycle);
+                          if (nextDate) {
+                            form.setValue("nextRenewal", nextDate);
+                          }
+                        }
+                      }
+                    }}
+                    aria-pressed={autoRenewal}
+                    aria-label="Toggle auto renewal"
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
+                        autoRenewal ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
               <h2 className="text-lg font-semibold mt-6 mb-3">Notes</h2>
               <div className={`grid gap-4 mb-6 ${isFullscreen ? 'grid-cols-1' : 'grid-cols-1'}`}>
@@ -1450,17 +1553,32 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     onOpenChange(false);
                     toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
                     
-                    // Update backend asynchronously
+                    // Update cache immediately for instant table refresh
                     if (isEditing && subscription?.id) {
+                      queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
+                        if (!oldData) return oldData;
+                        return oldData.map((sub: any) => 
+                          sub.id === subscription.id ? { ...sub, status: 'Cancelled' } : sub
+                        );
+                      });
+                      
+                      // Update analytics cache immediately
+                      queryClient.setQueryData(["/api/analytics/dashboard"], (oldData: any) => {
+                        if (!oldData) return oldData;
+                        return {
+                          ...oldData,
+                          activeSubscriptions: Math.max(0, (oldData.activeSubscriptions || 0) - 1)
+                        };
+                      });
+                      
+                      // Update backend asynchronously
                       const validId = getValidObjectId(subscription.id);
                       if (validId) {
                         apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' })
-                          .then(() => {
+                          .catch((e: any) => {
+                            // Revert cache on error and show error
                             queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
                             queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-                          })
-                          .catch((e: any) => {
-                            // Show error but don't reopen modal
                             toast({ title: 'Update failed', description: e?.message || 'Failed to update subscription status', variant: 'destructive' });
                           });
                       }
