@@ -429,22 +429,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     },
   });
 
-  // Cancel subscription mutation
-  const cancelSubscriptionMutation = useMutation({
-    mutationFn: async () => {
-      if (!subscription?.id) return;
-      // PATCH or PUT to cancel the subscription
-      return await apiRequest("PATCH", `/api/subscriptions/${subscription.id}/cancel`, { status: "Cancelled" });
-    },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Subscription cancelled." });
-      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-      onOpenChange(false);
-    },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error?.message || "Failed to cancel subscription.", variant: "destructive" });
-    }
-  });
   // Draft mutation for saving drafts
   const draftMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -1465,9 +1449,25 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   type="button" 
                   variant="outline" 
                   className="border-red-300 text-red-700 hover:bg-red-50 font-medium px-4 py-2"
-                  onClick={() => {
-                    setStatus('Cancelled');
-                    cancelSubscriptionMutation.mutate();
+                  onClick={async () => {
+                    try {
+                      // If editing, call minimal PUT to update only status
+                      if (isEditing && subscription?.id) {
+                        const validId = getValidObjectId(subscription.id);
+                        if (validId) {
+                          await apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' });
+                        }
+                      } else {
+                        setStatus('Cancelled');
+                      }
+                      // Refresh and close
+                      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+                      onOpenChange(false);
+                      toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
+                    } catch (e: any) {
+                      toast({ title: 'Error', description: e?.message || 'Failed to cancel subscription', variant: 'destructive' });
+                    }
                   }}
                 >
                   Cancel Renewal
