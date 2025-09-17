@@ -1426,81 +1426,84 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     </FormItem>
                   )}
                 />
-                {/* Reminder Policy */}
-                <FormField
-                  control={form.control}
-                  name="reminderPolicy"
-                  render={({ field }) => {
-                    const reminderDays = form.watch("reminderDays");
-                    const isOnlyOneTimeAllowed = reminderDays === 1;
-                    return (
-                      <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Reminder Policy</FormLabel>
-                        <Select 
-                          onValueChange={(val: string) => {
-                            if (["One time", "Two times", "Until Renewal"].includes(val)) {
-                              field.onChange(val);
-                            } else {
-                              field.onChange("One time");
+                {/* Reminder Policy + Auto Renewal side by side */}
+                <div className="flex items-start gap-4">
+                  <div className="flex-1">
+                    <FormField
+                      control={form.control}
+                      name="reminderPolicy"
+                      render={({ field }) => {
+                        const reminderDays = form.watch("reminderDays");
+                        const isOnlyOneTimeAllowed = reminderDays === 1;
+                        return (
+                          <FormItem>
+                            <FormLabel className="block text-sm font-medium text-slate-700">Reminder Policy</FormLabel>
+                            <Select 
+                              onValueChange={(val: string) => {
+                                if (["One time", "Two times", "Until Renewal"].includes(val)) {
+                                  field.onChange(val);
+                                } else {
+                                  field.onChange("One time");
+                                }
+                              }}
+                              value={field.value && ["One time", "Two times", "Until Renewal"].includes(field.value) ? field.value : "One time"}
+                              defaultValue={field.value && ["One time", "Two times", "Until Renewal"].includes(field.value) ? field.value : "One time"}
+                              disabled={isOnlyOneTimeAllowed}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="dropdown-content">
+                                <SelectItem value="One time" className={`${field.value === 'One time' ? 'selected' : ''} dropdown-item`}>One time</SelectItem>
+                                <SelectItem value="Two times" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Two times' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Two times</SelectItem>
+                                <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Until Renewal' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Until Renewal</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
+                              <li>One time: One reminder at {reminderDays} days before renewal</li>
+                              <li>Two times: Reminders at {reminderDays ?? 7} and {Math.floor((reminderDays ?? 7)/2)} days before</li>
+                              <li>Until Renewal: Daily reminders from {reminderDays} days until renewal</li>
+                            </ul>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-col justify-end pt-1">
+                    <label className="text-sm font-medium text-slate-700 mb-2">Auto Renewal</label>
+                    <button
+                      type="button"
+                      className={`relative inline-flex h-6 w-12 items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${
+                        autoRenewal ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'
+                      }`}
+                      onClick={() => {
+                        const newAutoRenewal = !autoRenewal;
+                        setAutoRenewal(newAutoRenewal);
+                        // Auto-update next renewal date when enabled
+                        if (newAutoRenewal) {
+                          const billingCycle = form.watch("billingCycle");
+                          const startDate = form.watch("startDate");
+                          if (billingCycle && startDate) {
+                            const nextDate = calculateNextRenewalDate(startDate, billingCycle);
+                            if (nextDate) {
+                              form.setValue("nextRenewal", nextDate);
                             }
-                          }}
-                          value={field.value && ["One time", "Two times", "Until Renewal"].includes(field.value) ? field.value : "One time"}
-                          defaultValue={field.value && ["One time", "Two times", "Until Renewal"].includes(field.value) ? field.value : "One time"}
-                          disabled={isOnlyOneTimeAllowed}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent className="dropdown-content">
-                            <SelectItem value="One time" className={`${field.value === 'One time' ? 'selected' : ''} dropdown-item`}>One time</SelectItem>
-                            <SelectItem value="Two times" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Two times' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Two times</SelectItem>
-                            <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Until Renewal' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Until Renewal</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
-                          <li>One time: One reminder at {reminderDays} days before renewal</li>
-                          <li>Two times: Reminders at {reminderDays ?? 7} and {Math.floor((reminderDays ?? 7)/2)} days before</li>
-                          <li>Until Renewal: Daily reminders from {reminderDays} days until renewal</li>
-                        </ul>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-                {/* Auto Renewal Toggle */}
-                <div className="flex flex-col justify-end">
-                  <label className="text-sm font-medium text-slate-700 mb-2">Auto Renewal</label>
-                  <button
-                    type="button"
-                    className={`relative inline-flex h-6 w-12 items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${
-                      autoRenewal ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'
-                    }`}
-                    onClick={() => {
-                      const newAutoRenewal = !autoRenewal;
-                      setAutoRenewal(newAutoRenewal);
-                      // Auto-update next renewal date when enabled
-                      if (newAutoRenewal) {
-                        const billingCycle = form.watch("billingCycle");
-                        const startDate = form.watch("startDate");
-                        if (billingCycle && startDate) {
-                          const nextDate = calculateNextRenewalDate(startDate, billingCycle);
-                          if (nextDate) {
-                            form.setValue("nextRenewal", nextDate);
                           }
                         }
-                      }
-                    }}
-                    aria-pressed={autoRenewal}
-                    aria-label="Toggle auto renewal"
-                  >
-                    <span
-                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
-                        autoRenewal ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
+                      }}
+                      aria-pressed={autoRenewal}
+                      aria-label="Toggle auto renewal"
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
+                          autoRenewal ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className={`grid gap-4 mb-6 ${isFullscreen ? 'grid-cols-1' : 'grid-cols-1'}`}>
