@@ -793,7 +793,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     <>
       <style>{animationStyles}</style>
       <Dialog open={open} onOpenChange={(v) => { if (!v) setIsFullscreen(false); onOpenChange(v); }}>
-        <DialogContent className={`$${''} ${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}> 
+        <DialogContent className={`$${''} ${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}> 
           <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl flex flex-row items-center justify-between">
             <div className="flex items-center gap-3">
               <CreditCard className="h-6 w-6" />
@@ -862,7 +862,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="p-6">
-              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1 md:grid-cols-3'}`}>
+              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-5 lg:grid-cols-6' : 'grid-cols-1 md:grid-cols-3'}`}>
                 {/* Static Fields */}
                 <FormField
                   control={form.control}
@@ -1243,7 +1243,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 
                 {/* Dynamic Fields from Configuration - now rendered after all static fields */}
                 {dynamicFields.length > 0 && (
-                  <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
+                  <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
                     {dynamicFields.map((field) => (
                       <FormField
                         key={field.name}
@@ -1292,7 +1292,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 )}
               </div>
               <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Information</h2>
-              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
+              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
                 <FormField
                   control={form.control}
                   name="startDate"
@@ -1338,7 +1338,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   )}
                 />
               </div>
-              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
+              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
                 <FormField
                   control={form.control}
                   name="reminderDays"
@@ -1410,7 +1410,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 />
               </div>
               <h2 className="text-lg font-semibold mt-6 mb-3">Notes</h2>
-              <div className="grid grid-cols-1 gap-4 mb-6">
+              <div className={`grid gap-4 mb-6 ${isFullscreen ? 'grid-cols-1' : 'grid-cols-1'}`}>
                 <FormField
                   control={form.control}
                   name="notes"
@@ -1444,24 +1444,29 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   type="button" 
                   variant="outline" 
                   className="border-red-300 text-red-700 hover:bg-red-50 font-medium px-4 py-2"
-                  onClick={async () => {
-                    try {
-                      // If editing, call minimal PUT to update only status
-                      if (isEditing && subscription?.id) {
-                        const validId = getValidObjectId(subscription.id);
-                        if (validId) {
-                          await apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' });
-                        }
-                      } else {
-                        setStatus('Cancelled');
+                  onClick={() => {
+                    // Close modal immediately for fast UX
+                    setStatus('Cancelled');
+                    onOpenChange(false);
+                    toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
+                    
+                    // Update backend asynchronously
+                    if (isEditing && subscription?.id) {
+                      const validId = getValidObjectId(subscription.id);
+                      if (validId) {
+                        apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' })
+                          .then(() => {
+                            queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+                            queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+                          })
+                          .catch((e: any) => {
+                            // Show error but don't reopen modal
+                            toast({ title: 'Update failed', description: e?.message || 'Failed to update subscription status', variant: 'destructive' });
+                          });
                       }
-                      // Refresh and close
+                    } else {
                       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
                       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-                      onOpenChange(false);
-                      toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
-                    } catch (e: any) {
-                      toast({ title: 'Error', description: e?.message || 'Failed to cancel subscription', variant: 'destructive' });
                     }
                   }}
                 >
