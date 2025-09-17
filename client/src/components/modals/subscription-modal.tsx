@@ -394,8 +394,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Reset status to Active for new subscriptions
       setStatus('Active');
       
-      // Reset auto renewal to false for new subscriptions
-      setAutoRenewal(false);
+      // Reset auto renewal to true for new subscriptions
+      setAutoRenewal(true);
       
       form.reset({
         serviceName: "",
@@ -1459,11 +1459,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Until Renewal' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Until Renewal</SelectItem>
                           </SelectContent>
                         </Select>
-                        {isOnlyOneTimeAllowed && (
-                          <p className="text-sm text-red-500 font-medium">
-                            When reminder days = 1, only "One time" policy is allowed
-                          </p>
-                        )}
                         <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
                           <li>One time: One reminder at {reminderDays} days before renewal</li>
                           <li>Two times: Reminders at {reminderDays ?? 7} and {Math.floor((reminderDays ?? 7)/2)} days before</li>
@@ -1583,18 +1578,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     }
                   }}
                 >
-                  Cancel Subscription
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  className="border-purple-300 text-purple-700 hover:bg-purple-50 font-medium px-4 py-2"
-                  onClick={() => {
-                    // Navigate to subscriptions page with history filter
-                    window.location.href = "/subscriptions?status=Cancelled";
-                  }}
-                >
-                  History
+                  Cancel Renewal
                 </Button>
                 <Button 
                   type="button" 
