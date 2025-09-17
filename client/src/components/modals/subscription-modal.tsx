@@ -1162,6 +1162,38 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     </FormItem>
                   )}
                 />
+
+                {/* Owner field - dropdown of employees */}
+                <FormField
+                  control={form.control}
+                  name="owner"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="block text-sm font-medium text-slate-700">Owner</FormLabel>
+                      <Select
+                        value={field.value || ''}
+                        onValueChange={field.onChange}
+                        disabled={employeesRaw.length === 0}
+                      >
+                        <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="dropdown-content">
+                          {employeesRaw.length > 0 ? (
+                            employeesRaw.map((emp: any) => (
+                              <SelectItem key={emp._id || emp.id || emp.name} value={emp.name} className="dropdown-item">
+                                {emp.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="no-owner" disabled className="dropdown-item disabled">No owners found</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 
                 {/* Dynamic Fields from Configuration - now rendered after all static fields */}
                 {dynamicFields.length > 0 && (
