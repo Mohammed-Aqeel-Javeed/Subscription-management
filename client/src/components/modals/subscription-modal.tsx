@@ -1196,7 +1196,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             <button
                               type="button"
                               className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
-                              onClick={() => window.location.href = '/company-details?tab=employees'}
+                              onClick={() => window.location.href = '/company-details?tab=employee'}
                             >
                               + New
                             </button>
