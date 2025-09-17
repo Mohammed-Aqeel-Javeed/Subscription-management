@@ -30,6 +30,7 @@ type SubscriptionModalData = Partial<Subscription> & {
   department?: string;
   owner?: string;
   paymentMethod?: string;
+  autoRenewal?: boolean;
 };
 import { z } from "zod";
 import { CreditCard, X, ChevronDown, Check, History, RefreshCw, Maximize2, Minimize2 } from "lucide-react";
@@ -141,6 +142,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Status state (Active/Cancel)
   const [status, setStatus] = useState<'Active' | 'Cancelled'>('Active');
+  
+  // Auto Renewal toggle state
+  const [autoRenewal, setAutoRenewal] = useState<boolean>(true);
   
   // Track the current subscription ObjectId for History button
   const [currentSubscriptionId, setCurrentSubscriptionId] = useState<string | undefined>();
@@ -301,6 +305,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Set status state from subscription data
       setStatus((subscription.status && subscription.status !== "" ? subscription.status : "Active") as 'Active' | 'Cancelled');
       
+      // Set auto renewal state from subscription data
+      setAutoRenewal(subscription.autoRenewal ?? true);
+      
       form.reset({
         serviceName: subscription.serviceName || "",
         vendor: subscription.vendor || "",
@@ -327,6 +334,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       // Reset status to Active for new subscriptions
       setStatus('Active');
+      
+      // Reset auto renewal to true for new subscriptions
+      setAutoRenewal(true);
       
       form.reset({
         serviceName: "",
@@ -478,6 +488,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const payload = {
         ...currentValues,
         status: status, // Add status from state
+        autoRenewal: autoRenewal, // Add auto renewal from state
         amount: amountNum,
         tenantId,
         departments: currentValues.departments || [],
@@ -506,6 +517,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const payload = {
         ...data,
         status: status, // Add status from state
+        autoRenewal: autoRenewal, // Add auto renewal from state
         amount: isNaN(amountNum) ? 0 : amountNum,
         departments: selectedDepartments,
         department: JSON.stringify(selectedDepartments),
@@ -1213,6 +1225,27 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   )}
                 />
                 
+                {/* Auto Renewal Toggle */}
+                <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg bg-slate-50">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Auto Renewal</label>
+                    <p className="text-xs text-slate-500">Automatically renew this subscription when it expires</p>
+                  </div>
+                  <button
+                    type="button"
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                      autoRenewal ? 'bg-indigo-600' : 'bg-gray-200'
+                    }`}
+                    onClick={() => setAutoRenewal(!autoRenewal)}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
+                        autoRenewal ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+                
                 {/* Dynamic Fields from Configuration - now rendered after all static fields */}
                 {dynamicFields.length > 0 && (
                   <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
@@ -1263,7 +1296,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   </div>
                 )}
               </div>
-              <h2 className="text-lg font-semibold mt-6 mb-3">Date Information</h2>
+              <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Information</h2>
               <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
                 <FormField
                   control={form.control}
@@ -1410,13 +1443,19 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-4 py-2"
                   onClick={() => onOpenChange(false)}
                 >
-                  Cancel
+                  Exit
                 </Button>
                 <Button 
                   type="button" 
                   variant="outline" 
                   className="border-red-300 text-red-700 hover:bg-red-50 font-medium px-4 py-2"
-                  onClick={() => setStatus('Cancelled')}
+                  onClick={() => {
+                    setStatus('Cancelled');
+                    // Close modal and refresh data
+                    onOpenChange(false);
+                    // Refresh subscriptions data
+                    queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+                  }}
                 >
                   Cancel Renewal
                 </Button>
