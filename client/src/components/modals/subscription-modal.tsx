@@ -139,6 +139,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Fullscreen toggle state
   const [isFullscreen, setIsFullscreen] = useState(false);
   
+  // Status state (Active/Cancel)
+  const [status, setStatus] = useState<'Active' | 'Cancelled'>('Active');
+  
   // Track the current subscription ObjectId for History button
   const [currentSubscriptionId, setCurrentSubscriptionId] = useState<string | undefined>();
 
@@ -295,6 +298,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setEndDateManuallySet(!!end);
       setSelectedDepartments(depts);
       
+      // Set status state from subscription data
+      setStatus((subscription.status && subscription.status !== "" ? subscription.status : "Active") as 'Active' | 'Cancelled');
+      
       form.reset({
         serviceName: subscription.serviceName || "",
         vendor: subscription.vendor || "",
@@ -318,6 +324,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setEndDate("");
       setEndDateManuallySet(false);
       setSelectedDepartments([]);
+      
+      // Reset status to Active for new subscriptions
+      setStatus('Active');
       
       form.reset({
         serviceName: "",
@@ -468,6 +477,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       const payload = {
         ...currentValues,
+        status: status, // Add status from state
         amount: amountNum,
         tenantId,
         departments: currentValues.departments || [],
@@ -495,6 +505,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
         ...data,
+        status: status, // Add status from state
         amount: isNaN(amountNum) ? 0 : amountNum,
         departments: selectedDepartments,
         department: JSON.stringify(selectedDepartments),
@@ -779,6 +790,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               </DialogTitle>
             </div>
             <div className="flex gap-3 items-center ml-auto mr-6">
+              {/* Active/Cancel Status Toggle Button */}
+              <Button
+                type="button"
+                className={`font-semibold px-4 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 min-w-[80px] ${
+                  status === 'Active' 
+                    ? 'bg-green-500 hover:bg-green-600 text-white' 
+                    : 'bg-red-500 hover:bg-red-600 text-white'
+                }`}
+                onClick={() => setStatus(status === 'Active' ? 'Cancelled' : 'Active')}
+              >
+                {status}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -972,27 +995,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           <SelectItem value="weekly" className="dropdown-item">Weekly</SelectItem>
                           <SelectItem value="quarterly" className="dropdown-item">Quarterly</SelectItem>
                           <SelectItem value="yearly" className="dropdown-item">Yearly</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Status</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent className="dropdown-content">
-                          <SelectItem value="Active" className={`${field.value === 'Active' ? 'selected' : ''} dropdown-item`}>Active</SelectItem>
-                          <SelectItem value="Cancelled" className={`${field.value === 'Cancelled' ? 'selected' : ''} dropdown-item`}>Cancelled</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -1409,6 +1411,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   onClick={() => onOpenChange(false)}
                 >
                   Cancel
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="border-red-300 text-red-700 hover:bg-red-50 font-medium px-4 py-2"
+                  onClick={() => setStatus('Cancelled')}
+                >
+                  Cancel Renewal
                 </Button>
                 <Button 
                   type="button" 
