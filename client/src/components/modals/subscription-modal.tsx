@@ -203,7 +203,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [status, setStatus] = useState<'Active' | 'Cancelled'>('Active');
   
   // Auto Renewal toggle state
-  const [autoRenewal, setAutoRenewal] = useState<boolean>(false); // Default OFF
+  const [autoRenewal, setAutoRenewal] = useState<boolean>(false);
   
   // Track the current subscription ObjectId for History button
   const [currentSubscriptionId, setCurrentSubscriptionId] = useState<string | undefined>();
@@ -908,54 +908,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <History className="h-4 w-4" />
                 View
               </Button>
-              {/* Cancel Subscription Button - After History */}
-              <Button
-                type="button"
-                variant="outline"
-                className={`bg-white text-red-600 hover:bg-red-50 font-semibold px-5 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 min-w-[90px] border-red-200 flex items-center gap-2 ${!isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onClick={() => {
-                  if (isEditing && subscription?.id) {
-                    // Close modal immediately for fast UX
-                    setStatus('Cancelled');
-                    onOpenChange(false);
-                    toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
-                    
-                    // Update cache immediately for instant table refresh
-                    queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
-                      if (!oldData) return oldData;
-                      return oldData.map((sub: any) => 
-                        sub.id === subscription.id ? { ...sub, status: 'Cancelled' } : sub
-                      );
-                    });
-                    
-                    // Update analytics cache immediately
-                    queryClient.setQueryData(["/api/analytics/dashboard"], (oldData: any) => {
-                      if (!oldData) return oldData;
-                      return {
-                        ...oldData,
-                        activeSubscriptions: Math.max(0, (oldData.activeSubscriptions || 0) - 1)
-                      };
-                    });
-                    
-                    // Update backend asynchronously
-                    const validId = getValidObjectId(subscription.id);
-                    if (validId) {
-                      apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' })
-                        .catch((e: any) => {
-                          // Revert cache on error and show error
-                          queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-                          queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-                          toast({ title: 'Update failed', description: e?.message || 'Failed to update subscription status', variant: 'destructive' });
-                        });
-                    }
-                  }
-                }}
-                disabled={!isEditing}
-                title={!isEditing ? "Cancel is available only for existing subscriptions" : undefined}
-              >
-                <X className="h-4 w-4" />
-                Cancel
-              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -1585,6 +1537,64 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   onClick={() => onOpenChange(false)}
                 >
                   Exit
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="border-red-300 text-red-700 hover:bg-red-50 font-medium px-4 py-2"
+                  onClick={() => {
+                    // Close modal immediately for fast UX
+                    setStatus('Cancelled');
+                    onOpenChange(false);
+                    toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
+                    
+                    // Update cache immediately for instant table refresh
+                    if (isEditing && subscription?.id) {
+                      queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
+                        if (!oldData) return oldData;
+                        return oldData.map((sub: any) => 
+                          sub.id === subscription.id ? { ...sub, status: 'Cancelled' } : sub
+                        );
+                      });
+                      
+                      // Update analytics cache immediately
+                      queryClient.setQueryData(["/api/analytics/dashboard"], (oldData: any) => {
+                        if (!oldData) return oldData;
+                        return {
+                          ...oldData,
+                          activeSubscriptions: Math.max(0, (oldData.activeSubscriptions || 0) - 1)
+                        };
+                      });
+                      
+                      // Update backend asynchronously
+                      const validId = getValidObjectId(subscription.id);
+                      if (validId) {
+                        apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' })
+                          .catch((e: any) => {
+                            // Revert cache on error and show error
+                            queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+                            queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+                            toast({ title: 'Update failed', description: e?.message || 'Failed to update subscription status', variant: 'destructive' });
+                          });
+                      }
+                    } else {
+                      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+                    }
+                  }}
+                >
+                  Cancel Subscription
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="border-purple-300 text-purple-700 hover:bg-purple-50 font-medium px-4 py-2"
+                  onClick={() => {
+                    // Navigate to subscriptions page with history filter
+                    window.location.href = "/subscriptions?status=Cancelled";
+                  }}
+                >
+                  History
                 </Button>
                 <Button 
                   type="button" 
