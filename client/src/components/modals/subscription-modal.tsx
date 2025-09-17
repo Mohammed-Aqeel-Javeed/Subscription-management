@@ -831,7 +831,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1 md:grid-cols-3'}`}>
                 {/* Static Fields */}
                 <FormField
                   control={form.control}
@@ -1172,7 +1172,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       <FormLabel className="block text-sm font-medium text-slate-700">Owner</FormLabel>
                       <Select
                         value={field.value || ''}
-                        onValueChange={field.onChange}
+                        onValueChange={(value) => {
+                          if (value === "add-new-owner") {
+                            window.location.href = "/company-details?tab=employees";
+                          } else {
+                            field.onChange(value);
+                          }
+                        }}
                         disabled={employeesRaw.length === 0}
                       >
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
@@ -1185,7 +1191,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 {emp.name}
                               </SelectItem>
                             ))
-                          ) : (
+                          ) : null}
+                          <div className="border-t">
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
+                              onClick={() => window.location.href = '/company-details?tab=employees'}
+                            >
+                              + New
+                            </button>
+                          </div>
+                          {employeesRaw.length === 0 && (
                             <SelectItem value="no-owner" disabled className="dropdown-item disabled">No owners found</SelectItem>
                           )}
                         </SelectContent>
@@ -1197,7 +1213,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 
                 {/* Dynamic Fields from Configuration - now rendered after all static fields */}
                 {dynamicFields.length > 0 && (
-                  <>
+                  <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
                     {dynamicFields.map((field) => (
                       <FormField
                         key={field.name}
@@ -1242,11 +1258,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         )}
                       />
                     ))}
-                  </>
+                  </div>
                 )}
               </div>
               <h2 className="text-lg font-semibold mt-6 mb-3">Date Information</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
                 <FormField
                   control={form.control}
                   name="startDate"
@@ -1292,7 +1308,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   )}
                 />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
                 <FormField
                   control={form.control}
                   name="reminderDays"
