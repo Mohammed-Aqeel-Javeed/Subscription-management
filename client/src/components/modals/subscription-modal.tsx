@@ -429,6 +429,22 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     },
   });
 
+  // Cancel subscription mutation
+  const cancelSubscriptionMutation = useMutation({
+    mutationFn: async () => {
+      if (!subscription?.id) return;
+      // PATCH or PUT to cancel the subscription
+      return await apiRequest("PATCH", `/api/subscriptions/${subscription.id}/cancel`, { status: "Cancelled" });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Subscription cancelled." });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+      onOpenChange(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error?.message || "Failed to cancel subscription.", variant: "destructive" });
+    }
+  });
   // Draft mutation for saving drafts
   const draftMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -1451,10 +1467,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   className="border-red-300 text-red-700 hover:bg-red-50 font-medium px-4 py-2"
                   onClick={() => {
                     setStatus('Cancelled');
-                    // Close modal and refresh data
-                    onOpenChange(false);
-                    // Refresh subscriptions data
-                    queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+                    cancelSubscriptionMutation.mutate();
                   }}
                 >
                   Cancel Renewal
