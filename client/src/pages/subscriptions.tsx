@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,8 +41,18 @@ export default function Subscriptions() {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [vendorFilter, setVendorFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Check for status parameter in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const status = urlParams.get('status');
+    if (status === 'Cancelled') {
+      setStatusFilter('Cancelled');
+    }
+  }, []);
   
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
   const { data: subscriptions, isLoading, refetch } = useQuery<SubscriptionWithExtras[]>({
@@ -211,7 +221,8 @@ export default function Subscriptions() {
                          sub.vendor.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === "all" || sub.category === categoryFilter;
     const matchesVendor = vendorFilter === "all" || sub.vendor === vendorFilter;
-    return matchesSearch && matchesCategory && matchesVendor;
+    const matchesStatus = statusFilter === "all" || sub.status === statusFilter;
+    return matchesSearch && matchesCategory && matchesVendor && matchesStatus;
   }) : [];
   
   const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.category) : []));
@@ -444,6 +455,20 @@ export default function Subscriptions() {
                       {uniqueVendors.filter(vendor => vendor && vendor !== "").map(vendor => (
                         <SelectItem key={vendor} value={vendor}>{vendor}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="w-full sm:w-48">
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="border-slate-300 bg-white text-slate-900 rounded-lg h-10 w-full">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="Active">Active</SelectItem>
+                      <SelectItem value="Cancelled">Cancelled</SelectItem>
+                      <SelectItem value="Expired">Expired</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
