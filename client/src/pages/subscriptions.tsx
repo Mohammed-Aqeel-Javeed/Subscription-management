@@ -41,6 +41,7 @@ export default function Subscriptions() {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [vendorFilter, setVendorFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -211,7 +212,8 @@ export default function Subscriptions() {
                          sub.vendor.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === "all" || sub.category === categoryFilter;
     const matchesVendor = vendorFilter === "all" || sub.vendor === vendorFilter;
-    return matchesSearch && matchesCategory && matchesVendor;
+    const matchesStatus = statusFilter === "all" || sub.status === statusFilter;
+    return matchesSearch && matchesCategory && matchesVendor && matchesStatus;
   }) : [];
   
   const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.category) : []));
@@ -391,15 +393,21 @@ export default function Subscriptions() {
                 <div className="text-white/90 text-sm">Active</div>
               </div>
             </Card>
-            <Card className="bg-gradient-to-r from-rose-500 to-rose-600 shadow-sm rounded-lg p-3 flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <XCircle className="h-6 w-6 text-white" />
+            <Button 
+              variant="outline" 
+              className="bg-white border-rose-300 text-rose-700 hover:bg-rose-50 font-medium px-4 py-8 rounded-lg shadow-sm flex items-center gap-3 h-auto"
+              onClick={() => setStatusFilter(statusFilter === "Cancelled" ? "all" : "Cancelled")}
+            >
+              <div className="p-2 bg-rose-100 rounded-lg">
+                <XCircle className="h-6 w-6 text-rose-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-white">{cancelled}</div>
-                <div className="text-white/90 text-sm">Cancelled</div>
+                <div className="text-2xl font-bold text-rose-700">{cancelled}</div>
+                <div className="text-rose-600 text-sm">
+                  {statusFilter === "Cancelled" ? "Show All" : "View Cancelled"}
+                </div>
               </div>
-            </Card>
+            </Button>
           </div>
         </div>
         
