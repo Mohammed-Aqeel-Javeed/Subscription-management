@@ -203,7 +203,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [status, setStatus] = useState<'Active' | 'Cancelled'>('Active');
   
   // Auto Renewal toggle state
-  const [autoRenewal, setAutoRenewal] = useState<boolean>(true);
+  const [autoRenewal, setAutoRenewal] = useState<boolean>(false); // Default OFF
   
   // Track the current subscription ObjectId for History button
   const [currentSubscriptionId, setCurrentSubscriptionId] = useState<string | undefined>();
@@ -394,8 +394,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Reset status to Active for new subscriptions
       setStatus('Active');
       
-      // Reset auto renewal to true for new subscriptions
-      setAutoRenewal(true);
+      // Reset auto renewal to false for new subscriptions
+      setAutoRenewal(false);
       
       form.reset({
         serviceName: "",
@@ -907,6 +907,54 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               >
                 <History className="h-4 w-4" />
                 View
+              </Button>
+              {/* Cancel Subscription Button - After History */}
+              <Button
+                type="button"
+                variant="outline"
+                className={`bg-white text-red-600 hover:bg-red-50 font-semibold px-5 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 min-w-[90px] border-red-200 flex items-center gap-2 ${!isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={() => {
+                  if (isEditing && subscription?.id) {
+                    // Close modal immediately for fast UX
+                    setStatus('Cancelled');
+                    onOpenChange(false);
+                    toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
+                    
+                    // Update cache immediately for instant table refresh
+                    queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
+                      if (!oldData) return oldData;
+                      return oldData.map((sub: any) => 
+                        sub.id === subscription.id ? { ...sub, status: 'Cancelled' } : sub
+                      );
+                    });
+                    
+                    // Update analytics cache immediately
+                    queryClient.setQueryData(["/api/analytics/dashboard"], (oldData: any) => {
+                      if (!oldData) return oldData;
+                      return {
+                        ...oldData,
+                        activeSubscriptions: Math.max(0, (oldData.activeSubscriptions || 0) - 1)
+                      };
+                    });
+                    
+                    // Update backend asynchronously
+                    const validId = getValidObjectId(subscription.id);
+                    if (validId) {
+                      apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' })
+                        .catch((e: any) => {
+                          // Revert cache on error and show error
+                          queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+                          queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+                          toast({ title: 'Update failed', description: e?.message || 'Failed to update subscription status', variant: 'destructive' });
+                        });
+                    }
+                  }
+                }}
+                disabled={!isEditing}
+                title={!isEditing ? "Cancel is available only for existing subscriptions" : undefined}
+              >
+                <X className="h-4 w-4" />
+                Cancel
               </Button>
               <Button
                 type="button"
@@ -1459,6 +1507,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Until Renewal' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Until Renewal</SelectItem>
                           </SelectContent>
                         </Select>
+                        {isOnlyOneTimeAllowed && (
+                          <p className="text-sm text-red-500 font-medium">
+                            When reminder days = 1, only "One time" policy is allowed
+                          </p>
+                        )}
+                        <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
+                          <li>One time: One reminder at {reminderDays} days before renewal</li>
+                          <li>Two times: Reminders at {reminderDays ?? 7} and {Math.floor((reminderDays ?? 7)/2)} days before</li>
+                          <li>Until Renewal: Daily reminders from {reminderDays} days until renewal</li>
+                        </ul>
                         <FormMessage />
                       </FormItem>
                     );
@@ -1527,53 +1585,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   onClick={() => onOpenChange(false)}
                 >
                   Exit
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  className="border-red-300 text-red-700 hover:bg-red-50 font-medium px-4 py-2"
-                  onClick={() => {
-                    // Close modal immediately for fast UX
-                    setStatus('Cancelled');
-                    onOpenChange(false);
-                    toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
-                    
-                    // Update cache immediately for instant table refresh
-                    if (isEditing && subscription?.id) {
-                      queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
-                        if (!oldData) return oldData;
-                        return oldData.map((sub: any) => 
-                          sub.id === subscription.id ? { ...sub, status: 'Cancelled' } : sub
-                        );
-                      });
-                      
-                      // Update analytics cache immediately
-                      queryClient.setQueryData(["/api/analytics/dashboard"], (oldData: any) => {
-                        if (!oldData) return oldData;
-                        return {
-                          ...oldData,
-                          activeSubscriptions: Math.max(0, (oldData.activeSubscriptions || 0) - 1)
-                        };
-                      });
-                      
-                      // Update backend asynchronously
-                      const validId = getValidObjectId(subscription.id);
-                      if (validId) {
-                        apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' })
-                          .catch((e: any) => {
-                            // Revert cache on error and show error
-                            queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-                            queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-                            toast({ title: 'Update failed', description: e?.message || 'Failed to update subscription status', variant: 'destructive' });
-                          });
-                      }
-                    } else {
-                      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-                      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-                    }
-                  }}
-                >
-                  Cancel Renewal
                 </Button>
                 <Button 
                   type="button" 
