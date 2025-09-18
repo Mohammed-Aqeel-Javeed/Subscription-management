@@ -200,7 +200,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Status state (Active/Cancel)
-  const [status, setStatus] = useState<'Active' | 'Cancelled'>('Active');
+  const [status, setStatus] = useState<'Active' | 'Cancelled' | 'Draft'>('Draft');
   
   // Auto Renewal toggle state
   const [autoRenewal, setAutoRenewal] = useState<boolean>(false);
@@ -546,7 +546,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       const payload = {
         ...currentValues,
-        status: status, // Add status from state
+        status: 'Draft', // Always save as draft
         autoRenewal: autoRenewal, // Add auto renewal from state
         amount: amountNum,
         tenantId,
@@ -567,6 +567,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   };
   
   const onSubmit = async (data: FormData) => {
+    setStatus('Active'); // Set status to Active when saving
     try {
       // Always include department as JSON string for backend
       // Ensure amount is a number
@@ -575,7 +576,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
         ...data,
-        status: status, // Add status from state
+        status: 'Active', // Always save as active
         autoRenewal: autoRenewal, // Add auto renewal from state
         amount: isNaN(amountNum) ? 0 : amountNum,
         departments: selectedDepartments,
@@ -1345,7 +1346,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 )}
               </div>
               <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Information</h2>
-              <div className="grid gap-4 mb-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
+              <div className="grid gap-4 mb-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                 {/* Start Date */}
                 <div className="w-full flex flex-col">
                   <FormField
@@ -1359,7 +1360,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full max-w-[140px] border-slate-300 rounded-lg p-1 text-base" 
+                            className="w-full border-slate-300 rounded-lg p-1 text-base" 
                             value={startDate || ''} 
                             onChange={e => { 
                               setStartDate(e.target.value); 
@@ -1395,7 +1396,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full sm:w-full md:w-full lg:w-full xl:w-full max-w-[140px] border-slate-300 rounded-lg p-1 text-base" 
+                            className="w-full border-slate-300 rounded-lg p-1 text-base" 
                             value={endDate || ''} 
                             onChange={e => {
                               setEndDateManuallySet(true);
@@ -1422,7 +1423,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             type="number" 
                             min="1"
                             max="365"
-                            className="w-full max-w-[80px] border-slate-300 rounded-lg p-1 text-base" 
+                            className="w-full border-slate-300 rounded-lg p-1 text-base" 
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
                           />
