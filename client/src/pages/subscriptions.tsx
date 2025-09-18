@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,8 @@ type SubscriptionWithExtras = Subscription & {
   };
 
 export default function Subscriptions() {
+  const location = useLocation();
+  const navigate = useNavigate();
   // ...existing code...
   // Removed duplicate declaration of subscriptions, isLoading, and refetch
 
@@ -41,57 +44,48 @@ export default function Subscriptions() {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [vendorFilter, setVendorFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const initialIsCancelledView = location.pathname.includes('cancelled');
+  const [statusFilter, setStatusFilter] = useState(initialIsCancelledView ? "Cancelled" : "all");
+  React.useEffect(() => {
+    if (location.pathname.includes('cancelled')) {
+      setStatusFilter('Cancelled');
+    }
+  }, [location.pathname]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
   const { data: subscriptions, isLoading, refetch } = useQuery<SubscriptionWithExtras[]>({
-  queryKey: ["/api/subscriptions", tenantId],
-  refetchOnWindowFocus: "always",
-  refetchOnReconnect: "always",
-  refetchInterval: false, // Disable auto-refresh
-  gcTime: 0,
-  staleTime: 0,
-  retry: false,
-  networkMode: "always",
-  refetchIntervalInBackground: false
-  });  // Listen for login/logout/account change events and trigger immediate refetch
+    queryKey: ["/api/subscriptions", tenantId],
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 10000, // auto refresh every 10s
+    refetchIntervalInBackground: true,
+    staleTime: 5000,
+    gcTime: 0,
+  });
+  // Listen for login/logout/account change events and trigger immediate refetch
   React.useEffect(() => {
-    function handleAccountChange() {
-      // Invalidate and refetch immediately
+    function triggerImmediateRefresh() {
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-      // Force an immediate refetch
       refetch();
     }
       // Listen for subscription-renewed event and refetch subscriptions
-      function handleSubscriptionRenewed() {
-        queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-        refetch();
-      }
+    function handleSubscriptionRenewed() { triggerImmediateRefresh(); }
 
     // Add event listeners
-    window.addEventListener('account-changed', handleAccountChange);
-    window.addEventListener('login', handleAccountChange);
-    window.addEventListener('logout', handleAccountChange);
-    window.addEventListener('subscription-created', handleAccountChange);
-    window.addEventListener('subscription-updated', handleAccountChange);
-    window.addEventListener('subscription-deleted', handleAccountChange);
-      window.addEventListener('subscription-renewed', handleSubscriptionRenewed);
+    const events = ['account-changed','login','logout','subscription-created','subscription-updated','subscription-deleted'];
+    events.forEach(ev => window.addEventListener(ev, triggerImmediateRefresh));
+    window.addEventListener('subscription-renewed', handleSubscriptionRenewed);
 
     // Trigger initial fetch
-    handleAccountChange();
+  triggerImmediateRefresh();
 
     return () => {
       // Remove event listeners
-      window.removeEventListener('account-changed', handleAccountChange);
-      window.removeEventListener('login', handleAccountChange);
-      window.removeEventListener('logout', handleAccountChange);
-      window.removeEventListener('subscription-created', handleAccountChange);
-      window.removeEventListener('subscription-updated', handleAccountChange);
-      window.removeEventListener('subscription-deleted', handleAccountChange);
-        window.removeEventListener('subscription-renewed', handleSubscriptionRenewed);
+      events.forEach(ev => window.removeEventListener(ev, triggerImmediateRefresh));
+      window.removeEventListener('subscription-renewed', handleSubscriptionRenewed);
     };
   }, [queryClient, refetch]);
   // Listen for new subscription created from modal
@@ -105,39 +99,10 @@ export default function Subscriptions() {
     return () => window.removeEventListener('subscription-created', handleCreated);
   }, []);
   // Fetch recent activities
-  const { data: recentActivitiesRaw, isLoading: isActivitiesLoading } = useQuery({
-  queryKey: ["/api/analytics/activity"],
-  });
-  
-  // Ensure recentActivities is always an array
-  const recentActivities: any[] = Array.isArray(recentActivitiesRaw) ? recentActivitiesRaw : [];
+  // (Removed unused recent activities query to improve performance)
 
   // Watch for tenantId changes and trigger refetch
-  React.useEffect(() => {
-    let lastTenantId = tenantId;
-    let lastSubscriptionCount = Array.isArray(subscriptions) ? subscriptions.length : 0;
-    
-    function checkChanges() {
-      const currentTenantId = (window as any).currentTenantId || (window as any).user?.tenantId;
-      const currentSubscriptionCount = Array.isArray(subscriptions) ? subscriptions.length : 0;
-      
-      if (currentTenantId !== lastTenantId || currentSubscriptionCount !== lastSubscriptionCount) {
-        lastTenantId = currentTenantId;
-        lastSubscriptionCount = currentSubscriptionCount;
-        // Force immediate refetch
-        queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-        refetch();
-      }
-    }
-
-  // Check for changes every 5 seconds for better performance
-  const intervalId = setInterval(checkChanges, 5000);
-    
-    // Initial check
-    checkChanges();
-
-    return () => clearInterval(intervalId);
-  }, [tenantId, refetch, subscriptions, queryClient]);
+  // Removed manual polling logic in favor of react-query interval + events
   
   const deleteMutation = useMutation({
     mutationFn: (id: string | number) => apiRequest("DELETE", `/api/subscriptions/${id}`)
@@ -219,10 +184,7 @@ export default function Subscriptions() {
   const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.category) : []));
   const uniqueVendors = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.vendor) : []));
   
-  const getCategoryColor = (category: string) => {
-    // No hardcoded categories, just default style
-    return 'bg-gray-100 text-gray-800';
-  };
+  // Category color helper removed (unused)
 
   // Helper to display department(s) from JSON string or array
   // (Removed duplicate DepartmentDisplay definition. Use the one at the top of the file.)
@@ -276,7 +238,7 @@ export default function Subscriptions() {
   // --- Summary Stats Section ---
   const total = Array.isArray(subscriptions) ? subscriptions.length : 0;
   const active = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active").length : 0;
-  const cancelled = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Cancelled").length : 0;
+  // const cancelled = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Cancelled").length : 0; // not shown currently
   
   if (isLoading) {
     return (
@@ -374,10 +336,16 @@ export default function Subscriptions() {
               <Button
                 variant="outline"
                 className="border-rose-200 text-rose-700 hover:bg-rose-50 shadow-sm"
-                onClick={() => setStatusFilter(statusFilter === "Cancelled" ? "all" : "Cancelled")}
+                onClick={() => {
+                  if (location.pathname.includes('cancelled')) {
+                    navigate('/subscriptions');
+                  } else {
+                    navigate('/subscriptions/cancelled');
+                  }
+                }}
               >
-                <XCircle className="h-5 w-5 mr-2" /> 
-                {statusFilter === "Cancelled" ? "Show All" : "Cancelled"}
+                <XCircle className="h-5 w-5 mr-2" />
+                {location.pathname.includes('cancelled') ? 'Show All' : 'Cancelled'}
               </Button>
             </div>
           </div>
@@ -506,9 +474,9 @@ export default function Subscriptions() {
                           <DepartmentDisplay departments={subscription.departments ?? []} />
                         </TableCell>
                         <TableCell className="py-3 px-4">
-                          <Badge className={getCategoryColor(subscription.category)}>
-                            {subscription.category}
-                          </Badge>
+                          <span className="inline-block bg-gray-100 text-gray-700 text-xs font-medium px-2 py-0.5 rounded-full">
+                            {subscription.category || '-'}
+                          </span>
                         </TableCell>
                         <TableCell className="text-sm text-slate-600 py-3 px-4">
                           {subscription.reminderPolicy} ({subscription.reminderDays}d)

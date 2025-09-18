@@ -8,6 +8,7 @@ import Sidebar from "@/components/layout/sidebar";
 import Dashboard from "@/pages/dashboard";
 import ComplianceLedger from "@/pages/compliance-ledger";
 import Subscriptions from "@/pages/subscriptions";
+import CancelledSubscriptionsPage from "@/pages/cancelled-subscriptions";
 import Notifications from "@/pages/notifications";
 import Configuration from "@/pages/configuration";
 import Reports from "@/pages/reports";
@@ -50,6 +51,7 @@ function AppWithSidebar() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/subscriptions" element={<Subscriptions />} />
+          <Route path="/subscriptions/cancelled" element={<CancelledSubscriptionsPage />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/configuration" element={<Configuration />} />
           <Route path="/reminders" element={<Configuration />} />
