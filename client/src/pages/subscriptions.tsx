@@ -419,6 +419,7 @@ export default function Subscriptions() {
               >
                 <Calendar className="h-5 w-5 mr-2" /> History
               </Button>
+
               <Button
                 variant="outline"
                 className="border-rose-200 text-rose-700 hover:bg-rose-50 shadow-sm"
@@ -434,25 +435,6 @@ export default function Subscriptions() {
                 {location.pathname.includes('cancelled') ? 'Show All' : 'Cancelled'}
               </Button>
             </div>
-            {/* Export/Import buttons after Active card */}
-            <div className="flex flex-row gap-2 items-center mt-4">
-              <Button
-                variant="ghost"
-                className="p-2 rounded-full text-slate-700 hover:bg-slate-100"
-                onClick={handleExport}
-                title="Export current list to CSV"
-              >
-                <Download className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                className="p-2 rounded-full text-slate-700 hover:bg-slate-100"
-                onClick={triggerImport}
-                title="Import subscriptions from CSV"
-              >
-                <Upload className="h-5 w-5" />
-              </Button>
-            </div>
           </div>
           {/* --- Summary Stats --- */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
@@ -465,13 +447,35 @@ export default function Subscriptions() {
                 <div className="text-white/90 text-sm">Total Subscriptions</div>
               </div>
             </Card>
-            <Card className="bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-sm rounded-lg p-3 flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <AlertCircle className="h-6 w-6 text-white" />
+            <Card className="bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-sm rounded-lg p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <AlertCircle className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-white">{active}</div>
+                  <div className="text-white/90 text-sm">Active</div>
+                </div>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-white">{active}</div>
-                <div className="text-white/90 text-sm">Active</div>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleExport}
+                  className="text-white hover:bg-white/20 p-2 h-8 w-8"
+                  title="Export to CSV"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={triggerImport}
+                  className="text-white hover:bg-white/20 p-2 h-8 w-8"
+                  title="Import from CSV"
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
               </div>
             </Card>
           </div>

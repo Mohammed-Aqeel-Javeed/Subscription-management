@@ -394,8 +394,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Reset status to Draft for new subscriptions
   setStatus('Draft');
       
-      // Reset auto renewal to true for new subscriptions
-      setAutoRenewal(true);
+      // Reset auto renewal to false for new subscriptions
+      setAutoRenewal(false);
       
       form.reset({
         serviceName: "",
@@ -1494,9 +1494,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           const billingCycle = form.watch("billingCycle");
                           const startDate = form.watch("startDate");
                           if (billingCycle && startDate) {
-                            const nextDate = calculateNextRenewalDate(startDate, billingCycle);
-                            if (nextDate) {
-                              form.setValue("nextRenewal", nextDate);
+                            const today = new Date();
+                            const nextRenewalDate = new Date(form.watch("nextRenewal"));
+                            
+                            // If next renewal date is today or past, update to next cycle
+                            if (nextRenewalDate <= today) {
+                              const nextDate = calculateNextRenewalDate(startDate, billingCycle);
+                              if (nextDate) {
+                                form.setValue("nextRenewal", nextDate);
+                                setEndDate(nextDate);
+                              }
                             }
                           }
                         }
