@@ -1395,7 +1395,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full max-w-[140px] border-slate-300 rounded-lg p-1 text-base" 
+                            className="w-full sm:w-full md:w-full lg:w-full xl:w-full max-w-[140px] border-slate-300 rounded-lg p-1 text-base" 
                             value={endDate || ''} 
                             onChange={e => {
                               setEndDateManuallySet(true);
