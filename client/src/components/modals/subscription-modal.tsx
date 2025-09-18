@@ -325,7 +325,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       paymentMethod: subscription?.paymentMethod || "",
       startDate: subscription?.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "",
       nextRenewal: subscription?.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "",
-      status: subscription?.status && subscription?.status !== "" ? subscription.status : "Active",
+  status: subscription?.status && subscription?.status !== "" ? subscription.status : "Draft",
       reminderDays: subscription?.reminderDays || 7,
       reminderPolicy: subscription?.reminderPolicy && subscription?.reminderPolicy !== "" ? subscription.reminderPolicy : "One time",
       notes: subscription?.notes || "",
@@ -362,7 +362,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setSelectedDepartments(depts);
       
       // Set status state from subscription data
-      setStatus((subscription.status && subscription.status !== "" ? subscription.status : "Active") as 'Active' | 'Cancelled');
+  setStatus((subscription.status && subscription.status !== "" ? subscription.status : "Active") as 'Active' | 'Cancelled' | 'Draft');
       
       // Set auto renewal state from subscription data
       setAutoRenewal(subscription.autoRenewal ?? true);
@@ -391,8 +391,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setEndDateManuallySet(false);
       setSelectedDepartments([]);
       
-      // Reset status to Active for new subscriptions
-      setStatus('Active');
+  // Reset status to Draft for new subscriptions
+  setStatus('Draft');
       
       // Reset auto renewal to true for new subscriptions
       setAutoRenewal(true);
@@ -408,7 +408,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         owner: "",
         startDate: "",
         nextRenewal: "",
-        status: "Active",
+  status: "Draft",
         reminderDays: 7,
         reminderPolicy: "One time",
         notes: "",
