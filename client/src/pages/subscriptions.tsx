@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Edit, Trash2, Search, CreditCard, AlertCircle, Calendar, XCircle } from "lucide-react";
+import { Plus, Edit, Trash2, Search, CreditCard, AlertCircle, Calendar, XCircle, Download, Upload } from "lucide-react";
+import Papa from 'papaparse';
 import SubscriptionModal from "@/components/modals/subscription-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -53,6 +54,7 @@ export default function Subscriptions() {
   }, [location.pathname]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
   const { data: subscriptions, isLoading, refetch } = useQuery<SubscriptionWithExtras[]>({
@@ -168,6 +170,90 @@ export default function Subscriptions() {
   const handleAddNew = () => {
     setEditingSubscription(undefined);
     setModalOpen(true);
+  };
+
+  // EXPORT current (filtered) subscriptions to CSV
+  const handleExport = () => {
+    if (!filteredSubscriptions.length) {
+      toast({ title: 'No data', description: 'There are no subscriptions to export', variant: 'destructive'});
+      return;
+    }
+    const rows = filteredSubscriptions.map(sub => ({
+      ServiceName: sub.serviceName,
+      Vendor: sub.vendor,
+      Amount: sub.amount,
+      BillingCycle: sub.billingCycle,
+      StartDate: sub.startDate ? new Date(sub.startDate).toISOString().split('T')[0] : '',
+      NextRenewal: sub.nextRenewal ? new Date(sub.nextRenewal).toISOString().split('T')[0] : '',
+      Status: sub.status,
+      Category: sub.category,
+      Departments: (sub.departments || []).join('|'),
+      ReminderPolicy: sub.reminderPolicy,
+      ReminderDays: sub.reminderDays,
+      Notes: sub.notes || ''
+    }));
+    const csv = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `subscriptions_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: 'Exported', description: 'Subscriptions exported to CSV' });
+  };
+
+  const triggerImport = () => fileInputRef.current?.click();
+
+  // IMPORT from CSV -> create subscriptions
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rows: any[] = results.data as any[];
+        if (!rows.length) {
+          toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive'});
+          return;
+        }
+        let success = 0; let failed = 0;
+        for (const row of rows) {
+          try {
+            const payload: any = {
+              serviceName: row.ServiceName || row.serviceName || '',
+              vendor: row.Vendor || row.vendor || '',
+              amount: parseFloat(row.Amount) || 0,
+              billingCycle: (row.BillingCycle || row.billingCycle || 'monthly').toLowerCase(),
+              startDate: row.StartDate || row.startDate || new Date().toISOString().split('T')[0],
+              nextRenewal: row.NextRenewal || row.nextRenewal || new Date().toISOString().split('T')[0],
+              status: row.Status || row.status || 'Draft',
+              category: row.Category || row.category || '',
+              department: '',
+              departments: (row.Departments || '').split('|').filter((d: string) => d),
+              reminderPolicy: row.ReminderPolicy || 'One time',
+              reminderDays: parseInt(row.ReminderDays) || 7,
+              notes: row.Notes || ''
+            };
+            // Basic validation
+            if (!payload.serviceName) { failed++; continue; }
+            await apiRequest('POST', '/api/subscriptions', payload);
+            success++;
+          } catch (err) {
+            failed++;
+          }
+        }
+        queryClient.invalidateQueries({ queryKey: ['/api/subscriptions'] });
+        toast({ title: 'Import finished', description: `Imported ${success} row(s). Failed: ${failed}` });
+        e.target.value = '';
+      },
+      error: () => {
+        toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
+      }
+    });
   };
   
   const filteredSubscriptions = Array.isArray(subscriptions) ? subscriptions.filter(sub => {
@@ -332,6 +418,22 @@ export default function Subscriptions() {
                 onClick={() => window.location.href = '/subscription-history'}
               >
                 <Calendar className="h-5 w-5 mr-2" /> History
+              </Button>
+              <Button
+                variant="outline"
+                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+                onClick={handleExport}
+                title="Export current list to CSV"
+              >
+                <Download className="h-5 w-5 mr-2" /> Export
+              </Button>
+              <Button
+                variant="outline"
+                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+                onClick={triggerImport}
+                title="Import subscriptions from CSV"
+              >
+                <Upload className="h-5 w-5 mr-2" /> Import
               </Button>
               <Button
                 variant="outline"
@@ -527,6 +629,13 @@ export default function Subscriptions() {
         open={modalOpen}
         onOpenChange={handleCloseModal}
   subscription={editingSubscription}
+      />
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        ref={fileInputRef}
+        onChange={handleImport}
+        className="hidden"
       />
     </div>
   );
