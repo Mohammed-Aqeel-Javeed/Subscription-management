@@ -421,22 +421,6 @@ export default function Subscriptions() {
               </Button>
               <Button
                 variant="outline"
-                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
-                onClick={handleExport}
-                title="Export current list to CSV"
-              >
-                <Download className="h-5 w-5 mr-2" /> Export
-              </Button>
-              <Button
-                variant="outline"
-                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
-                onClick={triggerImport}
-                title="Import subscriptions from CSV"
-              >
-                <Upload className="h-5 w-5 mr-2" /> Import
-              </Button>
-              <Button
-                variant="outline"
                 className="border-rose-200 text-rose-700 hover:bg-rose-50 shadow-sm"
                 onClick={() => {
                   if (location.pathname.includes('cancelled')) {
@@ -448,6 +432,25 @@ export default function Subscriptions() {
               >
                 <XCircle className="h-5 w-5 mr-2" />
                 {location.pathname.includes('cancelled') ? 'Show All' : 'Cancelled'}
+              </Button>
+            </div>
+            {/* Export/Import buttons after Active card */}
+            <div className="flex flex-row gap-2 items-center mt-4">
+              <Button
+                variant="ghost"
+                className="p-2 rounded-full text-slate-700 hover:bg-slate-100"
+                onClick={handleExport}
+                title="Export current list to CSV"
+              >
+                <Download className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                className="p-2 rounded-full text-slate-700 hover:bg-slate-100"
+                onClick={triggerImport}
+                title="Import subscriptions from CSV"
+              >
+                <Upload className="h-5 w-5" />
               </Button>
             </div>
           </div>
