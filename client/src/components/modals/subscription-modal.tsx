@@ -1345,7 +1345,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 )}
               </div>
               <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Information</h2>
-              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
+              <div className={`grid gap-4 mb-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6`}>
                 {/* Start Date */}
                 <FormField
                   control={form.control}
@@ -1358,7 +1358,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       <FormControl>
                         <Input 
                           type="date" 
-                          className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                          className="w-40 border-slate-300 rounded-lg p-1 text-base" 
                           value={startDate || ''} 
                           onChange={e => { 
                             setStartDate(e.target.value); 
@@ -1392,7 +1392,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       <FormControl>
                         <Input 
                           type="date" 
-                          className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                          className="w-40 border-slate-300 rounded-lg p-1 text-base" 
                           value={endDate || ''} 
                           onChange={e => {
                             setEndDateManuallySet(true);
@@ -1417,7 +1417,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           type="number" 
                           min="1"
                           max="365"
-                          className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                          className="w-24 border-slate-300 rounded-lg p-1 text-base" 
                           {...field}
                           onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
                         />
