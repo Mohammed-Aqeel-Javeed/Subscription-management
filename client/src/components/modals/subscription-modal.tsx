@@ -1345,7 +1345,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 )}
               </div>
               <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Information</h2>
-              <div className="grid gap-6 mb-6 grid-cols-1 md:grid-cols-5">
+              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
                 {/* Start Date */}
                 <FormField
                   control={form.control}
@@ -1427,8 +1427,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   )}
                 />
                 {/* Reminder Policy + Auto Renewal side by side */}
-                <div className="flex items-start gap-4">
-                  <div className="flex-1">
+                <div className={`${isFullscreen ? 'col-span-2' : 'col-span-1 md:col-span-2'} flex flex-col md:flex-row items-start gap-4`}>
+                  <div className="flex-1 w-full">
                     <FormField
                       control={form.control}
                       name="reminderPolicy"
@@ -1472,7 +1472,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       }}
                     />
                   </div>
-                  <div className="flex flex-col justify-end pt-1">
+                  <div className="flex flex-col justify-start md:justify-end md:pt-1 w-full md:w-auto">
                     <label className="text-sm font-medium text-slate-700 mb-2">Auto Renewal</label>
                     <button
                       type="button"
