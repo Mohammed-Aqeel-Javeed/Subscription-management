@@ -1489,21 +1489,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       onClick={() => {
                         const newAutoRenewal = !autoRenewal;
                         setAutoRenewal(newAutoRenewal);
-                        // Auto-update next renewal date when enabled
+                        // Auto-update next renewal date when enabled based on commitment cycle
                         if (newAutoRenewal) {
                           const billingCycle = form.watch("billingCycle");
                           const startDate = form.watch("startDate");
                           if (billingCycle && startDate) {
-                            const today = new Date();
-                            const nextRenewalDate = new Date(form.watch("nextRenewal"));
-                            
-                            // If next renewal date is today or past, update to next cycle
-                            if (nextRenewalDate <= today) {
-                              const nextDate = calculateNextRenewalDate(startDate, billingCycle);
-                              if (nextDate) {
-                                form.setValue("nextRenewal", nextDate);
-                                setEndDate(nextDate);
-                              }
+                            // Always recalculate next renewal date based on commitment cycle when auto renewal is enabled
+                            const nextDate = calculateNextRenewalDate(startDate, billingCycle);
+                            if (nextDate) {
+                              form.setValue("nextRenewal", nextDate);
+                              setEndDate(nextDate);
                             }
                           }
                         }

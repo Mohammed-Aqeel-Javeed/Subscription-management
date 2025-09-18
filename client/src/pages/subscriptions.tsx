@@ -447,37 +447,35 @@ export default function Subscriptions() {
                 <div className="text-white/90 text-sm">Total Subscriptions</div>
               </div>
             </Card>
-            <Card className="bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-sm rounded-lg p-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <AlertCircle className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-white">{active}</div>
-                  <div className="text-white/90 text-sm">Active</div>
-                </div>
+            <Card className="bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-sm rounded-lg p-3 flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg">
+                <AlertCircle className="h-6 w-6 text-white" />
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleExport}
-                  className="text-white hover:bg-white/20 p-2 h-8 w-8"
-                  title="Export to CSV"
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={triggerImport}
-                  className="text-white hover:bg-white/20 p-2 h-8 w-8"
-                  title="Import from CSV"
-                >
-                  <Upload className="h-4 w-4" />
-                </Button>
+              <div>
+                <div className="text-2xl font-bold text-white">{active}</div>
+                <div className="text-white/90 text-sm">Active</div>
               </div>
             </Card>
+            <div className="flex gap-2 items-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+                title="Export to CSV"
+              >
+                <Download className="h-4 w-4 mr-2" /> Export
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={triggerImport}
+                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+                title="Import from CSV"
+              >
+                <Upload className="h-4 w-4 mr-2" /> Import
+              </Button>
+            </div>
           </div>
         </div>
         
