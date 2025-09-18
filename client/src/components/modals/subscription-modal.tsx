@@ -1530,22 +1530,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
                 <Button 
                   type="button" 
-                  variant="outline" 
-                  className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-4 py-2"
-                  onClick={() => onOpenChange(false)}
-                >
-                  Exit
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  className="border-red-300 text-red-700 hover:bg-red-50 font-medium px-4 py-2"
+                  variant="destructive" 
+                  className="font-bold px-4 py-2 border-2 border-red-600 text-white bg-red-600 hover:bg-red-700 shadow-lg mr-auto"
                   onClick={() => {
                     // Close modal immediately for fast UX
                     setStatus('Cancelled');
                     onOpenChange(false);
                     toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
-                    
                     // Update cache immediately for instant table refresh
                     if (isEditing && subscription?.id) {
                       queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
@@ -1554,7 +1545,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           sub.id === subscription.id ? { ...sub, status: 'Cancelled' } : sub
                         );
                       });
-                      
                       // Update analytics cache immediately
                       queryClient.setQueryData(["/api/analytics/dashboard"], (oldData: any) => {
                         if (!oldData) return oldData;
@@ -1563,7 +1553,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           activeSubscriptions: Math.max(0, (oldData.activeSubscriptions || 0) - 1)
                         };
                       });
-                      
                       // Update backend asynchronously
                       const validId = getValidObjectId(subscription.id);
                       if (validId) {
@@ -1582,6 +1571,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   }}
                 >
                   Cancel Renewal
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-4 py-2"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Exit
                 </Button>
                 <Button 
                   type="button" 
