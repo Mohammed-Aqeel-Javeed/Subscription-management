@@ -6,65 +6,12 @@ interface SubscriptionField {
   enabled: boolean;
   type?: string;
 }
-
-// Helper function to calculate next renewal date based on billing cycle
-const calculateNextRenewalDate = (startDate: string, billingCycle: string): string => {
-  if (!startDate || !billingCycle) return '';
-  
-  const start = new Date(startDate);
-  const today = new Date();
-  let nextRenewal = new Date(start);
-  
-  // Calculate based on billing cycle
-  switch (billingCycle.toLowerCase()) {
-    case 'monthly':
-      // Add months until we get a future date
-      while (nextRenewal <= today) {
-        nextRenewal.setMonth(nextRenewal.getMonth() + 1);
-      }
-      break;
-    case 'quarterly':
-      // Add 3 months until we get a future date
-      while (nextRenewal <= today) {
-        nextRenewal.setMonth(nextRenewal.getMonth() + 3);
-      }
-      break;
-    case 'semi-annually':
-    case 'semi-annual':
-      // Add 6 months until we get a future date
-      while (nextRenewal <= today) {
-        nextRenewal.setMonth(nextRenewal.getMonth() + 6);
-      }
-      break;
-    case 'annually':
-    case 'yearly':
-      // Add years until we get a future date
-      while (nextRenewal <= today) {
-        nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
-      }
-      break;
-    case 'weekly':
-      // Add weeks until we get a future date
-      while (nextRenewal <= today) {
-        nextRenewal.setDate(nextRenewal.getDate() + 7);
-      }
-      break;
-    case 'daily':
-      // Add days until we get a future date
-      while (nextRenewal <= today) {
-        nextRenewal.setDate(nextRenewal.getDate() + 1);
-      }
-      break;
-    default:
-      // Default to monthly if billing cycle is not recognized
-      while (nextRenewal <= today) {
-        nextRenewal.setMonth(nextRenewal.getMonth() + 1);
-      }
-      break;
-  }
-  
-  return nextRenewal.toISOString().split('T')[0];
-};
+// NOTE: Removed previous calculateNextRenewalDate which advanced until > today.
+// New behaviour: When Auto Renewal is enabled we still derive the next renewal
+// from the selected start date + one commitment cycle (minus 1 day to represent
+// the end of the current period) so the logic is consistent no matter when the
+// start date is (even if it is in the past). This prevents the off-by-one month
+// difference users saw (e.g. 19 vs 18) when toggling Auto Renewal.
 // ...existing code...
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "../ui/button";
@@ -1035,15 +982,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <Select value={billingCycle} onValueChange={(val: string) => { 
                           setBillingCycle(val); 
                           field.onChange(val);
-                          
-                          // Auto-update next renewal date if Auto Renewal is enabled
+                          // When auto renewal is enabled, recompute next renewal as start + cycle (minus 1 day logic handled in calculateEndDate)
                           if (autoRenewal) {
-                            const startDate = form.watch("startDate");
-                            if (startDate) {
-                              const nextDate = calculateNextRenewalDate(startDate, val);
-                              if (nextDate) {
-                                form.setValue("nextRenewal", nextDate);
-                              }
+                            const s = form.watch("startDate");
+                            if (s) {
+                              const nextDate = calculateEndDate(s, val);
+                              form.setValue("nextRenewal", nextDate);
+                              setEndDate(nextDate);
                             }
                           }
                         }}>
@@ -1367,12 +1312,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               field.onChange(e);
                               // Auto-update next renewal date if Auto Renewal is enabled
                               if (autoRenewal && e.target.value) {
-                                const billingCycle = form.watch("billingCycle");
-                                if (billingCycle) {
-                                  const nextDate = calculateNextRenewalDate(e.target.value, billingCycle);
-                                  if (nextDate) {
-                                    form.setValue("nextRenewal", nextDate);
-                                  }
+                                const cycle = form.watch("billingCycle") || billingCycle;
+                                if (cycle) {
+                                  const nextDate = calculateEndDate(e.target.value, cycle);
+                                  form.setValue("nextRenewal", nextDate);
+                                  setEndDate(nextDate);
                                 }
                               }
                             }} 
@@ -1491,15 +1435,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         setAutoRenewal(newAutoRenewal);
                         // Auto-update next renewal date when enabled based on commitment cycle
                         if (newAutoRenewal) {
-                          const billingCycle = form.watch("billingCycle");
-                          const startDate = form.watch("startDate");
-                          if (billingCycle && startDate) {
-                            // Always recalculate next renewal date based on commitment cycle when auto renewal is enabled
-                            const nextDate = calculateNextRenewalDate(startDate, billingCycle);
-                            if (nextDate) {
-                              form.setValue("nextRenewal", nextDate);
-                              setEndDate(nextDate);
-                            }
+                          const cycle = form.watch("billingCycle") || billingCycle;
+                          const s = form.watch("startDate") || startDate;
+                          if (cycle && s) {
+                            const nextDate = calculateEndDate(s, cycle);
+                            form.setValue("nextRenewal", nextDate);
+                            setEndDate(nextDate);
                           }
                         }
                       }}
