@@ -221,9 +221,6 @@ export default function Subscriptions() {
           return;
         }
         let success = 0; let failed = 0;
-        // Optimistic: copy current cache
-        const current = (queryClient.getQueryData(["/api/subscriptions", tenantId]) as any[]) || [];
-        const optimistic: any[] = [...current];
         for (const row of rows) {
           try {
             const payload: any = {
@@ -243,17 +240,12 @@ export default function Subscriptions() {
             };
             // Basic validation
             if (!payload.serviceName) { failed++; continue; }
-            // Optimistic temp id
-            const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-            optimistic.push({ ...payload, id: tempId, _id: tempId, tenantId });
             await apiRequest('POST', '/api/subscriptions', payload);
             success++;
           } catch (err) {
             failed++;
           }
         }
-        // Update cache optimistically
-        queryClient.setQueryData(["/api/subscriptions", tenantId], optimistic);
         queryClient.invalidateQueries({ queryKey: ['/api/subscriptions'] });
         toast({ title: 'Import finished', description: `Imported ${success} row(s). Failed: ${failed}` });
         e.target.value = '';
@@ -411,7 +403,7 @@ export default function Subscriptions() {
                 </div>
               </div>
             </div>
-            <div className="flex flex-row gap-3 items-center">
+            <div className="flex flex-row gap-4 items-center">
               <Button
                 variant="default"
                 className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-semibold shadow-md hover:scale-105 transition-transform"
@@ -426,6 +418,22 @@ export default function Subscriptions() {
                 onClick={() => window.location.href = '/subscription-history'}
               >
                 <Calendar className="h-5 w-5 mr-2" /> History
+              </Button>
+              <Button
+                variant="outline"
+                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+                onClick={handleExport}
+                title="Export current list to CSV"
+              >
+                <Download className="h-5 w-5 mr-2" /> Export
+              </Button>
+              <Button
+                variant="outline"
+                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+                onClick={triggerImport}
+                title="Import subscriptions from CSV"
+              >
+                <Upload className="h-5 w-5 mr-2" /> Import
               </Button>
               <Button
                 variant="outline"
@@ -444,7 +452,7 @@ export default function Subscriptions() {
             </div>
           </div>
           {/* --- Summary Stats --- */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 items-stretch">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
             <Card className="bg-gradient-to-r from-indigo-500 to-indigo-600 shadow-sm rounded-lg p-3 flex items-center gap-3">
               <div className="p-2 bg-white/20 rounded-lg">
                 <CreditCard className="h-6 w-6 text-white" />
@@ -461,26 +469,6 @@ export default function Subscriptions() {
               <div>
                 <div className="text-2xl font-bold text-white">{active}</div>
                 <div className="text-white/90 text-sm">Active</div>
-              </div>
-              <div className="absolute right-2 top-2 flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 text-white hover:bg-white/20"
-                  onClick={handleExport}
-                  title="Export CSV"
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 text-white hover:bg-white/20"
-                  onClick={triggerImport}
-                  title="Import CSV"
-                >
-                  <Upload className="h-4 w-4" />
-                </Button>
               </div>
             </Card>
           </div>
