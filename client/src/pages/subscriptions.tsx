@@ -371,6 +371,14 @@ export default function Subscriptions() {
               >
                 <Calendar className="h-5 w-5 mr-2" /> History
               </Button>
+              <Button
+                variant="outline"
+                className="border-rose-200 text-rose-700 hover:bg-rose-50 shadow-sm"
+                onClick={() => setStatusFilter(statusFilter === "Cancelled" ? "all" : "Cancelled")}
+              >
+                <XCircle className="h-5 w-5 mr-2" /> 
+                {statusFilter === "Cancelled" ? "Show All" : "Cancelled"}
+              </Button>
             </div>
           </div>
           {/* --- Summary Stats --- */}
@@ -393,21 +401,6 @@ export default function Subscriptions() {
                 <div className="text-white/90 text-sm">Active</div>
               </div>
             </Card>
-            <Button 
-              variant="outline" 
-              className="bg-white border-rose-300 text-rose-700 hover:bg-rose-50 font-medium px-4 py-8 rounded-lg shadow-sm flex items-center gap-3 h-auto"
-              onClick={() => setStatusFilter(statusFilter === "Cancelled" ? "all" : "Cancelled")}
-            >
-              <div className="p-2 bg-rose-100 rounded-lg">
-                <XCircle className="h-6 w-6 text-rose-600" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-rose-700">{cancelled}</div>
-                <div className="text-rose-600 text-sm">
-                  {statusFilter === "Cancelled" ? "Show All" : "View Cancelled"}
-                </div>
-              </div>
-            </Button>
           </div>
         </div>
         
