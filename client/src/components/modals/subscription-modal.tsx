@@ -614,13 +614,91 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Handle renewal logic
   const handleRenew = async () => {
     if (!endDate || !billingCycle) {
-      toast({
-        title: "Cannot Renew",
-        description: "Please ensure both end date and billing cycle are set",
-        variant: "destructive",
-      });
-      return;
-    }
+          toast({
+            title: "Cannot Renew",
+            description: "Please ensure both end date and billing cycle are set",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        setIsRenewing(true);
+        
+        try {
+          // Always recalculate dates based on current endDate and billingCycle
+          const { newStartDate, newEndDate } = calculateRenewalDates(endDate, billingCycle);
+          
+          // Update local state
+          setStartDate(newStartDate);
+          setEndDate(newEndDate);
+          setEndDateManuallySet(true);
+          
+          // Update form values
+          form.setValue('startDate', newStartDate);
+          form.setValue('nextRenewal', newEndDate);
+          
+          // Prepare payload for API
+          const formValues = form.getValues();
+          // Always get tenantId from context or user info
+          const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
+          const payload = {
+            ...formValues,
+            startDate: newStartDate,
+            nextRenewal: newEndDate,
+            amount:
+              formValues.amount !== undefined && formValues.amount !== ""
+                ? Number(formValues.amount)
+                : undefined,
+            tenantId,
+          };
+          
+          // Save to backend
+          const subId = subscription?.id;
+          if (subId) {
+            // Ensure subId is a valid ObjectId string
+            const validSubscriptionId = typeof subId === 'string' && /^[a-f\d]{24}$/i.test(subId)
+              ? subId
+              : (subId?.toString?.() || "");
+            await apiRequest("PUT", `/api/subscriptions/${validSubscriptionId}`, payload);
+            // Insert into history table
+            await axios.post("/api/history", {
+              subscriptionId: validSubscriptionId,
+              data: payload,
+              action: "renew"
+            });
+            
+            // Invalidate queries to refresh data
+            queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+            
+            toast({
+              title: "Subscription Renewed",
+              description: `Subscription renewed from ${formatDate(newStartDate)} to ${formatDate(newEndDate)}`,
+              className: "bg-white border border-green-500 text-green-700 font-semibold shadow-lg",
+            });
+            // Notify parent/card page to update dates
+            if (typeof window !== 'undefined' && window.dispatchEvent) {
+              window.dispatchEvent(new CustomEvent('subscription-renewed', {
+                detail: {
+                  id: subId,
+                  startDate: newStartDate,
+                  nextRenewal: newEndDate
+                }
+              }));
+            }
+            // Close the modal after successful renewal
+            onOpenChange(false);
+          }
+        } catch (error) {
+          console.error("Renewal error:", error);
+          toast({
+            title: "Renewal Failed",
+            description: "Failed to renew subscription. Please try again.",
+            className: "bg-white border border-red-500 text-red-700 font-semibold shadow-lg",
+          });
+        } finally {
+          setIsRenewing(false);
+        }
     
     setIsRenewing(true);
     
