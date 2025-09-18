@@ -1424,6 +1424,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               setEndDateManuallySet(true);
                               setEndDate(e.target.value);
                               field.onChange(e);
+                              // If auto renewal is enabled and new value is today, update both start and next renewal
+                              if (autoRenewal) {
+                                const todayStr = new Date().toISOString().split('T')[0];
+                                if (e.target.value === todayStr) {
+                                  setStartDate(todayStr);
+                                  form.setValue("startDate", todayStr);
+                                  const cycle = form.watch("billingCycle") || billingCycle;
+                                  const nextDate = calculateEndDate(todayStr, cycle);
+                                  setEndDate(nextDate);
+                                  form.setValue("nextRenewal", nextDate);
+                                }
+                              }
                             }} 
                           />
                         </FormControl>
@@ -1514,8 +1526,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         // Auto-update next renewal date when enabled based on commitment cycle
                         if (newAutoRenewal) {
                           const cycle = form.watch("billingCycle") || billingCycle;
-                          const s = form.watch("startDate") || startDate;
-                          if (cycle && s) {
+                          let s = form.watch("startDate") || startDate;
+                          let n = form.watch("nextRenewal") || endDate;
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          if (n === todayStr) {
+                            s = todayStr;
+                            n = calculateEndDate(todayStr, cycle);
+                            form.setValue("startDate", s);
+                            setStartDate(s);
+                            form.setValue("nextRenewal", n);
+                            setEndDate(n);
+                          } else if (cycle && s) {
                             const nextDate = calculateEndDate(s, cycle);
                             form.setValue("nextRenewal", nextDate);
                             setEndDate(nextDate);
