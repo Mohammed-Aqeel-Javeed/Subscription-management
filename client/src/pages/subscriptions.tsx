@@ -456,12 +456,12 @@ export default function Subscriptions() {
                 <div className="text-white/90 text-sm">Active</div>
               </div>
             </Card>
-            <div className="flex gap-2 items-center">
+            <div className="flex flex-row items-center justify-start md:justify-end gap-6 px-2 py-1 bg-white rounded-lg shadow-sm border border-slate-100">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleExport}
-                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm min-w-[110px]"
                 title="Export to CSV"
               >
                 <Download className="h-4 w-4 mr-2" /> Export
@@ -470,7 +470,7 @@ export default function Subscriptions() {
                 variant="outline"
                 size="sm"
                 onClick={triggerImport}
-                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm min-w-[110px]"
                 title="Import from CSV"
               >
                 <Upload className="h-4 w-4 mr-2" /> Import
