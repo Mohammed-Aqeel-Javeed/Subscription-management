@@ -1345,87 +1345,93 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 )}
               </div>
               <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Information</h2>
-              <div className={`grid gap-4 mb-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6`}>
+              <div className="grid gap-4 mb-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
                 {/* Start Date */}
-                <FormField
-                  control={form.control}
-                  name="startDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">
-                        Start Date <span className="text-red-500">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="date" 
-                          className="w-40 border-slate-300 rounded-lg p-1 text-base" 
-                          value={startDate || ''} 
-                          onChange={e => { 
-                            setStartDate(e.target.value); 
-                            field.onChange(e);
-                            // Auto-update next renewal date if Auto Renewal is enabled
-                            if (autoRenewal && e.target.value) {
-                              const billingCycle = form.watch("billingCycle");
-                              if (billingCycle) {
-                                const nextDate = calculateNextRenewalDate(e.target.value, billingCycle);
-                                if (nextDate) {
-                                  form.setValue("nextRenewal", nextDate);
+                <div className="w-full flex flex-col">
+                  <FormField
+                    control={form.control}
+                    name="startDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="block text-sm font-medium text-slate-700">
+                          Start Date <span className="text-red-500">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="date" 
+                            className="w-full max-w-[140px] border-slate-300 rounded-lg p-1 text-base" 
+                            value={startDate || ''} 
+                            onChange={e => { 
+                              setStartDate(e.target.value); 
+                              field.onChange(e);
+                              // Auto-update next renewal date if Auto Renewal is enabled
+                              if (autoRenewal && e.target.value) {
+                                const billingCycle = form.watch("billingCycle");
+                                if (billingCycle) {
+                                  const nextDate = calculateNextRenewalDate(e.target.value, billingCycle);
+                                  if (nextDate) {
+                                    form.setValue("nextRenewal", nextDate);
+                                  }
                                 }
                               }
-                            }
-                          }} 
-                        />
-                      </FormControl>
-                      <FormMessage className="text-red-500" />
-                    </FormItem>
-                  )}
-                />
+                            }} 
+                          />
+                        </FormControl>
+                        <FormMessage className="text-red-500" />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 {/* Next Renewal Date */}
-                <FormField
-                  control={form.control}
-                  name="nextRenewal"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">
-                        Next Renewal Date <span className="text-red-500">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="date" 
-                          className="w-40 border-slate-300 rounded-lg p-1 text-base" 
-                          value={endDate || ''} 
-                          onChange={e => {
-                            setEndDateManuallySet(true);
-                            setEndDate(e.target.value);
-                            field.onChange(e);
-                          }} 
-                        />
-                      </FormControl>
-                      <FormMessage className="text-red-500" />
-                    </FormItem>
-                  )}
-                />
+                <div className="w-full flex flex-col">
+                  <FormField
+                    control={form.control}
+                    name="nextRenewal"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="block text-sm font-medium text-slate-700">
+                          Next Renewal Date <span className="text-red-500">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="date" 
+                            className="w-full max-w-[140px] border-slate-300 rounded-lg p-1 text-base" 
+                            value={endDate || ''} 
+                            onChange={e => {
+                              setEndDateManuallySet(true);
+                              setEndDate(e.target.value);
+                              field.onChange(e);
+                            }} 
+                          />
+                        </FormControl>
+                        <FormMessage className="text-red-500" />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 {/* Reminder Days */}
-                <FormField
-                  control={form.control}
-                  name="reminderDays"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Reminder Days</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          min="1"
-                          max="365"
-                          className="w-24 border-slate-300 rounded-lg p-1 text-base" 
-                          {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="w-full flex flex-col">
+                  <FormField
+                    control={form.control}
+                    name="reminderDays"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Reminder Days</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            min="1"
+                            max="365"
+                            className="w-full max-w-[80px] border-slate-300 rounded-lg p-1 text-base" 
+                            {...field}
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 {/* Reminder Policy + Auto Renewal side by side */}
                 <div className={`${isFullscreen ? 'col-span-2' : 'col-span-1 md:col-span-2'} flex flex-col md:flex-row items-start gap-4`}>
                   <div className="flex-1 w-full">
