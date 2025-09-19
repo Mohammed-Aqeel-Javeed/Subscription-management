@@ -589,7 +589,8 @@ export default function Compliance() {
             </div>
           </DialogHeader>
           <form className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* General Information Grid - expands to more columns in fullscreen */}
+            <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1 md:grid-cols-2'}`}>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Filing Name</label>
                 <Input 
@@ -654,7 +655,7 @@ export default function Compliance() {
               
               {/* Dynamic Compliance Fields - Now placed after default fields */}
               {isLoadingComplianceFields ? (
-                <div className="col-span-2 text-center text-slate-500">Loading compliance fields...</div>
+                <div className="col-span-full text-center text-slate-500">Loading compliance fields...</div>
               ) : (
                 complianceFields.filter(f => f.enabled).map(field => (
                   <div className="space-y-2" key={field._id || field.name}>
@@ -676,7 +677,8 @@ export default function Compliance() {
             </div>
             
             <h2 className="text-lg font-semibold mt-6 mb-3">Date Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Date Information Grid - more columns in fullscreen so all date fields fit one row */}
+            <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1 md:grid-cols-2'}`}>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Start Date</label>
                 <Input 
@@ -718,7 +720,8 @@ export default function Compliance() {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+            {/* Submission Status & Submit By Grid */}
+            <div className={`grid gap-4 mt-6 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submission Status</label>
                 <Select value={form.filingSubmissionStatus} onValueChange={(val: string) => handleFormChange("filingSubmissionStatus", val)}>
@@ -754,7 +757,8 @@ export default function Compliance() {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+            {/* Reminder Settings Grid */}
+            <div className={`grid gap-4 mt-6 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Reminder Days</label>
                 <Input 
