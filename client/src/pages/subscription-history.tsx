@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "../components/ui/card";
@@ -48,16 +48,11 @@ function formatDate(date: string | Date) {
 export default function SubscriptionHistory() {
   // Get serviceName from query params if present
   const location = useLocation();
-  const navigate = useNavigate();
   // More robust extraction of id from URL
-  let idParam: string | null = null;
-  let showAll = false;
+  let idParam = null;
   try {
     const urlParams = new URLSearchParams(location.search || "");
-    // Accept both ?id= and ?subscriptionId=
-    idParam = urlParams.get("id") || urlParams.get("subscriptionId");
-    // Check if we should show all history
-    showAll = urlParams.get("list") === "all";
+    idParam = urlParams.get("id");
   } catch (e) {
     idParam = null;
   }
@@ -85,29 +80,37 @@ export default function SubscriptionHistory() {
     };
   }, [queryClient]);
 
-  const { data, isLoading, error, refetch } = useQuery<HistoryRecord[]>({
+  const { data, isLoading, error } = useQuery<HistoryRecord[]>({
     queryKey: ["history", idParam],
     queryFn: async () => {
-      const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId;
-      if (!tenantId) {
-        // Without tenant we can't fetch – return empty array but not error so UI can show message
+      // Build URL based on whether we're looking at specific subscription or all
+      const url = idParam ? `/api/history/${idParam}` : "/api/history/list";
+
+      console.log(`Fetching history data from: ${url}`);
+
+      const res = await fetch(url, {
+        headers: {
+          "Cache-Control": "no-cache"
+        }
+      });
+
+      if (!res.ok) {
+        console.error(`API returned status: ${res.status}`);
+        const errorText = await res.text();
+        console.error(`Error details: ${errorText}`);
+        throw new Error(`API error: ${res.status}`);
+      }
+
+      const result = await res.json();
+      if (!Array.isArray(result)) {
+        console.error('Unexpected API response format:', result);
         return [];
       }
-      const url = (idParam && !showAll) ? `/api/history/${idParam}` : "/api/history/list";
-      try {
-        const res = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`History fetch failed ${res.status}: ${text}`);
-        }
-        const result = await res.json();
-        return Array.isArray(result) ? result : [];
-      } catch (err) {
-        console.error('[History] fetch error', err);
-        throw err;
-      }
+
+      console.log(`Received ${result.length} history records from API`);
+      return result;
     },
-    retry: 1,
+    retry: 1,  // Retry once if request fails
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -266,21 +269,6 @@ export default function SubscriptionHistory() {
                   </div>
                   <p className="text-rose-500 font-medium text-lg">Failed to load history</p>
                   <p className="text-slate-500 mt-2">Please try again later</p>
-                  <Button variant="outline" className="mt-4" onClick={() => refetch()}>Retry</Button>
-                </div>
-              ) : (!idParam && !showAll && filteredHistory.length === 0) ? (
-                <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-                  <div className="bg-slate-100 rounded-full p-5 mb-5">
-                    <AlertCircle className="w-12 h-12 text-slate-400" />
-                  </div>
-                  <h3 className="text-xl font-medium text-slate-800 mb-2">No subscription selected</h3>
-                  <p className="text-slate-600 max-w-md">
-                    Open a subscription and click the History button to view its change log, or browse all history records.
-                  </p>
-                  <div className="flex gap-3 mt-6">
-                    <Button variant="outline" onClick={() => navigate('/subscriptions')} className="border-indigo-300 text-indigo-700">Go to Subscriptions</Button>
-                    <Button variant="outline" onClick={() => { window.location.href = '/subscription-history?list=all'; }} className="border-slate-300">Show All History</Button>
-                  </div>
                 </div>
               ) : filteredHistory.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20">
