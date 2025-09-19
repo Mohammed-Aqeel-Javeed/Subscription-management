@@ -881,9 +881,14 @@ export default function Compliance() {
                           idx === editIndex ? { ...item, ...saveData } : item
                         ) : []
                       );
+                      complianceId = itemToEdit._id; // ensure we have id for ledger
                     }
                   } else {
-                    await addMutation.mutateAsync(saveData);
+                    // Capture returned new compliance to get its _id for ledger linkage
+                    const newItem: any = await addMutation.mutateAsync(saveData);
+                    if (newItem && (newItem._id || newItem.id)) {
+                      complianceId = newItem._id || newItem.id;
+                    }
                   }
                   if (isCompleted && hasSubmissionDate) {
                     try {
