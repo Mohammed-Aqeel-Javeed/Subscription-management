@@ -51,10 +51,13 @@ export default function SubscriptionHistory() {
   const navigate = useNavigate();
   // More robust extraction of id from URL
   let idParam: string | null = null;
+  let showAll = false;
   try {
     const urlParams = new URLSearchParams(location.search || "");
     // Accept both ?id= and ?subscriptionId=
     idParam = urlParams.get("id") || urlParams.get("subscriptionId");
+    // Check if we should show all history
+    showAll = urlParams.get("list") === "all";
   } catch (e) {
     idParam = null;
   }
@@ -90,7 +93,7 @@ export default function SubscriptionHistory() {
         // Without tenant we can't fetch – return empty array but not error so UI can show message
         return [];
       }
-      const url = idParam ? `/api/history/${idParam}` : "/api/history/list";
+      const url = (idParam && !showAll) ? `/api/history/${idParam}` : "/api/history/list";
       try {
         const res = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
         if (!res.ok) {
@@ -265,7 +268,7 @@ export default function SubscriptionHistory() {
                   <p className="text-slate-500 mt-2">Please try again later</p>
                   <Button variant="outline" className="mt-4" onClick={() => refetch()}>Retry</Button>
                 </div>
-              ) : (!idParam && filteredHistory.length === 0) ? (
+              ) : (!idParam && !showAll && filteredHistory.length === 0) ? (
                 <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
                   <div className="bg-slate-100 rounded-full p-5 mb-5">
                     <AlertCircle className="w-12 h-12 text-slate-400" />
