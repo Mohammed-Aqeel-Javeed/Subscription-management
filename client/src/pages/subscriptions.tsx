@@ -415,7 +415,7 @@ export default function Subscriptions() {
               <Button
                 variant="outline"
                 className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-sm"
-                onClick={() => window.location.href = '/subscription-history?list=all'}
+                onClick={() => window.location.href = '/subscription-history'}
               >
                 <Calendar className="h-5 w-5 mr-2" /> History
               </Button>
