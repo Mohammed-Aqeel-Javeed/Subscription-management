@@ -562,14 +562,15 @@ export default function Compliance() {
                 {editIndex !== null ? "Edit Compliance" : "Add New Compliance"}
               </DialogTitle>
               <div className="flex items-center gap-2">
-                <button
+                <Button
                   type="button"
-                  className="text-white hover:bg-white/10 p-2 rounded-lg transition-colors"
+                  variant="outline"
                   title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
                   onClick={() => setIsFullscreen(f => !f)}
+                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-3 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
                 >
                   {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-                </button>
+                </Button>
                 {editIndex !== null && complianceItems[editIndex]?._id && (
                   <Button
                     type="button"
