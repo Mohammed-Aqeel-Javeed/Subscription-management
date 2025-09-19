@@ -89,6 +89,7 @@ export default function SubscriptionHistory() {
       console.log(`Fetching history data from: ${url}`);
 
       const res = await fetch(url, {
+        credentials: "include",
         headers: {
           "Cache-Control": "no-cache"
         }
