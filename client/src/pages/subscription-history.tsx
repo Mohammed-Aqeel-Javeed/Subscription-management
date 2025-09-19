@@ -11,15 +11,9 @@ import {
   Loader2, 
   AlertCircle, 
   Search, 
-  Download, 
-  Calendar,
-  X,
-  FileText,
-  BarChart3,
-  CheckCircle,
-  Clock
+  Download
 } from "lucide-react";
-import { format, subMonths } from "date-fns";
+import { format } from "date-fns";
 
 interface HistoryData {
   serviceName: string;
@@ -56,7 +50,6 @@ export default function SubscriptionHistory() {
   } catch (e) {
     idParam = null;
   }
-  const serviceNameParam = null; // Not used
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredHistory, setFilteredHistory] = useState<HistoryRecord[]>([]);
   const queryClient = useQueryClient();
@@ -119,6 +112,8 @@ export default function SubscriptionHistory() {
   });
 
   const history: HistoryRecord[] = Array.isArray(data) ? data : [];
+  // Fallback dataset used for rendering (avoid empty screen when filter state not yet applied)
+  const displayHistory = filteredHistory.length > 0 ? filteredHistory : (searchTerm ? [] : history);
 
   // Filter based on search term only - the API already filters by subscriptionId
   useEffect(() => {
@@ -253,6 +248,17 @@ export default function SubscriptionHistory() {
         >
           <Card className="shadow-xl border border-slate-100 rounded-2xl bg-white overflow-hidden">
             <CardContent className="p-0">
+              {/* Summary bar showing counts (helps debug empty table) */}
+              {!isLoading && !error && (
+                <div className="flex items-center justify-between px-6 py-3 bg-gradient-to-r from-indigo-50 to-cyan-50 border-b border-slate-100 text-xs md:text-sm text-slate-600">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span><span className="font-semibold text-indigo-600">Total:</span> {history.length}</span>
+                    <span><span className="font-semibold text-indigo-600">Visible:</span> {displayHistory.length}</span>
+                    {idParam && <span><span className="font-semibold text-indigo-600">Subscription ID:</span> <code className="bg-white border border-slate-200 px-1 rounded text-[10px] md:text-[11px]">{idParam}</code></span>}
+                  </div>
+                  {searchTerm && <div className="italic text-slate-500 truncate max-w-[40%]">Filter: "{searchTerm}"</div>}
+                </div>
+              )}
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20">
                   <motion.div
@@ -271,7 +277,7 @@ export default function SubscriptionHistory() {
                   <p className="text-rose-500 font-medium text-lg">Failed to load history</p>
                   <p className="text-slate-500 mt-2">Please try again later</p>
                 </div>
-              ) : filteredHistory.length === 0 ? (
+              ) : displayHistory.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20">
                   <div className="bg-slate-100 rounded-full p-5 mb-5">
                     <AlertCircle className="w-12 h-12 text-slate-400" />
@@ -285,8 +291,7 @@ export default function SubscriptionHistory() {
                   <p className="text-slate-600 max-w-md text-center">
                     {searchTerm 
                       ? "Try adjusting your search terms" 
-                      : "No changes have been made to subscriptions yet"
-                    }
+                      : history.length > 0 ? "Records loaded but none visible — check filters." : "No changes have been made to subscriptions yet"}
                   </p>
                   {searchTerm && (
                     <Button 
@@ -319,7 +324,7 @@ export default function SubscriptionHistory() {
                     </TableHeader>
                     <TableBody className="divide-y divide-slate-100">
                       <AnimatePresence>
-                        {filteredHistory.map((item, index) => {
+                        {displayHistory.map((item, index) => {
                           const record = item.data || item.updatedFields || {};
                           return (
                             <motion.tr 
