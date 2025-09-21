@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "../components/ui/card";
+import { API_BASE_URL } from "@/lib/config";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -84,13 +85,16 @@ export default function SubscriptionHistory() {
     queryKey: ["history", idParam],
     queryFn: async () => {
       // Build URL based on whether we're looking at specific subscription or all
-      const url = idParam ? `/api/history/${idParam}` : "/api/history/list";
+      const url = idParam ? `${API_BASE_URL}/api/history/${idParam}` : `${API_BASE_URL}/api/history/list`;
 
       console.log(`Fetching history data from: ${url}`);
 
       const res = await fetch(url, {
+        method: "GET",
+        credentials: "include",
         headers: {
-          "Cache-Control": "no-cache"
+          "Cache-Control": "no-cache",
+          "Content-Type": "application/json"
         }
       });
 
@@ -98,6 +102,14 @@ export default function SubscriptionHistory() {
         console.error(`API returned status: ${res.status}`);
         const errorText = await res.text();
         console.error(`Error details: ${errorText}`);
+        
+        // Handle 401 specifically for better user experience
+        if (res.status === 401) {
+          // Redirect to login or show auth error
+          window.location.href = '/login';
+          return [];
+        }
+        
         throw new Error(`API error: ${res.status}`);
       }
 
@@ -269,6 +281,28 @@ export default function SubscriptionHistory() {
                   </div>
                   <p className="text-rose-500 font-medium text-lg">Failed to load history</p>
                   <p className="text-slate-500 mt-2">Please try again later</p>
+                  <Button 
+                    variant="outline" 
+                    className="mt-4 border-rose-300 text-rose-700 hover:bg-rose-50"
+                    onClick={() => window.location.reload()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : history.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <div className="bg-slate-100 rounded-full p-5 mb-5">
+                    <AlertCircle className="w-12 h-12 text-slate-400" />
+                  </div>
+                  <h3 className="text-xl font-medium text-slate-800 mb-2">
+                    No history records found
+                  </h3>
+                  <p className="text-slate-600 max-w-md text-center">
+                    {idParam 
+                      ? "No changes have been made to this subscription yet" 
+                      : "No subscription changes have been recorded yet"
+                    }
+                  </p>
                 </div>
               ) : filteredHistory.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20">
@@ -278,13 +312,13 @@ export default function SubscriptionHistory() {
                   <h3 className="text-xl font-medium text-slate-800 mb-2">
                     {searchTerm 
                       ? "No matching records found" 
-                      : "No history records"
+                      : "No filtered records"
                     }
                   </h3>
                   <p className="text-slate-600 max-w-md text-center">
                     {searchTerm 
                       ? "Try adjusting your search terms" 
-                      : "No changes have been made to subscriptions yet"
+                      : `${history.length} total records loaded but none match current filters`
                     }
                   </p>
                   {searchTerm && (
@@ -295,6 +329,11 @@ export default function SubscriptionHistory() {
                     >
                       Clear Search
                     </Button>
+                  )}
+                  {!searchTerm && history.length > 0 && (
+                    <Badge variant="secondary" className="mt-4">
+                      {history.length} records available
+                    </Badge>
                   )}
                 </div>
               ) : (

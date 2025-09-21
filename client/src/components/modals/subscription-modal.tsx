@@ -661,10 +661,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               : (subId?.toString?.() || "");
             await apiRequest("PUT", `/api/subscriptions/${validSubscriptionId}`, payload);
             // Insert into history table
-            await axios.post("/api/history", {
+            await axios.post(`${API_BASE_URL}/api/history`, {
               subscriptionId: validSubscriptionId,
               data: payload,
               action: "renew"
+            }, {
+              withCredentials: true,
+              headers: {
+                'Content-Type': 'application/json'
+              }
             });
             
             // Invalidate queries to refresh data
@@ -739,10 +744,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           : (subId?.toString?.() || "");
         await apiRequest("PUT", `/api/subscriptions/${validSubscriptionId}`, payload);
         // Insert into history table
-        await axios.post("/api/history", {
+        await axios.post(`${API_BASE_URL}/api/history`, {
           subscriptionId: validSubscriptionId,
           data: payload,
           action: "renew"
+        }, {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json'
+          }
         });
         
         // Invalidate queries to refresh data
