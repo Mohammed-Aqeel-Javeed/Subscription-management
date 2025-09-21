@@ -85,9 +85,14 @@ export default function SubscriptionHistory() {
     queryKey: ["history", idParam],
     queryFn: async () => {
       // Build URL based on whether we're looking at specific subscription or all
-      const url = idParam ? `${API_BASE_URL}/api/history/${idParam}` : `${API_BASE_URL}/api/history/list`;
+      const endpoint = idParam ? `/api/history/${idParam}` : `/api/history/list`;
+      const url = `${API_BASE_URL}${endpoint}`;
 
       console.log(`Fetching history data from: ${url}`);
+      console.log(`API_BASE_URL: "${API_BASE_URL}"`);
+      console.log(`endpoint: "${endpoint}"`);
+      console.log(`idParam: ${idParam}`);
+      console.log(`Current window.location:`, window.location.href);
 
       const res = await fetch(url, {
         method: "GET",
@@ -98,6 +103,9 @@ export default function SubscriptionHistory() {
         }
       });
 
+      console.log(`Response status: ${res.status}`);
+      console.log(`Response headers:`, Object.fromEntries(res.headers.entries()));
+
       if (!res.ok) {
         console.error(`API returned status: ${res.status}`);
         const errorText = await res.text();
@@ -105,24 +113,32 @@ export default function SubscriptionHistory() {
         
         // Handle 401 specifically for better user experience
         if (res.status === 401) {
-          // Redirect to login or show auth error
-          window.location.href = '/login';
-          return [];
+          console.log('Authentication required, redirecting to login');
+          // Don't redirect immediately, show error instead
+          throw new Error('Authentication required');
         }
         
-        throw new Error(`API error: ${res.status}`);
+        throw new Error(`API error: ${res.status} - ${errorText}`);
       }
 
       const result = await res.json();
+      console.log(`Raw API response:`, result);
+      console.log(`Response type:`, typeof result);
+      console.log(`Is array:`, Array.isArray(result));
+      
       if (!Array.isArray(result)) {
         console.error('Unexpected API response format:', result);
         return [];
       }
 
       console.log(`Received ${result.length} history records from API`);
+      console.log(`First few records:`, result.slice(0, 3));
       return result;
     },
-    retry: 1,  // Retry once if request fails
+    retry: (failureCount, error) => {
+      console.log(`Query retry attempt ${failureCount}, error:`, error);
+      return failureCount < 2; // Retry up to 2 times
+    },
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -130,6 +146,15 @@ export default function SubscriptionHistory() {
   });
 
   const history: HistoryRecord[] = Array.isArray(data) ? data : [];
+
+  // Debug logging for query state
+  React.useEffect(() => {
+    console.log('Query state changed:');
+    console.log('  isLoading:', isLoading);
+    console.log('  error:', error);
+    console.log('  data length:', data?.length || 0);
+    console.log('  history length:', history.length);
+  }, [isLoading, error, data, history.length]);
 
   // Filter based on search term only - the API already filters by subscriptionId
   useEffect(() => {
@@ -262,6 +287,26 @@ export default function SubscriptionHistory() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.5 }}
         >
+          {/* Debug Info - Temporarily enabled for troubleshooting */}
+          {(process.env.NODE_ENV === 'development' || window.location.hostname.includes('render.com')) && (
+            <Card className="mb-4 bg-yellow-50 border-yellow-200">
+              <CardContent className="p-4">
+                <h3 className="font-bold text-yellow-800 mb-2">Debug Info:</h3>
+                <div className="text-sm text-yellow-700 space-y-1">
+                  <div>API_BASE_URL: "{API_BASE_URL || '(empty)'}"</div>
+                  <div>idParam: {idParam || '(none)'}</div>
+                  <div>isLoading: {isLoading.toString()}</div>
+                  <div>error: {error?.message || '(none)'}</div>
+                  <div>data length: {data?.length || 0}</div>
+                  <div>history length: {history.length}</div>
+                  <div>filteredHistory length: {filteredHistory.length}</div>
+                  <div>searchTerm: "{searchTerm || '(empty)'}"</div>
+                  <div>window.location: {window.location.href}</div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
           <Card className="shadow-xl border border-slate-100 rounded-2xl bg-white overflow-hidden">
             <CardContent className="p-0">
               {isLoading ? (
