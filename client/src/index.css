@@ -79,9 +79,11 @@
   .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: #d1d5db #f9fafb;
+    overflow-y: scroll !important;
   }
   .custom-scrollbar::-webkit-scrollbar {
     width: 14px;
+    display: block !important;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: #f9fafb;
@@ -99,5 +101,8 @@
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:active {
     background: #6b7280;
+  }
+  .custom-scrollbar::-webkit-scrollbar-corner {
+    background: #f9fafb;
   }
 }
