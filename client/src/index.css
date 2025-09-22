@@ -75,24 +75,29 @@
   .nav-item.active:hover {
     @apply bg-blue-600;
   }
-  /* Reusable thin scrollbar */
+  /* Reusable drag-style scrollbar */
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #6366f1 #f1f5f9;
+    scrollbar-color: #d1d5db #f9fafb;
   }
   .custom-scrollbar::-webkit-scrollbar {
-    width: 12px;
+    width: 14px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 6px;
+    background: #f9fafb;
+    border-radius: 7px;
+    border: 1px solid #e5e7eb;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #6366f1;
-    border-radius: 6px;
-    border: 2px solid #f1f5f9;
+    background: #d1d5db;
+    border-radius: 7px;
+    border: 2px solid #f9fafb;
+    min-height: 40px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #4f46e5;
+    background: #9ca3af;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:active {
+    background: #6b7280;
   }
 }
