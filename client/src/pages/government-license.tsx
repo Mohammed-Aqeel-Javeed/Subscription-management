@@ -553,7 +553,7 @@ export default function GovernmentLicense() {
             </DialogHeader>
             
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className={`px-6 pb-6 ${isFullscreen ? 'pt-2' : 'pt-3'}`}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className={`px-6 pb-6 ${isFullscreen ? 'pt-1' : 'pt-2'}`}>
                 <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-5 lg:grid-cols-6' : 'grid-cols-1 md:grid-cols-3'}`}>
                   {/* License Name */}
                   <FormField
