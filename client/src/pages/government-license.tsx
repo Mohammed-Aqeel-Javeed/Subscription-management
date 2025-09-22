@@ -5,7 +5,7 @@ import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -19,7 +19,7 @@ import {
 import { useToast } from "../hooks/use-toast";
 import { API_BASE_URL } from "@/lib/config";
 
-// Predefined Issuing Authorities (can later move to config or API)
+// Predefined Issuing Authorities (ordered to match provided screenshot)
 const ISSUING_AUTHORITIES = [
   "Government Electronic Business (GeBIZ)",
   "Ministry of Manpower (MOM) Employment Pass (EP) Online",
@@ -30,17 +30,6 @@ const ISSUING_AUTHORITIES = [
   "Singapore Police Force (SPF)",
   "Building and Construction Authority (BCA)",
   "Singapore Food Agency (SFA)",
-  "Urban Redevelopment Authority (URA)",
-  "Land Transport Authority (LTA)",
-  "Ministry of Health (MOH)",
-  "Infocomm Media Development Authority (IMDA)",
-  "Monetary Authority of Singapore (MAS)",
-  "Central Provident Fund Board (CPF)",
-  "Housing & Development Board (HDB)",
-  "Public Utilities Board (PUB)",
-  "Singapore Tourism Board (STB)",
-  "Singapore Customs",
-  "Immigration & Checkpoints Authority (ICA)",
 ];
 
 // License interface
@@ -615,13 +604,16 @@ export default function GovernmentLicense() {
                                 <SelectValue placeholder="Select issuing authority" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent className="bg-white border border-slate-200 rounded-md shadow-lg max-h-[200px] overflow-hidden">
-                              <div className="max-h-[180px] overflow-y-auto custom-scrollbar p-1">
-                                {ISSUING_AUTHORITIES.map(name => (
-                                  <SelectItem key={name} value={name} className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
-                                    {name}
-                                  </SelectItem>
-                                ))}
+                            <SelectContent className="bg-white border border-slate-200 rounded-md shadow-lg max-h-[260px] overflow-hidden">
+                              <div className="max-h-[240px] overflow-y-auto custom-scrollbar p-1">
+                                <SelectGroup>
+                                  <SelectLabel className="text-xs font-semibold tracking-wide text-slate-500 px-2 py-1 uppercase">Portal / System</SelectLabel>
+                                  {ISSUING_AUTHORITIES.map(name => (
+                                    <SelectItem key={name} value={name} className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
+                                      <span className="border-b border-dotted border-slate-300 pb-0.5 leading-snug inline-block w-full">{name}</span>
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
                                 {!valueInList && field.value && (
                                   <SelectItem value={field.value} className="pl-8 pr-3 py-2 text-sm italic text-slate-600 bg-amber-50">
                                     {field.value} (custom)
