@@ -604,7 +604,12 @@ export default function GovernmentLicense() {
                                 <SelectValue placeholder="Select issuing authority" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent hideScrollButtons thinScrollbar className="bg-white border border-slate-200 rounded-md shadow-lg h-40 overflow-y-scroll custom-scrollbar">
+                            <SelectContent 
+                              hideScrollButtons 
+                              thinScrollbar 
+                              className="bg-white border border-slate-200 rounded-md shadow-lg overflow-hidden"
+                              style={{ height: '160px', maxHeight: '160px' }}
+                            >
                               {ISSUING_AUTHORITIES.map(name => (
                                 <SelectItem key={name} value={name} className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
                                   {name}
