@@ -8,13 +8,13 @@ import { Textarea } from "../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Dialog, DialogContent } from "../components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { 
-  Plus, Edit, Trash2, Shield, Search, Download, Calendar, Building2, Users, Phone, Mail, AlertCircle, CheckCircle, Clock, RefreshCw, Upload
+  Plus, Edit, Trash2, Shield, Search, Download, Calendar, Building2, Users, Phone, Mail, AlertCircle, CheckCircle, Clock, RefreshCw, Upload, Maximize2, Minimize2
 } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { API_BASE_URL } from "@/lib/config";
@@ -64,6 +64,7 @@ export default function GovernmentLicense() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const form = useForm<LicenseFormData>({
     resolver: zodResolver(licenseSchema),
@@ -529,17 +530,45 @@ export default function GovernmentLicense() {
         </motion.div>
 
         {/* Add/Edit License Modal */}
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-                <Shield className="h-6 w-6 text-indigo-600" />
-                {editingLicense ? 'Edit License' : 'Add New License'}
-              </DialogTitle>
-            </DialogHeader>
-            
+        <Dialog open={isModalOpen} onOpenChange={(open) => { if (!open) setIsFullscreen(false); setIsModalOpen(open); }}>
+          <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl'} w-full p-0 overflow-hidden rounded-2xl border-slate-200 shadow-2xl bg-white transition-[width,height] duration-300`}>        
+            {/* Gradient Header replicating subscription modal */}
+            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 flex flex-row items-center justify-between gap-4 rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-xl bg-white/15 flex items-center justify-center shadow-inner">
+                  <Shield className="h-6 w-6" />
+                </div>
+                <div className="flex flex-col">
+                  <h2 className="text-xl md:text-2xl font-bold tracking-tight">
+                    {editingLicense ? 'Edit License' : 'Add New License'}
+                  </h2>
+                  <p className="text-white/80 text-sm md:text-base">Manage regulatory & statutory license information</p>
+                </div>
+              </div>
+              {/* Status Pill */}
+              <div className="flex items-center gap-3 ml-auto">
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold shadow-sm capitalize ${
+                  (form.watch('status') === 'Active') ? 'bg-emerald-500 text-white' :
+                  (form.watch('status') === 'Pending') ? 'bg-yellow-500 text-white' :
+                  (form.watch('status') === 'Expired') ? 'bg-rose-600 text-white' :
+                  'bg-blue-500 text-white'
+                }`}>
+                  {form.watch('status')}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
+                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-3 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
+                  onClick={() => setIsFullscreen(f => !f)}
+                >
+                  {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+                </Button>
+              </div>
+            </div>
+
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* License Name */}
                   <FormField
@@ -744,20 +773,21 @@ export default function GovernmentLicense() {
                 />
 
                 {/* Form Actions */}
-                <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                <div className="flex justify-end gap-3 mt-2 pt-6 border-t border-slate-200">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-5"
                     onClick={() => setIsModalOpen(false)}
                   >
-                    Cancel
+                    Exit
                   </Button>
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     disabled={licenseMutation.isPending}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                    className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-6 shadow-md hover:shadow-lg"
                   >
-                    {licenseMutation.isPending ? 'Saving...' : (editingLicense ? 'Update License' : 'Create License')}
+                    {licenseMutation.isPending ? 'Saving...' : (editingLicense ? 'Update License' : 'Save License')}
                   </Button>
                 </div>
               </form>
