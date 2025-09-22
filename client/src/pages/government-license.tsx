@@ -607,8 +607,7 @@ export default function GovernmentLicense() {
                             <SelectContent 
                               hideScrollButtons 
                               thinScrollbar 
-                              className="bg-white border border-slate-200 rounded-md shadow-lg overflow-hidden"
-                              style={{ height: '160px', maxHeight: '160px' }}
+                              className="bg-white border border-slate-200 rounded-md shadow-lg"
                             >
                               {ISSUING_AUTHORITIES.map(name => (
                                 <SelectItem key={name} value={name} className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
