@@ -13,6 +13,7 @@ import Notifications from "@/pages/notifications";
 import Configuration from "@/pages/configuration";
 import Reports from "@/pages/reports";
 import SubscriptionHistory from "@/pages/subscription-history";
+import GovernmentLicense from "@/pages/government-license";
 // import Users from "@/pages/users";
 import NotFound from "@/pages/not-found";
 import SubscriptionUserPage from "@/pages/subscription-user";
@@ -61,6 +62,7 @@ function AppWithSidebar() {
           <Route path="/compliance-dashboard" element={<ComplianceDashboard />} />
           <Route path="/compliance" element={<Compliance />} />
           <Route path="/compliance-ledger" element={<ComplianceLedger />} />
+          <Route path="/government-license" element={<GovernmentLicense />} />
           <Route path="/company-details" element={<CompanyDetails />} />
           <Route path="/subscription-user" element={<SubscriptionUserPage />} />
           <Route path="/calendar-monthly" element={<CalendarMonthly />} />

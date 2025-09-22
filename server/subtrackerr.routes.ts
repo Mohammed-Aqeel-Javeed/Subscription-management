@@ -1894,4 +1894,141 @@ router.get("/api/notifications/compliance", async (req, res) => {
   }
 });
 
+// --- Government Licenses API ---
+// Get all licenses
+router.get("/api/licenses", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("licenses");
+    const tenantId = req.user?.tenantId;
+    
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const licenses = await collection.find({ tenantId }).sort({ createdAt: -1 }).toArray();
+    
+    // Convert ObjectIds to strings for frontend
+    const processedLicenses = licenses.map(license => ({
+      ...license,
+      id: license._id.toString(),
+      _id: undefined
+    }));
+
+    res.status(200).json(processedLicenses);
+  } catch (error: unknown) {
+    console.error("Error fetching licenses:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to fetch licenses", error: errorMessage });
+  }
+});
+
+// Create a new license
+router.post("/api/licenses", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("licenses");
+    const tenantId = req.user?.tenantId;
+    
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const licenseData = {
+      ...req.body,
+      tenantId,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const result = await collection.insertOne(licenseData);
+    
+    res.status(201).json({ 
+      message: "License created successfully",
+      id: result.insertedId.toString()
+    });
+  } catch (error: unknown) {
+    console.error("Error creating license:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to create license", error: errorMessage });
+  }
+});
+
+// Update a license
+router.put("/api/licenses/:id", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("licenses");
+    const { id } = req.params;
+    const tenantId = req.user?.tenantId;
+    
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    let licenseId;
+    try {
+      licenseId = new ObjectId(id);
+    } catch {
+      return res.status(400).json({ message: "Invalid license ID format" });
+    }
+
+    const updateData = {
+      ...req.body,
+      updatedAt: new Date()
+    };
+    
+    // Remove tenantId from update payload if present
+    delete updateData.tenantId;
+
+    const result = await collection.updateOne(
+      { _id: licenseId, tenantId },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "License not found or access denied" });
+    }
+
+    res.status(200).json({ message: "License updated successfully" });
+  } catch (error: unknown) {
+    console.error("Error updating license:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to update license", error: errorMessage });
+  }
+});
+
+// Delete a license
+router.delete("/api/licenses/:id", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("licenses");
+    const { id } = req.params;
+    const tenantId = req.user?.tenantId;
+    
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    let licenseId;
+    try {
+      licenseId = new ObjectId(id);
+    } catch {
+      return res.status(400).json({ message: "Invalid license ID format" });
+    }
+
+    const result = await collection.deleteOne({ _id: licenseId, tenantId });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "License not found or access denied" });
+    }
+
+    res.status(200).json({ message: "License deleted successfully" });
+  } catch (error: unknown) {
+    console.error("Error deleting license:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to delete license", error: errorMessage });
+  }
+});
+
 export default router;
