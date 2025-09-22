@@ -593,7 +593,7 @@ export default function GovernmentLicense() {
                     render={({ field }) => {
                       const valueInList = ISSUING_AUTHORITIES.includes(field.value || "");
                       return (
-                        <FormItem>
+                        <FormItem className="md:col-span-2 lg:col-span-2 xl:col-span-2">
                           <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Name</FormLabel>
                           <Select
                             value={field.value || ''}
