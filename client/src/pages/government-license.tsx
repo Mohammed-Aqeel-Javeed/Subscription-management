@@ -30,6 +30,17 @@ const ISSUING_AUTHORITIES = [
   "Singapore Police Force (SPF)",
   "Building and Construction Authority (BCA)",
   "Singapore Food Agency (SFA)",
+  "Urban Redevelopment Authority (URA)",
+  "Land Transport Authority (LTA)",
+  "Ministry of Health (MOH)",
+  "Infocomm Media Development Authority (IMDA)",
+  "Monetary Authority of Singapore (MAS)",
+  "Central Provident Fund Board (CPF)",
+  "Housing & Development Board (HDB)",
+  "Public Utilities Board (PUB)",
+  "Singapore Tourism Board (STB)",
+  "Singapore Customs",
+  "Immigration & Checkpoints Authority (ICA)",
 ];
 
 // License interface
@@ -604,21 +615,19 @@ export default function GovernmentLicense() {
                                 <SelectValue placeholder="Select issuing authority" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent 
-                              hideScrollButtons 
-                              thinScrollbar 
-                              className="bg-white border border-slate-200 rounded-md shadow-lg"
-                            >
-                              {ISSUING_AUTHORITIES.map(name => (
-                                <SelectItem key={name} value={name} className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
-                                  {name}
-                                </SelectItem>
-                              ))}
-                              {!valueInList && field.value && (
-                                <SelectItem value={field.value} className="pl-8 pr-3 py-2 text-sm italic text-slate-600 bg-amber-50">
-                                  {field.value} (custom)
-                                </SelectItem>
-                              )}
+                            <SelectContent className="bg-white border border-slate-200 rounded-md shadow-lg max-h-[200px] overflow-hidden">
+                              <div className="max-h-[180px] overflow-y-auto custom-scrollbar p-1">
+                                {ISSUING_AUTHORITIES.map(name => (
+                                  <SelectItem key={name} value={name} className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
+                                    {name}
+                                  </SelectItem>
+                                ))}
+                                {!valueInList && field.value && (
+                                  <SelectItem value={field.value} className="pl-8 pr-3 py-2 text-sm italic text-slate-600 bg-amber-50">
+                                    {field.value} (custom)
+                                  </SelectItem>
+                                )}
+                              </div>
                             </SelectContent>
                           </Select>
                           <FormMessage />
