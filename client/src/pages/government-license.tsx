@@ -8,7 +8,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
-import { Dialog, DialogContent } from "../components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -530,55 +530,44 @@ export default function GovernmentLicense() {
         </motion.div>
 
         {/* Add/Edit License Modal */}
-        <Dialog open={isModalOpen} onOpenChange={(open) => { if (!open) setIsFullscreen(false); setIsModalOpen(open); }}>
-          <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl'} w-full p-0 overflow-hidden rounded-2xl border-slate-200 shadow-2xl bg-white transition-[width,height] duration-300`}>        
-            {/* Gradient Header replicating subscription modal */}
-            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 flex flex-row items-center justify-between gap-4 rounded-t-2xl">
+        <Dialog open={isModalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setIsModalOpen(v); }}>
+          <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
+            <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl flex flex-row items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-xl bg-white/15 flex items-center justify-center shadow-inner">
-                  <Shield className="h-6 w-6" />
-                </div>
-                <div className="flex flex-col">
-                  <h2 className="text-xl md:text-2xl font-bold tracking-tight">
-                    {editingLicense ? 'Edit License' : 'Add New License'}
-                  </h2>
-                  <p className="text-white/80 text-sm md:text-base">Manage regulatory & statutory license information</p>
-                </div>
+                <Shield className="h-6 w-6" />
+                <DialogTitle className="text-xl font-bold">
+                  {editingLicense ? 'Edit License' : 'Add New License'}
+                </DialogTitle>
               </div>
-              {/* Status Pill */}
-              <div className="flex items-center gap-3 ml-auto">
-                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold shadow-sm capitalize ${
-                  (form.watch('status') === 'Active') ? 'bg-emerald-500 text-white' :
-                  (form.watch('status') === 'Pending') ? 'bg-yellow-500 text-white' :
-                  (form.watch('status') === 'Expired') ? 'bg-rose-600 text-white' :
-                  'bg-blue-500 text-white'
-                }`}>
-                  {form.watch('status')}
-                </span>
+              <div className="flex gap-3 items-center ml-auto mr-6">
                 <Button
                   type="button"
                   variant="outline"
                   title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
-                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-3 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
+                  className={`bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-3 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center`}
                   onClick={() => setIsFullscreen(f => !f)}
                 >
                   {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
                 </Button>
               </div>
-            </div>
-
+            </DialogHeader>
+            
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="p-6">
+                <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-5 lg:grid-cols-6' : 'grid-cols-1 md:grid-cols-3'}`}>
                   {/* License Name */}
                   <FormField
                     control={form.control}
                     name="licenseName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">License Name *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">License Name *</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter license name" {...field} />
+                          <Input 
+                            placeholder="Enter license name" 
+                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -591,9 +580,13 @@ export default function GovernmentLicense() {
                     name="issuingAuthorityName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">Issuing Authority Name *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Name *</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter issuing authority name" {...field} />
+                          <Input 
+                            placeholder="Enter issuing authority name" 
+                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -606,9 +599,13 @@ export default function GovernmentLicense() {
                     name="startDate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">Start Date *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Start Date *</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} />
+                          <Input 
+                            type="date" 
+                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -621,9 +618,13 @@ export default function GovernmentLicense() {
                     name="endDate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">End Date *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">End Date *</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} />
+                          <Input 
+                            type="date" 
+                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -636,13 +637,14 @@ export default function GovernmentLicense() {
                     name="renewalFee"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">Renewal Fee *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Renewal Fee *</FormLabel>
                         <FormControl>
                           <Input 
                             type="number" 
                             min="0" 
                             step="0.01"
                             placeholder="0.00"
+                            className="w-full border-slate-300 rounded-lg p-2 text-base text-right font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field}
                             onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                           />
@@ -658,18 +660,18 @@ export default function GovernmentLicense() {
                     name="status"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">Status *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Status *</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
                               <SelectValue placeholder="Select status" />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
-                            <SelectItem value="Active">Active</SelectItem>
-                            <SelectItem value="Pending">Pending</SelectItem>
-                            <SelectItem value="Expired">Expired</SelectItem>
-                            <SelectItem value="Under Renewal">Under Renewal</SelectItem>
+                          <SelectContent className="bg-white border border-slate-200 rounded-lg shadow-lg">
+                            <SelectItem value="Active" className="px-3 py-2 text-sm hover:bg-slate-50">Active</SelectItem>
+                            <SelectItem value="Pending" className="px-3 py-2 text-sm hover:bg-slate-50">Pending</SelectItem>
+                            <SelectItem value="Expired" className="px-3 py-2 text-sm hover:bg-slate-50">Expired</SelectItem>
+                            <SelectItem value="Under Renewal" className="px-3 py-2 text-sm hover:bg-slate-50">Under Renewal</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -683,9 +685,13 @@ export default function GovernmentLicense() {
                     name="responsiblePerson"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">Responsible Person *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Responsible Person *</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter responsible person name" {...field} />
+                          <Input 
+                            placeholder="Enter responsible person name" 
+                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -698,9 +704,13 @@ export default function GovernmentLicense() {
                     name="department"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">Department *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Department *</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter department name" {...field} />
+                          <Input 
+                            placeholder="Enter department name" 
+                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -713,9 +723,13 @@ export default function GovernmentLicense() {
                     name="backupContact"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">Backup Contact *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Backup Contact *</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter backup contact name" {...field} />
+                          <Input 
+                            placeholder="Enter backup contact name" 
+                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -728,9 +742,14 @@ export default function GovernmentLicense() {
                     name="issuingAuthorityEmail"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">Issuing Authority Email *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Email *</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="Enter email address" {...field} />
+                          <Input 
+                            type="email" 
+                            placeholder="Enter email address" 
+                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -743,9 +762,13 @@ export default function GovernmentLicense() {
                     name="issuingAuthorityPhone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-medium text-slate-700">Issuing Authority Phone *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Phone *</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter phone number" {...field} />
+                          <Input 
+                            placeholder="Enter phone number" 
+                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -758,12 +781,12 @@ export default function GovernmentLicense() {
                   control={form.control}
                   name="details"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="font-medium text-slate-700">Details</FormLabel>
+                    <FormItem className="mb-6">
+                      <FormLabel className="block text-sm font-medium text-slate-700">Details</FormLabel>
                       <FormControl>
                         <Textarea 
                           placeholder="Enter additional details about the license..."
-                          className="min-h-[100px]"
+                          className="w-full border border-slate-400 rounded-lg p-3 text-base min-h-[100px] max-h-[120px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                           {...field}
                         />
                       </FormControl>
@@ -773,21 +796,21 @@ export default function GovernmentLicense() {
                 />
 
                 {/* Form Actions */}
-                <div className="flex justify-end gap-3 mt-2 pt-6 border-t border-slate-200">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-5"
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-4 py-2"
                     onClick={() => setIsModalOpen(false)}
                   >
-                    Exit
+                    Cancel
                   </Button>
-                  <Button
-                    type="submit"
+                  <Button 
+                    type="submit" 
                     disabled={licenseMutation.isPending}
-                    className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-6 shadow-md hover:shadow-lg"
+                    className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-4 py-2 shadow-md hover:shadow-lg"
                   >
-                    {licenseMutation.isPending ? 'Saving...' : (editingLicense ? 'Update License' : 'Save License')}
+                    {licenseMutation.isPending ? 'Saving...' : (editingLicense ? 'Update License' : 'Create License')}
                   </Button>
                 </div>
               </form>
