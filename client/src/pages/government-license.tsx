@@ -532,7 +532,7 @@ export default function GovernmentLicense() {
         {/* Add/Edit License Modal */}
         <Dialog open={isModalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setIsModalOpen(v); }}>
           <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
-            <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white px-6 py-4 rounded-t-2xl flex flex-row items-center justify-between h-[72px] min-h-[72px]">
+            <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white px-6 py-3 rounded-t-2xl flex flex-row items-center justify-between h-[64px] min-h-[64px] border-b border-indigo-400/20">
               <div className="flex items-center gap-3">
                 <Shield className="h-6 w-6" />
                 <DialogTitle className="text-xl font-bold leading-none">
@@ -553,7 +553,7 @@ export default function GovernmentLicense() {
             </DialogHeader>
             
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 pt-5">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="px-6 pb-6 pt-3">
                 <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-5 lg:grid-cols-6' : 'grid-cols-1 md:grid-cols-3'}`}>
                   {/* License Name */}
                   <FormField
@@ -666,22 +666,10 @@ export default function GovernmentLicense() {
                           </FormControl>
                           <SelectContent className="bg-white border border-slate-200 rounded-md shadow-lg p-0 overflow-hidden">
                             <div className="py-1">
-                              <SelectItem value="Active" className="pl-8 pr-3 py-2 text-sm relative group data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 hidden group-data-[state=checked]:block text-indigo-600">✔</span>
-                                Active
-                              </SelectItem>
-                              <SelectItem value="Pending" className="pl-8 pr-3 py-2 text-sm relative group data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 hidden group-data-[state=checked]:block text-indigo-600">✔</span>
-                                Pending
-                              </SelectItem>
-                              <SelectItem value="Expired" className="pl-8 pr-3 py-2 text-sm relative group data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 hidden group-data-[state=checked]:block text-indigo-600">✔</span>
-                                Expired
-                              </SelectItem>
-                              <SelectItem value="Under Renewal" className="pl-8 pr-3 py-2 text-sm relative group data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 hidden group-data-[state=checked]:block text-indigo-600">✔</span>
-                                Under Renewal
-                              </SelectItem>
+                              <SelectItem value="Active" className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">Active</SelectItem>
+                              <SelectItem value="Pending" className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">Pending</SelectItem>
+                              <SelectItem value="Expired" className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">Expired</SelectItem>
+                              <SelectItem value="Under Renewal" className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">Under Renewal</SelectItem>
                             </div>
                           </SelectContent>
                         </Select>
