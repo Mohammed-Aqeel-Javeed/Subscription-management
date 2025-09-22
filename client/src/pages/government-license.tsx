@@ -561,11 +561,10 @@ export default function GovernmentLicense() {
                     name="licenseName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">License Name *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">License Name</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Enter license name" 
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -580,11 +579,10 @@ export default function GovernmentLicense() {
                     name="issuingAuthorityName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Name *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Name</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Enter issuing authority name" 
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -599,11 +597,11 @@ export default function GovernmentLicense() {
                     name="startDate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Start Date *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Start Date</FormLabel>
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -618,11 +616,11 @@ export default function GovernmentLicense() {
                     name="endDate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">End Date *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">End Date</FormLabel>
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -637,14 +635,13 @@ export default function GovernmentLicense() {
                     name="renewalFee"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Renewal Fee *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Renewal Fee</FormLabel>
                         <FormControl>
                           <Input 
                             type="number" 
                             min="0" 
                             step="0.01"
-                            placeholder="0.00"
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm text-right font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base text-right font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field}
                             onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                           />
@@ -660,18 +657,32 @@ export default function GovernmentLicense() {
                     name="status"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Status *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Status</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <SelectTrigger className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                            <SelectTrigger className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
                               <SelectValue placeholder="Select status" />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent className="bg-white border border-slate-200 rounded-lg shadow-lg">
-                            <SelectItem value="Active" className="px-3 py-2 text-sm hover:bg-slate-50">Active</SelectItem>
-                            <SelectItem value="Pending" className="px-3 py-2 text-sm hover:bg-slate-50">Pending</SelectItem>
-                            <SelectItem value="Expired" className="px-3 py-2 text-sm hover:bg-slate-50">Expired</SelectItem>
-                            <SelectItem value="Under Renewal" className="px-3 py-2 text-sm hover:bg-slate-50">Under Renewal</SelectItem>
+                          <SelectContent className="bg-white border border-slate-200 rounded-md shadow-lg p-0 overflow-hidden">
+                            <div className="py-1">
+                              <SelectItem value="Active" className="pl-8 pr-3 py-2 text-sm relative group data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 hidden group-data-[state=checked]:block text-indigo-600">✔</span>
+                                Active
+                              </SelectItem>
+                              <SelectItem value="Pending" className="pl-8 pr-3 py-2 text-sm relative group data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 hidden group-data-[state=checked]:block text-indigo-600">✔</span>
+                                Pending
+                              </SelectItem>
+                              <SelectItem value="Expired" className="pl-8 pr-3 py-2 text-sm relative group data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 hidden group-data-[state=checked]:block text-indigo-600">✔</span>
+                                Expired
+                              </SelectItem>
+                              <SelectItem value="Under Renewal" className="pl-8 pr-3 py-2 text-sm relative group data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 hidden group-data-[state=checked]:block text-indigo-600">✔</span>
+                                Under Renewal
+                              </SelectItem>
+                            </div>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -685,11 +696,10 @@ export default function GovernmentLicense() {
                     name="responsiblePerson"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Responsible Person *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Responsible Person</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Enter responsible person name" 
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -704,11 +714,10 @@ export default function GovernmentLicense() {
                     name="department"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Department *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Department</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Enter department name" 
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -723,11 +732,10 @@ export default function GovernmentLicense() {
                     name="backupContact"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Backup Contact *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Backup Contact</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Enter backup contact name" 
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -742,12 +750,11 @@ export default function GovernmentLicense() {
                     name="issuingAuthorityEmail"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Email *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Email</FormLabel>
                         <FormControl>
                           <Input 
                             type="email" 
-                            placeholder="Enter email address" 
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -762,11 +769,10 @@ export default function GovernmentLicense() {
                     name="issuingAuthorityPhone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Phone *</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Phone</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Enter phone number" 
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -785,8 +791,7 @@ export default function GovernmentLicense() {
                       <FormLabel className="block text-sm font-medium text-slate-700">Details</FormLabel>
                       <FormControl>
                         <Textarea 
-                          placeholder="Enter additional details about the license..."
-                          className="w-full border border-slate-400 rounded-lg px-3 py-2 text-sm min-h-[100px] max-h-[140px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                          className="w-full border border-slate-400 rounded-lg px-3 py-2 text-base min-h-[100px] max-h-[140px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                           {...field}
                         />
                       </FormControl>
