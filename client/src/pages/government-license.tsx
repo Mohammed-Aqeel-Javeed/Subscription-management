@@ -532,7 +532,7 @@ export default function GovernmentLicense() {
         {/* Add/Edit License Modal */}
         <Dialog open={isModalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setIsModalOpen(v); }}>
           <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
-            <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white px-6 py-3 rounded-t-2xl flex flex-row items-center justify-between h-[64px] min-h-[64px] border-b border-indigo-400/20">
+            <DialogHeader className={`bg-gradient-to-r from-indigo-500 to-indigo-600 text-white px-6 py-3 rounded-t-2xl flex flex-row items-center justify-between border-b border-indigo-400/20 ${isFullscreen ? 'h-[76px] min-h-[76px]' : 'h-[64px] min-h-[64px]'}`}>
               <div className="flex items-center gap-3">
                 <Shield className="h-6 w-6" />
                 <DialogTitle className="text-xl font-bold leading-none">
