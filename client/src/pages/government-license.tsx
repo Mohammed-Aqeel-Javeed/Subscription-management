@@ -19,6 +19,19 @@ import {
 import { useToast } from "../hooks/use-toast";
 import { API_BASE_URL } from "@/lib/config";
 
+// Predefined Issuing Authorities (can later move to config or API)
+const ISSUING_AUTHORITIES = [
+  "Government Electronic Business (GeBIZ)",
+  "Ministry of Manpower (MOM) Employment Pass (EP) Online",
+  "Accounting and Corporate Regulatory Authority (ACRA)",
+  "Enterprise Singapore (via GoBusiness Licensing)",
+  "Singapore Civil Defence Force (SCDF)",
+  "National Environment Agency (NEA)",
+  "Singapore Police Force (SPF)",
+  "Building and Construction Authority (BCA)",
+  "Singapore Food Agency (SFA)",
+];
+
 // License interface
 interface License {
   id: string;
@@ -573,22 +586,41 @@ export default function GovernmentLicense() {
                     )}
                   />
 
-                  {/* Issuing Authority Name */}
+                  {/* Issuing Authority Name (Dropdown) */}
                   <FormField
                     control={form.control}
                     name="issuingAuthorityName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Name</FormLabel>
-                        <FormControl>
-                          <Input 
-                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const valueInList = ISSUING_AUTHORITIES.includes(field.value || "");
+                      return (
+                        <FormItem>
+                          <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Name</FormLabel>
+                          <Select
+                            value={field.value || ''}
+                            onValueChange={(val) => field.onChange(val)}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                                <SelectValue placeholder="Select issuing authority" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="bg-white border border-slate-200 rounded-md shadow-lg max-h-72 overflow-y-auto">
+                              {ISSUING_AUTHORITIES.map(name => (
+                                <SelectItem key={name} value={name} className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
+                                  {name}
+                                </SelectItem>
+                              ))}
+                              {!valueInList && field.value && (
+                                <SelectItem value={field.value} className="pl-8 pr-3 py-2 text-sm italic text-slate-600 bg-amber-50">
+                                  {field.value} (custom)
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
 
                   {/* Start Date */}
