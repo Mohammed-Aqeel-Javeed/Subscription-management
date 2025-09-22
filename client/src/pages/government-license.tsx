@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "../components/ui/card";
@@ -14,21 +14,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Shield, 
-  Search, 
-  Download, 
-  Calendar,
-  Building2,
-  Users,
-  Phone,
-  Mail,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  RefreshCw
+  Plus, Edit, Trash2, Shield, Search, Download, Calendar, Building2, Users, Phone, Mail, AlertCircle, CheckCircle, Clock, RefreshCw, Upload
 } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { API_BASE_URL } from "@/lib/config";
@@ -75,6 +61,7 @@ export default function GovernmentLicense() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
 
@@ -265,81 +252,119 @@ export default function GovernmentLicense() {
     });
   };
 
+  // Summary stats similar to subscriptions
+  const total = licenses.length;
+  const active = licenses.filter(l => l.status === 'Active').length;
+  // const expiringSoon = licenses.filter(l => {
+  //   const end = new Date(l.endDate).getTime();
+  //   const now = Date.now();
+  //   const diff = end - now;
+  //   return diff > 0 && diff < 1000 * 60 * 60 * 24 * 30; // within 30 days
+  // }).length; // Future enhancement: show expiring soon card
+
   return (
-    <motion.div 
-      className="min-h-screen p-4 md:p-8 bg-white"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-    >
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-slate-50 to-indigo-100 p-4 md:p-6 relative">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <motion.div 
-          className="mb-8"
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-        >
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl shadow-sm bg-slate-100 border border-slate-200">
-                <Shield className="h-8 w-8 text-indigo-600" />
+        {/* Header Section (mirroring subscriptions) */}
+        <div className="bg-white rounded-2xl shadow-xl p-4 mb-6 border border-slate-200">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-4 mb-3">
+                <div className="p-3 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl shadow-md">
+                  <Shield className="h-7 w-7 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">Government License Management</h1>
+                  <p className="text-slate-600 text-lg mt-1">Manage all your regulatory and statutory licenses</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-row gap-4 items-center">
+              <Button
+                variant="default"
+                className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-semibold shadow-md hover:scale-105 transition-transform"
+                onClick={handleAddNew}
+                title="Add License"
+              >
+                <Plus className="h-5 w-5 mr-2" /> Add New License
+              </Button>
+            </div>
+          </div>
+          {/* --- Summary Stats --- */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <Card className="bg-gradient-to-r from-indigo-500 to-indigo-600 shadow-sm rounded-lg p-3 flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg">
+                <Shield className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl md:text-4xl font-bold text-slate-900">
-                  Government Licenses
-                </h1>
-                <p className="text-slate-600 mt-2">Manage your government licenses and compliance requirements</p>
+                <div className="text-2xl font-bold text-white">{total}</div>
+                <div className="text-white/90 text-sm">Total Licenses</div>
               </div>
-            </div>
-            
-            <div className="flex gap-3 mt-4 md:mt-0">
-              <Button 
-                variant="outline" 
+            </Card>
+            <Card className="bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-sm rounded-lg p-3 flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-white">{active}</div>
+                <div className="text-white/90 text-sm">Active</div>
+              </div>
+            </Card>
+            <div className="flex flex-row items-center justify-start md:justify-end gap-6 px-2 py-1 bg-white rounded-lg shadow-sm border border-slate-100">
+              <Button
+                variant="outline"
                 size="sm"
-                className="flex items-center gap-1.5 border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-sm"
+                onClick={() => {/* TODO export */}}
+                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm min-w-[110px]"
+                title="Export to CSV"
               >
-                <Download className="h-4 w-4" />
-                Export
+                <Download className="h-4 w-4 mr-2" /> Export
               </Button>
-              <Button 
-                onClick={handleAddNew}
-                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md"
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm min-w-[110px]"
+                title="Import from CSV"
               >
-                <Plus className="h-4 w-4" />
-                Add New License
+                <Upload className="h-4 w-4 mr-2" /> Import
               </Button>
             </div>
           </div>
-          
-          {/* Filters */}
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <Search className="h-5 w-5 text-slate-400" />
+        </div>
+
+        {/* Filters Section */}
+        <Card className="mb-6 border-slate-200 shadow-md rounded-xl">
+          <CardContent className="p-6">
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Search Input */}
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 h-5 w-5" />
+                <Input
+                  placeholder="Search licenses..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-12 border-slate-300 bg-white text-slate-900 placeholder-slate-400 rounded-lg h-10"
+                />
               </div>
-              <Input
-                type="text"
-                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 placeholder-slate-400 shadow-sm"
-                placeholder="Search licenses..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+              {/* Status Filter */}
+              <div className="w-full sm:w-48">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="border-slate-300 bg-white text-slate-900 rounded-lg h-10 w-full">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Expired">Expired</SelectItem>
+                    <SelectItem value="Under Renewal">Under Renewal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full md:w-48 border border-slate-200 rounded-xl bg-white shadow-sm">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Pending">Pending</SelectItem>
-                <SelectItem value="Expired">Expired</SelectItem>
-                <SelectItem value="Under Renewal">Under Renewal</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </motion.div>
+          </CardContent>
+        </Card>
 
         {/* Main Content */}
         <motion.div
@@ -740,6 +765,6 @@ export default function GovernmentLicense() {
           </DialogContent>
         </Dialog>
       </div>
-    </motion.div>
+    </div>
   );
 }
