@@ -287,25 +287,6 @@ export default function SubscriptionHistory() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.5 }}
         >
-          {/* Debug Info - Temporarily enabled for troubleshooting */}
-          {(process.env.NODE_ENV === 'development' || window.location.hostname.includes('render.com')) && (
-            <Card className="mb-4 bg-yellow-50 border-yellow-200">
-              <CardContent className="p-4">
-                <h3 className="font-bold text-yellow-800 mb-2">Debug Info:</h3>
-                <div className="text-sm text-yellow-700 space-y-1">
-                  <div>API_BASE_URL: "{API_BASE_URL || '(empty)'}"</div>
-                  <div>idParam: {idParam || '(none)'}</div>
-                  <div>isLoading: {isLoading.toString()}</div>
-                  <div>error: {error?.message || '(none)'}</div>
-                  <div>data length: {data?.length || 0}</div>
-                  <div>history length: {history.length}</div>
-                  <div>filteredHistory length: {filteredHistory.length}</div>
-                  <div>searchTerm: "{searchTerm || '(empty)'}"</div>
-                  <div>window.location: {window.location.href}</div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
           
           <Card className="shadow-xl border border-slate-100 rounded-2xl bg-white overflow-hidden">
             <CardContent className="p-0">
@@ -391,9 +372,9 @@ export default function SubscriptionHistory() {
                   <Table className="w-full divide-y divide-slate-100">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Subscription</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Owner</TableHead>
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">Service</TableHead>
+                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Vendor</TableHead>
+                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Owner</TableHead>
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">Start Date</TableHead>
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">End Date</TableHead>
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">Amount</TableHead>
@@ -403,7 +384,9 @@ export default function SubscriptionHistory() {
                     <TableBody className="divide-y divide-slate-100">
                       <AnimatePresence>
                         {filteredHistory.map((item, index) => {
-                          const record = item.data || item.updatedFields || {};
+                          // For update actions, prioritize updatedFields (new values) over data (old values)
+                          // For create actions, use data as it contains the complete record
+                          const record = item.action === "update" ? (item.updatedFields || item.data || {}) : (item.data || item.updatedFields || {});
                           return (
                             <motion.tr 
                               key={item._id || index}
@@ -418,10 +401,10 @@ export default function SubscriptionHistory() {
                                 {record.serviceName || "-"}
                               </TableCell>
                               <TableCell className="py-4 px-6 text-slate-700">
-                                {record.owner || "-"}
+                                {record.vendor || record.serviceName || "-"}
                               </TableCell>
                               <TableCell className="py-4 px-6 text-slate-700">
-                                {record.serviceName || "-"}
+                                {record.owner || record.ownerName || "-"}
                               </TableCell>
                               <TableCell className="py-4 px-6 text-slate-600">
                                 {record.startDate ? formatDate(record.startDate) : "-"}
