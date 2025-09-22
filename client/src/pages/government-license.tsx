@@ -532,10 +532,10 @@ export default function GovernmentLicense() {
         {/* Add/Edit License Modal */}
         <Dialog open={isModalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setIsModalOpen(v); }}>
           <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
-            <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl flex flex-row items-center justify-between">
+            <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white px-6 py-4 rounded-t-2xl flex flex-row items-center justify-between h-[72px] min-h-[72px]">
               <div className="flex items-center gap-3">
                 <Shield className="h-6 w-6" />
-                <DialogTitle className="text-xl font-bold">
+                <DialogTitle className="text-xl font-bold leading-none">
                   {editingLicense ? 'Edit License' : 'Add New License'}
                 </DialogTitle>
               </div>
@@ -553,7 +553,7 @@ export default function GovernmentLicense() {
             </DialogHeader>
             
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="p-6">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 pt-5">
                 <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-5 lg:grid-cols-6' : 'grid-cols-1 md:grid-cols-3'}`}>
                   {/* License Name */}
                   <FormField
@@ -565,7 +565,7 @@ export default function GovernmentLicense() {
                         <FormControl>
                           <Input 
                             placeholder="Enter license name" 
-                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -584,7 +584,7 @@ export default function GovernmentLicense() {
                         <FormControl>
                           <Input 
                             placeholder="Enter issuing authority name" 
-                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -603,7 +603,7 @@ export default function GovernmentLicense() {
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -622,7 +622,7 @@ export default function GovernmentLicense() {
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -644,7 +644,7 @@ export default function GovernmentLicense() {
                             min="0" 
                             step="0.01"
                             placeholder="0.00"
-                            className="w-full border-slate-300 rounded-lg p-2 text-base text-right font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm text-right font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field}
                             onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                           />
@@ -663,7 +663,7 @@ export default function GovernmentLicense() {
                         <FormLabel className="block text-sm font-medium text-slate-700">Status *</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                            <SelectTrigger className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
                               <SelectValue placeholder="Select status" />
                             </SelectTrigger>
                           </FormControl>
@@ -689,7 +689,7 @@ export default function GovernmentLicense() {
                         <FormControl>
                           <Input 
                             placeholder="Enter responsible person name" 
-                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -708,7 +708,7 @@ export default function GovernmentLicense() {
                         <FormControl>
                           <Input 
                             placeholder="Enter department name" 
-                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -727,7 +727,7 @@ export default function GovernmentLicense() {
                         <FormControl>
                           <Input 
                             placeholder="Enter backup contact name" 
-                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -747,7 +747,7 @@ export default function GovernmentLicense() {
                           <Input 
                             type="email" 
                             placeholder="Enter email address" 
-                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -766,7 +766,7 @@ export default function GovernmentLicense() {
                         <FormControl>
                           <Input 
                             placeholder="Enter phone number" 
-                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             {...field} 
                           />
                         </FormControl>
@@ -786,7 +786,7 @@ export default function GovernmentLicense() {
                       <FormControl>
                         <Textarea 
                           placeholder="Enter additional details about the license..."
-                          className="w-full border border-slate-400 rounded-lg p-3 text-base min-h-[100px] max-h-[120px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                          className="w-full border border-slate-400 rounded-lg px-3 py-2 text-sm min-h-[100px] max-h-[140px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                           {...field}
                         />
                       </FormControl>
