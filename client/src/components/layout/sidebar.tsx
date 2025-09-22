@@ -1,10 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
-import { CreditCard, PieChart, List, Settings, FileText, Users, User, Bell, Building2, Shield } from "lucide-react";
+import { CreditCard, PieChart, List, Settings, FileText, Users, User, Bell, Building2, Shield, ShieldCheck } from "lucide-react";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: PieChart },
   { path: "/subscriptions", label: "Subscriptions", icon: List },
-  { path: "/compliance", label: "Compliance", icon: Settings },
+  { path: "/compliance", label: "Compliance", icon: ShieldCheck },
   { path: "/government-license", label: "Government License", icon: Shield },
   { path: "/notifications", label: "Notifications", icon: Bell },
   { path: "/reminders", label: "Setup & Configuration", icon: Settings },
