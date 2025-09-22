@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+// Removed unused Popover related imports
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -28,7 +28,7 @@ import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { insertSubscriptionSchema } from "@shared/schema";
+// Removed unused insertSubscriptionSchema import
 import type { InsertSubscription, Subscription } from "@shared/schema";
 // Extend Subscription for modal usage to include extra fields
 type SubscriptionModalData = Partial<Subscription> & {
@@ -39,7 +39,7 @@ type SubscriptionModalData = Partial<Subscription> & {
   autoRenewal?: boolean;
 };
 import { z } from "zod";
-import { CreditCard, X, ChevronDown, Check, History, RefreshCw, Maximize2, Minimize2 } from "lucide-react";
+import { CreditCard, X, History, RefreshCw, Maximize2, Minimize2 } from "lucide-react";
 // Define the Category interface
 interface Category {
   name: string;
@@ -153,19 +153,19 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [autoRenewal, setAutoRenewal] = useState<boolean>(false);
   
   // Track the current subscription ObjectId for History button
-  const [currentSubscriptionId, setCurrentSubscriptionId] = useState<string | undefined>();
+  // removed currentSubscriptionId (unused)
 
   useEffect(() => {
     if (open) {
       if (subscription?.id) {
-        const validId = getValidObjectId(subscription.id);
-        setCurrentSubscriptionId(validId || undefined);
+  // removed validId extraction (unused)
+  // removed currentSubscriptionId usage
       } else {
-        setCurrentSubscriptionId(undefined);
+  // removed currentSubscriptionId usage
       }
     } else {
       setTimeout(() => {
-        setCurrentSubscriptionId(undefined);
+  // removed currentSubscriptionId usage
       }, 100);
     }
   }, [subscription, open]);
@@ -200,11 +200,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Dynamic subscription fields from config
   const [dynamicFields, setDynamicFields] = useState<SubscriptionField[]>([]);
-  const [fieldsLoading, setFieldsLoading] = useState(true);
+  // Removed unused fieldsLoading state
   
   // Employee list for Owner dropdown (from /api/employee)
   // Fetch employees from /api/employees (plural) to match company-details.tsx
-  const { data: employeesRaw = [], isLoading: employeesLoading } = useQuery({
+  const { data: employeesRaw = [] } = useQuery({
     queryKey: ['/api/employees'],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/api/employees`, { credentials: 'include' });
@@ -214,7 +214,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   });
   
   // Map _id to id for frontend usage (like company-details)
-  const employees = employeesRaw.map((emp: any) => ({ ...emp, id: emp._id }));
+  // removed employees mapping (unused)
   
   // Fetch payment methods for dynamic dropdown
   const { data: paymentMethods = [], isLoading: paymentMethodsLoading } = useQuery({
@@ -228,7 +228,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Fetch enabled fields from backend
   useEffect(() => {
-    setFieldsLoading(true);
+  // removed fieldsLoading logic
     fetch(`${API_BASE_URL}/api/config/fields`)
       .then(res => res.json())
       .then((data) => {
@@ -239,7 +239,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         }
       })
       .catch(() => setDynamicFields([]))
-      .finally(() => setFieldsLoading(false));
+  .finally(() => {/* removed fieldsLoading logic */});
   }, [open]);
   
   // Parse departments from subscription if it exists
@@ -283,9 +283,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [startDate, setStartDate] = useState(subscription?.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "");
   const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle || "monthly");
   const [endDate, setEndDate] = useState(subscription?.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "");
-  const [endDateManuallySet, setEndDateManuallySet] = useState(false);
+  // Removed unused endDateManuallySet state
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(parseDepartments(subscription?.department));
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  // Removed unused isPopoverOpen state
   const [isRenewing, setIsRenewing] = useState(false);
   
   // Refetch data when modal opens
@@ -305,7 +305,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setStartDate(start);
       setBillingCycle(subscription.billingCycle || "monthly");
       setEndDate(end);
-      setEndDateManuallySet(!!end);
+  // removed manual end date flag
       setSelectedDepartments(depts);
       
       // Set status state from subscription data
@@ -335,7 +335,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setStartDate("");
       setBillingCycle("monthly");
       setEndDate("");
-      setEndDateManuallySet(false);
+  // removed manual end date flag
       setSelectedDepartments([]);
       
   // Reset status to Draft for new subscriptions
@@ -395,10 +395,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       }
       return res.json();
     },
-    onSuccess: async (data, variables) => {
+  onSuccess: async () => {
       // Use only the subscription's id
       if (subscription?.id) {
-        setCurrentSubscriptionId(subscription.id);
+  // removed currentSubscriptionId usage
       }
       
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
@@ -603,13 +603,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     form.setValue("departments", newSelectedDepartments);
   };
   
-  // Handle popover open/close
-  const handlePopoverOpenChange = (open: boolean) => {
-    setIsPopoverOpen(open);
-    if (open) {
-      refetchDepartments();
-    }
-  };
+  // Removed popover open/close handler
   
   // Handle renewal logic
   const handleRenew = async () => {
@@ -631,7 +625,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           // Update local state
           setStartDate(newStartDate);
           setEndDate(newEndDate);
-          setEndDateManuallySet(true);
+          // removed manual end date flag
           
           // Update form values
           form.setValue('startDate', newStartDate);
@@ -714,7 +708,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Update local state
       setStartDate(newStartDate);
       setEndDate(newEndDate);
-      setEndDateManuallySet(true);
+  // removed manual end date flag
       
       // Update form values
       form.setValue('startDate', newStartDate);
@@ -889,22 +883,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       <style>{animationStyles}</style>
       <Dialog open={open} onOpenChange={(v) => { if (!v) setIsFullscreen(false); onOpenChange(v); }}>
         <DialogContent className={`$${''} ${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}> 
-          <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl flex flex-row items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CreditCard className="h-6 w-6" />
-              <DialogTitle className="text-xl font-bold">
-                {isEditing ? 'Edit Subscription' : 'Add New Subscription'}
-              </DialogTitle>
+          <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl flex flex-row items-center">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <CreditCard className="h-6 w-6 flex-shrink-0" />
+              <div className="flex items-center gap-4 flex-wrap">
+                <DialogTitle className="text-xl font-bold">
+                  {isEditing ? 'Edit Subscription' : 'Add New Subscription'}
+                </DialogTitle>
+                <span
+                  className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm tracking-wide ${
+                    status === 'Active' ? 'bg-green-500 text-white' : status === 'Cancelled' ? 'bg-rose-500 text-white' : 'bg-orange-500 text-white'
+                  }`}
+                >
+                  {status}
+                </span>
+              </div>
             </div>
             <div className="flex gap-3 items-center ml-auto mr-6">
-              {/* Status Pill (read-only) */}
-              <span
-                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold shadow-sm ${
-                  status === 'Active' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-                }`}
-              >
-                {status}
-              </span>
               <Button
                 type="button"
                 variant="outline"
@@ -1431,7 +1426,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             className="w-full border-slate-300 rounded-lg p-1 text-base" 
                             value={endDate || ''} 
                             onChange={e => {
-                              setEndDateManuallySet(true);
+                              // removed manual end date flag
                               setEndDate(e.target.value);
                               field.onChange(e);
                               // If auto renewal is enabled and new value is today, update both start and next renewal
