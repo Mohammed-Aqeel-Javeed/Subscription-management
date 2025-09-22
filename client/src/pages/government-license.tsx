@@ -267,7 +267,7 @@ export default function GovernmentLicense() {
 
   return (
     <motion.div 
-      className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-indigo-50 via-white to-cyan-50"
+      className="min-h-screen p-4 md:p-8 bg-white"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
@@ -282,11 +282,11 @@ export default function GovernmentLicense() {
         >
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
             <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-r from-indigo-600 to-cyan-600 p-3 rounded-xl shadow-lg">
-                <Shield className="h-8 w-8 text-white" />
+              <div className="p-3 rounded-xl shadow-sm bg-slate-100 border border-slate-200">
+                <Shield className="h-8 w-8 text-indigo-600" />
               </div>
               <div>
-                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-700 to-cyan-600 bg-clip-text text-transparent">
+                <h1 className="text-3xl md:text-4xl font-bold text-slate-900">
                   Government Licenses
                 </h1>
                 <p className="text-slate-600 mt-2">Manage your government licenses and compliance requirements</p>
@@ -304,7 +304,7 @@ export default function GovernmentLicense() {
               </Button>
               <Button 
                 onClick={handleAddNew}
-                className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-600 to-cyan-600 text-white hover:from-indigo-700 hover:to-cyan-700 shadow-md"
+                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md"
               >
                 <Plus className="h-4 w-4" />
                 Add New License
@@ -384,7 +384,7 @@ export default function GovernmentLicense() {
                   {!searchTerm && statusFilter === "all" && (
                     <Button 
                       onClick={handleAddNew}
-                      className="mt-4 bg-gradient-to-r from-indigo-600 to-cyan-600 text-white"
+                      className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white"
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       Add First License
@@ -505,7 +505,7 @@ export default function GovernmentLicense() {
 
         {/* Add/Edit License Modal */}
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl font-bold">
                 <Shield className="h-6 w-6 text-indigo-600" />
@@ -730,7 +730,7 @@ export default function GovernmentLicense() {
                   <Button 
                     type="submit" 
                     disabled={licenseMutation.isPending}
-                    className="bg-gradient-to-r from-indigo-600 to-cyan-600 text-white"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
                   >
                     {licenseMutation.isPending ? 'Saving...' : (editingLicense ? 'Update License' : 'Create License')}
                   </Button>
