@@ -70,6 +70,7 @@ const licenseSchema = z.object({
   status: z.enum(['Active', 'Pending', 'Expired', 'Under Renewal']).optional(),
   issuingAuthorityEmail: z.string().email("Invalid email").optional(),
   issuingAuthorityPhone: z.string().optional(),
+  renewalSubmittedDate: z.string().optional(),
 });
 
 type LicenseFormData = z.infer<typeof licenseSchema>;
@@ -94,7 +95,7 @@ export default function GovernmentLicense() {
       startDate: "",
       endDate: "",
       details: "",
-      renewalFee: 0,
+      renewalFee: undefined, // Show empty by default
       responsiblePerson: "",
       department: "",
       backupContact: "",
@@ -738,6 +739,17 @@ export default function GovernmentLicense() {
                         </div>
                       </SelectContent>
                     </Select>
+                  </FormItem>
+
+                  {/* Renewal Submitted Date (enabled only if status is 'Renewal submitted') */}
+                  <FormItem className="md:col-span-1">
+                    <FormLabel className="block text-sm font-medium text-slate-700">Renewal Submitted Date</FormLabel>
+                    <Input
+                      type="date"
+                      className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      disabled={renewalStatus !== "Renewal submitted"}
+                      {...form.register("renewalSubmittedDate")}
+                    />
                   </FormItem>
 
                   {/* Responsible Person */}
