@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, X } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 // Helper functions remain the same
@@ -554,30 +554,21 @@ export default function Compliance() {
       
       {/* Modal */}
       <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setModalOpen(v); }}>
-        <DialogContent className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300 [&>button[aria-label='Close']]:hidden`}>
+        <DialogContent className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
           <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-5 rounded-t-2xl">
             <div className="flex items-center justify-between w-full">
               <DialogTitle className="text-xl font-bold flex items-center gap-3">
                 <FileText className="h-6 w-6" />
                 {editIndex !== null ? "Edit Compliance" : "Add New Compliance"}
               </DialogTitle>
-              <div className="flex items-center gap-4 pr-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-label="Close"
-                  title="Close"
-                  onClick={() => { setIsFullscreen(false); setModalOpen(false); }}
-                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold rounded-xl shadow-md transition-all duration-200 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
+              {/* Added mr-14 to create clear space before the global close (X) button positioned at top-right of DialogContent */}
+              <div className="flex items-center gap-3 pr-1 mr-14">
                 <Button
                   type="button"
                   variant="outline"
                   title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
                   onClick={() => setIsFullscreen(f => !f)}
-                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold rounded-xl shadow-md transition-all duration-200 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
+                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold rounded-xl shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
                 >
                   {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
                 </Button>
