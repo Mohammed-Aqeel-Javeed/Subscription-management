@@ -654,33 +654,7 @@ export default function Compliance() {
                   </SelectContent>
                 </Select>
               </div>
-              
-              {/* Dynamic Compliance Fields - Now placed after default fields */}
-              {isLoadingComplianceFields ? (
-                <div className="col-span-full text-center text-slate-500">Loading compliance fields...</div>
-              ) : (
-                complianceFields.filter(f => f.enabled).map(field => (
-                  <div className="space-y-2" key={field._id || field.name}>
-                    <label className="block text-sm font-medium text-slate-700">
-                      {field.name}
-                      {field.required ? <span className="text-red-500 ml-1">*</span> : null}
-                      {field.description && <span className="block text-xs text-slate-500">{field.description}</span>}
-                    </label>
-                    <Input
-                      className="w-full border-slate-300 rounded-lg p-2 text-base"
-                      value={dynamicFieldValues[field.name] || ''}
-                      onChange={e => handleDynamicFieldChange(field.name, e.target.value)}
-                      
-                      required={!!field.required}
-                    />
-                  </div>
-                ))
-              )}
-            </div>
-            
-            <h2 className="text-lg font-semibold mt-6 mb-3">Submission Details</h2>
-            {/* Date Information Grid - more columns in fullscreen so all date fields fit one row */}
-            <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1 md:grid-cols-2'}`}>
+              {/* Added date range & deadline fields moved from previous Submission Details section */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Start Date</label>
                 <Input 
@@ -708,17 +682,35 @@ export default function Compliance() {
                   onChange={e => handleFormChange("filingSubmissionDeadline", e.target.value)} 
                 />
               </div>
-              <div className="space-y-2">
-                {/* Submission Date will be moved to Renewal Details below */}
-              </div>
-              <div className="space-y-2">
-                {/* Amount field removed as requested */}
-              </div>
+              
+              {/* Dynamic Compliance Fields - Now placed after default fields */}
+              {isLoadingComplianceFields ? (
+                <div className="col-span-full text-center text-slate-500">Loading compliance fields...</div>
+              ) : (
+                complianceFields.filter(f => f.enabled).map(field => (
+                  <div className="space-y-2" key={field._id || field.name}>
+                    <label className="block text-sm font-medium text-slate-700">
+                      {field.name}
+                      {field.required ? <span className="text-red-500 ml-1">*</span> : null}
+                      {field.description && <span className="block text-xs text-slate-500">{field.description}</span>}
+                    </label>
+                    <Input
+                      className="w-full border-slate-300 rounded-lg p-2 text-base"
+                      value={dynamicFieldValues[field.name] || ''}
+                      onChange={e => handleDynamicFieldChange(field.name, e.target.value)}
+                      
+                      required={!!field.required}
+                    />
+                  </div>
+                ))
+              )}
             </div>
             
-            {/* Submission Status & Submit By Grid */}
-            <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Details</h2>
-            <div className={`grid gap-4 mt-2 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
+            {/* Move date range fields into Compliance Details above: we append them there */}
+            {/* Updated Compliance Details grid below now includes Start/End/Submission Deadline - implemented by adding them earlier (see modification). */}
+            <h2 className="text-lg font-semibold mt-6 mb-3">Submission Details</h2>
+            <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
+              {/* Only Submission Date and Submitted By per user request */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submission Date</label>
                 <Input 
@@ -729,19 +721,7 @@ export default function Compliance() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Submission Status</label>
-                <Select value={form.filingSubmissionStatus} onValueChange={(val: string) => handleFormChange("filingSubmissionStatus", val)}>
-                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                    <SelectItem value="Pending" className="text-slate-900 hover:bg-indigo-50">Pending</SelectItem>
-                    <SelectItem value="Completed" className="text-slate-900 hover:bg-indigo-50">Completed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Submit By</label>
+                <label className="block text-sm font-medium text-slate-700">Submitted By</label>
                 <Select value={form.submittedBy || ''} onValueChange={(val: string) => handleFormChange("submittedBy", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                     <SelectValue />
