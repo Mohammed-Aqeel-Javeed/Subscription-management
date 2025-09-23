@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Fragment } from "react";
+import React, { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,6 @@ import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLi
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 // Helper functions remain the same
-const mapStatus = (status: string): string => {
-  return "Pending";
-};
 const calculateEndDate = (start: string, freq: string): string => {
   if (!start) return "";
   const date = new Date(start);
@@ -42,38 +39,23 @@ const formatDate = (dateStr?: string): string => {
   const yyyy = String(d.getFullYear());
   return `${dd}/${mm}/${yyyy}`;
 };
-function getNextPeriodDates(startDate: string, endDate: string, frequency: string): { nextStartDate: string; nextEndDate: string } {
-  const start = new Date(endDate);
-  let nextStart = new Date(start);
-  let nextEnd = new Date(start);
-  
-  nextStart.setDate(start.getDate() + 1);
-  
-  if (frequency === "Monthly") {
-    nextEnd.setMonth(nextStart.getMonth() + 1);
-    nextEnd.setDate(nextEnd.getDate() - 1);
-  } else if (frequency === "Quarterly") {
-    nextEnd.setMonth(nextStart.getMonth() + 3);
-    nextEnd.setDate(nextEnd.getDate() - 1);
-  } else if (frequency === "Yearly") {
-    nextEnd.setFullYear(nextStart.getFullYear() + 1);
-    nextEnd.setDate(nextEnd.getDate() - 1);
-  }
-  
-  const format = (d: Date): string =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  
-  return { nextStartDate: format(nextStart), nextEndDate: format(nextEnd) };
-}
+
+const mapStatus = (status: string): string => {
+  // Simple status mapping - can be enhanced later
+  if (status === "Completed") return "Compliant";
+  if (status === "Pending") return "Pending";
+  return "Non-Compliant";
+};
+
 export default function Compliance() {
   // --- Dynamic Compliance Fields ---
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
   const [isLoadingComplianceFields, setIsLoadingComplianceFields] = useState(true);
   
-  // State for categories and governing authorities
-  const [categories, setCategories] = useState<string[]>([]);
-  const [governingAuthorities, setGoverningAuthorities] = useState<string[]>([]);
-  const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(true);
+  // State for categories and governing authorities - unused but keeping for potential future use
+  // const [categories, setCategories] = useState<string[]>([]);
+  // const [governingAuthorities, setGoverningAuthorities] = useState<string[]>([]);
+  // const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(true);
   
   // Fullscreen toggle state
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -91,41 +73,17 @@ export default function Compliance() {
         .finally(() => setIsLoadingComplianceFields(false));
     };
     
-    const fetchDropdownData = () => {
-      setIsLoadingDropdowns(true);
-      Promise.all([
-        fetch('/api/compliance/categories').then(res => res.json()),
-        fetch('/api/compliance/authorities').then(res => res.json())
-      ])
-      .then(([categoriesData, authoritiesData]) => {
-        if (Array.isArray(categoriesData)) setCategories(categoriesData);
-        if (Array.isArray(authoritiesData)) setGoverningAuthorities(authoritiesData);
-      })
-      .catch(() => {
-        setCategories([]);
-        setGoverningAuthorities([]);
-      })
-      .finally(() => setIsLoadingDropdowns(false));
-    };
-    
     fetchComplianceFields();
-    fetchDropdownData();
     
     // Add event listeners for account changes
     window.addEventListener("accountChanged", fetchComplianceFields);
     window.addEventListener("logout", fetchComplianceFields);
     window.addEventListener("login", fetchComplianceFields);
-    window.addEventListener("accountChanged", fetchDropdownData);
-    window.addEventListener("logout", fetchDropdownData);
-    window.addEventListener("login", fetchDropdownData);
     
     return () => {
       window.removeEventListener("accountChanged", fetchComplianceFields);
       window.removeEventListener("logout", fetchComplianceFields);
       window.removeEventListener("login", fetchComplianceFields);
-      window.removeEventListener("accountChanged", fetchDropdownData);
-      window.removeEventListener("logout", fetchDropdownData);
-      window.removeEventListener("login", fetchDropdownData);
     };
   }, []);
   
@@ -155,7 +113,7 @@ export default function Compliance() {
   
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   
