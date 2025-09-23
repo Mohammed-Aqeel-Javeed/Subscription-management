@@ -83,6 +83,8 @@ export default function GovernmentLicense() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Renewal status for modal
+  const [renewalStatus, setRenewalStatus] = useState<string>("Renewal submitted");
 
   const form = useForm<LicenseFormData>({
     resolver: zodResolver(licenseSchema),
@@ -550,12 +552,13 @@ export default function GovernmentLicense() {
         {/* Add/Edit License Modal */}
         <Dialog open={isModalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setIsModalOpen(v); }}>
           <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
-            <DialogHeader className={`bg-gradient-to-r from-indigo-500 to-indigo-600 text-white px-6 py-3 rounded-t-2xl flex flex-row items-center justify-between border-b border-indigo-400/20 ${isFullscreen ? 'h-[76px] min-h-[76px]' : 'h-[64px] min-h-[64px]'}`}>
-              <div className="flex items-center gap-3">
+            <DialogHeader className={`bg-gradient-to-r from-indigo-500 to-indigo-600 text-white px-6 py-3 rounded-t-2xl flex flex-row items-center border-b border-indigo-400/20 ${isFullscreen ? 'h-[76px] min-h-[76px]' : 'h-[64px] min-h-[64px]'}`}>
+              <div className="flex items-center gap-4">
                 <Shield className="h-6 w-6" />
                 <DialogTitle className="text-xl font-bold leading-none">
                   {editingLicense ? 'Edit License' : 'Add New License'}
                 </DialogTitle>
+                <span className="ml-4 px-3 py-1 rounded-full text-xs font-semibold bg-orange-500 text-white shadow-sm tracking-wide">Draft</span>
               </div>
               <div className="flex gap-3 items-center ml-auto mr-6">
                 <Button
@@ -719,6 +722,23 @@ export default function GovernmentLicense() {
                       </FormItem>
                     )}
                   />
+
+                  {/* Renewal Status */}
+                  <FormItem className="md:col-span-1">
+                    <FormLabel className="block text-sm font-medium text-slate-700">Renewal Status</FormLabel>
+                    <Select value={renewalStatus} onValueChange={setRenewalStatus}>
+                      <SelectTrigger className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                        <SelectValue placeholder="Select renewal status" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border border-slate-200 rounded-md shadow-lg p-0 overflow-hidden">
+                        <div className="py-1">
+                          <SelectItem value="Renewal submitted" className="pl-8 pr-3 py-2 text-sm">Renewal submitted</SelectItem>
+                          <SelectItem value="Approved" className="pl-8 pr-3 py-2 text-sm">Approved</SelectItem>
+                          <SelectItem value="Rejected" className="pl-8 pr-3 py-2 text-sm">Rejected</SelectItem>
+                        </div>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
 
                   {/* Responsible Person */}
                   <FormField
