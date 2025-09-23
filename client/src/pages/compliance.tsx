@@ -555,19 +555,19 @@ export default function Compliance() {
       {/* Modal */}
       <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setModalOpen(v); }}>
         <DialogContent className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
-          <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl">
-            <div className="flex justify-between items-center">
+          <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-5 rounded-t-2xl">
+            <div className="flex items-center justify-between w-full">
               <DialogTitle className="text-xl font-bold flex items-center gap-3">
                 <FileText className="h-6 w-6" />
                 {editIndex !== null ? "Edit Compliance" : "Add New Compliance"}
               </DialogTitle>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 pr-1">
                 <Button
                   type="button"
                   variant="outline"
                   title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
                   onClick={() => setIsFullscreen(f => !f)}
-                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-3 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
+                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold rounded-xl shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
                 >
                   {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
                 </Button>
@@ -575,7 +575,7 @@ export default function Compliance() {
                   <Button
                     type="button"
                     variant="default"
-                    className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 flex items-center gap-2 shadow-md transition-all duration-300"
+                    className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 flex items-center gap-2 shadow-md transition-all duration-300 rounded-xl"
                     onClick={() => {
                       window.location.href = `/compliance-ledger?id=${complianceItems[editIndex]._id}`;
                     }}
