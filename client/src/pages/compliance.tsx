@@ -589,6 +589,7 @@ export default function Compliance() {
             </div>
           </DialogHeader>
           <form className="p-6">
+            <h2 className="text-lg font-semibold mb-3">Compliance Details</h2>
             {/* General Information Grid - expands to more columns in fullscreen */}
             <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1 md:grid-cols-2'}`}>
               <div className="space-y-2">
@@ -675,6 +676,7 @@ export default function Compliance() {
                 ))
               )}
             </div>
+            <h2 className="text-lg font-semibold mt-6 mb-3">Date Information</h2>
             
             <h2 className="text-lg font-semibold mt-6 mb-3">Date Information</h2>
             {/* Date Information Grid - more columns in fullscreen so all date fields fit one row */}
@@ -722,6 +724,7 @@ export default function Compliance() {
             
             {/* Submission Status & Submit By Grid */}
             <div className={`grid gap-4 mt-6 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
+            <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Details</h2>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submission Status</label>
                 <Select value={form.filingSubmissionStatus} onValueChange={(val: string) => handleFormChange("filingSubmissionStatus", val)}>
