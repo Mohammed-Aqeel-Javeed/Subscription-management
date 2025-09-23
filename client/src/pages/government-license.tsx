@@ -51,20 +51,25 @@ interface License {
   updatedAt?: string;
 }
 
-// Form schema
+// Form schema (all fields optional per request to remove mandatory validation)
+// NOTE: Backend may still enforce required fields; this only relaxes frontend validation.
 const licenseSchema = z.object({
-  licenseName: z.string().min(1, "License name is required"),
-  issuingAuthorityName: z.string().min(1, "Issuing authority name is required"),
-  startDate: z.string().min(1, "Start date is required"),
-  endDate: z.string().min(1, "End date is required"),
+  licenseName: z.string().optional(),
+  issuingAuthorityName: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
   details: z.string().optional(),
-  renewalFee: z.number().min(0, "Renewal fee must be positive"),
-  responsiblePerson: z.string().min(1, "Responsible person is required"),
-  department: z.string().min(1, "Department is required"),
-  backupContact: z.string().min(1, "Backup contact is required"),
-  status: z.enum(['Active', 'Pending', 'Expired', 'Under Renewal']),
-  issuingAuthorityEmail: z.string().email("Valid email is required"),
-  issuingAuthorityPhone: z.string().min(1, "Phone number is required"),
+  renewalFee: z.preprocess((val) => {
+    if (val === '' || val === null || val === undefined) return undefined;
+    const num = typeof val === 'string' ? parseFloat(val) : val;
+    return isNaN(Number(num)) ? undefined : Number(num);
+  }, z.number().min(0).optional()),
+  responsiblePerson: z.string().optional(),
+  department: z.string().optional(),
+  backupContact: z.string().optional(),
+  status: z.enum(['Active', 'Pending', 'Expired', 'Under Renewal']).optional(),
+  issuingAuthorityEmail: z.string().email("Invalid email").optional(),
+  issuingAuthorityPhone: z.string().optional(),
 });
 
 type LicenseFormData = z.infer<typeof licenseSchema>;
