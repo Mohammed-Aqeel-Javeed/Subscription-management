@@ -86,6 +86,8 @@ export default function GovernmentLicense() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Renewal status for modal
   const [renewalStatus, setRenewalStatus] = useState<string>("Renewal submitted");
+  // Modal header status pill
+  const [headerStatus, setHeaderStatus] = useState<'Inactive' | 'Active'>("Inactive");
 
   const form = useForm<LicenseFormData>({
     resolver: zodResolver(licenseSchema),
@@ -142,6 +144,7 @@ export default function GovernmentLicense() {
         title: "Success",
         description: `License ${editingLicense ? 'updated' : 'created'} successfully`,
       });
+      setHeaderStatus('Active');
       setIsModalOpen(false);
       setEditingLicense(null);
       form.reset();
@@ -216,14 +219,16 @@ export default function GovernmentLicense() {
       issuingAuthorityEmail: license.issuingAuthorityEmail,
       issuingAuthorityPhone: license.issuingAuthorityPhone,
     });
+    setHeaderStatus('Active');
     setIsModalOpen(true);
   };
 
   // Handle add new
   const handleAddNew = () => {
-    setEditingLicense(null);
-    form.reset();
-    setIsModalOpen(true);
+  setEditingLicense(null);
+  form.reset();
+  setHeaderStatus('Inactive');
+  setIsModalOpen(true);
   };
 
   // Handle delete
@@ -559,7 +564,7 @@ export default function GovernmentLicense() {
                 <DialogTitle className="text-xl font-bold leading-none">
                   {editingLicense ? 'Edit License' : 'Add New License'}
                 </DialogTitle>
-                <span className="ml-4 px-3 py-1 rounded-full text-xs font-semibold bg-orange-500 text-white shadow-sm tracking-wide">Draft</span>
+                <span className={`ml-4 px-3 py-1 rounded-full text-xs font-semibold shadow-sm tracking-wide ${headerStatus === 'Inactive' ? 'bg-gray-400 text-white' : 'bg-green-500 text-white'}`}>{headerStatus}</span>
               </div>
               <div className="flex gap-3 items-center ml-auto mr-6">
                 <Button
