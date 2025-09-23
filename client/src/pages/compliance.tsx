@@ -710,7 +710,7 @@ export default function Compliance() {
             {/* Updated Compliance Details grid below now includes Start/End/Submission Deadline - implemented by adding them earlier (see modification). */}
             <h2 className="text-lg font-semibold mt-6 mb-3">Submission Details</h2>
             <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
-              {/* Only Submission Date and Submitted By per user request */}
+              {/* Submission Date */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submission Date</label>
                 <Input 
@@ -720,6 +720,20 @@ export default function Compliance() {
                   onChange={e => handleFormChange("filingSubmissionDate", e.target.value)} 
                 />
               </div>
+              {/* Submission Status (re-added) */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Submission Status</label>
+                <Select value={form.filingSubmissionStatus} onValueChange={(val: string) => handleFormChange("filingSubmissionStatus", val)}>
+                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
+                    <SelectItem value="Pending" className="text-slate-900 hover:bg-indigo-50">Pending</SelectItem>
+                    <SelectItem value="Completed" className="text-slate-900 hover:bg-indigo-50">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Submitted By */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submitted By</label>
                 <Select value={form.submittedBy || ''} onValueChange={(val: string) => handleFormChange("submittedBy", val)}>
