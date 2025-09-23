@@ -676,9 +676,8 @@ export default function Compliance() {
                 ))
               )}
             </div>
-            <h2 className="text-lg font-semibold mt-6 mb-3">Date Information</h2>
             
-            <h2 className="text-lg font-semibold mt-6 mb-3">Date Information</h2>
+            <h2 className="text-lg font-semibold mt-6 mb-3">Submission Details</h2>
             {/* Date Information Grid - more columns in fullscreen so all date fields fit one row */}
             <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1 md:grid-cols-2'}`}>
               <div className="space-y-2">
@@ -709,6 +708,17 @@ export default function Compliance() {
                 />
               </div>
               <div className="space-y-2">
+                {/* Submission Date will be moved to Renewal Details below */}
+              </div>
+              <div className="space-y-2">
+                {/* Amount field removed as requested */}
+              </div>
+            </div>
+            
+            {/* Submission Status & Submit By Grid */}
+            <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Details</h2>
+            <div className={`grid gap-4 mt-2 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submission Date</label>
                 <Input 
                   className="w-full border-slate-300 rounded-lg p-2 text-base" 
@@ -717,14 +727,6 @@ export default function Compliance() {
                   onChange={e => handleFormChange("filingSubmissionDate", e.target.value)} 
                 />
               </div>
-              <div className="space-y-2">
-                {/* Amount field removed as requested */}
-              </div>
-            </div>
-            
-            {/* Submission Status & Submit By Grid */}
-            <div className={`grid gap-4 mt-6 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
-            <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Details</h2>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submission Status</label>
                 <Select value={form.filingSubmissionStatus} onValueChange={(val: string) => handleFormChange("filingSubmissionStatus", val)}>
