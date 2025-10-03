@@ -36,5 +36,6 @@ export const API_ENDPOINTS = {
   CONFIG_COMPLIANCE_FIELDS: '/api/config/compliance-fields',
   COMPANY_CATEGORIES: '/api/company/categories',
   COMPANY_DEPARTMENTS: '/api/company/departments',
+  COMPANY_INFO: '/api/company-info',
   CURRENCIES: '/api/currencies',
 } as const;

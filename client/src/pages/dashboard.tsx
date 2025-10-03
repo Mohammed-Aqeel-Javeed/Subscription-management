@@ -169,36 +169,48 @@ export default function Dashboard() {
 
   return (
     <ErrorBoundary>
-      <div className="p-8">
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-          <button
-            onClick={handleLogout}
-            style={{ padding: '8px 16px', background: '#f44336', color: '#fff', border: 0, borderRadius: 4, fontWeight: 600 }}
-          >
-            Logout
-          </button>
-        </div>
-        {/* Top tab buttons */}
-        <div className="flex gap-4 mb-8">
-          <Button
-            className={location === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
-            variant="outline"
-            onClick={() => handleTabClick('subscription')}
-          >
-            Subscription
-          </Button>
-          <Button
-            className={location === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
-            variant="outline"
-            onClick={() => handleTabClick('compliance')}
-          >
-            Compliance
-          </Button>
-        </div>
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">Dashboard</h2>
-          <p className="text-gray-600 mt-2">Overview of your subscription spending and analytics</p>
-        </div>
+      <div className="min-h-screen bg-white">
+        <div className="max-w-[1400px] mx-auto px-6 py-8">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+            <button
+              onClick={handleLogout}
+              style={{ padding: '8px 16px', background: '#f44336', color: '#fff', border: 0, borderRadius: 4, fontWeight: 600 }}
+            >
+              Logout
+            </button>
+          </div>
+          
+          {/* Modern Professional Header */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-4">
+                <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
+                  <TrendingUp className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Dashboard</h1>
+                  <p className="text-gray-600 text-sm">Overview of your subscription spending and analytics</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-3">
+                <Button
+                  className={location === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+                  variant="outline"
+                  onClick={() => handleTabClick('subscription')}
+                >
+                  Subscription
+                </Button>
+                <Button
+                  className={location === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+                  variant="outline"
+                  onClick={() => handleTabClick('compliance')}
+                >
+                  Compliance
+                </Button>
+              </div>
+            </div>
+          </div>
 
         {/* Date Filter */}
         <div className="mb-6 flex justify-between items-center">
@@ -228,91 +240,87 @@ export default function Dashboard() {
         </div>
 
         {/* Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-white shadow-md rounded-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Monthly Spend</p>
-                  <p className="text-3xl font-bold text-gray-900">
-                    ${metrics?.monthlySpend.toLocaleString() || '0'}
-                  </p>
-                  <p className={`text-sm mt-1 flex items-center ${getGrowthColor(-12)}`}>
-                    {getGrowthIcon(-12)} 12% from last month
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <CalendarDays className="text-primary" />
-                </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-100">Monthly Spend</p>
+                <p className="text-2xl font-bold text-white mt-1">
+                  ${metrics?.monthlySpend.toLocaleString() || '0'}
+                </p>
+                <p className={`text-sm mt-1 flex items-center text-blue-200`}>
+                  {getGrowthIcon(-12)} 12% from last month
+                </p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <CalendarDays className="h-5 w-5 text-white" />
+              </div>
+            </div>
+          </div>
 
-          <Card className="bg-white shadow-md rounded-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Yearly Spend</p>
-                  <p className="text-3xl font-bold text-gray-900">
-                    ${metrics?.yearlySpend.toLocaleString() || '0'}
-                  </p>
-                  <p className={`text-sm mt-1 flex items-center ${getGrowthColor(8)}`}>
-                    {getGrowthIcon(8)} 8% from last year
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="text-green-600" />
-                </div>
+          <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-green-100">Yearly Spend</p>
+                <p className="text-2xl font-bold text-white mt-1">
+                  ${metrics?.yearlySpend.toLocaleString() || '0'}
+                </p>
+                <p className={`text-sm mt-1 flex items-center text-green-200`}>
+                  {getGrowthIcon(8)} 8% from last year
+                </p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-white" />
+              </div>
+            </div>
+          </div>
 
-          <Card className={`cursor-pointer hover:shadow-md transition-shadow bg-white rounded-lg ${activeSubscriptionsModalOpen ? 'border-2 border-blue-500 bg-blue-50' : ''}`} onClick={() => setActiveSubscriptionsModalOpen(true)}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Active Subscriptions</p>
-                  <p className="text-3xl font-bold text-blue-600 hover:text-blue-700">
-                    {metrics?.activeSubscriptions || 0}
-                  </p>
-                  <p className="text-sm text-blue-600 mt-1 flex items-center">
-                    <Users className="w-4 h-4 mr-1" /> Click to view details
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <RefreshCw className="text-blue-600" />
-                </div>
+          <div 
+            className={`cursor-pointer hover:shadow-lg transition-shadow bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 shadow-sm ${activeSubscriptionsModalOpen ? 'ring-2 ring-purple-300' : ''}`} 
+            onClick={() => setActiveSubscriptionsModalOpen(true)}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-purple-100">Active Subscriptions</p>
+                <p className="text-2xl font-bold text-white mt-1">
+                  {metrics?.activeSubscriptions || 0}
+                </p>
+                <p className="text-sm text-purple-200 mt-1 flex items-center">
+                  <Users className="w-4 h-4 mr-1" /> Click to view details
+                </p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <RefreshCw className="h-5 w-5 text-white" />
+              </div>
+            </div>
+          </div>
 
-          <Card className={`cursor-pointer hover:shadow-md transition-shadow bg-white rounded-lg ${upcomingRenewalsModalOpen ? 'border-2 border-blue-500 bg-blue-50' : ''}`} onClick={() => setUpcomingRenewalsModalOpen(true)}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Upcoming Renewals</p>
-                  <p className="text-3xl font-bold text-orange-600 hover:text-orange-700">
-                    {metrics?.upcomingRenewals || 0}
-                  </p>
-                  <p className="text-sm text-orange-600 mt-1 flex items-center">
-                    <Clock className="w-4 h-4 mr-1" /> Next 30 days - Click to view
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Bell className="text-orange-600" />
-                </div>
+          <div 
+            className={`cursor-pointer hover:shadow-lg transition-shadow bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-4 shadow-sm ${upcomingRenewalsModalOpen ? 'ring-2 ring-orange-300' : ''}`} 
+            onClick={() => setUpcomingRenewalsModalOpen(true)}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-orange-100">Upcoming Renewals</p>
+                <p className="text-2xl font-bold text-white mt-1">
+                  {upcomingRenewals.length}
+                </p>
+                <p className="text-sm text-orange-200 mt-1 flex items-center">
+                  <Clock className="w-4 h-4 mr-1" /> Next 30 days - Click to view
+                </p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <Bell className="h-5 w-5 text-white" />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Spending Trends</CardTitle>
-            </CardHeader>
-            <CardContent>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Spending Trends</h3>
+            <div>
               {trendsLoading ? (
                 <Skeleton className="h-80 w-full" />
               ) : trends ? (
@@ -322,14 +330,12 @@ export default function Dashboard() {
                   No trend data available
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Category Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Category Breakdown</h3>
+            <div>
               {categoriesLoading ? (
                 <Skeleton className="h-80 w-full" />
               ) : categories ? (
@@ -339,8 +345,8 @@ export default function Dashboard() {
                   No category data available
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
         {/* Active Subscriptions Modal */}
@@ -431,6 +437,7 @@ export default function Dashboard() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
     </ErrorBoundary>
   );

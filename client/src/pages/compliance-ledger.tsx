@@ -18,6 +18,34 @@ const formatDate = (dateStr?: string): string => {
   return `${dd}/${mm}/${yyyy}`;
 };
 
+// Dynamic status calculation - same as in compliance.tsx
+const getComplianceStatus = (endDate?: string, submissionDeadline?: string): string => {
+  // If no dates provided, default to Pending
+  if (!endDate && !submissionDeadline) return "Pending";
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Set to start of today for accurate comparison
+  
+  // Use submission deadline if available, otherwise use end date
+  const targetDate = new Date(submissionDeadline || endDate || "");
+  if (isNaN(targetDate.getTime())) return "Pending";
+  
+  targetDate.setHours(0, 0, 0, 0); // Set to start of day for accurate comparison
+  
+  // If today is past the target date, it's overdue
+  if (today > targetDate) {
+    return "Overdue";
+  }
+  
+  // If today equals the target date, it's due today
+  if (today.getTime() === targetDate.getTime()) {
+    return "Due Today";
+  }
+  
+  // If target date is in the future, it's pending
+  return "Pending";
+};
+
 // Function to map status values and get appropriate icon
 const getStatusInfo = (status: string) => {
   if (status === "Completed") {
@@ -26,6 +54,20 @@ const getStatusInfo = (status: string) => {
       variant: "default" as const, 
       icon: <CheckCircle className="w-4 h-4" />,
       color: "bg-green-100 text-green-800"
+    };
+  } else if (status === "Overdue") {
+    return { 
+      text: "Overdue", 
+      variant: "destructive" as const, 
+      icon: <XCircle className="w-4 h-4" />,
+      color: "bg-red-100 text-red-800"
+    };
+  } else if (status === "Due Today") {
+    return { 
+      text: "Due Today", 
+      variant: "secondary" as const, 
+      icon: <Clock className="w-4 h-4" />,
+      color: "bg-orange-100 text-orange-800"
     };
   } else if (status === "Pending") {
     return { 
@@ -218,7 +260,18 @@ export default function ComplianceLedger() {
                     </TableRow>
                   ) : (
                     filteredLedgerItems.map((item: any) => {
-                      const statusInfo = getStatusInfo(item.filingSubmissionStatus);
+                      // Calculate dynamic status based on submission date and deadline
+                      let displayStatus = item.filingSubmissionStatus;
+                      
+                      // If there's a submission date, it's completed
+                      if (item.filingSubmissionDate) {
+                        displayStatus = "Completed";
+                      } else {
+                        // Otherwise calculate based on dates
+                        displayStatus = getComplianceStatus(item.filingEndDate, item.filingSubmissionDeadline);
+                      }
+                      
+                      const statusInfo = getStatusInfo(displayStatus);
                       return (
                         <TableRow key={item._id} className="hover:bg-gray-50 transition-colors">
                           <TableCell className="font-medium text-gray-900">{item.filingName}</TableCell>

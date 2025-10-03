@@ -197,6 +197,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       return Array.isArray(data) ? data : [];
     }
   });
+
+  // Fetch company info for local currency and exchange rate calculations
+  const { data: companyInfo = {} } = useQuery({
+    queryKey: ["/api/company-info"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/company-info`, { credentials: "include" });
+      if (res.ok) {
+        return await res.json();
+      }
+      return {};
+    }
+  });
   
   // Dynamic subscription fields from config
   const [dynamicFields, setDynamicFields] = useState<SubscriptionField[]>([]);
@@ -287,6 +299,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(parseDepartments(subscription?.department));
   // Removed unused isPopoverOpen state
   const [isRenewing, setIsRenewing] = useState(false);
+  const [lcyAmount, setLcyAmount] = useState<string>('');
   
   // Refetch data when modal opens
   useEffect(() => {
@@ -371,6 +384,34 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       form.setValue('nextRenewal', calculatedEndDate);
     }
   }, [startDate, billingCycle, form]);
+
+  // Calculate LCY Amount based on amount, currency, and exchange rate
+  useEffect(() => {
+    const calculateLcyAmount = () => {
+      const amount = form.watch('amount');
+      const currency = form.watch('currency');
+      const localCurrency = companyInfo?.defaultCurrency;
+      
+      if (!amount || !currency || !localCurrency || currency === localCurrency) {
+        setLcyAmount(currency === localCurrency ? amount?.toString() || '' : '');
+        return;
+      }
+      
+      // Find the selected currency and its exchange rate
+      const selectedCurrency = currencies.find((curr: any) => curr.code === currency);
+      const exchangeRate = selectedCurrency?.exchangeRate ? parseFloat(selectedCurrency.exchangeRate) : null;
+      
+      if (exchangeRate && exchangeRate > 0) {
+        const amountNum = parseFloat(amount?.toString() || '0');
+        const convertedAmount = amountNum * exchangeRate;
+        setLcyAmount(convertedAmount.toFixed(2));
+      } else {
+        setLcyAmount('');
+      }
+    };
+    
+    calculateLcyAmount();
+  }, [form.watch('amount'), form.watch('currency'), companyInfo?.defaultCurrency, currencies]);
   
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -882,17 +923,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     <>
       <style>{animationStyles}</style>
       <Dialog open={open} onOpenChange={(v) => { if (!v) setIsFullscreen(false); onOpenChange(v); }}>
-        <DialogContent className={`$${''} ${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}> 
-          <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-t-2xl flex flex-row items-center">
+        <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}> 
+          <DialogHeader className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white p-6 rounded-t-2xl flex flex-row items-center shadow-sm">
             <div className="flex items-center gap-4 flex-1 min-w-0">
-              <CreditCard className="h-6 w-6 flex-shrink-0" />
+              <div className="h-10 w-10 bg-white/15 rounded-xl flex items-center justify-center">
+                <CreditCard className="h-5 w-5 text-white" />
+              </div>
               <div className="flex items-center gap-4 flex-wrap">
-                <DialogTitle className="text-xl font-bold">
-                  {isEditing ? 'Edit Subscription' : 'Add New Subscription'}
+                <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                  {isEditing ? (subscription?.serviceName || 'Edit Subscription') : 'Subscription'}
                 </DialogTitle>
                 <span
-                  className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm tracking-wide ${
-                    status === 'Active' ? 'bg-green-500 text-white' : status === 'Cancelled' ? 'bg-rose-500 text-white' : 'bg-orange-500 text-white'
+                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold tracking-wide ${
+                    status === 'Active' 
+                      ? 'bg-emerald-500 text-white' 
+                      : status === 'Cancelled' 
+                        ? 'bg-rose-500 text-white' 
+                        : 'bg-orange-500 text-white'
                   }`}
                 >
                   {status}
@@ -903,7 +950,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <Button
                 type="button"
                 variant="outline"
-                className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-5 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 min-w-[90px] border-indigo-200"
+                className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] border-white shadow-sm"
                 onClick={() => window.location.href = "/subscription-user"}
               >
                 User
@@ -911,7 +958,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <Button
                 type="button"
                 variant="outline"
-                className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-5 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 min-w-[90px] border-indigo-200 flex items-center gap-2"
+                className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-white shadow-sm"
                 onClick={handleRenew}
                 disabled={isRenewing || !endDate || !billingCycle}
               >
@@ -926,7 +973,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <Button
                 type="button"
                 variant="outline"
-                className={`bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-5 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 min-w-[90px] border-indigo-200 flex items-center gap-2 ${!isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`bg-white text-indigo-600 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-white shadow-sm ${!isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
                   if (isEditing && subscription?.id) {
                     // Only pass the ID, removing serviceName to simplify filtering
@@ -943,26 +990,32 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 type="button"
                 variant="outline"
                 title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
-                className={`bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-3 py-2 rounded-lg shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center`}
+                className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
                 onClick={() => setIsFullscreen(f => !f)}
               >
-                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
             </div>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="p-6">
-              <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-5 lg:grid-cols-6' : 'grid-cols-1 md:grid-cols-3'}`}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="p-8 bg-gradient-to-br from-gray-50 to-white">
+              {/* Professional Section Header */}
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">Subscription Details</h2>
+                <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
+              </div>
+              
+              <div className={`grid gap-6 mb-8 ${isFullscreen ? 'grid-cols-1 md:grid-cols-5 lg:grid-cols-7' : 'grid-cols-1 md:grid-cols-4'}`}>
                 {/* Static Fields */}
                 <FormField
                   control={form.control}
                   name="serviceName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Service Name</FormLabel>
+                      <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Service Name</FormLabel>
                       <FormControl>
                         <Input 
-                          className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                          className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
                           {...field} 
                           
                         />
@@ -976,10 +1029,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="vendor"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Vendor</FormLabel>
+                      <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Vendor</FormLabel>
                       <FormControl>
                         <Input 
-                          className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                          className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
                           {...field} 
                           
                         />
@@ -993,12 +1046,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="currency"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Currency</FormLabel>
+                      <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Currency</FormLabel>
                       <Select
                         value={field.value || ''}
                         onValueChange={field.onChange}
                       >
-                        <SelectTrigger className="w-full bg-white border border-blue-300 rounded-lg shadow-sm p-2 text-base focus:ring-2 focus:ring-blue-500">
+                        <SelectTrigger className="w-full bg-white border-gray-300 rounded-lg shadow-sm p-3 text-base font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
@@ -1033,13 +1086,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="amount"
                   render={({ field }) => (
                     <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Amount</FormLabel>
+                        <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Amount</FormLabel>
                         <FormControl>
                           <Input 
                             type="number" 
                             step="0.01" 
                             min="0"
-                            className="w-full border-slate-300 rounded-lg p-2 text-base text-right font-semibold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
+                            className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
                             value={field.value}
                             onChange={e => {
                               // Limit to 2 decimal places
@@ -1056,6 +1109,32 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     </FormItem>
                   )}
                 />
+                {/* LCY Amount Field - Read-only calculated field */}
+                <div className="form-item">
+                  <label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">
+                    LCY Amount ({companyInfo?.defaultCurrency || 'Local Currency'})
+                  </label>
+                  <div className="relative">
+                    <Input 
+                      type="text"
+                      value={lcyAmount}
+                      readOnly
+                      className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-gray-50 text-gray-600 shadow-sm"
+                      placeholder={
+                        !companyInfo?.defaultCurrency ? 'Set local currency in Company Details' :
+                        !form.watch('currency') ? 'Select currency' :
+                        form.watch('currency') === companyInfo?.defaultCurrency ? 'Same as amount' :
+                        !currencies.find((c: any) => c.code === form.watch('currency'))?.exchangeRate ? 'Set exchange rate in Currency Settings' :
+                        'Calculated automatically'
+                      }
+                    />
+                    {form.watch('currency') && form.watch('currency') !== companyInfo?.defaultCurrency && lcyAmount && (
+                      <div className="text-xs text-gray-500 mt-2 font-medium">
+                        Exchange rate: {currencies.find((c: any) => c.code === form.watch('currency'))?.exchangeRate || 'Not set'}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <FormField
                   control={form.control}
                     name="billingCycle"
@@ -1160,66 +1239,70 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="departments"
                   render={() => (
                     <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
-                        <Select
-                          value={selectedDepartments.length > 0 ? selectedDepartments.join(',') : ''}
-                          onValueChange={() => {}}
-                          disabled={departmentsLoading}
-                        >
-                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="dropdown-content">
-                            {Array.isArray(departments) && departments.length > 0 ? (
-                              departments
-                                .filter(dept => dept.visible)
-                                .map(dept => (
-                                  <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
-                                    <Checkbox
-                                      id={`dept-${dept.name}`}
-                                      checked={selectedDepartments.includes(dept.name)}
-                                      onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
-                                      disabled={departmentsLoading}
-                                    />
-                                    <label
-                                      htmlFor={`dept-${dept.name}`}
-                                      className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                      <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
+                      <Select
+                        value={selectedDepartments.length > 0 ? selectedDepartments.join(',') : ''}
+                        onValueChange={() => {}}
+                        disabled={departmentsLoading}
+                      >
+                        <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden">
+                          <div className="w-full overflow-hidden">
+                            {/* Render selected departments as badges inside the input box */}
+                            {selectedDepartments.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 w-full">
+                                {selectedDepartments.map((dept) => (
+                                  <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
+                                    <span className="truncate max-w-[80px]">{dept}</span>
+                                    <button
+                                      type="button"
+                                      onClick={e => { e.stopPropagation(); removeDepartment(dept); }}
+                                      className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
+                                      tabIndex={-1}
                                     >
-                                      {dept.name}
-                                    </label>
-                                  </div>
-                                ))
-                            ) : null}
-                            {/* Add Department option at the end */}
-                            <div
-                              className="dropdown-item font-medium border-t border-gray-200 mt-1 pt-2 text-black cursor-pointer px-2 py-2"
-                              onClick={() => window.location.href = "/company-details?tab=department"}
-                            >
-                              + New
-                            </div>
-                            {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
-                              <SelectItem value="no-department" disabled className="dropdown-item disabled">No departments found</SelectItem>
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">Select departments</span>
                             )}
-                          </SelectContent>
-                        </Select>
-                        {/* Display selected departments as badges */}
-                        {selectedDepartments.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {selectedDepartments.map((dept) => (
-                              <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200">
-                                {dept}
-                                <button
-                                  type="button"
-                                  onClick={() => removeDepartment(dept)}
-                                  className="ml-1 rounded-full hover:bg-indigo-300"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ))}
                           </div>
-                        )}
-                        <FormMessage />
+                        </SelectTrigger>
+                        <SelectContent className="dropdown-content">
+                          {Array.isArray(departments) && departments.length > 0 ? (
+                            departments
+                              .filter(dept => dept.visible)
+                              .map(dept => (
+                                <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                                  <Checkbox
+                                    id={`dept-${dept.name}`}
+                                    checked={selectedDepartments.includes(dept.name)}
+                                    onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
+                                    disabled={departmentsLoading}
+                                  />
+                                  <label
+                                    htmlFor={`dept-${dept.name}`}
+                                    className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                                  >
+                                    {dept.name}
+                                  </label>
+                                </div>
+                              ))
+                          ) : null}
+                          {/* Add Department option at the end */}
+                          <div
+                            className="dropdown-item font-medium border-t border-gray-200 mt-1 pt-2 text-black cursor-pointer px-2 py-2"
+                            onClick={() => window.location.href = "/company-details?tab=department"}
+                          >
+                            + New
+                          </div>
+                          {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
+                            <SelectItem value="no-department" disabled className="dropdown-item disabled">No departments found</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -1373,7 +1456,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   </div>
                 )}
               </div>
-              <h2 className="text-lg font-semibold mt-6 mb-3">Renewal Information</h2>
+              {/* Professional Renewal Section Header */}
+              <div className="mt-10 mb-8">
+                <h2 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">Renewal Information</h2>
+                <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
+              </div>
               <div className="grid gap-4 mb-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                 {/* Start Date */}
                 <div className="w-full flex flex-col">
@@ -1581,11 +1668,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   )}
                 />
               </div>
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
+              <div className="flex justify-end gap-4 mt-10 pt-6 border-t border-gray-200 bg-gray-50/50 -mx-8 px-8 -mb-8 pb-8 rounded-b-2xl">
                 <Button 
                   type="button" 
                   variant="destructive" 
-                  className="font-bold px-4 py-2 border-2 border-red-600 text-white bg-red-600 hover:bg-red-700 shadow-lg mr-auto"
+                  className="font-semibold px-6 py-3 border-2 border-red-600 text-white bg-red-600 hover:bg-red-700 shadow-lg mr-auto rounded-lg transition-all duration-200 hover:shadow-red-500/25"
                   onClick={() => {
                     // Close modal immediately for fast UX
                     setStatus('Cancelled');
@@ -1629,7 +1716,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <Button 
                   type="button" 
                   variant="outline" 
-                  className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-4 py-2"
+                  className="border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
                   onClick={() => onOpenChange(false)}
                 >
                   Exit
@@ -1637,7 +1724,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <Button 
                   type="button" 
                   variant="outline" 
-                  className="border-blue-300 text-blue-700 hover:bg-blue-50 font-medium px-4 py-2"
+                  className="border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
                   onClick={() => handleSaveDraft()}
                   disabled={draftMutation.isPending}
                 >
@@ -1645,7 +1732,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </Button>
                 <Button 
                   type="submit" 
-                  className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-4 py-2 shadow-md hover:shadow-lg"
+                  className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold px-8 py-3 shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-blue-700 rounded-lg transition-all duration-200 tracking-tight"
                   disabled={mutation.isPending}
                 >
                   {mutation.isPending ? 'Saving...' : isEditing ? 'Update Subscription' : 'Save Subscription'}

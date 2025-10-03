@@ -975,6 +975,110 @@ router.get("/api/currencies", async (req, res) => {
   }
 });
 
+// --- Exchange Rates API ---
+// Get exchange rates for a currency code (for current tenant)
+router.get("/api/exchange-rates/:code", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("exchange_rates");
+    const tenantId = req.user?.tenantId;
+    const code = (req.params.code || "").toUpperCase();
+
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    if (!code) {
+      return res.status(400).json({ message: "Currency code is required" });
+    }
+
+    const items = await collection
+      .find({ tenantId, code })
+      .sort({ date: 1, createdAt: 1 })
+      .toArray();
+
+    // Normalize output
+    const rates = items.map((r: any) => ({
+      _id: r._id?.toString?.() || undefined,
+      date: typeof r.date === 'string' ? r.date : (r.date?.toISOString?.().slice(0, 10) || ''),
+      code: r.code,
+      relCurrency: r.relCurrency,
+      rate: String(r.rate ?? ''),
+      relRate: String(r.relRate ?? '')
+    }));
+
+    res.status(200).json(rates);
+  } catch (error) {
+    console.error("Error fetching exchange rates:", error);
+    res.status(500).json({ message: "Failed to fetch exchange rates", error });
+  }
+});
+
+// Replace exchange rates for a currency code (idempotent upsert by full replace)
+router.post("/api/exchange-rates/:code", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("exchange_rates");
+    const tenantId = req.user?.tenantId;
+    const code = (req.params.code || "").toUpperCase();
+
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    if (!code) {
+      return res.status(400).json({ message: "Currency code is required" });
+    }
+
+    const { rates } = req.body || {};
+    if (!Array.isArray(rates)) {
+      return res.status(400).json({ message: "'rates' array is required" });
+    }
+
+    // Validate and normalize incoming rows
+    const normalizeDate = (val: any) => {
+      if (!val) return undefined;
+      if (typeof val === 'string') {
+        // accept yyyy-mm-dd or dd-mm-yyyy
+        if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+        if (/^\d{2}-\d{2}-\d{4}$/.test(val)) {
+          const [dd, mm, yyyy] = val.split('-');
+          return `${yyyy}-${mm}-${dd}`;
+        }
+      }
+      // fallback: try Date parsing
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      return undefined;
+    };
+
+    const docs = rates
+      .map((r: any) => ({
+        date: normalizeDate(r.date),
+        code,
+        relCurrency: (r.relCurrency || '').toString().trim().toUpperCase(),
+        rate: r.rate === '' || r.rate == null ? undefined : Number(r.rate),
+        relRate: r.relRate === '' || r.relRate == null ? undefined : Number(r.relRate)
+      }))
+      .filter((r: any) => r.date && r.relCurrency && (typeof r.rate === 'number' || typeof r.relRate === 'number'))
+      .map((r: any) => ({
+        ...r,
+        tenantId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }));
+
+    // Replace strategy: delete old then insert new
+    await collection.deleteMany({ tenantId, code });
+    if (docs.length > 0) {
+      await collection.insertMany(docs);
+    }
+
+    res.status(200).json({ message: "Exchange rates saved", count: docs.length });
+  } catch (error) {
+    console.error("Error saving exchange rates:", error);
+    res.status(500).json({ message: "Failed to save exchange rates", error });
+  }
+});
+
 // Add a new currency
 router.post("/api/currencies", async (req, res) => {
   try {
@@ -2028,6 +2132,206 @@ router.delete("/api/licenses/:id", async (req, res) => {
     console.error("Error deleting license:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     res.status(500).json({ message: "Failed to delete license", error: errorMessage });
+  }
+});
+
+// --- Company Information API ---
+// Company Information interface
+export interface CompanyInfo {
+  _id?: any; // MongoDB ObjectId
+  tenantId: string;
+  companyName: string;
+  companyLogo?: string;
+  defaultCurrency?: string;
+  address: string;
+  country: string;
+  financialYearEnd: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Get company information
+router.get("/api/company-info", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("companyInfo");
+    const tenantId = req.user?.tenantId;
+    
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const companyInfo = await collection.findOne({ tenantId });
+    
+    if (companyInfo) {
+      // Convert ObjectId to string for frontend
+      res.status(200).json({
+        ...companyInfo,
+        _id: companyInfo._id.toString()
+      });
+    } else {
+      res.status(404).json({ message: "Company information not found" });
+    }
+  } catch (error: unknown) {
+    console.error("Error fetching company info:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to fetch company information", error: errorMessage });
+  }
+});
+
+// Create or update company information
+router.post("/api/company-info", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("companyInfo");
+    const tenantId = req.user?.tenantId;
+    
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+  const { companyName, companyLogo, address, country, financialYearEnd, defaultCurrency } = req.body;
+
+    // Validate required fields
+    if (!companyName || !address || !country || !financialYearEnd) {
+      return res.status(400).json({ 
+        message: "Company name, address, country, and financial year end are required" 
+      });
+    }
+
+    const companyData: CompanyInfo = {
+      tenantId,
+      companyName: companyName.trim(),
+      companyLogo: companyLogo || "",
+      defaultCurrency: defaultCurrency || "",
+      address: address.trim(),
+      country: country.trim(),
+      financialYearEnd: financialYearEnd.trim(),
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // Check if company info already exists for this tenant
+    const existingInfo = await collection.findOne({ tenantId });
+    
+    if (existingInfo) {
+      // Update existing record
+      const updateData = {
+        ...companyData,
+        createdAt: existingInfo.createdAt, // Preserve original creation date
+        updatedAt: new Date()
+      };
+      
+      const result = await collection.updateOne(
+        { tenantId },
+        { $set: updateData }
+      );
+      
+      res.status(200).json({ 
+        message: "Company information updated successfully",
+        _id: existingInfo._id.toString()
+      });
+    } else {
+      // Create new record
+      const result = await collection.insertOne(companyData);
+      
+      res.status(201).json({ 
+        message: "Company information created successfully",
+        _id: result.insertedId.toString()
+      });
+    }
+  } catch (error: unknown) {
+    console.error("Error saving company info:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to save company information", error: errorMessage });
+  }
+});
+
+// Update company information
+router.put("/api/company-info/:id", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("companyInfo");
+    const { id } = req.params;
+    const tenantId = req.user?.tenantId;
+    
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    let companyId;
+    try {
+      companyId = new ObjectId(id);
+    } catch {
+      return res.status(400).json({ message: "Invalid company ID format" });
+    }
+
+  const { companyName, companyLogo, address, country, financialYearEnd, defaultCurrency } = req.body;
+
+    // Validate required fields
+    if (!companyName || !address || !country || !financialYearEnd) {
+      return res.status(400).json({ 
+        message: "Company name, address, country, and financial year end are required" 
+      });
+    }
+
+    const updateData = {
+      companyName: companyName.trim(),
+      companyLogo: companyLogo || "",
+      defaultCurrency: defaultCurrency || "",
+      address: address.trim(),
+      country: country.trim(),
+      financialYearEnd: financialYearEnd.trim(),
+      updatedAt: new Date()
+    };
+
+    const result = await collection.updateOne(
+      { _id: companyId, tenantId },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Company information not found or access denied" });
+    }
+
+    res.status(200).json({ message: "Company information updated successfully" });
+  } catch (error: unknown) {
+    console.error("Error updating company info:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to update company information", error: errorMessage });
+  }
+});
+
+// Delete company information
+router.delete("/api/company-info/:id", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("companyInfo");
+    const { id } = req.params;
+    const tenantId = req.user?.tenantId;
+    
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    let companyId;
+    try {
+      companyId = new ObjectId(id);
+    } catch {
+      return res.status(400).json({ message: "Invalid company ID format" });
+    }
+
+    const result = await collection.deleteOne({ _id: companyId, tenantId });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Company information not found or access denied" });
+    }
+
+    res.status(200).json({ message: "Company information deleted successfully" });
+  } catch (error: unknown) {
+    console.error("Error deleting company info:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to delete company information", error: errorMessage });
   }
 });
 

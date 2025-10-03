@@ -387,42 +387,34 @@ export default function Subscriptions() {
   }
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-slate-50 to-indigo-100 p-4 md:p-6 relative">
-      <div className="max-w-7xl mx-auto">
-        {/* Header Section */}
-        <div className="bg-white rounded-2xl shadow-xl p-4 mb-6 border border-slate-200">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="flex-1">
-              <div className="flex items-center gap-4 mb-3">
-                <div className="p-3 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl shadow-md">
-                  <CreditCard className="h-7 w-7 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">Subscription Management</h1>
-                  <p className="text-slate-600 text-lg mt-1">Manage all your active subscriptions</p>
-                </div>
+    <div className="min-h-screen bg-white">
+      <div className="max-w-[1400px] mx-auto px-6 py-8">
+        {/* Modern Professional Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-4">
+              <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
+                <CreditCard className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Subscription Management</h1>
               </div>
             </div>
-            <div className="flex flex-row gap-4 items-center">
-              <Button
-                variant="default"
-                className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-semibold shadow-md hover:scale-105 transition-transform"
-                onClick={handleAddNew}
-                title="Add Subscription"
-              >
-                <Plus className="h-5 w-5 mr-2" /> Add New Subscription
-              </Button>
+            
+            <div className="flex items-center space-x-3">
               <Button
                 variant="outline"
-                className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-sm"
+                size="sm"
                 onClick={() => window.location.href = '/subscription-history'}
+                className="bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200 hover:border-indigo-300 font-medium transition-all duration-200"
               >
-                <Calendar className="h-5 w-5 mr-2" /> History
+                <Calendar className="h-4 w-4 mr-2" />
+                History
               </Button>
-
+              
               <Button
                 variant="outline"
-                className="border-rose-200 text-rose-700 hover:bg-rose-50 shadow-sm"
+                size="sm"
                 onClick={() => {
                   if (location.pathname.includes('cancelled')) {
                     navigate('/subscriptions');
@@ -430,210 +422,269 @@ export default function Subscriptions() {
                     navigate('/subscriptions/cancelled');
                   }
                 }}
+                className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200 text-orange-700 hover:from-orange-100 hover:to-orange-200 hover:border-orange-300 font-medium transition-all duration-200"
               >
-                <XCircle className="h-5 w-5 mr-2" />
-                {location.pathname.includes('cancelled') ? 'Show All' : 'Cancelled'}
+                <XCircle className="h-4 w-4 mr-2" />
+                {location.pathname.includes('cancelled') ? 'All Subscriptions' : 'Cancelled'}
+              </Button>
+              
+              <Button
+                onClick={handleAddNew}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Subscription
               </Button>
             </div>
           </div>
-          {/* --- Summary Stats --- */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <Card className="bg-gradient-to-r from-indigo-500 to-indigo-600 shadow-sm rounded-lg p-3 flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <CreditCard className="h-6 w-6 text-white" />
+
+          {/* Key Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-100">Total Subscriptions</p>
+                  <p className="text-2xl font-bold text-white mt-1">{total}</p>
+                </div>
+                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <CreditCard className="h-5 w-5 text-white" />
+                </div>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-white">{total}</div>
-                <div className="text-white/90 text-sm">Total Subscriptions</div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-emerald-100">Active Services</p>
+                  <p className="text-2xl font-bold text-white mt-1">{active}</p>
+                </div>
+                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <AlertCircle className="h-5 w-5 text-white" />
+                </div>
               </div>
-            </Card>
-            <Card className="bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-sm rounded-lg p-3 flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <AlertCircle className="h-6 w-6 text-white" />
+            </div>
+            
+            <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-purple-100">Data Management</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExport}
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
+                    >
+                      <Download className="h-3 w-3 mr-1" />
+                      Export
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={triggerImport}
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
+                    >
+                      <Upload className="h-3 w-3 mr-1" />
+                      Import
+                    </Button>
+                  </div>
+                </div>
+                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <Download className="h-5 w-5 text-white" />
+                </div>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-white">{active}</div>
-                <div className="text-white/90 text-sm">Active</div>
-              </div>
-            </Card>
-            <div className="flex flex-row items-center justify-start md:justify-end gap-6 px-2 py-1 bg-white rounded-lg shadow-sm border border-slate-100">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExport}
-                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm min-w-[110px]"
-                title="Export to CSV"
-              >
-                <Download className="h-4 w-4 mr-2" /> Export
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={triggerImport}
-                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm min-w-[110px]"
-                title="Import from CSV"
-              >
-                <Upload className="h-4 w-4 mr-2" /> Import
-              </Button>
             </div>
           </div>
-        </div>
-        
-        {/* Filters Section */}
-        <Card className="mb-6 border-slate-200 shadow-md rounded-xl">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              {/* Search Input */}
-              <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 h-5 w-5" />
+
+          {/* Search and Filters Row */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
                   placeholder="Search subscriptions..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-12 border-slate-300 bg-white text-slate-900 placeholder-slate-400 rounded-lg h-10"
+                  className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm"
                 />
               </div>
               
-              {/* Filter Dropdowns */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="w-full sm:w-48">
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="border-slate-300 bg-white text-slate-900 rounded-lg h-10 w-full">
-                      <SelectValue placeholder="All Categories" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      {uniqueCategories.filter(category => category && category !== "").map(category => (
-                        <SelectItem key={category} value={category}>{category}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="w-full sm:w-48">
-                  <Select value={vendorFilter} onValueChange={setVendorFilter}>
-                    <SelectTrigger className="border-slate-300 bg-white text-slate-900 rounded-lg h-10 w-full">
-                      <SelectValue placeholder="All Vendors" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Vendors</SelectItem>
-                      {uniqueVendors.filter(vendor => vendor && vendor !== "").map(vendor => (
-                        <SelectItem key={vendor} value={vendor}>{vendor}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {uniqueCategories.filter(category => category && category !== "").map(category => (
+                    <SelectItem key={category} value={category}>{category}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Select value={vendorFilter} onValueChange={setVendorFilter}>
+                <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
+                  <SelectValue placeholder="All Vendors" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Vendors</SelectItem>
+                  {uniqueVendors.filter(vendor => vendor && vendor !== "").map(vendor => (
+                    <SelectItem key={vendor} value={vendor}>{vendor}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
         
-        {/* Table Section */}
-        <Card className="border-slate-200 shadow-lg rounded-2xl overflow-hidden">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table className="min-w-full">
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-semibold text-slate-700 text-sm py-3 px-4">Service Name</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-sm py-3 px-4">Vendor</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-sm py-3 px-4">Amount</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-sm py-3 px-4">Billing Cycle</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-sm py-3 px-4 text-center">Next Renewal</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-sm py-3 px-4">Status</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-sm py-3 px-4">Department</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-sm py-3 px-4">Category</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-sm py-3 px-4">Reminder Policy</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-sm py-3 px-4 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSubscriptions && filteredSubscriptions.length > 0 ? (
-                    filteredSubscriptions.map((subscription) => {
-                      // DEBUG: Log subscription object to verify departments field
-                      console.log('Subscription row:', subscription);
-                      console.log('Subscription ID fields:', { id: subscription.id, _id: subscription._id });
-                      return (
-                        <TableRow key={subscription._id || subscription.id} className="hover:bg-slate-50 transition-colors">
-                        <TableCell className="py-3 px-4">
-                          <div>
-                            <div className="font-medium text-slate-900">{subscription.serviceName}</div>
-                            {subscription.notes && (
-                              <div className="text-sm text-slate-500 mt-1">{subscription.notes}</div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-slate-700 py-3 px-4">{subscription.vendor}</TableCell>
-                        <TableCell className="font-medium text-slate-900 py-3 px-4">
-                          {parseFloat(String(subscription.amount)).toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-slate-700 capitalize py-3 px-4">{subscription.billingCycle}</TableCell>
-                        <TableCell className="text-center py-3 px-4">
-                          <div className="flex items-center justify-center gap-2 text-slate-700">
-                            <Calendar className="h-4 w-4 text-slate-400" />
-                            {formatDate(subscription.nextRenewal)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-3 px-4">
-                          <StatusBadge status={subscription.status} />
-                        </TableCell>
-                        <TableCell className="py-3 px-4">
-                          <DepartmentDisplay departments={subscription.departments ?? []} />
-                        </TableCell>
-                        <TableCell className="py-3 px-4">
-                          <span className="inline-block bg-gray-100 text-gray-700 text-xs font-medium px-2 py-0.5 rounded-full">
-                            {subscription.category || '-'}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-600 py-3 px-4">
-                          {subscription.reminderPolicy} ({subscription.reminderDays}d)
-                        </TableCell>
-                        <TableCell className="text-right py-3 px-4">
-                          <div className="flex items-center justify-end space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(subscription)}
-                              className="text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-2 h-8 w-8"
-                            >
-                              <Edit size={16} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDelete(subscription._id || subscription.id)}
-                              className="text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg p-2 h-8 w-8"
-                              disabled={deleteMutation.isPending}
-                            >
-                              <Trash2 size={16} />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                      );
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-center py-12 text-slate-500">
-                        <div className="flex flex-col items-center justify-center">
-                          <AlertCircle className="h-12 w-12 text-slate-300 mb-3" />
-                          <p className="text-lg font-medium text-slate-600">No subscription records found</p>
-                          <p className="text-slate-500 mt-1">Try adjusting your filters or add a new subscription</p>
+        {/* Professional Data Table */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
+                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
+                    Service
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Vendor
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Amount
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Billing
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Next Renewal
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Status
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Department
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Category
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Reminder
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredSubscriptions && filteredSubscriptions.length > 0 ? (
+                  filteredSubscriptions.map((subscription, index) => (
+                    <TableRow 
+                      key={subscription._id || subscription.id} 
+                      className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                        index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
+                      }`}
+                    >
+                      <TableCell className="px-4 py-3">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{subscription.serviceName}</div>
+                          {subscription.notes && (
+                            <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">{subscription.notes}</div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-sm text-gray-700">
+                        {subscription.vendor}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-right">
+                        <span className="text-sm font-medium text-gray-900">
+                          ${parseFloat(String(subscription.amount)).toFixed(2)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <span className="text-sm text-gray-700 capitalize">
+                          {subscription.billingCycle}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center text-sm text-gray-700">
+                          <Calendar className="h-3 w-3 text-gray-400 mr-1" />
+                          {formatDate(subscription.nextRenewal)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          subscription.status === 'Active' 
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                            : subscription.status === 'Cancelled'
+                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                            : 'bg-gray-100 text-gray-800 border border-gray-200'
+                        }`}>
+                          {subscription.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {(subscription.departments || []).map((dept, idx) => (
+                            <span key={dept + idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              {dept}
+                            </span>
+                          ))}
+                          {(!subscription.departments || subscription.departments.length === 0) && (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                          {subscription.category || '-'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-sm text-gray-600">
+                        {subscription.reminderPolicy} ({subscription.reminderDays}d)
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(subscription)}
+                            className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(subscription._id || subscription.id)}
+                            className="h-8 w-8 p-0 text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={10} className="h-32 text-center">
+                      <div className="flex flex-col items-center justify-center text-gray-500">
+                        <AlertCircle className="h-8 w-8 text-gray-300 mb-2" />
+                        <p className="text-sm font-medium text-gray-900">No subscriptions found</p>
+                        <p className="text-xs text-gray-500 mt-1">Try adjusting your search filters or add a new subscription</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       </div>
       
       <SubscriptionModal
         open={modalOpen}
         onOpenChange={handleCloseModal}
-  subscription={editingSubscription}
+        subscription={editingSubscription}
       />
       <input
         type="file"

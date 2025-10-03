@@ -1,5 +1,5 @@
 // import { insertUserSchema } from "@shared/schema";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -15,12 +15,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { API_BASE_URL } from "@/lib/config";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
 // ...existing code...
-import type { User as UserType, InsertUser } from "@shared/types";
+import type { User as UserType, InsertUser, CompanyInfo, InsertCompanyInfo } from "@shared/types";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import Papa from 'papaparse';
@@ -1068,13 +1069,79 @@ disabled={deleteMutation.isPending}
 }
 export default function CompanyDetails() {
 // Company information state
-const [companyInfo, setCompanyInfo] = useState({
-name: "",
-address: "",
-country: "",
-financialYearEnd: "",
-logo: null as File | null,
-logoPreview: "" as string,
+const [companyInfo, setCompanyInfo] = useState<InsertCompanyInfo>({
+  tenantId: "",
+  companyName: "",
+  address: "",
+  country: "",
+  financialYearEnd: "",
+  companyLogo: "",
+  defaultCurrency: "",
+});
+
+// Fetch company information
+const { data: companyData, isLoading: companyLoading } = useQuery<CompanyInfo | null>({
+  queryKey: ["/api/company-info"],
+  queryFn: async () => {
+    try {
+      const response = await apiRequest("GET", "/api/company-info");
+      return await response.json();
+    } catch (err: any) {
+      // If not found yet, treat as no data rather than erroring the page
+      if (typeof err?.message === 'string' && err.message.startsWith('404')) {
+        return null;
+      }
+      throw err;
+    }
+  },
+  retry: 1,
+  refetchOnWindowFocus: false,
+});
+
+// Update company info state when data is fetched
+useEffect(() => {
+  if (companyData) {
+    setCompanyInfo({
+      tenantId: companyData.tenantId || "",
+      companyName: companyData.companyName || "",
+      address: companyData.address || "",
+      country: companyData.country || "",
+      financialYearEnd: companyData.financialYearEnd || "",
+      companyLogo: companyData.companyLogo || "",
+      defaultCurrency: companyData.defaultCurrency || "",
+    });
+  }
+}, [companyData]);
+
+// Company info mutation
+const saveCompanyMutation = useMutation({
+  mutationFn: async (data: InsertCompanyInfo) => {
+    let response: Response;
+    if (companyData?._id) {
+      // Update existing company info
+      response = await apiRequest("PUT", `/api/company-info/${companyData._id}`, data);
+    } else {
+      // Create new company info
+      response = await apiRequest("POST", "/api/company-info", data);
+    }
+    return await response.json();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/company-info"] });
+    toast({
+      title: "Success",
+      description: "Company information saved successfully!",
+      duration: 2000,
+    });
+  },
+  onError: (error: any) => {
+    toast({
+      title: "Error",
+      description: error.message || "Failed to save company information",
+      variant: "destructive",
+      duration: 2000,
+    });
+  },
 });
 
 // Category configuration with visibility settings (dynamic, from backend)
@@ -1298,23 +1365,37 @@ setCompanyInfo(prev => ({ ...prev, [name]: value }));
 
 // Handle logo upload
 const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-const file = e.target.files?.[0];
-if (file) {
-setCompanyInfo(prev => ({
-...prev,
-logo: file,
-logoPreview: URL.createObjectURL(file)
-}));
-}
+  const file = e.target.files?.[0];
+  if (file) {
+    // For now, we'll store the base64 string of the image
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setCompanyInfo(prev => ({
+        ...prev,
+        companyLogo: result
+      }));
+    };
+    reader.readAsDataURL(file);
+  }
 };
 
 // Handle form submission
 const handleSubmit = (e: React.FormEvent) => {
   e.preventDefault();
-  // Here you would typically send the data to your backend
-  console.log("Company Information:", companyInfo);
-  alert("Company information saved successfully!");
+  saveCompanyMutation.mutate(companyInfo);
 };
+
+// Currencies for dynamic dropdown (reused behavior like subscription modal)
+const { data: currencies = [], isLoading: currenciesLoading } = useQuery<any[]>({
+  queryKey: ["/api/currencies"],
+  queryFn: async () => {
+    const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
+    if (!res.ok) throw new Error("Failed to fetch currencies");
+    return res.json();
+  },
+  refetchOnWindowFocus: false,
+});
 
 // Tab selection logic from query param
 const [searchParams] = useSearchParams();
@@ -1329,11 +1410,22 @@ else if (tabParam === "subscription-category" || tabParam === "subscription") in
 const [activeTab, setActiveTab] = useState(initialTab);
 
 return (
-  <div className="min-h-screen p-4 bg-gray-50">
-    <div className="mb-6">
-      <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Company Details</h2>
-      <p className="text-base text-gray-600 mt-1 font-light">Manage company information, departments, employees, and system settings</p>
-      <div className="mt-4">
+  <div className="min-h-screen bg-white">
+    <div className="max-w-[1400px] mx-auto px-6 py-8">
+      {/* Modern Professional Header */}
+      <div className="mb-8">
+        <div className="flex items-center space-x-4 mb-6">
+          <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
+            <Building2 className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Company Details</h1>
+            <p className="text-gray-600 text-sm">Manage company information, departments, employees, and system settings</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
 <TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6">
 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
@@ -1420,14 +1512,44 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl fle
 </div>
 </div>
 <form onSubmit={handleSubmit} className="space-y-6">
+{companyLoading ? (
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div className="space-y-2">
+<Skeleton className="h-4 w-24" />
+<Skeleton className="h-10 w-full" />
+</div>
+<div className="space-y-2">
+<Skeleton className="h-4 w-24" />
+<div className="flex items-center gap-4">
+<Skeleton className="w-20 h-20 rounded-xl" />
+<div>
+<Skeleton className="h-10 w-32" />
+<Skeleton className="h-3 w-24 mt-1" />
+</div>
+</div>
+</div>
+<div className="space-y-2">
+<Skeleton className="h-4 w-16" />
+<Skeleton className="h-10 w-full" />
+</div>
+<div className="space-y-2">
+<Skeleton className="h-4 w-16" />
+<Skeleton className="h-10 w-full" />
+</div>
+<div className="space-y-2">
+<Skeleton className="h-4 w-32" />
+<Skeleton className="h-10 w-full" />
+</div>
+</div>
+) : (
 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 {/* Company Name */}
 <div className="space-y-2">
-<Label htmlFor="name" className="text-sm font-medium text-gray-700">Company Name</Label>
+<Label htmlFor="companyName" className="text-sm font-medium text-gray-700">Company Name</Label>
 <Input
-id="name"
-name="name"
-value={companyInfo.name}
+id="companyName"
+name="companyName"
+value={companyInfo.companyName}
 onChange={handleInputChange}
 placeholder="Enter company name"
 className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
@@ -1438,10 +1560,10 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
 <div className="space-y-2">
 <Label htmlFor="logo" className="text-sm font-medium text-gray-700">Company Logo</Label>
 <div className="flex items-center gap-4">
-{companyInfo.logoPreview ? (
+{companyInfo.companyLogo ? (
 <div className="w-20 h-20 rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">
 <img
-src={companyInfo.logoPreview}
+src={companyInfo.companyLogo}
 alt="Company Logo"
 className="w-full h-full object-cover"
 />
@@ -1488,15 +1610,50 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
 
 {/* Country */}
 <div className="space-y-2">
-<Label htmlFor="country" className="text-sm font-medium text-gray-700">Country</Label>
-<Input
-id="country"
-name="country"
-value={companyInfo.country}
-onChange={handleInputChange}
-placeholder="Enter country"
-className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
-/>
+  <Label htmlFor="country" className="text-sm font-medium text-gray-700">Country</Label>
+  <Input
+    id="country"
+    name="country"
+    value={companyInfo.country}
+    onChange={handleInputChange}
+    placeholder="Enter country"
+    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+  />
+</div>
+
+{/* Local Currency */}
+<div className="space-y-2">
+  <Label className="text-sm font-medium text-gray-700">Local Currency</Label>
+  <Select
+    value={companyInfo.defaultCurrency || ''}
+    onValueChange={(val) => setCompanyInfo(prev => ({ ...prev, defaultCurrency: val }))}
+  >
+    <SelectTrigger className="w-full bg-white border border-gray-300 rounded-lg h-10">
+      <SelectValue placeholder={currenciesLoading ? 'Loading…' : 'Select currency'} />
+    </SelectTrigger>
+    <SelectContent className="dropdown-content">
+      {currencies && currencies.length > 0 ? (
+        currencies.map((curr: any) => (
+          <SelectItem key={curr.code} value={curr.code} className="dropdown-item">
+            {curr.code}
+          </SelectItem>
+        ))
+      ) : (
+        <SelectItem value="no-currency" disabled className="dropdown-item disabled">
+          No currencies configured
+        </SelectItem>
+      )}
+      <div className="border-t">
+        <button
+          type="button"
+          className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
+          onClick={() => window.location.href = '/configuration?tab=currency'}
+        >
+          + New
+        </button>
+      </div>
+    </SelectContent>
+  </Select>
 </div>
 
 {/* Financial Year End */}
@@ -1512,16 +1669,18 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
 />
 </div>
 </div>
+)}
 
 {/* Save Button */}
 <div className="pt-2 flex justify-end">
 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
 <Button
 type="submit"
-className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-6 rounded-lg"
+disabled={saveCompanyMutation.isPending || companyLoading}
+className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
 >
 <Save className="w-4 h-4 mr-2" />
-Save Company Information
+{saveCompanyMutation.isPending ? "Saving..." : "Save Company Information"}
 </Button>
 </motion.div>
 </div>

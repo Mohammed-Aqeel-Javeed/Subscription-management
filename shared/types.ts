@@ -110,3 +110,21 @@ export type Reminder = {
 	monthlyDay?: number;
 };
 export type InsertReminder = Omit<Reminder, 'id'>;
+
+// Company Information type
+export type CompanyInfo = {
+	id?: string;
+	_id?: string;
+	tenantId: string;
+	companyName: string;
+	companyLogo?: string;
+	// Default currency code for this tenant (e.g., "USD", "INR")
+	defaultCurrency?: string;
+	address: string;
+	country: string;
+	financialYearEnd: string;
+	createdAt?: string;
+	updatedAt?: string;
+};
+
+export type InsertCompanyInfo = Omit<CompanyInfo, 'id' | 'createdAt' | 'updatedAt'>;
