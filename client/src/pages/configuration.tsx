@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2 } from "lucide-react";
 import { cardImages } from "@/assets/card-icons/cardImages";
 import { useToast } from "@/hooks/use-toast";
@@ -33,23 +34,9 @@ export default function Configuration() {
   }, [searchParams]);
   
   const [addCurrencyOpen, setAddCurrencyOpen] = useState(false);
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency | null>(null);
-  const [exchangeRates, setExchangeRates] = useState<Array<{
-    date: string;
-    code: string;
-    relCurrency: string;
-    rate: string;
-    relRate: string;
-  }>>([]);
-  const [exchangeRateOpen, setExchangeRateOpen] = useState(false);
-  const [addRateOpen, setAddRateOpen] = useState(false);
-  const [newRate, setNewRate] = useState({
-    date: '',
-    code: '',
-    relCurrency: '',
-    rate: '',
-    relRate: ''
-  });
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isUpdateMode, setIsUpdateMode] = useState(false);
+  const [editingRates, setEditingRates] = useState<{ [key: string]: string }>({});
   // Delete payment method handler (DELETE from backend)
   const handleDeletePaymentMethod = (method: any) => {
     if (!method._id) {
@@ -146,6 +133,8 @@ export default function Configuration() {
     exchangeRate: string;
     visible: boolean;
     created: string;
+    lastUpdated?: string; // Track when currency rate was last updated
+    latestRate?: string; // Added for displaying latest exchange rate
   }
   
   const [newCurrency, setNewCurrency] = useState<Currency>({
@@ -160,18 +149,45 @@ export default function Configuration() {
   
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [currenciesLoading, setCurrenciesLoading] = useState(true);
+  const [companyInfo, setCompanyInfo] = useState<{ defaultCurrency?: string }>({});
   
-  // Fetch currencies from backend on mount
+  // Fetch currencies and company info on mount and when currency/exchange dialogs toggle (refresh after saves)
   useEffect(() => {
     fetchCurrencies();
-  }, [open]);
+    fetchCompanyInfo();
+  }, [addCurrencyOpen]);
   
   const fetchCurrencies = async () => {
     try {
       setCurrenciesLoading(true);
       const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
       const data = await res.json();
-      setCurrencies(Array.isArray(data) ? data : []);
+      const currenciesArray = Array.isArray(data) ? data : [];
+      
+      // Fetch latest exchange rates for each currency
+      const currenciesWithRates = await Promise.all(
+        currenciesArray.map(async (currency) => {
+          try {
+            const rateRes = await fetch(`${API_BASE_URL}/api/exchange-rates/${currency.code}`, { credentials: "include" });
+            if (rateRes.ok) {
+              const rates = await rateRes.json();
+              if (Array.isArray(rates) && rates.length > 0) {
+                // Get the most recent rate
+                const latestRate = rates[rates.length - 1];
+                return {
+                  ...currency,
+                  latestRate: latestRate.rate || latestRate.relRate || '-'
+                };
+              }
+            }
+            return { ...currency, latestRate: '-' };
+          } catch {
+            return { ...currency, latestRate: '-' };
+          }
+        })
+      );
+      
+      setCurrencies(currenciesWithRates);
     } catch (error) {
       console.error("Error fetching currencies:", error);
       setCurrencies([]);
@@ -185,51 +201,36 @@ export default function Configuration() {
     }
   };
   
-  const updateCurrencyVisibility = async (code: string, visible: boolean) => {
+  const fetchCompanyInfo = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/currencies/${code}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ visible }),
-      });
-      
+      const res = await fetch(`${API_BASE_URL}/api/company-info`, { credentials: "include" });
       if (res.ok) {
-        setCurrencies(prev => prev.map(c =>
-          c.code === code ? { ...c, visible } : c
-        ));
-        toast({
-          title: "Currency Updated",
-          description: `Currency ${code} visibility updated`,
-        });
+        const data = await res.json();
+        setCompanyInfo(data);
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update currency visibility",
-        variant: "destructive",
-      });
+      console.error("Error fetching company info:", error);
     }
   };
   
-  const saveCurrencySettings = () => {
-    toast({
-      title: "Settings Saved",
-      description: "Currency visibility configuration has been saved successfully",
-    });
-  };
+  // Note: visibility toggles removed from UI; endpoints kept server-side if needed.
   
-  // Add new currency handler
+  // Add/Update currency handler
   const addNewCurrency = async () => {
     if (
       newCurrency.name.trim() &&
       newCurrency.code.trim() &&
       newCurrency.symbol.trim() &&
-      !currencies.find(c => c.code.toLowerCase() === newCurrency.code.toLowerCase())
+      (isEditMode || !currencies.find(c => c.code.toLowerCase() === newCurrency.code.toLowerCase()))
     ) {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/currencies`, {
-          method: "POST",
+        const method = isEditMode ? "PUT" : "POST";
+        const url = isEditMode 
+          ? `${API_BASE_URL}/api/currencies/${newCurrency.code.toUpperCase()}` 
+          : `${API_BASE_URL}/api/currencies`;
+          
+        const res = await fetch(url, {
+          method: method,
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
@@ -242,7 +243,7 @@ export default function Configuration() {
         });
         
         if (res.ok) {
-          const result = await res.json();
+          await res.json();
           await fetchCurrencies(); // Refresh the list
           setNewCurrency({
             name: '',
@@ -253,23 +254,24 @@ export default function Configuration() {
             visible: true,
             created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
           });
+          setIsEditMode(false);
           setAddCurrencyOpen(false);
           toast({
-            title: "Currency Added",
-            description: `${newCurrency.name} currency has been added successfully`,
+            title: isEditMode ? "Currency Updated" : "Currency Added",
+            description: `${newCurrency.name} currency has been ${isEditMode ? 'updated' : 'added'} successfully`,
           });
         } else {
           const error = await res.json();
           toast({
             title: "Error",
-            description: error.message || "Failed to add currency",
+            description: error.message || `Failed to ${isEditMode ? 'update' : 'add'} currency`,
             variant: "destructive",
           });
         }
       } catch (error) {
         toast({
           title: "Error",
-          description: "Failed to add currency",
+          description: `Failed to ${isEditMode ? 'update' : 'add'} currency`,
           variant: "destructive",
         });
       }
@@ -312,6 +314,79 @@ export default function Configuration() {
         variant: "destructive",
       });
     }
+  };
+
+  // Update currency rates handler
+  const updateCurrencyRates = async () => {
+    try {
+      const currentTimestamp = new Date().toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: '2-digit', 
+        year: 'numeric' 
+      });
+      
+      const updates = Object.entries(editingRates).map(async ([code, rate]) => {
+        const res = await fetch(`${API_BASE_URL}/api/currencies/${code}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            exchangeRate: rate,
+            lastUpdated: currentTimestamp,
+          }),
+        });
+        return res.ok;
+      });
+
+      const results = await Promise.all(updates);
+      const allSuccessful = results.every(result => result);
+
+      if (allSuccessful) {
+        await fetchCurrencies(); // Refresh the list
+        setIsUpdateMode(false);
+        setEditingRates({});
+        toast({
+          title: "Currency Rates Updated",
+          description: "All currency rates have been updated successfully",
+        });
+      } else {
+        toast({
+          title: "Partial Update",
+          description: "Some currency rates failed to update",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update currency rates",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle rate change in edit mode
+  const handleRateChange = (code: string, value: string) => {
+    setEditingRates(prev => ({
+      ...prev,
+      [code]: value
+    }));
+  };
+
+  // Initialize editing rates when entering update mode
+  const enterUpdateMode = () => {
+    const initialRates: { [key: string]: string } = {};
+    currencies.forEach(currency => {
+      initialRates[currency.code] = currency.exchangeRate || '';
+    });
+    setEditingRates(initialRates);
+    setIsUpdateMode(true);
+  };
+
+  // Cancel update mode
+  const cancelUpdateMode = () => {
+    setIsUpdateMode(false);
+    setEditingRates({});
   };
   
   // Currency state is already defined above
@@ -628,33 +703,9 @@ export default function Configuration() {
     }
   };
   
-  // Credit card details
-  const [cardDetails, setCardDetails] = useState({
-    cardNumber: '',
-    expiryDate: '',
-    cvv: '',
-    cardholderName: '',
-  });
+  // (Removed) Demo credit card details state
   
-  const handleCardDetailsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setCardDetails(prev => ({ ...prev, [name]: value }));
-  };
-  
-  const saveCardDetails = () => {
-    if (cardDetails.cardNumber && cardDetails.expiryDate && cardDetails.cvv && cardDetails.cardholderName) {
-      toast({
-        title: "Card Details Saved",
-        description: "Credit card information has been saved successfully",
-      });
-    } else {
-      toast({
-        title: "Error",
-        description: "Please fill in all card details",
-        variant: "destructive",
-      });
-    }
-  };
+  // Deprecated demo handlers removed
   
   // Handler for adding a new payment method (POST to backend)
   function handleAddPaymentMethod(e: React.FormEvent<HTMLFormElement>) {
@@ -717,11 +768,21 @@ export default function Configuration() {
   ];
   
   return (
-    <div className="min-h-screen p-4 bg-gray-50">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Setup & Configuration</h2>
-        <p className="text-base text-gray-600 mt-1 font-light">Configure your subscription settings, currencies, and payment methods</p>
-        <div className="mt-4">
+    <div className="min-h-screen bg-white">
+      <div className="max-w-[1400px] mx-auto px-6 py-8">
+        {/* Modern Professional Header */}
+        <div className="mb-8">
+          <div className="flex items-center space-x-4 mb-6">
+            <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
+              <Settings className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Setup & Configuration</h1>
+            </div>
+          </div>
+        </div>
+
+        <div>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
             <TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6">
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
@@ -799,224 +860,130 @@ export default function Configuration() {
                             <DollarSign className="w-5 h-5" />
                             <h3 className="text-xl font-semibold">Currency Management</h3>
                           </div>
-                          <div className="flex gap-2">
-                            <Button variant="outline">View Exchange Rates</Button>
-                            <Button onClick={() => setAddCurrencyOpen(true)}>Add Currency</Button>
+                          <div className="flex items-center gap-4">
+                            {/* Local Currency Display */}
+                            <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
+                              <div className="text-center">
+                                <span className="text-sm text-gray-600 font-medium block">Local Currency</span>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-lg font-semibold text-blue-600">
+                                    {companyInfo.defaultCurrency || 'Not Set'}
+                                  </span>
+                                  {companyInfo.defaultCurrency && (
+                                    <span className="text-sm text-gray-500">
+                                      ({currencies.find(c => c.code === companyInfo.defaultCurrency)?.symbol || '$'})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Action Buttons */}
+                            <div className="flex gap-2">
+                              {isUpdateMode ? (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    onClick={cancelUpdateMode}
+                                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    onClick={updateCurrencyRates}
+                                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold shadow-md"
+                                  >
+                                    Save Changes
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    onClick={enterUpdateMode}
+                                    disabled={currencies.length === 0}
+                                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                                  >
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    Update Currency
+                                  </Button>
+                                  <Button
+                                    className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md"
+                                    style={{ boxShadow: '0 2px 8px rgba(99,102,241,0.15)' }}
+                                    onClick={() => {
+                                      setIsEditMode(false);
+                                      setAddCurrencyOpen(true);
+                                    }}
+                                  >Add Currency</Button>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                         
-                        <Dialog open={addCurrencyOpen} onOpenChange={setAddCurrencyOpen}>
+                        <Dialog open={addCurrencyOpen} onOpenChange={(open) => {
+                          if (!open) {
+                            // Reset form when modal closes
+                            setNewCurrency({
+                              name: '',
+                              code: '',
+                              symbol: '',
+                              isoNumber: '',
+                              exchangeRate: '',
+                              visible: true,
+                              created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+                            });
+                            setIsEditMode(false);
+                          }
+                          setAddCurrencyOpen(open);
+                        }}>
                           <DialogContent className="max-w-md bg-white">
                             <DialogHeader className="flex flex-col space-y-4">
                               <div className="flex justify-between items-center">
-                                <DialogTitle>Add New Currency</DialogTitle>
-                                <Button 
-                                  className="mr-8 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedCurrency(newCurrency);
-                                    setExchangeRateOpen(true);
-                                  }}
-                                >
-                                  Exchange Rate
-                                </Button>
-                                {/* Exchange Rate Dialog */}
-                                <Dialog open={exchangeRateOpen} onOpenChange={setExchangeRateOpen}>
-                                  <DialogContent className="sm:max-w-[900px] bg-white">
-                                    <DialogHeader>
-                                      <div className="flex items-center gap-2 mb-4">
-                                        <h1 className="text-2xl font-bold flex items-center gap-2">
-                                          <span className="text-2xl">{selectedCurrency?.symbol}</span> {selectedCurrency?.code} - {selectedCurrency?.name}
-                                        </h1>
-                                      </div>
-                                    </DialogHeader>
-                                    
-                                    <div className="space-y-6">
-                                      {/* Currency Details */}
-                                      <div className="bg-white p-6 rounded-lg">
-                                        <h2 className="text-lg font-semibold mb-4">Currency Details</h2>
-                                        <div className="grid grid-cols-4 gap-6">
-                                          <div>
-                                            <Label className="text-sm text-gray-600">Currency Code</Label>
-                                            <div className="font-semibold">{selectedCurrency?.code || '-'}</div>
-                                          </div>
-                                          <div>
-                                            <Label className="text-sm text-gray-600">Description</Label>
-                                            <div className="font-semibold">{selectedCurrency?.name || '-'}</div>
-                                          </div>
-                                          <div>
-                                            <Label className="text-sm text-gray-600">ISO Number</Label>
-                                            <div className="font-semibold">{selectedCurrency?.isoNumber || '-'}</div>
-                                          </div>
-                                          <div>
-                                            <Label className="text-sm text-gray-600">Symbol</Label>
-                                            <div className="font-semibold">{selectedCurrency?.symbol || '-'}</div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      {/* Exchange Rates */}
-                                      <div>
-                                        <div className="flex justify-between items-center mb-4">
-                                          <h2 className="text-lg font-semibold">Exchange Rates for {selectedCurrency?.code}</h2>
-                                          <div className="flex gap-2">
-                                            <Button 
-                                              className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white"
-                                              onClick={() => {
-                                                const emptyRate = {
-                                                  date: '',
-                                                  code: selectedCurrency?.code || '',
-                                                  relCurrency: '',
-                                                  rate: '',
-                                                  relRate: '',
-                                                  isEditing: true
-                                                };
-                                                setExchangeRates([...exchangeRates, emptyRate]);
-                                              }}
-                                            >
-                                              <Plus className="w-4 h-4 mr-2" />
-                                              Add Rate
-                                            </Button>
-                                            <Button 
-                                              variant="outline"
-                                              onClick={() => {
-                                                // Handle Update Rates click
-                                                toast({
-                                                  title: "Update Rates",
-                                                  description: "Update rates functionality will be implemented here",
-                                                });
-                                              }}
-                                            >
-                                              Update Rates
-                                            </Button>
-                                          </div>
-                                        </div>
-                                        <div className="rounded-md border">
-                                          <table className="w-full">
-                                            <thead className="bg-gray-50">
-                                              <tr>
-                                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">Starting Date</th>
-                                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">Currency Code</th>
-                                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">Relational Currency</th>
-                                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">Exch. Rate Amount</th>
-                                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">Relational Exch. Rate Amount</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-200 bg-white">
-                                              {exchangeRates.map((rate, index) => (
-                                                <tr key={index}>
-                                                  <td className="py-2 px-4">
-                                                    <Input
-                                                      type="date"
-                                                      value={rate.date}
-                                                      onChange={(e) => {
-                                                        const updatedRates = [...exchangeRates];
-                                                        updatedRates[index] = { ...rate, date: e.target.value };
-                                                        setExchangeRates(updatedRates);
-                                                      }}
-                                                      className="h-8"
-                                                    />
-                                                  </td>
-                                                  <td className="py-2 px-4">
-                                                    <Input
-                                                      value={rate.code}
-                                                      disabled
-                                                      className="h-8 bg-gray-50"
-                                                    />
-                                                  </td>
-                                                  <td className="py-2 px-4">
-                                                    <Input
-                                                      value={rate.relCurrency}
-                                                      onChange={(e) => {
-                                                        const updatedRates = [...exchangeRates];
-                                                        updatedRates[index] = { ...rate, relCurrency: e.target.value };
-                                                        setExchangeRates(updatedRates);
-                                                      }}
-                                                      className="h-8"
-                                                    />
-                                                  </td>
-                                                  <td className="py-2 px-4">
-                                                    <Input
-                                                      type="number"
-                                                      value={rate.rate}
-                                                      onChange={(e) => {
-                                                        const updatedRates = [...exchangeRates];
-                                                        updatedRates[index] = { ...rate, rate: e.target.value };
-                                                        setExchangeRates(updatedRates);
-                                                      }}
-                                                      className="h-8"
-                                                    />
-                                                  </td>
-                                                  <td className="py-2 px-4 flex gap-2">
-                                                    <Input
-                                                      type="number"
-                                                      value={rate.relRate}
-                                                      onChange={(e) => {
-                                                        const updatedRates = [...exchangeRates];
-                                                        updatedRates[index] = { ...rate, relRate: e.target.value };
-                                                        setExchangeRates(updatedRates);
-                                                      }}
-                                                      className="h-8"
-                                                    />
-                                                    <Button
-                                                      variant="ghost"
-                                                      size="sm"
-                                                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                      onClick={() => {
-                                                        const updatedRates = [...exchangeRates];
-                                                        updatedRates.splice(index, 1);
-                                                        setExchangeRates(updatedRates);
-                                                      }}
-                                                    >
-                                                      <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                  </td>
-                                                </tr>
-                                              ))}
-                                            </tbody>
-                                          </table>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </DialogContent>
-                                </Dialog>
+                                <DialogTitle>{isEditMode ? 'Update Currency' : 'Add New Currency'}</DialogTitle>
                               </div>
-                            </DialogHeader>
-                            <div className="space-y-4 py-4">
                               <div className="space-y-2">
                                 <Label>Currency Code</Label>
                                 <Input
                                   value={newCurrency.code}
-                                  onChange={(e) => setNewCurrency({...newCurrency, code: e.target.value})}
+                                  onChange={(e) => setNewCurrency({ ...newCurrency, code: e.target.value })}
                                 />
                               </div>
                               <div className="space-y-2">
                                 <Label>Description</Label>
                                 <Input
                                   value={newCurrency.name}
-                                  onChange={(e) => setNewCurrency({...newCurrency, name: e.target.value})}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>ISO Number</Label>
-                                <Input
-                                  value={newCurrency.isoNumber}
-                                  onChange={(e) => setNewCurrency({...newCurrency, isoNumber: e.target.value})}
+                                  onChange={(e) => setNewCurrency({ ...newCurrency, name: e.target.value })}
                                 />
                               </div>
                               <div className="space-y-2">
                                 <Label>Symbol</Label>
                                 <Input
                                   value={newCurrency.symbol}
-                                  onChange={(e) => setNewCurrency({...newCurrency, symbol: e.target.value})}
+                                  onChange={(e) => setNewCurrency({ ...newCurrency, symbol: e.target.value })}
                                 />
                               </div>
-                            </div>
+                              <div className="space-y-2">
+                                <Label>Exch.Rate against 1 LCY</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={newCurrency.exchangeRate || ''}
+                                  onChange={(e) => setNewCurrency({ ...newCurrency, exchangeRate: e.target.value })}
+                                />
+                              </div>
+                            </DialogHeader>
                             <DialogFooter>
                               <Button variant="outline" onClick={() => setAddCurrencyOpen(false)}>Cancel</Button>
-                              <Button onClick={() => {
-                                addNewCurrency();
-                                setAddCurrencyOpen(false);
-                              }}>Add Currency</Button>
+                              <Button
+                                className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md"
+                                style={{ boxShadow: '0 2px 8px rgba(99,102,241,0.15)' }}
+                                onClick={() => {
+                                  addNewCurrency();
+                                  setAddCurrencyOpen(false);
+                                }}
+                              >{isEditMode ? 'Update Currency' : 'Add Currency'}</Button>
                             </DialogFooter>
                           </DialogContent>
                         </Dialog>
@@ -1032,10 +999,12 @@ export default function Configuration() {
                                 <tr>
                                   <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">CURRENCY CODE</th>
                                   <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">DESCRIPTION</th>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">ISO NUMBER</th>
                                   <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">SYMBOL</th>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">CURRENT MONTH EXCH. RATE</th>
+                                  <th className={`py-3 px-4 text-left text-sm font-semibold ${isUpdateMode ? 'text-blue-600 bg-blue-50' : 'text-gray-900'}`}>
+                                    Exch.Rate against 1 LCY {isUpdateMode && <span className="text-xs">(Editable)</span>}
+                                  </th>
                                   <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">CREATED</th>
+                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">LAST UPDATED</th>
                                   <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">ACTIONS</th>
                                 </tr>
                               </thead>
@@ -1051,65 +1020,73 @@ export default function Configuration() {
                                   <tr key={currency.code}>
                                     <td className="py-3 px-4 text-sm text-gray-900">{currency.code}</td>
                                     <td className="py-3 px-4 text-sm text-gray-900">{currency.name}</td>
-                                    <td className="py-3 px-4 text-sm text-gray-500">
-                                      {currency.isoNumber || '-'}
-                                    </td>
                                     <td className="py-3 px-4 text-sm text-gray-900">{currency.symbol}</td>
                                     <td className="py-3 px-4 text-sm text-gray-500">
-                                      {currency.exchangeRate || '-'}
+                                      {isUpdateMode ? (
+                                        <Input
+                                          type="number"
+                                          step="0.0001"
+                                          min="0"
+                                          value={editingRates[currency.code] || ''}
+                                          onChange={(e) => handleRateChange(currency.code, e.target.value)}
+                                          className="w-24 h-8 text-sm border-blue-300 focus:border-blue-500 focus:ring-blue-500"
+                                          placeholder="Rate"
+                                        />
+                                      ) : (
+                                        currency.exchangeRate || '-'
+                                      )}
                                     </td>
                                     <td className="py-3 px-4 text-sm text-gray-500">
-                                      {currency.created || 'Aug 11, 2025'}
+                                      {currency.created || 'Sep 25, 2025'}
+                                    </td>
+                                    <td className="py-3 px-4 text-sm text-gray-500">
+                                      {currency.lastUpdated ? (
+                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+                                          {currency.lastUpdated}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-400">-</span>
+                                      )}
                                     </td>
                                     <td className="py-3 px-4">
-                                      <div className="flex gap-2">
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-8 w-8 p-0"
-                                          onClick={() => updateCurrencyVisibility(currency.code, !currency.visible)}
-                                        >
-                                          {currency.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-8 w-8 p-0"
-                                        >
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                          onClick={() => deleteCurrency(currency.code)}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      </div>
+                                      {!isUpdateMode && (
+                                        <div className="flex gap-2">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 w-8 p-0"
+                                            onClick={() => {
+                                              setNewCurrency({
+                                                name: currency.name || '',
+                                                code: currency.code || '',
+                                                symbol: currency.symbol || '',
+                                                isoNumber: '', // Not used
+                                                exchangeRate: currency.exchangeRate || '',
+                                                visible: currency.visible,
+                                                created: currency.created || ''
+                                              });
+                                              setIsEditMode(true);
+                                              setAddCurrencyOpen(true);
+                                            }}
+                                          >
+                                            <Edit className="h-4 w-4 text-blue-500" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            onClick={() => deleteCurrency(currency.code)}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      )}
                                     </td>
                                   </tr>
                                   ))
                                 )}
                               </tbody>
                             </table>
-                          </div>
-                          
-                          {/* Summary */}
-                          <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                            <div className="text-sm text-gray-600">
-                              <span className="font-semibold">{currencies.filter(c => c.visible).length}</span> enabled currencies,
-                              <span className="font-semibold ml-1">{currencies.filter(c => !c.visible).length}</span> disabled currencies
-                            </div>
-                            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                              <Button
-                                onClick={saveCurrencySettings}
-                                className="flex items-center space-x-2 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
-                              >
-                                <Settings className="w-4 h-4" />
-                                <span>Save Configuration</span>
-                              </Button>
-                            </motion.div>
                           </div>
                         </div>
                         )}

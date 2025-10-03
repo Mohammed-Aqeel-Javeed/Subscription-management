@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 // Helper functions remain the same
+const mapStatus = (status: string): string => {
+  return "Pending";
+};
 const calculateEndDate = (start: string, freq: string): string => {
   if (!start) return "";
   const date = new Date(start);
@@ -30,6 +33,62 @@ const calculateEndDate = (start: string, freq: string): string => {
   const dd = String(endDate.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 };
+
+// Calculate compliance status based on dates
+const getComplianceStatus = (endDate: string, submissionDeadline: string): { status: string, color: string, bgColor: string } => {
+  // If no End Date, return No Due
+  if (!endDate) {
+    return { status: "No Due", color: "text-slate-700", bgColor: "bg-slate-100" };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  
+  // Calculate 2 days before end date
+  const twoDaysBeforeEnd = new Date(end);
+  twoDaysBeforeEnd.setDate(end.getDate() - 2);
+  twoDaysBeforeEnd.setHours(0, 0, 0, 0);
+  
+  console.log('Status Debug:', {
+    today: today.toDateString(),
+    endDate: end.toDateString(),
+    submissionDeadline: submissionDeadline || 'Not set',
+    twoDaysBeforeEnd: twoDaysBeforeEnd.toDateString(),
+    todayTime: today.getTime(),
+    twoDaysBeforeTime: twoDaysBeforeEnd.getTime(),
+    endTime: end.getTime(),
+    isGoingToBeDue: today.getTime() === twoDaysBeforeEnd.getTime(),
+    isDue: today.getTime() >= end.getTime()
+  });
+  
+  // Check for "Going to be Due" first (2 days before end date)
+  if (today.getTime() === twoDaysBeforeEnd.getTime()) {
+    return { status: "Going to be Due", color: "text-amber-800", bgColor: "bg-amber-100" };
+  }
+  
+  // If we have a submission deadline, use it for Due/Late logic
+  if (submissionDeadline) {
+    const deadline = new Date(submissionDeadline);
+    deadline.setHours(0, 0, 0, 0);
+    
+    if (today.getTime() >= end.getTime() && today.getTime() < deadline.getTime()) {
+      return { status: "Due", color: "text-orange-800", bgColor: "bg-orange-100" };
+    } else if (today.getTime() >= deadline.getTime()) {
+      return { status: "Late", color: "text-white", bgColor: "bg-red-600 animate-pulse shadow-lg border-2 border-red-400" };
+    }
+  } else {
+    // If no submission deadline but past end date, consider it Due
+    if (today.getTime() >= end.getTime()) {
+      return { status: "Due", color: "text-orange-800", bgColor: "bg-orange-100" };
+    }
+  }
+  
+  // Default case
+  return { status: "No Due", color: "text-slate-700", bgColor: "bg-slate-100" };
+};
 const formatDate = (dateStr?: string): string => {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -39,23 +98,38 @@ const formatDate = (dateStr?: string): string => {
   const yyyy = String(d.getFullYear());
   return `${dd}/${mm}/${yyyy}`;
 };
-
-const mapStatus = (status: string): string => {
-  // Simple status mapping - can be enhanced later
-  if (status === "Completed") return "Compliant";
-  if (status === "Pending") return "Pending";
-  return "Non-Compliant";
-};
-
+function getNextPeriodDates(startDate: string, endDate: string, frequency: string): { nextStartDate: string; nextEndDate: string } {
+  const start = new Date(endDate);
+  let nextStart = new Date(start);
+  let nextEnd = new Date(start);
+  
+  nextStart.setDate(start.getDate() + 1);
+  
+  if (frequency === "Monthly") {
+    nextEnd.setMonth(nextStart.getMonth() + 1);
+    nextEnd.setDate(nextEnd.getDate() - 1);
+  } else if (frequency === "Quarterly") {
+    nextEnd.setMonth(nextStart.getMonth() + 3);
+    nextEnd.setDate(nextEnd.getDate() - 1);
+  } else if (frequency === "Yearly") {
+    nextEnd.setFullYear(nextStart.getFullYear() + 1);
+    nextEnd.setDate(nextEnd.getDate() - 1);
+  }
+  
+  const format = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  
+  return { nextStartDate: format(nextStart), nextEndDate: format(nextEnd) };
+}
 export default function Compliance() {
   // --- Dynamic Compliance Fields ---
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
   const [isLoadingComplianceFields, setIsLoadingComplianceFields] = useState(true);
   
-  // State for categories and governing authorities - unused but keeping for potential future use
-  // const [categories, setCategories] = useState<string[]>([]);
-  // const [governingAuthorities, setGoverningAuthorities] = useState<string[]>([]);
-  // const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(true);
+  // State for categories and governing authorities
+  const [categories, setCategories] = useState<string[]>([]);
+  const [governingAuthorities, setGoverningAuthorities] = useState<string[]>([]);
+  const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(true);
   
   // Fullscreen toggle state
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -73,17 +147,41 @@ export default function Compliance() {
         .finally(() => setIsLoadingComplianceFields(false));
     };
     
+    const fetchDropdownData = () => {
+      setIsLoadingDropdowns(true);
+      Promise.all([
+        fetch('/api/compliance/categories').then(res => res.json()),
+        fetch('/api/compliance/authorities').then(res => res.json())
+      ])
+      .then(([categoriesData, authoritiesData]) => {
+        if (Array.isArray(categoriesData)) setCategories(categoriesData);
+        if (Array.isArray(authoritiesData)) setGoverningAuthorities(authoritiesData);
+      })
+      .catch(() => {
+        setCategories([]);
+        setGoverningAuthorities([]);
+      })
+      .finally(() => setIsLoadingDropdowns(false));
+    };
+    
     fetchComplianceFields();
+    fetchDropdownData();
     
     // Add event listeners for account changes
     window.addEventListener("accountChanged", fetchComplianceFields);
     window.addEventListener("logout", fetchComplianceFields);
     window.addEventListener("login", fetchComplianceFields);
+    window.addEventListener("accountChanged", fetchDropdownData);
+    window.addEventListener("logout", fetchDropdownData);
+    window.addEventListener("login", fetchDropdownData);
     
     return () => {
       window.removeEventListener("accountChanged", fetchComplianceFields);
       window.removeEventListener("logout", fetchComplianceFields);
       window.removeEventListener("login", fetchComplianceFields);
+      window.removeEventListener("accountChanged", fetchDropdownData);
+      window.removeEventListener("logout", fetchDropdownData);
+      window.removeEventListener("login", fetchDropdownData);
     };
   }, []);
   
@@ -113,9 +211,10 @@ export default function Compliance() {
   
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [showSubmissionDetails, setShowSubmissionDetails] = useState(false);
   
   const [form, setForm] = useState({
     filingName: "",
@@ -128,6 +227,7 @@ export default function Compliance() {
     filingSubmissionStatus: "Pending",
     filingRecurringFrequency: "",
     filingRemarks: "",
+    submissionNotes: "",
     filingSubmissionDate: "",
     reminderDays: "7",
     reminderPolicy: "One time",
@@ -291,36 +391,37 @@ export default function Compliance() {
   const pending = complianceItems.filter((item: ComplianceItem) => mapStatus(item.status) === "Pending").length;
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-slate-50 to-indigo-100 p-4 md:p-6 relative">
-      <div className="max-w-7xl mx-auto">
-        {/* Header Section */}
-        <div className="bg-white rounded-2xl shadow-xl p-4 md:p-6 mb-6 border border-slate-200">
-          {/* Title and Buttons Row */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl shadow-md">
-                <FileText className="h-7 w-7 text-white" />
+    <div className="min-h-screen bg-white">
+      <div className="max-w-[1400px] mx-auto px-6 py-8">
+        {/* Modern Professional Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-4">
+              <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
+                <FileText className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Compliance Management</h1>
-                <p className="text-slate-600">Enterprise Compliance Tracking System</p>
+                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Compliance Management</h1>
               </div>
             </div>
-            <div className="flex flex-row gap-3 items-center">
+            
+            <div className="flex items-center space-x-3">
               <Button
                 variant="outline"
-                className="border-indigo-600 text-indigo-600 hover:bg-indigo-50 font-semibold shadow-sm hover:shadow-md transition-all duration-300 h-10"
+                size="sm"
                 onClick={() => {
                   window.location.href = "/compliance-ledger";
                 }}
+                className="bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200 hover:border-indigo-300 font-medium transition-all duration-200"
               >
-                <FileText className="h-4 w-4 mr-2" /> Compliance Ledger
+                <FileText className="h-4 w-4 mr-2" />
+                Compliance Ledger
               </Button>
+              
               <Button
-                variant="default"
-                className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-semibold shadow-md hover:scale-105 transition-transform h-10"
                 onClick={() => {
                   setEditIndex(null);
+                  setShowSubmissionDetails(false);
                   setForm({
                     filingName: "",
                     filingFrequency: "Monthly",
@@ -332,6 +433,7 @@ export default function Compliance() {
                     filingSubmissionStatus: "Pending",
                     filingRecurringFrequency: "",
                     filingRemarks: "",
+                    submissionNotes: "",
                     filingSubmissionDate: "",
                     reminderDays: "7",
                     reminderPolicy: "One time",
@@ -340,187 +442,296 @@ export default function Compliance() {
                   });
                   setModalOpen(true);
                 }}
-                title="Add Compliance"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
               >
-                <Plus className="h-5 w-5 mr-2" /> Add Compliance
+                <Plus className="h-4 w-4 mr-2" />
+                Add Compliance
               </Button>
             </div>
           </div>
-          
-          {/* Stats and Search Row */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl shadow-lg p-3 flex items-center gap-3">
-              <FileText className="h-6 w-6 text-white" />
-              <div>
-                <div className="text-xl font-bold text-white">{total}</div>
-                <div className="text-white text-xs">Total Filings</div>
+
+          {/* Key Metrics Cards with Search and Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-100">Total Filings</p>
+                  <p className="text-2xl font-bold text-white mt-1">{total}</p>
+                </div>
+                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-white" />
+                </div>
               </div>
             </div>
-            <div className="bg-gradient-to-r from-amber-400 to-amber-500 rounded-xl shadow-lg p-3 flex items-center gap-3">
-              <AlertCircle className="h-6 w-6 text-white" />
-              <div>
-                <div className="text-xl font-bold text-white">{pending}</div>
-                <div className="text-white text-xs">Pending</div>
+            
+            <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-amber-100">Pending</p>
+                  <p className="text-2xl font-bold text-white mt-1">{pending}</p>
+                </div>
+                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <AlertCircle className="h-5 w-5 text-white" />
+                </div>
               </div>
             </div>
-            <div className="col-span-2 flex items-center gap-2">
-              <div className="relative w-1/2">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+
+            {/* Search Bar */}
+            <div className="flex items-center">
+              <div className="relative w-full">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  
+                  placeholder="Search compliance filings..."
                   value={searchTerm}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                  className="pl-10 border-slate-300 bg-white text-slate-900 rounded-lg h-10"
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 w-full border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm"
                 />
               </div>
-              <div className="w-1/2">
-                <Select value={categoryFilter} onValueChange={(value: string) => setCategoryFilter(value)}>
-                  <SelectTrigger className="border-slate-300 bg-white text-slate-900 rounded-lg h-10 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                    <SelectItem value="all" className="text-slate-900 hover:bg-indigo-50">All Categories</SelectItem>
-                    {uniqueCategories.map((cat, idx) => (
-                      <SelectItem key={String(cat) + idx} value={String(cat)} className="text-slate-900 hover:bg-indigo-50">{String(cat)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            </div>
+
+            {/* Category Filter */}
+            <div className="flex items-center">
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {uniqueCategories.map((category, idx) => (
+                    <SelectItem key={String(category) + idx} value={String(category)}>
+                      {String(category)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
         
-        {/* Table Section */}
-        <Card className="border-slate-200 shadow-lg rounded-2xl overflow-hidden bg-white">
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="p-6 space-y-4">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="flex items-center space-x-4">
-                    <Skeleton className="h-12 w-12 rounded-xl" />
-                    <div className="space-y-2 flex-1">
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-4 w-1/2" />
-                    </div>
+        {/* Professional Data Table */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
+                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
+                    Policy
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Category
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Status
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Due Date
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Submitted Date
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Submission
+                  </TableHead>
+                  <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <div className="space-y-2 p-6">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <Table className="">
-                <TableHeader className="bg-gradient-to-r from-indigo-100 to-indigo-50">
+                ) : filteredItems.length === 0 ? (
                   <TableRow>
-                    <TableHead className="font-bold text-indigo-700 text-base py-3">Policy</TableHead>
-                    <TableHead className="font-bold text-indigo-700 text-base py-3">Category</TableHead>
-                    <TableHead className="font-bold text-indigo-700 text-base py-3">Status</TableHead>
-                    <TableHead className="font-bold text-indigo-700 text-base py-3 text-center">Due Date</TableHead>
-                    <TableHead className="font-bold text-indigo-700 text-base py-3 text-center">Submitted Date</TableHead>
-                    <TableHead className="font-bold text-indigo-700 text-base py-3 text-right">Actions</TableHead>
+                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                      <div className="flex flex-col items-center justify-center">
+                        <AlertCircle className="h-10 w-10 text-gray-300 mb-2" />
+                        <p className="text-lg font-medium text-gray-600">No compliance records found</p>
+                        <p className="text-gray-500 mt-1">Try adjusting your filters or add a new compliance record</p>
+                      </div>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredItems.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-slate-500">
-                        <div className="flex flex-col items-center justify-center">
-                          <AlertCircle className="h-10 w-10 text-slate-300 mb-2" />
-                          <p className="text-lg font-medium text-slate-600">No compliance records found</p>
-                          <p className="text-slate-500 mt-1">Try adjusting your filters or add a new compliance record</p>
+                ) : (
+                  filteredItems.map((item: ComplianceItem) => (
+                    <TableRow key={item._id || item.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100">
+                      <TableCell className="px-4 py-4 font-medium text-gray-900">{item.policy}</TableCell>
+                      <TableCell className="px-4 py-4">
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-700 font-medium border-blue-200">
+                          {item.category}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-4 py-4">
+                        {(() => {
+                          const statusInfo = getComplianceStatus(item.endDate || '', item.submissionDeadline || '');
+                          const isLate = statusInfo.status === "Late";
+                          return (
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color} ${statusInfo.bgColor} ${
+                              isLate ? 'animate-pulse relative' : ''
+                            } transition-all duration-300`}>
+                              {isLate && (
+                                <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-400 rounded-full animate-ping"></span>
+                              )}
+                              {statusInfo.status}
+                            </span>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell className="px-4 py-4 text-center">
+                        <div className="flex items-center justify-center gap-2 text-gray-700 font-medium">
+                          <Calendar className="h-4 w-4 text-blue-400" />
+                          <span className="text-sm">{formatDate(item.submissionDeadline)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-4 text-center">
+                        <div className="flex items-center justify-center gap-2 text-gray-700 font-medium">
+                          <Calendar className="h-4 w-4 text-blue-400" />
+                          <span className="text-sm">{formatDate(item.filingSubmissionDate)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4 py-4 text-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          title="Submit now"
+                          onClick={() => {
+                            const index = (complianceItems as ComplianceItem[]).findIndex(
+                              (ci: ComplianceItem) => (ci._id || ci.id) === (item._id || item.id)
+                            );
+                            setEditIndex(index);
+                            setShowSubmissionDetails(true);
+                            setModalOpen(true);
+                            const currentItem = complianceItems[index] as ComplianceItem;
+                            setForm({
+                              filingName: currentItem.policy,
+                              filingFrequency: currentItem.frequency || "Monthly",
+                              filingComplianceCategory: currentItem.category,
+                              filingGoverningAuthority: currentItem.governingAuthority || "",
+                              filingStartDate: currentItem.lastAudit || "",
+                              filingEndDate: currentItem.endDate || "",
+                              filingSubmissionDeadline: currentItem.submissionDeadline || "",
+                              filingSubmissionStatus: mapStatus(currentItem.status),
+                              filingRecurringFrequency: currentItem.recurringFrequency || "",
+                              filingRemarks: currentItem.remarks || "",
+                              submissionNotes: "",
+                              filingSubmissionDate: "",
+                              reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
+                              reminderPolicy: currentItem.reminderPolicy || "One time",
+                              submittedBy: currentItem.submittedBy || "",
+                              amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : ""
+                            });
+                          }}
+                          className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
+                        >
+                          Submit now
+                        </Button>
+                      </TableCell>
+                      <TableCell className="px-4 py-4 text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const index = (complianceItems as ComplianceItem[]).findIndex(
+                                (ci: ComplianceItem) => (ci._id || ci.id) === (item._id || item.id)
+                              );
+                              setEditIndex(index);
+                              setShowSubmissionDetails(false);
+                              setModalOpen(true);
+                              const currentItem = complianceItems[index] as ComplianceItem;
+                              setForm({
+                                filingName: currentItem.policy,
+                                filingFrequency: currentItem.frequency || "Monthly",
+                                filingComplianceCategory: currentItem.category,
+                                filingGoverningAuthority: currentItem.governingAuthority || "",
+                                filingStartDate: currentItem.lastAudit || "",
+                                filingEndDate: currentItem.endDate || "",
+                                filingSubmissionDeadline: currentItem.submissionDeadline || "",
+                                filingSubmissionStatus: mapStatus(currentItem.status),
+                                filingRecurringFrequency: currentItem.recurringFrequency || "",
+                                filingRemarks: currentItem.remarks || "",
+                                submissionNotes: "",
+                                filingSubmissionDate: "",
+                                reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
+                                reminderPolicy: currentItem.reminderPolicy || "One time",
+                                submittedBy: currentItem.submittedBy || "",
+                                amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : ""
+                              });
+                            }}
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors p-2"
+                          >
+                            <Edit size={16} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (window.confirm("Do you want to delete this compliance item?")) {
+                                deleteMutation.mutate(item._id as string);
+                              }
+                            }}
+                            className="text-red-600 hover:text-red-800 hover:bg-red-50 transition-colors p-2"
+                          >
+                            <Trash2 size={16} />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    filteredItems.map((item: ComplianceItem) => (
-                      <TableRow key={item._id || item.id} className="hover:bg-indigo-50/40 transition-colors">
-                        <TableCell className="font-semibold text-slate-900 text-base py-3">{item.policy}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 font-medium">
-                            {item.category}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={mapStatus(item.status)} />
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-2 text-slate-700 font-medium">
-                            <Calendar className="h-4 w-4 text-indigo-400" />
-                            {formatDate(item.submissionDeadline)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-2 text-slate-700 font-medium">
-                            <Calendar className="h-4 w-4 text-indigo-400" />
-                            {formatDate(item.filingSubmissionDate)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                const index = (complianceItems as ComplianceItem[]).findIndex(
-                                  (ci: ComplianceItem) => (ci._id || ci.id) === (item._id || item.id)
-                                );
-                                setEditIndex(index);
-                                setModalOpen(true);
-                                const currentItem = complianceItems[index] as ComplianceItem;
-                                setForm({
-                                  filingName: currentItem.policy,
-                                  filingFrequency: currentItem.frequency || "Monthly",
-                                  filingComplianceCategory: currentItem.category,
-                                  filingGoverningAuthority: currentItem.governingAuthority || "",
-                                  filingStartDate: currentItem.lastAudit || "",
-                                  filingEndDate: currentItem.endDate || "",
-                                  filingSubmissionDeadline: currentItem.submissionDeadline || "",
-                                  filingSubmissionStatus: mapStatus(currentItem.status),
-                                  filingRecurringFrequency: currentItem.recurringFrequency || "",
-                                  filingRemarks: currentItem.remarks || "",
-                                  filingSubmissionDate: "",
-                                  reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
-                                  reminderPolicy: currentItem.reminderPolicy || "One time",
-                                  submittedBy: currentItem.submittedBy || "",
-                                  amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : ""
-                                });
-                              }}
-                              className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg p-2"
-                            >
-                              <Edit size={16} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                if (window.confirm("Do you want to delete this compliance item?")) {
-                                  deleteMutation.mutate(item._id as string);
-                                }
-                              }}
-                              className="text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg p-2"
-                            >
-                              <Trash2 size={16} />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       </div>
       
       {/* Modal */}
       <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setModalOpen(v); }}>
         <DialogContent className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
-          <DialogHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-5 rounded-t-2xl">
+          {/* Local keyframes for the sheen animation */}
+          <style>{`@keyframes sheen { 0% { transform: translateX(-60%); } 100% { transform: translateX(180%); } }`}</style>
+          <DialogHeader className={`bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'p-4 md:p-5' : 'p-5'} rounded-t-2xl`}>
             <div className="flex items-center justify-between w-full">
-              <DialogTitle className="text-xl font-bold flex items-center gap-3">
-                <FileText className="h-6 w-6" />
-                {editIndex !== null ? "Edit Compliance" : "Add New Compliance"}
-              </DialogTitle>
-              {/* Added mr-14 to create clear space before the global close (X) button positioned at top-right of DialogContent */}
+              <div className="flex items-center gap-3">
+                <DialogTitle className="text-xl font-bold flex items-center gap-3">
+                  <FileText className="h-6 w-6" />
+                  {showSubmissionDetails ? "Submission" : (editIndex !== null ? (form.filingName || 'Edit Compliance') : "Compliance")}
+                </DialogTitle>
+                {/* Dynamic Status Badge - hidden when in Submission view */}
+                {!showSubmissionDetails && (() => {
+                  const statusInfo = getComplianceStatus(form.filingEndDate, form.filingSubmissionDeadline);
+                  const isLate = statusInfo.status === "Late";
+                  return (
+                    <span className={`px-4 py-2 rounded-full text-sm font-medium ${statusInfo.color} ${statusInfo.bgColor} ${
+                      isLate ? 'animate-bounce relative' : ''
+                    } transition-all duration-300`}>
+                      {isLate && (
+                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
+                      )}
+                      {statusInfo.status}
+                    </span>
+                  );
+                })()}
+              </div>
+              {/* Right side controls: Submission button, fullscreen, View Ledger */}
               <div className="flex items-center gap-3 pr-1 mr-14">
+                {/* Submission Toggle Button - highlighted in green theme, now on right */}
+                {!showSubmissionDetails && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowSubmissionDetails(!showSubmissionDetails)}
+                    className={`relative overflow-hidden px-3 py-1 text-sm rounded-lg font-semibold transition-all duration-300
+                      bg-gradient-to-r from-emerald-500/70 to-green-600/70 text-white border border-emerald-300/60 hover:from-emerald-500 hover:to-green-600 hover:shadow-[0_8px_16px_rgba(16,185,129,0.25)]
+                    `}
+                  >
+                    <FileText className="h-4 w-4 mr-1" />
+                    Submission
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="outline"
@@ -547,8 +758,66 @@ export default function Compliance() {
               </div>
             </div>
           </DialogHeader>
-          <form className="p-6">
-            <h2 className="text-lg font-semibold mb-3">Compliance Details</h2>
+          <form className={`${isFullscreen ? 'p-4 md:p-6 lg:p-8' : 'p-6'}`}>
+            {/* Show Submission Details when showSubmissionDetails is true */}
+            {showSubmissionDetails && (
+              <>
+                {/* Submission Details heading removed as requested */}
+                <div className={`grid gap-6 mb-8 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
+                  {/* Submission Date and Submitted By fields */}
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-slate-700">Submission Date</label>
+                    <Input 
+                      className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40" 
+                      type="date" 
+                      value={form.filingSubmissionDate} 
+                      onChange={e => handleFormChange("filingSubmissionDate", e.target.value)} 
+                      disabled={editIndex === null}
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-slate-700">Submitted By</label>
+                    <Select 
+                      value={form.submittedBy || ''} 
+                      onValueChange={(val: string) => handleFormChange("submittedBy", val)}
+                      disabled={editIndex === null}
+                    >
+                      <SelectTrigger className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
+                        {isLoadingEmployees ? (
+                          <SelectItem value="loading" disabled className="text-slate-500">Loading employees...</SelectItem>
+                        ) : employees.length > 0 ? (
+                          employees.map((emp: any) => (
+                            <SelectItem key={emp._id || emp.id} value={emp._id || emp.id} className="text-slate-900 hover:bg-indigo-50">
+                              {emp.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-employees" disabled className="text-slate-500">No employees available</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Remarks under Submission Details for better usability in focused view */}
+                <div className="mt-4 mb-8">
+                  <label className="block text-sm font-medium text-slate-700 mb-3">Submission Notes</label>
+                  <Textarea
+                    className="w-full border-slate-300 rounded-lg text-base min-h-[120px] md:min-h-[140px] resize-y focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 p-4"
+                    value={form.submissionNotes}
+                    onChange={(e) => handleFormChange("submissionNotes", e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Show Compliance Details when not viewing Submission Details */}
+            {!showSubmissionDetails && (
+              <>
+                {/* Compliance Details heading removed as requested */}
             {/* General Information Grid - expands to more columns in fullscreen */}
             <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1 md:grid-cols-2'}`}>
               <div className="space-y-2">
@@ -640,6 +909,45 @@ export default function Compliance() {
                   onChange={e => handleFormChange("filingSubmissionDeadline", e.target.value)} 
                 />
               </div>
+              {/* Moved Reminder Days and Reminder Policy into Compliance Details */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Reminder Days</label>
+                <Input 
+                  className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                  type="number" 
+                  value={form.reminderDays} 
+                  onChange={e => handleFormChange("reminderDays", e.target.value)} 
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Reminder Policy</label>
+                <Select value={form.reminderPolicy} onValueChange={(val: string) => handleFormChange("reminderPolicy", val)}>
+                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
+                    <SelectItem value="One time" className="text-slate-900 hover:bg-indigo-50">One time</SelectItem>
+                    <SelectItem value="Two times" className="text-slate-900 hover:bg-indigo-50">Two times</SelectItem>
+                    <SelectItem value="Until Renewal" className="text-slate-900 hover:bg-indigo-50">Until Renewal</SelectItem>
+                  </SelectContent>
+                </Select>
+                <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
+                  <li>One time: One reminder at {form.reminderDays} days before renewal</li>
+                  <li>Two times: Reminders at {form.reminderDays} and 3 days before</li>
+                  <li>Until Renewal: Daily reminders from {form.reminderDays} days until renewal</li>
+                </ul>
+              </div>
+              {/* Moved Remarks (Additional Notes) into Compliance Details; hidden when Submission view is active */}
+              {!showSubmissionDetails && (
+              <div className="space-y-2 col-span-full">
+                <label className="block text-sm font-medium text-slate-700">Compliance Notes</label>
+                <textarea 
+                  className="w-full border border-slate-400 rounded-lg p-2 text-base min-h-[80px] max-h-[120px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
+                  value={form.filingRemarks} 
+                  onChange={e => handleFormChange("filingRemarks", e.target.value)} 
+                />
+              </div>
+              )}
               
               {/* Dynamic Compliance Fields - Now placed after default fields */}
               {isLoadingComplianceFields ? (
@@ -663,89 +971,12 @@ export default function Compliance() {
                 ))
               )}
             </div>
+            </>
+            )}
             
-            {/* Move date range fields into Compliance Details above: we append them there */}
-            {/* Updated Compliance Details grid below now includes Start/End/Submission Deadline - implemented by adding them earlier (see modification). */}
-            <h2 className="text-lg font-semibold mt-6 mb-3">Submission Details</h2>
-            <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
-              {/* Only Submission Date and Submitted By per user request */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Submission Date</label>
-                <Input 
-                  className="w-full border-slate-300 rounded-lg p-2 text-base" 
-                  type="date" 
-                  value={form.filingSubmissionDate} 
-                  onChange={e => handleFormChange("filingSubmissionDate", e.target.value)} 
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Submitted By</label>
-                <Select value={form.submittedBy || ''} onValueChange={(val: string) => handleFormChange("submittedBy", val)}>
-                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                    {isLoadingEmployees ? (
-                      <SelectItem value="loading" disabled className="text-slate-500">Loading employees...</SelectItem>
-                    ) : employees.length > 0 ? (
-                      employees.map((emp: any) => (
-                        <SelectItem key={emp._id || emp.id} value={emp._id || emp.id} className="text-slate-900 hover:bg-indigo-50">
-                          {emp.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-employees" disabled className="text-slate-500">No employees available</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
-            {/* Reminder Settings Grid */}
-            <div className={`grid gap-4 mt-6 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Reminder Days</label>
-                <Input 
-                  className="w-full border-slate-300 rounded-lg p-2 text-base" 
-                  type="number" 
-                  value={form.reminderDays} 
-                  onChange={e => handleFormChange("reminderDays", e.target.value)} 
-                  
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Reminder Policy</label>
-                <Select value={form.reminderPolicy} onValueChange={(val: string) => handleFormChange("reminderPolicy", val)}>
-                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                    <SelectItem value="One time" className="text-slate-900 hover:bg-indigo-50">One time</SelectItem>
-                    <SelectItem value="Two times" className="text-slate-900 hover:bg-indigo-50">Two times</SelectItem>
-                    <SelectItem value="Until Renewal" className="text-slate-900 hover:bg-indigo-50">Until Renewal</SelectItem>
-                  </SelectContent>
-                </Select>
-                <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
-                  <li>One time: One reminder at {form.reminderDays} days before renewal</li>
-                  <li>Two times: Reminders at {form.reminderDays} and 3 days before</li>
-                  <li>Until Renewal: Daily reminders from {form.reminderDays} days until renewal</li>
-                </ul>
-              </div>
-            </div>
-            
-            <h2 className="text-lg font-semibold mt-6 mb-3">Remarks</h2>
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Additional Notes</label>
-                <textarea 
-                  className="w-full border border-slate-400 rounded-lg p-2 text-base min-h-[80px] max-h-[120px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
-                  value={form.filingRemarks} 
-                  onChange={e => handleFormChange("filingRemarks", e.target.value)} 
-                  
-                />
-              </div>
-            </div>
-            
+            {/* Removed duplicate Reminder and Remarks sections; these fields are now in Compliance Details */}
+
+            {/* Always show action buttons (including in Submission view) */}
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
               <Button 
                 type="button" 
@@ -759,17 +990,21 @@ export default function Compliance() {
                 type="button" 
                 className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-4 py-2 shadow-md hover:shadow-lg"
                 onClick={async () => {
-                  const isCompleted = form.filingSubmissionStatus === "Completed";
                   const hasSubmissionDate = !!form.filingSubmissionDate;
+                  const hasSubmittedBy = !!form.submittedBy;
                   let newStartDate = form.filingStartDate;
                   let newEndDate = form.filingEndDate;
                   let newSubmissionDeadline = form.filingSubmissionDeadline;
                   const frequency = form.filingFrequency || form.filingRecurringFrequency || "Monthly";
+                  
+                  // Calculate the actual status to store in database
+                  const calculatedStatus = getComplianceStatus(newEndDate, newSubmissionDeadline);
+                  
                   // Merge dynamic field values into saveData
                   let saveData = {
                     policy: form.filingName,
                     category: form.filingComplianceCategory,
-                    status: "Non-Compliant",
+                    status: calculatedStatus.status, // Use calculated status instead of hardcoded "Non-Compliant"
                     lastAudit: newStartDate,
                     issues: 0,
                     frequency: form.filingFrequency,
@@ -789,7 +1024,7 @@ export default function Compliance() {
                   if (editIndex !== null && complianceItems[editIndex]?._id) {
                     complianceId = complianceItems[editIndex]._id;
                   }
-                  if (isCompleted && hasSubmissionDate) {
+                  if (hasSubmissionDate && hasSubmittedBy) {
                     const currentEndDate = new Date(form.filingEndDate);
                     if (!isNaN(currentEndDate.getTime())) {
                       const nextStartDateObj = new Date(currentEndDate);
@@ -814,11 +1049,15 @@ export default function Compliance() {
                         newSubmissionDeadline = newStartDate;
                       }
                     }
+                    // Recalculate status for the new period dates
+                    const newPeriodStatus = getComplianceStatus(newEndDate, newSubmissionDeadline);
+                    
                     saveData = {
                       ...saveData,
                       lastAudit: newStartDate,
                       endDate: newEndDate,
-                      submissionDeadline: newSubmissionDeadline
+                      submissionDeadline: newSubmissionDeadline,
+                      status: newPeriodStatus.status // Update status for new period
                     };
                   }
                   if (editIndex !== null) {
@@ -839,10 +1078,12 @@ export default function Compliance() {
                       complianceId = newItem._id || newItem.id;
                     }
                   }
-                  if (isCompleted && hasSubmissionDate) {
+                  if (hasSubmissionDate && hasSubmittedBy) {
                     try {
                       const ledgerData = {
                         ...form,
+                        // Use submissionNotes for ledger remarks
+                        filingRemarks: form.submissionNotes,
                         complianceId: complianceId
                       };
                       const res = await fetch('/api/ledger/insert', {
@@ -862,11 +1103,12 @@ export default function Compliance() {
                   }
                   setForm((prev) => ({
                     ...prev,
-                    filingStartDate: isCompleted && hasSubmissionDate ? newStartDate : prev.filingStartDate,
-                    filingEndDate: isCompleted && hasSubmissionDate ? newEndDate : prev.filingEndDate,
-                    filingSubmissionDeadline: isCompleted && hasSubmissionDate ? newSubmissionDeadline : prev.filingSubmissionDeadline,
+                    filingStartDate: hasSubmissionDate && hasSubmittedBy ? newStartDate : prev.filingStartDate,
+                    filingEndDate: hasSubmissionDate && hasSubmittedBy ? newEndDate : prev.filingEndDate,
+                    filingSubmissionDeadline: hasSubmissionDate && hasSubmittedBy ? newSubmissionDeadline : prev.filingSubmissionDeadline,
                     filingSubmissionStatus: "Pending",
                     filingSubmissionDate: "",
+                    submissionNotes: "",
                     amount: ""
                   }));
                   setDynamicFieldValues({});
@@ -874,7 +1116,7 @@ export default function Compliance() {
                   setEditIndex(null);
                 }}
               >
-                Save & Submit
+                Save & Close
               </Button>
             </div>
           </form>
