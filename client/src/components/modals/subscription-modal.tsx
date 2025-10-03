@@ -330,12 +330,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       form.reset({
         serviceName: subscription.serviceName || "",
         vendor: subscription.vendor || "",
+        currency: subscription.currency || "",
         amount: subscription.amount !== undefined && subscription.amount !== null ? String(subscription.amount) : "",
         billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
         category: subscription.category || "",
         department: subscription.department || "",
         departments: depts,
         owner: subscription.owner || "",
+        paymentMethod: subscription.paymentMethod || "",
         startDate: start,
         nextRenewal: end,
         status: subscription.status && subscription.status !== "" ? subscription.status : "Active",
@@ -344,6 +346,26 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         notes: subscription.notes || "",
         isActive: subscription.isActive ?? true,
       });
+
+      // Force LCY calculation after form reset with a small delay
+      setTimeout(() => {
+        const amount = subscription.amount !== undefined && subscription.amount !== null ? String(subscription.amount) : "";
+        const currency = subscription.currency || "";
+        const localCurrency = companyInfo?.defaultCurrency;
+        
+        if (amount && currency && localCurrency && currency !== localCurrency) {
+          const selectedCurrency = currencies.find((curr: any) => curr.code === currency);
+          const exchangeRate = selectedCurrency?.exchangeRate ? parseFloat(selectedCurrency.exchangeRate) : null;
+          
+          if (exchangeRate && exchangeRate > 0) {
+            const amountNum = parseFloat(amount);
+            const convertedAmount = amountNum * exchangeRate;
+            setLcyAmount(convertedAmount.toFixed(2));
+          }
+        } else if (currency === localCurrency && amount) {
+          setLcyAmount(amount);
+        }
+      }, 100);
     } else {
       setStartDate("");
       setBillingCycle("monthly");
@@ -360,12 +382,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       form.reset({
         serviceName: "",
         vendor: "",
+        currency: "",
         amount: "",
         billingCycle: "monthly",
         category: "",
         department: "",
         departments: [],
         owner: "",
+        paymentMethod: "",
         startDate: "",
         nextRenewal: "",
   status: "Draft",
@@ -374,8 +398,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         notes: "",
         isActive: true,
       });
+
+      // Reset LCY amount for new subscriptions
+      setLcyAmount('');
     }
-  }, [subscription, form]);
+  }, [subscription, form, companyInfo?.defaultCurrency, currencies]);
   
   useEffect(() => {
     if (startDate && billingCycle) {
@@ -411,7 +438,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     };
     
     calculateLcyAmount();
-  }, [form.watch('amount'), form.watch('currency'), companyInfo?.defaultCurrency, currencies]);
+  }, [form.watch('amount'), form.watch('currency'), companyInfo?.defaultCurrency, currencies, subscription]);
   
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {

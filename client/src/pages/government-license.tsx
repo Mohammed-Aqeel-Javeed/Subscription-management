@@ -476,26 +476,19 @@ export default function GovernmentLicense() {
                             <TableCell className="py-4 px-6 text-slate-700">
                               <div>
                                 <div className="font-medium">{license.issuingAuthorityName}</div>
-                                <div className="text-sm text-slate-500 flex items-center gap-1 mt-1">
-                                  <Mail className="h-3 w-3" />
-                                  {license.issuingAuthorityEmail}
-                                </div>
-                                <div className="text-sm text-slate-500 flex items-center gap-1">
-                                  <Phone className="h-3 w-3" />
-                                  {license.issuingAuthorityPhone}
-                                </div>
+                                {/* Removed email and phone display as per requirements */}
                               </div>
                             </TableCell>
                             <TableCell className="py-4 px-6 text-slate-600">
                               <div className="flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
-                                {formatDate(license.startDate)}
+                                {license.startDate ? new Date(license.startDate).toLocaleDateString('en-GB') : ''}
                               </div>
                             </TableCell>
                             <TableCell className="py-4 px-6 text-slate-600">
                               <div className="flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
-                                {formatDate(license.endDate)}
+                                {license.endDate ? new Date(license.endDate).toLocaleDateString('en-GB') : ''}
                               </div>
                             </TableCell>
                             <TableCell className="py-4 px-6 text-slate-700">
@@ -510,9 +503,7 @@ export default function GovernmentLicense() {
                                   <Users className="h-4 w-4" />
                                   {license.responsiblePerson}
                                 </div>
-                                <div className="text-sm text-slate-500">
-                                  Backup: {license.backupContact}
-                                </div>
+                                {/* Removed backup contact as per requirements */}
                               </div>
                             </TableCell>
                             <TableCell className="py-4 px-6 text-slate-700 font-semibold">

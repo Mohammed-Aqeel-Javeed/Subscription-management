@@ -233,6 +233,7 @@ export default function Compliance() {
     reminderPolicy: "One time",
     submittedBy: "",
     amount: "",
+    paymentDate: "",
   });
   
   // Fetch employees for the submit by dropdown with auto-refresh
@@ -438,7 +439,8 @@ export default function Compliance() {
                     reminderDays: "7",
                     reminderPolicy: "One time",
                     submittedBy: "",
-                    amount: ""
+                    amount: "",
+                    paymentDate: ""
                   });
                   setModalOpen(true);
                 }}
@@ -620,7 +622,8 @@ export default function Compliance() {
                               reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
                               reminderPolicy: currentItem.reminderPolicy || "One time",
                               submittedBy: currentItem.submittedBy || "",
-                              amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : ""
+                              amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
+                              paymentDate: ""
                             });
                           }}
                           className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
@@ -657,7 +660,8 @@ export default function Compliance() {
                                 reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
                                 reminderPolicy: currentItem.reminderPolicy || "One time",
                                 submittedBy: currentItem.submittedBy || "",
-                                amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : ""
+                                amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
+                                paymentDate: ""
                               });
                             }}
                             className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors p-2"
@@ -860,26 +864,22 @@ export default function Compliance() {
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Governing Authority</label>
-                <Select 
-                  value={form.filingGoverningAuthority} 
-                  onValueChange={(val: string) => {
-                    handleFormChange('filingGoverningAuthority', val);
-                  }}
-                >
-                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue placeholder="Select Authority" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md max-h-60 overflow-y-auto">
-                    <SelectItem value="IRAS" className="text-slate-900 hover:bg-indigo-50">IRAS</SelectItem>
-                    <SelectItem value="ACRA" className="text-slate-900 hover:bg-indigo-50">ACRA</SelectItem>
-                    <SelectItem value="CPF" className="text-slate-900 hover:bg-indigo-50">CPF</SelectItem>
-                    <SelectItem value="AGD" className="text-slate-900 hover:bg-indigo-50">AGD</SelectItem>
-                    <SelectItem value="MOM" className="text-slate-900 hover:bg-indigo-50">MOM</SelectItem>
-                    {form.filingGoverningAuthority && !['IRAS','ACRA','CPF','AGD','MOM'].includes(form.filingGoverningAuthority) && (
-                      <SelectItem value={form.filingGoverningAuthority} className="text-slate-900 hover:bg-indigo-50">{form.filingGoverningAuthority}</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <Input
+                    className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                    value={form.filingGoverningAuthority}
+                    onChange={(e) => handleFormChange('filingGoverningAuthority', e.target.value)}
+                    placeholder="Enter or select authority"
+                    list="authority-list"
+                  />
+                  <datalist id="authority-list">
+                    <option value="IRAS" />
+                    <option value="ACRA" />
+                    <option value="CPF" />
+                    <option value="AGD" />
+                    <option value="MOM" />
+                  </datalist>
+                </div>
               </div>
               {/* Added date range & deadline fields moved from previous Submission Details section */}
               <div className="space-y-2">
@@ -937,6 +937,15 @@ export default function Compliance() {
                   <li>Until Renewal: Daily reminders from {form.reminderDays} days until renewal</li>
                 </ul>
               </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Payment Date</label>
+                <Input 
+                  className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40" 
+                  type="date" 
+                  value={form.paymentDate} 
+                  onChange={e => handleFormChange("paymentDate", e.target.value)} 
+                />
+              </div>
               {/* Moved Remarks (Additional Notes) into Compliance Details; hidden when Submission view is active */}
               {!showSubmissionDetails && (
               <div className="space-y-2 col-span-full">
@@ -981,14 +990,25 @@ export default function Compliance() {
               <Button 
                 type="button" 
                 variant="outline" 
-                className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-4 py-2"
+                className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
                 onClick={() => setModalOpen(false)}
               >
-                Cancel
+                Exit
               </Button>
               <Button 
                 type="button" 
-                className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-4 py-2 shadow-md hover:shadow-lg"
+                variant="outline" 
+                className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
+                onClick={() => {
+                  // Save as draft logic here
+                  toast({ title: 'Draft saved successfully' });
+                }}
+              >
+                Save Draft
+              </Button>
+              <Button 
+                type="button" 
+                className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-6 py-2 shadow-md hover:shadow-lg"
                 onClick={async () => {
                   const hasSubmissionDate = !!form.filingSubmissionDate;
                   const hasSubmittedBy = !!form.submittedBy;
@@ -1109,14 +1129,15 @@ export default function Compliance() {
                     filingSubmissionStatus: "Pending",
                     filingSubmissionDate: "",
                     submissionNotes: "",
-                    amount: ""
+                    amount: "",
+                    paymentDate: ""
                   }));
                   setDynamicFieldValues({});
                   setModalOpen(false);
                   setEditIndex(null);
                 }}
               >
-                Save & Close
+                Save Compliance
               </Button>
             </div>
           </form>
