@@ -134,6 +134,22 @@ export default function Compliance() {
   // Fullscreen toggle state
   const [isFullscreen, setIsFullscreen] = useState(false);
   
+  // Dropdown open state for governing authority
+  const [isGoverningAuthorityOpen, setIsGoverningAuthorityOpen] = useState(false);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (isGoverningAuthorityOpen && !target.closest('.governing-authority-dropdown')) {
+        setIsGoverningAuthorityOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isGoverningAuthorityOpen]);
+  
   useEffect(() => {
     const fetchComplianceFields = () => {
       setIsLoadingComplianceFields(true);
@@ -207,6 +223,8 @@ export default function Compliance() {
     reminderPolicy?: string;
     submittedBy?: string;
     amount?: string | number;
+    isDraft?: boolean;
+    paymentDate?: string;
   };
   
   const [searchTerm, setSearchTerm] = useState("");
@@ -559,7 +577,9 @@ export default function Compliance() {
                 ) : (
                   filteredItems.map((item: ComplianceItem) => (
                     <TableRow key={item._id || item.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100">
-                      <TableCell className="px-4 py-4 font-medium text-gray-900">{item.policy}</TableCell>
+                      <TableCell className="px-4 py-4 font-medium text-gray-900">
+                        {item.policy}
+                      </TableCell>
                       <TableCell className="px-4 py-4">
                         <Badge variant="secondary" className="bg-blue-100 text-blue-700 font-medium border-blue-200">
                           {item.category}
@@ -567,6 +587,15 @@ export default function Compliance() {
                       </TableCell>
                       <TableCell className="px-4 py-4">
                         {(() => {
+                          // Check if item is a draft first
+                          if (item.isDraft || item.status === "Draft") {
+                            return (
+                              <span className="px-3 py-1 rounded-full text-xs font-medium text-amber-800 bg-amber-100 transition-all duration-300">
+                                Draft
+                              </span>
+                            );
+                          }
+                          
                           const statusInfo = getComplianceStatus(item.endDate || '', item.submissionDeadline || '');
                           const isLate = statusInfo.status === "Late";
                           return (
@@ -623,7 +652,7 @@ export default function Compliance() {
                               reminderPolicy: currentItem.reminderPolicy || "One time",
                               submittedBy: currentItem.submittedBy || "",
                               amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
-                              paymentDate: ""
+                              paymentDate: currentItem.paymentDate || ""
                             });
                           }}
                           className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
@@ -661,7 +690,7 @@ export default function Compliance() {
                                 reminderPolicy: currentItem.reminderPolicy || "One time",
                                 submittedBy: currentItem.submittedBy || "",
                                 amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
-                                paymentDate: ""
+                                paymentDate: currentItem.paymentDate || ""
                               });
                             }}
                             className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors p-2"
@@ -864,21 +893,48 @@ export default function Compliance() {
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Governing Authority</label>
-                <div className="relative">
-                  <Input
-                    className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                    value={form.filingGoverningAuthority}
-                    onChange={(e) => handleFormChange('filingGoverningAuthority', e.target.value)}
-                    placeholder="Enter or select authority"
-                    list="authority-list"
-                  />
-                  <datalist id="authority-list">
-                    <option value="IRAS" />
-                    <option value="ACRA" />
-                    <option value="CPF" />
-                    <option value="AGD" />
-                    <option value="MOM" />
-                  </datalist>
+                <div className="relative governing-authority-dropdown">
+                  <div className="relative">
+                    <Input
+                      className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                      placeholder="Enter or select authority"
+                      value={form.filingGoverningAuthority || ''}
+                      onChange={(e) => handleFormChange('filingGoverningAuthority', e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 flex items-center pr-3"
+                      onClick={() => setIsGoverningAuthorityOpen(!isGoverningAuthorityOpen)}
+                    >
+                      <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+                  {isGoverningAuthorityOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-[200px] overflow-hidden">
+                      <div className="max-h-[180px] overflow-y-auto p-1">
+                        <div className="text-xs font-semibold tracking-wide text-slate-500 px-2 py-1 uppercase">Authorities</div>
+                        {['IRAS', 'ACRA', 'CPF', 'AGD', 'MOM'].map(authority => (
+                          <div
+                            key={authority}
+                            className="px-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer rounded"
+                            onClick={() => {
+                              handleFormChange('filingGoverningAuthority', authority);
+                              setIsGoverningAuthorityOpen(false);
+                            }}
+                          >
+                            {authority}
+                          </div>
+                        ))}
+                        {!['IRAS', 'ACRA', 'CPF', 'AGD', 'MOM'].includes(form.filingGoverningAuthority || "") && form.filingGoverningAuthority && (
+                          <div className="px-3 py-2 text-sm italic text-slate-600 bg-amber-50 rounded">
+                            {form.filingGoverningAuthority} (custom)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               {/* Added date range & deadline fields moved from previous Submission Details section */}
@@ -999,9 +1055,74 @@ export default function Compliance() {
                 type="button" 
                 variant="outline" 
                 className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
-                onClick={() => {
-                  // Save as draft logic here
-                  toast({ title: 'Draft saved successfully' });
+                onClick={async () => {
+                  // Save as draft logic - save the compliance item with current form data
+                  const calculatedStatus = getComplianceStatus(form.filingEndDate, form.filingSubmissionDeadline);
+                  
+                  let saveData = {
+                    policy: form.filingName,
+                    category: form.filingComplianceCategory,
+                    status: "Draft", // Set status to "Draft" for draft items
+                    lastAudit: form.filingStartDate,
+                    issues: 0,
+                    frequency: form.filingFrequency,
+                    governingAuthority: form.filingGoverningAuthority,
+                    endDate: form.filingEndDate,
+                    submissionDeadline: form.filingSubmissionDeadline,
+                    recurringFrequency: form.filingRecurringFrequency,
+                    remarks: form.filingRemarks,
+                    filingSubmissionDate: form.filingSubmissionDate,
+                    reminderDays: form.reminderDays,
+                    reminderPolicy: form.reminderPolicy,
+                    submittedBy: form.submittedBy,
+                    amount: form.amount,
+                    paymentDate: form.paymentDate,
+                    complianceFieldValues: dynamicFieldValues,
+                    isDraft: true // Mark as draft
+                  };
+
+                  try {
+                    if (editIndex !== null) {
+                      const itemToEdit = complianceItems[editIndex] as ComplianceItem;
+                      if (itemToEdit._id) {
+                        await editMutation.mutateAsync({ _id: itemToEdit._id, data: saveData });
+                      }
+                    } else {
+                      await addMutation.mutateAsync(saveData);
+                    }
+                    toast({ title: 'Draft saved successfully' });
+                    
+                    // Close modal and reset form after saving draft
+                    setModalOpen(false);
+                    setEditIndex(null);
+                    setShowSubmissionDetails(false);
+                    setForm({
+                      filingName: "",
+                      filingFrequency: "Monthly",
+                      filingComplianceCategory: "",
+                      filingGoverningAuthority: "",
+                      filingStartDate: "",
+                      filingEndDate: "",
+                      filingSubmissionDeadline: "",
+                      filingSubmissionStatus: "Pending",
+                      filingRecurringFrequency: "",
+                      filingRemarks: "",
+                      submissionNotes: "",
+                      filingSubmissionDate: "",
+                      reminderDays: "7",
+                      reminderPolicy: "One time",
+                      submittedBy: "",
+                      amount: "",
+                      paymentDate: ""
+                    });
+                    setDynamicFieldValues({});
+                  } catch (error) {
+                    toast({
+                      title: 'Error',
+                      description: 'Failed to save draft',
+                      variant: 'destructive'
+                    });
+                  }
                 }}
               >
                 Save Draft
