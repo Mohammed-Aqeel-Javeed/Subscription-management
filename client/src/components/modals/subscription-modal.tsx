@@ -516,8 +516,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         nextRenewal: new Date(data.nextRenewal ?? "").toISOString(),
       };
       
-      const res = await apiRequest("POST", "/api/subscriptions/draft", draftData);
-      return res.json();
+      // If editing an existing subscription, use PUT to update, otherwise POST to create
+      if (isEditing && subscription?.id) {
+        const res = await apiRequest("PUT", `/api/subscriptions/${subscription.id}`, draftData);
+        return res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/subscriptions/draft", draftData);
+        return res.json();
+      }
     },
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });

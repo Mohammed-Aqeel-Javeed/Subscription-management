@@ -1,11 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "../components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -14,7 +14,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { 
-  Plus, Edit, Trash2, Shield, Search, Download, Calendar, Building2, Users, Phone, Mail, AlertCircle, CheckCircle, Clock, RefreshCw, Upload, Maximize2, Minimize2
+  Plus, Edit, Trash2, Shield, Search, Download, Calendar, Building2, Users, AlertCircle, CheckCircle, Clock, RefreshCw, Upload, Maximize2, Minimize2
 } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { API_BASE_URL } from "@/lib/config";
@@ -88,6 +88,22 @@ export default function GovernmentLicense() {
   const [renewalStatus, setRenewalStatus] = useState<string>("Renewal submitted");
   // Modal header status pill
   const [headerStatus, setHeaderStatus] = useState<'Inactive' | 'Active'>("Inactive");
+  
+  // Dropdown open state for issuing authority
+  const [isIssuingAuthorityOpen, setIsIssuingAuthorityOpen] = useState(false);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (isIssuingAuthorityOpen && !target.closest('.issuing-authority-dropdown')) {
+        setIsIssuingAuthorityOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isIssuingAuthorityOpen]);
 
   const form = useForm<LicenseFormData>({
     resolver: zodResolver(licenseSchema),
@@ -186,14 +202,15 @@ export default function GovernmentLicense() {
 
   // Filter licenses based on search and status
   const filteredLicenses = licenses.filter((license) => {
+    const q = (searchTerm || "").toLowerCase();
     const matchesSearch = 
-      license.licenseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      license.issuingAuthorityName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      license.responsiblePerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      license.department.toLowerCase().includes(searchTerm.toLowerCase());
-    
+      (license.licenseName || "").toLowerCase().includes(q) ||
+      (license.issuingAuthorityName || "").toLowerCase().includes(q) ||
+      (license.responsiblePerson || "").toLowerCase().includes(q) ||
+      (license.department || "").toLowerCase().includes(q);
+
     const matchesStatus = statusFilter === "all" || license.status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
 
@@ -206,18 +223,18 @@ export default function GovernmentLicense() {
   const handleEdit = (license: License) => {
     setEditingLicense(license);
     form.reset({
-      licenseName: license.licenseName,
-      issuingAuthorityName: license.issuingAuthorityName,
-      startDate: license.startDate,
-      endDate: license.endDate,
-      details: license.details,
-      renewalFee: license.renewalFee,
-      responsiblePerson: license.responsiblePerson,
-      department: license.department,
-      backupContact: license.backupContact,
-      status: license.status,
-      issuingAuthorityEmail: license.issuingAuthorityEmail,
-      issuingAuthorityPhone: license.issuingAuthorityPhone,
+      licenseName: license.licenseName || "",
+      issuingAuthorityName: license.issuingAuthorityName || "",
+      startDate: license.startDate || "",
+      endDate: license.endDate || "",
+      details: license.details || "",
+      renewalFee: typeof license.renewalFee === 'number' ? license.renewalFee : undefined,
+      responsiblePerson: license.responsiblePerson || "",
+      department: license.department || "",
+      backupContact: license.backupContact || "",
+      status: (license.status as any) || 'Active',
+      issuingAuthorityEmail: license.issuingAuthorityEmail || "",
+      issuingAuthorityPhone: license.issuingAuthorityPhone || "",
     });
     setHeaderStatus('Active');
     setIsModalOpen(true);
@@ -270,14 +287,7 @@ export default function GovernmentLicense() {
     }
   };
 
-  // Format date
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  // (date formatting handled inline where needed)
 
   // Summary stats similar to subscriptions
   const total = licenses.length;
@@ -297,19 +307,18 @@ export default function GovernmentLicense() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex-1">
               <div className="flex items-center gap-4 mb-3">
-                <div className="p-3 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl shadow-md">
-                  <Shield className="h-7 w-7 text-white" />
+                <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
+                  <Shield className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">Government License Management</h1>
-                  <p className="text-slate-600 text-lg mt-1">Manage all your regulatory and statutory licenses</p>
+                  <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Government License Management</h1>
                 </div>
               </div>
             </div>
             <div className="flex flex-row gap-4 items-center">
               <Button
                 variant="default"
-                className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-semibold shadow-md hover:scale-105 transition-transform"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
                 onClick={handleAddNew}
                 title="Add License"
               >
@@ -317,45 +326,59 @@ export default function GovernmentLicense() {
               </Button>
             </div>
           </div>
-          {/* --- Summary Stats --- */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <Card className="bg-gradient-to-r from-indigo-500 to-indigo-600 shadow-sm rounded-lg p-3 flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <Shield className="h-6 w-6 text-white" />
+          
+          {/* Key Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-100">Total Licenses</p>
+                  <p className="text-2xl font-bold text-white mt-1">{total}</p>
+                </div>
+                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <Shield className="h-5 w-5 text-white" />
+                </div>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-white">{total}</div>
-                <div className="text-white/90 text-sm">Total Licenses</div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-emerald-100">Active Licenses</p>
+                  <p className="text-2xl font-bold text-white mt-1">{active}</p>
+                </div>
+                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="h-5 w-5 text-white" />
+                </div>
               </div>
-            </Card>
-            <Card className="bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-sm rounded-lg p-3 flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-white" />
+            </div>
+            
+            <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-purple-100">Data Management</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {/* TODO export */}}
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
+                    >
+                      <Download className="h-3 w-3 mr-1" />
+                      Export
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
+                    >
+                      <Upload className="h-3 w-3 mr-1" />
+                      Import
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-white">{active}</div>
-                <div className="text-white/90 text-sm">Active</div>
-              </div>
-            </Card>
-            <div className="flex flex-row items-center justify-start md:justify-end gap-6 px-2 py-1 bg-white rounded-lg shadow-sm border border-slate-100">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {/* TODO export */}}
-                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm min-w-[110px]"
-                title="Export to CSV"
-              >
-                <Download className="h-4 w-4 mr-2" /> Export
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-                className="border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm min-w-[110px]"
-                title="Import from CSV"
-              >
-                <Upload className="h-4 w-4 mr-2" /> Import
-              </Button>
             </div>
           </div>
         </div>
@@ -446,17 +469,17 @@ export default function GovernmentLicense() {
               ) : (
                 <div className="overflow-x-auto">
                   <Table className="w-full">
-                    <TableHeader className="bg-slate-50">
+                    <TableHeader className="bg-gray-50">
                       <TableRow>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">License Name</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Issuing Authority</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Start Date</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">End Date</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Department</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Responsible Person</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Renewal Fee</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Status</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Actions</TableHead>
+                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">License Name</TableHead>
+                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Issuing Authority</TableHead>
+                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Start Date</TableHead>
+                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">End Date</TableHead>
+                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Department</TableHead>
+                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Responsible Person</TableHead>
+                        <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">Renewal Fee</TableHead>
+                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Status</TableHead>
+                        <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -470,34 +493,34 @@ export default function GovernmentLicense() {
                             exit={{ opacity: 0 }}
                             transition={{ delay: 0.05 * index }}
                           >
-                            <TableCell className="py-4 px-6 font-medium text-slate-800">
+                            <TableCell className="px-4 py-3 font-medium text-gray-800">
                               {license.licenseName}
                             </TableCell>
-                            <TableCell className="py-4 px-6 text-slate-700">
+                            <TableCell className="px-4 py-3 text-sm text-gray-700">
                               <div>
                                 <div className="font-medium">{license.issuingAuthorityName}</div>
                                 {/* Removed email and phone display as per requirements */}
                               </div>
                             </TableCell>
-                            <TableCell className="py-4 px-6 text-slate-600">
+                            <TableCell className="px-4 py-3 text-sm text-gray-600">
                               <div className="flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
                                 {license.startDate ? new Date(license.startDate).toLocaleDateString('en-GB') : ''}
                               </div>
                             </TableCell>
-                            <TableCell className="py-4 px-6 text-slate-600">
+                            <TableCell className="px-4 py-3 text-sm text-gray-600">
                               <div className="flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
                                 {license.endDate ? new Date(license.endDate).toLocaleDateString('en-GB') : ''}
                               </div>
                             </TableCell>
-                            <TableCell className="py-4 px-6 text-slate-700">
+                            <TableCell className="px-4 py-3 text-sm text-gray-700">
                               <div className="flex items-center gap-1">
                                 <Building2 className="h-4 w-4" />
                                 {license.department}
                               </div>
                             </TableCell>
-                            <TableCell className="py-4 px-6 text-slate-700">
+                            <TableCell className="px-4 py-3 text-sm text-gray-700">
                               <div>
                                 <div className="font-medium flex items-center gap-1">
                                   <Users className="h-4 w-4" />
@@ -506,17 +529,17 @@ export default function GovernmentLicense() {
                                 {/* Removed backup contact as per requirements */}
                               </div>
                             </TableCell>
-                            <TableCell className="py-4 px-6 text-slate-700 font-semibold">
-                              ${license.renewalFee.toLocaleString()}
+                            <TableCell className="px-4 py-3 text-right text-sm text-gray-700 font-semibold">
+                              {typeof license.renewalFee === 'number' ? `$${license.renewalFee.toLocaleString()}` : '-'}
                             </TableCell>
-                            <TableCell className="py-4 px-6">
+                            <TableCell className="px-4 py-3">
                               <Badge className={`flex items-center gap-1 ${getStatusColor(license.status)}`}>
                                 {getStatusIcon(license.status)}
                                 {license.status}
                               </Badge>
                             </TableCell>
-                            <TableCell className="py-4 px-6">
-                              <div className="flex gap-2">
+                            <TableCell className="px-4 py-3 text-right">
+                              <div className="flex gap-2 justify-end">
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -597,36 +620,55 @@ export default function GovernmentLicense() {
                     name="issuingAuthorityName"
                     render={({ field }) => {
                       const valueInList = ISSUING_AUTHORITIES.includes(field.value || "");
+                      
                       return (
                         <FormItem className="md:col-span-2 lg:col-span-2 xl:col-span-2">
                           <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Name</FormLabel>
-                          <Select
-                            value={field.value || ''}
-                            onValueChange={(val) => field.onChange(val)}
-                          >
+                          <div className="relative issuing-authority-dropdown">
                             <FormControl>
-                              <SelectTrigger className="w-full border-slate-300 rounded-lg px-3 py-2 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
-                                <SelectValue placeholder="Select issuing authority" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="bg-white border border-slate-200 rounded-md shadow-lg max-h-[260px] overflow-hidden">
-                              <div className="max-h-[240px] overflow-y-auto custom-scrollbar p-1">
-                                <SelectGroup>
-                                  <SelectLabel className="text-xs font-semibold tracking-wide text-slate-500 px-2 py-1 uppercase">Portal / System</SelectLabel>
-                                  {ISSUING_AUTHORITIES.map(name => (
-                                    <SelectItem key={name} value={name} className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">
-                                      <span className="border-b border-dotted border-slate-300 pb-0.5 leading-snug inline-block w-full">{name}</span>
-                                    </SelectItem>
-                                  ))}
-                                </SelectGroup>
-                                {!valueInList && field.value && (
-                                  <SelectItem value={field.value} className="pl-8 pr-3 py-2 text-sm italic text-slate-600 bg-amber-50">
-                                    {field.value} (custom)
-                                  </SelectItem>
-                                )}
+                              <div className="relative">
+                                <Input
+                                  className="w-full border-slate-300 rounded-lg px-3 py-2 pr-10 text-base focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                  placeholder="Type or select issuing authority"
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                />
+                                <button
+                                  type="button"
+                                  className="absolute inset-y-0 right-0 flex items-center pr-3"
+                                  onClick={() => setIsIssuingAuthorityOpen(!isIssuingAuthorityOpen)}
+                                >
+                                  <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
                               </div>
-                            </SelectContent>
-                          </Select>
+                            </FormControl>
+                            {isIssuingAuthorityOpen && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-[260px] overflow-hidden">
+                                <div className="max-h-[240px] overflow-y-auto p-1">
+                                  <div className="text-xs font-semibold tracking-wide text-slate-500 px-2 py-1 uppercase">Portal / System</div>
+                                  {ISSUING_AUTHORITIES.map(name => (
+                                    <div
+                                      key={name}
+                                      className="pl-8 pr-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer"
+                                      onClick={() => {
+                                        field.onChange(name);
+                                        setIsIssuingAuthorityOpen(false);
+                                      }}
+                                    >
+                                      <span className="border-b border-dotted border-slate-300 pb-0.5 leading-snug inline-block w-full">{name}</span>
+                                    </div>
+                                  ))}
+                                  {!valueInList && field.value && (
+                                    <div className="pl-8 pr-3 py-2 text-sm italic text-slate-600 bg-amber-50">
+                                      {field.value} (custom)
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                           <FormMessage />
                         </FormItem>
                       );
