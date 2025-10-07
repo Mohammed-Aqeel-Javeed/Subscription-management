@@ -1049,8 +1049,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       <FormControl>
                         <Input 
                           className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
-                          {...field} 
-                          
+                          {...field}
+                          onChange={(e) => {
+                            // Auto-capitalize each word
+                            const capitalizedValue = e.target.value
+                              .split(' ')
+                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                              .join(' ');
+                            field.onChange(capitalizedValue);
+                          }}
                         />
                       </FormControl>
                       <FormMessage />

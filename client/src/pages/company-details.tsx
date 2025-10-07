@@ -376,7 +376,7 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl fle
 </motion.div>
 <div>
 <h3 className="text-xl font-semibold text-gray-900">Employee Management</h3>
-<p className="text-gray-500 text-sm">Manage your organization's employees</p>
+{/* Description removed as requested */}
 </div>
 <Badge className="bg-indigo-100 text-indigo-800 h-8 px-3 text-sm font-medium">
 {filteredEmployees.length} {filteredEmployees.length === 1 ? 'Employee' : 'Employees'}
@@ -427,15 +427,27 @@ Add Employee
 </Button>
 </motion.div>
 </DialogTrigger>
-<DialogContent className="sm:max-w-md bg-white/95 backdrop-blur-sm shadow-xl border-0 rounded-xl">
-<DialogHeader>
-<DialogTitle className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-<User className="w-5 h-5 text-indigo-600" />
-{editingEmployee ? 'Edit Employee' : 'Add New Employee'}
-</DialogTitle>
-</DialogHeader>
-<Form {...form}>
-<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+<DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
+  {/* Header with Gradient Background */}
+  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+    <DialogHeader>
+      <div className="flex items-center gap-4">
+        <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
+          <User className="h-6 w-6 text-white" />
+        </div>
+        <div>
+          <DialogTitle className="text-2xl font-bold tracking-tight text-white">
+            {editingEmployee ? 'Edit Employee' : 'Add New Employee'}
+          </DialogTitle>
+        </div>
+      </div>
+    </DialogHeader>
+  </div>
+
+  {/* Form Content */}
+  <div className="px-8 py-6">
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6">
 <FormField
 control={form.control}
 name="name"
@@ -518,7 +530,7 @@ render={({ field }) => (
 </FormItem>
 )}
 />
-<div className="flex justify-end space-x-3 pt-2">
+<div className="flex justify-end space-x-3 pt-6 col-span-2">
 <Button type="button" variant="outline" onClick={() => setModalOpen(false)} className="border-gray-300 text-gray-700 rounded-lg h-10 px-4">
 Cancel
 </Button>
@@ -536,6 +548,7 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 </div>
 </form>
 </Form>
+</div>
 </DialogContent>
 </Dialog>
 </div>
@@ -846,7 +859,7 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-lg fle
 </motion.div>
 <div>
 <h3 className="text-xl font-semibold text-gray-900">User Management</h3>
-<p className="text-gray-500 text-sm">Manage system users and permissions</p>
+{/* Description removed as requested */}
 </div>
 <Badge className="bg-indigo-100 text-indigo-800 h-8 px-3 text-sm font-medium">
 {filteredUsers.length} {filteredUsers.length === 1 ? 'User' : 'Users'}
@@ -874,15 +887,27 @@ Add User
 </Button>
 </motion.div>
 </DialogTrigger>
-<DialogContent className="sm:max-w-md bg-white/95 backdrop-blur-sm shadow-xl border-0 rounded-xl">
-<DialogHeader>
-<DialogTitle className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-<Settings className="w-5 h-5 text-indigo-600" />
-{editingUser ? 'Edit User' : 'Add New User'}
-</DialogTitle>
-</DialogHeader>
-<Form {...form}>
-<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+<DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
+  {/* Header with Gradient Background */}
+  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+    <DialogHeader>
+      <div className="flex items-center gap-4">
+        <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
+          <Settings className="h-6 w-6 text-white" />
+        </div>
+        <div>
+          <DialogTitle className="text-2xl font-bold tracking-tight text-white">
+            {editingUser ? 'Edit User' : 'Add New User'}
+          </DialogTitle>
+        </div>
+      </div>
+    </DialogHeader>
+  </div>
+
+  {/* Form Content */}
+  <div className="px-8 py-6">
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6">
 <FormField
 control={form.control}
 name="name"
@@ -890,7 +915,7 @@ render={({ field }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Full Name</FormLabel>
 <FormControl>
-<Input placeholder="John Doe" {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
+<Input placeholder="" {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
 </FormControl>
 <FormMessage />
 </FormItem>
@@ -903,7 +928,7 @@ render={({ field }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Email Address</FormLabel>
 <FormControl>
-<Input type="email" placeholder="john.doe@company.com" {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
+<Input type="email" placeholder="" {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
 </FormControl>
 <FormMessage />
 </FormItem>
@@ -952,7 +977,7 @@ render={({ field }) => (
 </FormItem>
 )}
 />
-<div className="flex justify-end space-x-3 pt-2">
+<div className="flex justify-end space-x-3 pt-6 col-span-2">
 <Button type="button" variant="outline" onClick={() => setModalOpen(false)} className="border-gray-300 text-gray-700 rounded-lg h-10 px-4">
 Cancel
 </Button>
@@ -970,6 +995,7 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 </div>
 </form>
 </Form>
+</div>
 </DialogContent>
 </Dialog>
 </div>
@@ -1420,7 +1446,7 @@ return (
           </div>
           <div>
             <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Company Details</h1>
-            <p className="text-gray-600 text-sm">Manage company information, departments, employees, and system settings</p>
+            {/* Description removed as requested */}
           </div>
         </div>
       </div>
@@ -1497,21 +1523,31 @@ animate={{ opacity: 1, y: 0 }}
 exit={{ opacity: 0, y: -20 }}
 transition={{ duration: 0.3 }}
 >
-<Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
-<div className="flex items-center gap-4 mb-6">
-<motion.div
-whileHover={{ scale: 1.05 }}
-whileTap={{ scale: 0.95 }}
-className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
->
-<Building2 className="text-white" size={20} />
-</motion.div>
-<div>
-<h3 className="text-lg font-semibold text-gray-900">Company Information</h3>
-<p className="text-gray-500 text-sm">Update your company details and branding</p>
+<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden">
+{/* Professional Header with Gradient */}
+<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-6">
+  <div className="flex items-center gap-4">
+    <motion.div
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shadow-md"
+    >
+      <Building2 className="text-white" size={24} />
+    </motion.div>
+    <div>
+      <h3 className="text-2xl font-bold text-white tracking-tight">Company Information</h3>
+      <p className="text-blue-100 text-sm">Manage your organization details and branding</p>
+    </div>
+  </div>
 </div>
-</div>
-<form onSubmit={handleSubmit} className="space-y-6">
+
+{/* Form Content */}
+<form onSubmit={handleSubmit} className="p-8 bg-gradient-to-br from-gray-50 to-white">
+  {/* Professional Section Header */}
+  <div className="mb-8">
+    <h2 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">Basic Information</h2>
+    <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
+  </div>
 {companyLoading ? (
 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 <div className="space-y-2">
@@ -1541,24 +1577,24 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl fle
 <Skeleton className="h-10 w-full" />
 </div>
 </div>
-) : (
-<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-{/* Company Name */}
-<div className="space-y-2">
-<Label htmlFor="companyName" className="text-sm font-medium text-gray-700">Company Name</Label>
-<Input
-id="companyName"
-name="companyName"
-value={companyInfo.companyName}
-onChange={handleInputChange}
-placeholder="Enter company name"
-className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
-/>
-</div>
+  ) : (
+  <div className="grid gap-6 mb-8 grid-cols-1 md:grid-cols-3">
+    {/* Company Name */}
+    <div className="space-y-2">
+      <Label htmlFor="companyName" className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Company Name</Label>
+      <Input
+        id="companyName"
+        name="companyName"
+        value={companyInfo.companyName}
+        onChange={handleInputChange}
+        placeholder=""
+        className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+      />
+    </div>
 
-{/* Company Logo */}
-<div className="space-y-2">
-<Label htmlFor="logo" className="text-sm font-medium text-gray-700">Company Logo</Label>
+    {/* Company Logo */}
+    <div className="space-y-2">
+      <Label htmlFor="logo" className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Company Logo</Label>
 <div className="flex items-center gap-4">
 {companyInfo.companyLogo ? (
 <div className="w-20 h-20 rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">
@@ -1577,7 +1613,7 @@ className="w-full h-full object-cover"
 <Button
 type="button"
 variant="outline"
-className="relative overflow-hidden rounded-lg h-10"
+className="relative overflow-hidden rounded-lg h-11 px-4 text-base font-medium bg-white shadow-sm border-gray-300 hover:bg-gray-50 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
 onClick={() => document.getElementById('logo-upload')?.click()}
 >
 <Upload className="w-4 h-4 mr-2" />
@@ -1597,38 +1633,38 @@ onChange={handleLogoUpload}
 
 {/* Address */}
 <div className="space-y-2">
-<Label htmlFor="address" className="text-sm font-medium text-gray-700">Address</Label>
+<Label htmlFor="address" className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Address</Label>
 <Input
 id="address"
 name="address"
 value={companyInfo.address}
 onChange={handleInputChange}
-placeholder="Enter company address"
+placeholder=""
 className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
 />
 </div>
 
 {/* Country */}
 <div className="space-y-2">
-  <Label htmlFor="country" className="text-sm font-medium text-gray-700">Country</Label>
+  <Label htmlFor="country" className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Country</Label>
   <Input
     id="country"
     name="country"
     value={companyInfo.country}
     onChange={handleInputChange}
-    placeholder="Enter country"
+    placeholder=""
     className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
   />
 </div>
 
 {/* Local Currency */}
 <div className="space-y-2">
-  <Label className="text-sm font-medium text-gray-700">Local Currency</Label>
+  <Label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Local Currency</Label>
   <Select
     value={companyInfo.defaultCurrency || ''}
     onValueChange={(val) => setCompanyInfo(prev => ({ ...prev, defaultCurrency: val }))}
   >
-    <SelectTrigger className="w-full bg-white border border-gray-300 rounded-lg h-10">
+    <SelectTrigger className="w-full bg-white border border-gray-300 rounded-lg p-3 h-12 text-base font-medium shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200">
       <SelectValue placeholder={currenciesLoading ? 'Loading…' : 'Select currency'} />
     </SelectTrigger>
     <SelectContent className="dropdown-content">
@@ -1658,34 +1694,34 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
 
 {/* Financial Year End */}
 <div className="space-y-2">
-<Label htmlFor="financialYearEnd" className="text-sm font-medium text-gray-700">Financial Year End</Label>
-<Input
-id="financialYearEnd"
-name="financialYearEnd"
-type="date"
-value={companyInfo.financialYearEnd}
-onChange={handleInputChange}
-className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
-/>
+  <Label htmlFor="financialYearEnd" className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Financial Year End</Label>
+  <Input
+    id="financialYearEnd"
+    name="financialYearEnd"
+    type="date"
+    value={companyInfo.financialYearEnd}
+    onChange={handleInputChange}
+    className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+  />
 </div>
 </div>
 )}
 
-{/* Save Button */}
-<div className="pt-2 flex justify-end">
-<motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-<Button
-type="submit"
-disabled={saveCompanyMutation.isPending || companyLoading}
-className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
->
-<Save className="w-4 h-4 mr-2" />
-{saveCompanyMutation.isPending ? "Saving..." : "Save Company Information"}
-</Button>
-</motion.div>
-</div>
-</form>
-</Card>
+                  {/* Save Button - Professional styling */}
+                  <div className="pt-8 flex justify-end border-t border-gray-200 mt-8">
+                    <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                      <Button
+                        type="submit"
+                        disabled={saveCompanyMutation.isPending || companyLoading}
+                        className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-lg py-3 px-8 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        {saveCompanyMutation.isPending ? "Saving..." : "Save Company Information"}
+                      </Button>
+                    </motion.div>
+                  </div>
+                </form>
+              </Card>
 </motion.div>
 </TabsContent>
 
@@ -1696,28 +1732,33 @@ animate={{ opacity: 1, y: 0 }}
 exit={{ opacity: 0, y: -20 }}
 transition={{ duration: 0.3 }}
 >
-<Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
-<div className="flex items-center gap-4 mb-6">
-<motion.div
-whileHover={{ scale: 1.05 }}
-whileTap={{ scale: 0.95 }}
-className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
->
-<Shield className="text-white" size={20} />
-</motion.div>
-<div>
-<h3 className="text-lg font-semibold text-gray-900">Department</h3>
-<p className="text-gray-500 text-sm">Manage your organization's departments</p>
+<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden">
+{/* Professional Header with Gradient */}
+<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-6">
+  <div className="flex items-center gap-4">
+    <motion.div
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shadow-md"
+    >
+      <Shield className="text-white" size={24} />
+    </motion.div>
+    <div>
+      <h3 className="text-2xl font-bold text-white tracking-tight">Department Management</h3>
+      <p className="text-blue-100 text-sm">Organize your company structure and teams</p>
+    </div>
+  </div>
 </div>
-</div>
-<div className="space-y-6">
+
+{/* Content */}
+<div className="p-8 bg-gradient-to-br from-gray-50 to-white">
 {/* Add New Department */}
 <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
 <Input
-placeholder="Enter new department name"
+placeholder=""
 value={newDepartmentName}
 onChange={(e) => setNewDepartmentName(e.target.value)}
-className="flex-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
 onKeyPress={(e) => e.key === 'Enter' && addNewDepartment()}
 />
 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
@@ -1830,7 +1871,7 @@ animate={{ opacity: 1, y: 0 }}
 exit={{ opacity: 0, y: -20 }}
 transition={{ duration: 0.3 }}
 >
-<Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
+<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden">
 <div className="flex items-center gap-4 mb-6">
 <motion.div
 whileHover={{ scale: 1.05 }}
@@ -1841,14 +1882,14 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl fle
 </motion.div>
 <div>
 <h3 className="text-lg font-semibold text-gray-900">Subscription Categories</h3>
-<p className="text-gray-500 text-sm">Manage subscription categories for your services</p>
+{/* Description removed as requested */}
 </div>
 </div>
 <div className="space-y-6">
 {/* Add New Category */}
 <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
 <Input
-placeholder="Enter new category name"
+placeholder=""
 value={newCategoryName}
 onChange={(e) => setNewCategoryName(e.target.value)}
 className="flex-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"

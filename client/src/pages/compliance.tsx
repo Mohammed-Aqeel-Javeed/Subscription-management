@@ -529,7 +529,7 @@ export default function Compliance() {
         </div>
         
         {/* Professional Data Table */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>

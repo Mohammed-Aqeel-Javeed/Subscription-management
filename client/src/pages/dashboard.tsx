@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CalendarDays, TrendingUp, RefreshCw, Bell, Plus, Edit, BellRing, Users, Clock } from "lucide-react";
+import { CalendarDays, TrendingUp, RefreshCw, Bell, Plus, Edit, BellRing, Users, Clock, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import TrendsChart from "@/components/charts/trends-chart";
 import CategoryChart from "@/components/charts/category-chart";
@@ -170,16 +170,7 @@ export default function Dashboard() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-white">
-        <div className="max-w-[1400px] mx-auto px-6 py-8">
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-            <button
-              onClick={handleLogout}
-              style={{ padding: '8px 16px', background: '#f44336', color: '#fff', border: 0, borderRadius: 4, fontWeight: 600 }}
-            >
-              Logout
-            </button>
-          </div>
-          
+        <div className="max-w-[1400px] mx-auto px-6 py-8">          
           {/* Modern Professional Header */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-6">

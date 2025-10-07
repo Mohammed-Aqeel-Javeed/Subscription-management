@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, CheckCircle, Clock, FileCheck, Shield, Users, TrendingUp, Calendar } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, FileCheck, Shield, Users, TrendingUp, Calendar, LogOut } from "lucide-react";
 import ComplianceTrendsChart from "@/components/charts/compliance-trends-chart";
 import ComplianceCategoryChart from "@/components/charts/compliance-category-chart";
 import { useNavigate } from "react-router-dom";
@@ -165,45 +165,29 @@ export default function ComplianceDashboard() {
 
   return (
     <ErrorBoundary>
-      <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleLogout}
-            style={{ 
-              padding: '8px 16px', 
-              background: '#f44336', 
-              color: '#fff', 
-              border: 0, 
-              borderRadius: 4, 
-              fontWeight: 600 
-            }}
-          >
-            Logout
-          </motion.button>
-        </div>
-        
+      <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">        
         {/* Top tab buttons */}
-        <div className="flex gap-4 mb-8">
-          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
-            <Button
-              className={window.location.pathname === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
-              variant="outline"
-              onClick={() => handleTabClick('subscription')}
-            >
-              Subscription
-            </Button>
-          </motion.div>
-          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
-            <Button
-              className={window.location.pathname === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
-              variant="outline"
-              onClick={() => handleTabClick('compliance')}
-            >
-              Compliance
-            </Button>
-          </motion.div>
+        <div className="flex justify-between items-center gap-4 mb-8">
+          <div className="flex gap-4">
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+              <Button
+                className={window.location.pathname === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+                variant="outline"
+                onClick={() => handleTabClick('subscription')}
+              >
+                Subscription
+              </Button>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+              <Button
+                className={window.location.pathname === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+                variant="outline"
+                onClick={() => handleTabClick('compliance')}
+              >
+                Compliance
+              </Button>
+            </motion.div>
+          </div>
         </div>
         
         <motion.div 
