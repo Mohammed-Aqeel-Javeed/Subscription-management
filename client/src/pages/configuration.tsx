@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2 } from "lucide-react";
+import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search } from "lucide-react";
 import { cardImages } from "@/assets/card-icons/cardImages";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -745,6 +745,9 @@ export default function Configuration() {
   
   // --- Payment Method Modal State ---
   const [addPaymentModalOpen, setAddPaymentModalOpen] = useState(false);
+  const [isAddPaymentFullscreen, setIsAddPaymentFullscreen] = useState(false);
+  const [isEditPaymentFullscreen, setIsEditPaymentFullscreen] = useState(false);
+  const [paymentSearchTerm, setPaymentSearchTerm] = useState("");
   const [paymentForm, setPaymentForm] = useState({
     title: '',
     type: '',
@@ -784,11 +787,11 @@ export default function Configuration() {
 
         <div>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-            <TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6">
+            <TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6 font-inter gap-2">
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
                 <TabsTrigger
                   value="currency"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-all duration-300
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-md focus:outline-none transition-all duration-300 font-inter
                   data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
                   text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 >
@@ -800,7 +803,7 @@ export default function Configuration() {
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
                 <TabsTrigger
                   value="payment"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-all duration-300
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-md focus:outline-none transition-all duration-300 font-inter
                   data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
                   text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 >
@@ -812,7 +815,7 @@ export default function Configuration() {
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
                 <TabsTrigger
                   value="reminder"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-all duration-300
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-md focus:outline-none transition-all duration-300 font-inter
                   data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
                   text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 >
@@ -824,7 +827,7 @@ export default function Configuration() {
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
                 <TabsTrigger
                   value="subscription"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-all duration-300
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-md focus:outline-none transition-all duration-300 font-inter
                   data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
                   text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 >
@@ -836,7 +839,7 @@ export default function Configuration() {
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
                 <TabsTrigger
                   value="compliance"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-all duration-300
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-md focus:outline-none transition-all duration-300 font-inter
                   data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
                   text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 >
@@ -937,54 +940,101 @@ export default function Configuration() {
                           }
                           setAddCurrencyOpen(open);
                         }}>
-                          <DialogContent className="max-w-md bg-white">
-                            <DialogHeader className="flex flex-col space-y-4">
-                              <div className="flex justify-between items-center">
-                                <DialogTitle>{isEditMode ? 'Update Currency' : 'Add New Currency'}</DialogTitle>
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Currency Code</Label>
-                                <Input
-                                  value={newCurrency.code}
-                                  onChange={(e) => setNewCurrency({ ...newCurrency, code: e.target.value })}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Description</Label>
-                                <Input
-                                  value={newCurrency.name}
-                                  onChange={(e) => setNewCurrency({ ...newCurrency, name: e.target.value })}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Symbol</Label>
-                                <Input
-                                  value={newCurrency.symbol}
-                                  onChange={(e) => setNewCurrency({ ...newCurrency, symbol: e.target.value })}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Exch.Rate against 1 LCY</Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={newCurrency.exchangeRate || ''}
-                                  onChange={(e) => setNewCurrency({ ...newCurrency, exchangeRate: e.target.value })}
-                                />
-                              </div>
-                            </DialogHeader>
-                            <DialogFooter>
-                              <Button variant="outline" onClick={() => setAddCurrencyOpen(false)}>Cancel</Button>
-                              <Button
-                                className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md"
-                                style={{ boxShadow: '0 2px 8px rgba(99,102,241,0.15)' }}
-                                onClick={() => {
-                                  addNewCurrency();
-                                  setAddCurrencyOpen(false);
-                                }}
-                              >{isEditMode ? 'Update Currency' : 'Add Currency'}</Button>
-                            </DialogFooter>
+                          <DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
+                            {/* Header with Gradient Background */}
+                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+                              <DialogHeader>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-4">
+                                    <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
+                                      <DollarSign className="h-6 w-6 text-white" />
+                                    </div>
+                                    <div>
+                                      <DialogTitle className="text-2xl font-bold tracking-tight text-white">
+                                        {isEditMode ? 'Update Currency' : 'Add New Currency'}
+                                      </DialogTitle>
+                                    </div>
+                                  </div>
+                                </div>
+                              </DialogHeader>
+                            </div>
+
+                            {/* Form Content */}
+                            <div className="px-8 py-6">
+                              <form className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Currency Code Field */}
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                    Currency Code <span className="text-red-500">*</span>
+                                  </Label>
+                                  <Input
+                                    value={newCurrency.code}
+                                    onChange={(e) => setNewCurrency({ ...newCurrency, code: e.target.value })}
+                                    className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                                  />
+                                </div>
+
+                                {/* Description Field */}
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                    Description <span className="text-red-500">*</span>
+                                  </Label>
+                                  <Input
+                                    value={newCurrency.name}
+                                    onChange={(e) => setNewCurrency({ ...newCurrency, name: e.target.value })}
+                                    className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                                  />
+                                </div>
+
+                                {/* Symbol Field */}
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                    Symbol <span className="text-red-500">*</span>
+                                  </Label>
+                                  <Input
+                                    value={newCurrency.symbol}
+                                    onChange={(e) => setNewCurrency({ ...newCurrency, symbol: e.target.value })}
+                                    className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                                  />
+                                </div>
+
+                                {/* Exchange Rate Field */}
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                    Exch.Rate against 1 LCY <span className="text-red-500">*</span>
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={newCurrency.exchangeRate || ''}
+                                    onChange={(e) => setNewCurrency({ ...newCurrency, exchangeRate: e.target.value })}
+                                    className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                                  />
+                                </div>
+
+                                {/* Action Buttons - Full Width */}
+                                <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200 md:col-span-2">
+                                  <Button 
+                                    type="button" 
+                                    variant="outline" 
+                                    onClick={() => setAddCurrencyOpen(false)} 
+                                    className="h-9 px-6 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-lg transition-all duration-200"
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button 
+                                    onClick={() => {
+                                      addNewCurrency();
+                                      setAddCurrencyOpen(false);
+                                    }}
+                                    className="h-9 px-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200 tracking-wide"
+                                  >
+                                    {isEditMode ? 'Update Currency' : 'Add Currency'}
+                                  </Button>
+                                </div>
+                              </form>
+                            </div>
                           </DialogContent>
                         </Dialog>
                         {currenciesLoading ? (
@@ -993,7 +1043,7 @@ export default function Configuration() {
                           </div>
                         ) : (
                           <div className="space-y-6">
-                          <div className="rounded-md border">
+                          <div className="rounded-md border shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden">
                             <table className="w-full">
                               <thead className="bg-gray-50">
                                 <tr>
@@ -1103,9 +1153,14 @@ export default function Configuration() {
                 >
                   <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                      <Input
-                        className="w-full md:w-1/2 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
-                      />
+                      <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <Input
+                          value={paymentSearchTerm}
+                          onChange={(e) => setPaymentSearchTerm(e.target.value)}
+                          className="pl-10 w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-gray-50 focus:bg-white transition-all duration-200"
+                        />
+                      </div>
                       <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                         <Button
                           onClick={() => setAddPaymentModalOpen(true)}
@@ -1117,154 +1172,401 @@ export default function Configuration() {
                       </motion.div>
                     </div>
                     {/* Payment Methods List */}
-                    <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {paymentMethods.map((method, idx) => {
+                    <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {paymentMethods
+                        .filter(method => 
+                          method.name.toLowerCase().includes(paymentSearchTerm.toLowerCase()) ||
+                          method.type.toLowerCase().includes(paymentSearchTerm.toLowerCase())
+                        )
+                        .map((method, idx) => {
                         const iconObj = iconOptions.find(opt => opt.value === method.icon);
                         return (
-                          <div key={idx} className="flex items-center gap-4 p-4 border rounded-xl bg-gray-50">
-                            {iconObj ? (
-                              <div className="flex-shrink-0"><img src={iconObj.img} alt={iconObj.label} className="w-12 h-8 object-contain" /></div>
-                            ) : (
-                              <div className="w-12 h-8 bg-gray-200 rounded" />
+                          <motion.div 
+                            key={idx} 
+                            whileHover={{ scale: 1.02 }}
+                            className="bg-white border border-gray-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-200"
+                          >
+                            <div className="flex items-center gap-3 mb-3">
+                              {iconObj ? (
+                                <div className="flex-shrink-0 p-2 bg-gray-100 rounded-lg">
+                                  <img src={iconObj.img} alt={iconObj.label} className="w-10 h-6 object-contain" />
+                                </div>
+                              ) : (
+                                <div className="w-14 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
+                                  <CreditCard className="w-5 h-5 text-gray-400" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-gray-900 truncate">{method.name}</div>
+                                <div className="text-sm text-gray-500">{method.type}</div>
+                              </div>
+                            </div>
+                            
+                            {method.description && (
+                              <p className="text-sm text-gray-600 mb-3 line-clamp-2">{method.description}</p>
                             )}
-                            <div className="flex-1">
-                              <div className="font-semibold text-gray-900">{method.name}</div>
-                              <div className="text-xs text-gray-500">{method.type}</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button size="icon" variant="ghost" onClick={() => openEditPayment(method)} title="Edit" className="text-indigo-600 hover:bg-indigo-50 rounded-full">
-                                <Edit size={18} />
+                            
+                            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                onClick={() => openEditPayment(method)} 
+                                className="text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 rounded-lg px-3 py-1 h-8 font-medium"
+                              >
+                                <Edit className="w-3 h-3 mr-1" />
+                                Edit
                               </Button>
-                              <Button size="icon" variant="ghost" onClick={() => handleDeletePaymentMethod(method)} title="Delete" className="text-red-600 hover:bg-red-50 rounded-full">
-                                <Trash2 size={18} />
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                onClick={() => handleDeletePaymentMethod(method)} 
+                                className="text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg px-3 py-1 h-8 font-medium"
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" />
+                                Delete
                               </Button>
                             </div>
-                          </div>
+                          </motion.div>
                         );
                       })}
+                      
+                      {paymentMethods.filter(method => 
+                        method.name.toLowerCase().includes(paymentSearchTerm.toLowerCase()) ||
+                        method.type.toLowerCase().includes(paymentSearchTerm.toLowerCase())
+                      ).length === 0 && (
+                        <div className="col-span-full flex flex-col items-center justify-center py-12 text-gray-500">
+                          <CreditCard className="w-12 h-12 mb-4 text-gray-300" />
+                          <h3 className="text-lg font-medium text-gray-600 mb-2">
+                            {paymentSearchTerm ? 'No payment methods found' : 'No payment methods yet'}
+                          </h3>
+                          <p className="text-center max-w-md">
+                            {paymentSearchTerm 
+                              ? `No payment methods match "${paymentSearchTerm}". Try adjusting your search.`
+                              : 'Add your first payment method to get started with managing your subscription payments.'
+                            }
+                          </p>
+                        </div>
+                      )}
                     </div>
                     {/* Edit Payment Method Modal */}
                     <Dialog open={editPaymentModalOpen} onOpenChange={setEditPaymentModalOpen}>
-                      <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-sm shadow-xl border-0 rounded-xl">
-                        <DialogHeader>
-                          <DialogTitle className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                            Edit Payment Method
-                          </DialogTitle>
-                        </DialogHeader>
-                        <form onSubmit={handleEditPaymentMethod} className="space-y-5">
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Title (*)</Label>
-                            <Input required value={paymentForm.title} onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))} />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Type (*)</Label>
-                            <select required className="w-full border-gray-300 rounded-lg h-10" value={paymentForm.type} onChange={e => setPaymentForm(f => ({ ...f, type: e.target.value }))}>
-                              <option value="">Select type</option>
-                              <option value="Credit">Credit</option>
-                              <option value="Debit">Debit</option>
-                              <option value="Cash">Cash</option>
-                              <option value="Other">Other</option>
-                            </select>
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Description</Label>
-                            <Input value={paymentForm.description} onChange={e => setPaymentForm(f => ({ ...f, description: e.target.value }))} />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Card Image</Label>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {iconOptions.map(opt => (
-                                <button
-                                  type="button"
-                                  key={opt.value}
-                                  className={`p-2 border rounded-lg bg-white ${paymentForm.icon === opt.value ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'}`}
-                                  onClick={() => setPaymentForm(f => ({ ...f, icon: opt.value }))}
-                                  title={opt.label}
-                                >
-                                  <img src={opt.img} alt={opt.label} className="w-12 h-8 object-contain" />
-                                </button>
-                              ))}
+                      <DialogContent className={`${isEditPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
+                        {/* Header with Gradient Background */}
+                        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-6 rounded-t-2xl">
+                          <DialogHeader>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
+                                  <Edit className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                  <DialogTitle className="text-2xl font-bold tracking-tight text-white">
+                                    Edit Payment Method
+                                  </DialogTitle>
+                                  <p className="text-indigo-100 mt-1 font-medium">Update payment method details</p>
+                                </div>
+                              </div>
+                              
+                              {/* Extend Button */}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setIsEditPaymentFullscreen(!isEditPaymentFullscreen)}
+                                className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
+                              >
+                                {isEditPaymentFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                              </Button>
                             </div>
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Managed by</Label>
-                            <Input value={paymentForm.manager} onChange={e => setPaymentForm(f => ({ ...f, manager: e.target.value }))} />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Expires at</Label>
-                            <Input type="date" value={paymentForm.expiresAt} onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))} />
-                          </div>
-                          <div className="flex justify-end space-x-3 pt-2">
-                            <Button type="button" variant="outline" onClick={() => setEditPaymentModalOpen(false)} className="border-gray-300 text-gray-700 rounded-lg h-10 px-4">
-                              Cancel
-                            </Button>
-                            <Button type="submit" className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4">
-                              Save Changes
-                            </Button>
-                          </div>
-                        </form>
+                          </DialogHeader>
+                        </div>
+
+                        {/* Form Content */}
+                        <div className="px-8 py-6">
+                          <form onSubmit={handleEditPaymentMethod} className={`${isEditPaymentFullscreen ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'grid grid-cols-1 md:grid-cols-2 gap-6'}`}>
+                            {/* Title Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Title <span className="text-red-500">*</span>
+                              </Label>
+                              <Input 
+                                required 
+                                value={paymentForm.title} 
+                                onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))}
+                                placeholder=""
+                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                              />
+                            </div>
+
+                            {/* Type Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Type <span className="text-red-500">*</span>
+                              </Label>
+                              <select 
+                                required 
+                                className="w-full h-9 px-3 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-20 font-medium bg-gray-50 focus:bg-white transition-all duration-200 text-gray-900"
+                                value={paymentForm.type} 
+                                onChange={e => setPaymentForm(f => ({ ...f, type: e.target.value }))}
+                              >
+                                <option value="">Select payment type</option>
+                                <option value="Credit">Credit Card</option>
+                                <option value="Debit">Debit Card</option>
+                                <option value="Cash">Cash</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
+                                <option value="Digital Wallet">Digital Wallet</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
+
+                            {/* Description Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Description
+                              </Label>
+                              <Input 
+                                value={paymentForm.description} 
+                                onChange={e => setPaymentForm(f => ({ ...f, description: e.target.value }))}
+                                placeholder=""
+                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                              />
+                            </div>
+
+                            {/* Manager Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Managed by
+                              </Label>
+                              <Input 
+                                value={paymentForm.manager} 
+                                onChange={e => setPaymentForm(f => ({ ...f, manager: e.target.value }))}
+                                placeholder=""
+                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                              />
+                            </div>
+
+                            {/* Expires At Field */}
+                            <div className={`space-y-2 ${isEditPaymentFullscreen ? 'lg:col-span-1' : 'md:col-span-1'}`}>
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Expires at
+                              </Label>
+                              <Input 
+                                type="date" 
+                                value={paymentForm.expiresAt} 
+                                onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
+                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                              />
+                            </div>
+
+                            {/* Card Image Selection - Full Width */}
+                            <div className={`space-y-3 ${isEditPaymentFullscreen ? 'lg:col-span-2' : 'md:col-span-2'}`}>
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Card Image
+                              </Label>
+                              <div className={`grid gap-3 ${isEditPaymentFullscreen ? 'grid-cols-6 lg:grid-cols-9' : 'grid-cols-6 lg:grid-cols-9'}`}>
+                                {iconOptions.map(opt => (
+                                  <button
+                                    type="button"
+                                    key={opt.value}
+                                    className={`relative p-3 border-2 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 ${
+                                      paymentForm.icon === opt.value 
+                                        ? 'border-indigo-500 bg-indigo-50 shadow-lg ring-2 ring-indigo-500 ring-opacity-20' 
+                                        : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                                    onClick={() => setPaymentForm(f => ({ ...f, icon: opt.value }))}
+                                    title={opt.label}
+                                  >
+                                    <img src={opt.img} alt={opt.label} className="w-12 h-8 object-contain mx-auto" />
+                                    {paymentForm.icon === opt.value && (
+                                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center">
+                                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Action Buttons - Full Width */}
+                            <div className={`flex justify-end space-x-4 pt-6 border-t border-gray-200 ${isEditPaymentFullscreen ? 'lg:col-span-2' : 'md:col-span-2'}`}>
+                              <Button 
+                                type="button" 
+                                variant="outline" 
+                                onClick={() => setEditPaymentModalOpen(false)} 
+                                className="h-9 px-6 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-lg transition-all duration-200"
+                              >
+                                Cancel
+                              </Button>
+                              <Button 
+                                type="submit" 
+                                className="h-9 px-8 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200 tracking-wide"
+                              >
+                                Save Changes
+                              </Button>
+                            </div>
+                          </form>
+                        </div>
                       </DialogContent>
                     </Dialog>
                     {/* Modal for Add Payment Method */}
                     <Dialog open={addPaymentModalOpen} onOpenChange={setAddPaymentModalOpen}>
-                      <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-sm shadow-xl border-0 rounded-xl">
-                        <DialogHeader>
-                          <DialogTitle className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                            Create new method
-                          </DialogTitle>
-                        </DialogHeader>
-                        <form onSubmit={handleAddPaymentMethod} className="space-y-5">
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Title (*)</Label>
-                            <Input required value={paymentForm.title} onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))} />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Type (*)</Label>
-                            <select required className="w-full border-gray-300 rounded-lg h-10" value={paymentForm.type} onChange={e => setPaymentForm(f => ({ ...f, type: e.target.value }))}>
-                              <option value="">Select type</option>
-                              <option value="Credit">Credit</option>
-                              <option value="Debit">Debit</option>
-                              <option value="Cash">Cash</option>
-                              <option value="Other">Other</option>
-                            </select>
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Description</Label>
-                            <Input value={paymentForm.description} onChange={e => setPaymentForm(f => ({ ...f, description: e.target.value }))} />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Card Image</Label>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {iconOptions.map(opt => (
-                                <button
-                                  type="button"
-                                  key={opt.value}
-                                  className={`p-2 border rounded-lg bg-white ${paymentForm.icon === opt.value ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'}`}
-                                  onClick={() => setPaymentForm(f => ({ ...f, icon: opt.value }))}
-                                  title={opt.label}
-                                >
-                                  <img src={opt.img} alt={opt.label} className="w-12 h-8 object-contain" />
-                                </button>
-                              ))}
+                      <DialogContent className={`${isAddPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
+                        {/* Header with Gradient Background */}
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+                          <DialogHeader>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
+                                  <CreditCard className="h-6 w-6 text-white" />
+                                </div>
+                                <div>
+                                  <DialogTitle className="text-2xl font-bold tracking-tight text-white">
+                                    Create Payment Method
+                                  </DialogTitle>
+                                  {/* Description removed as requested */}
+                                </div>
+                              </div>
+                              
+                              {/* Extend Button */}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setIsAddPaymentFullscreen(!isAddPaymentFullscreen)}
+                                className="bg-white text-blue-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
+                              >
+                                {isAddPaymentFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                              </Button>
                             </div>
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Managed by</Label>
-                            <Input value={paymentForm.manager} onChange={e => setPaymentForm(f => ({ ...f, manager: e.target.value }))} />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Expires at</Label>
-                            <Input type="date" value={paymentForm.expiresAt} onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))} />
-                          </div>
-                          <div className="flex justify-end space-x-3 pt-2">
-                            <Button type="button" variant="outline" onClick={() => setAddPaymentModalOpen(false)} className="border-gray-300 text-gray-700 rounded-lg h-10 px-4">
-                              Cancel
-                            </Button>
-                            <Button type="submit" className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4">
-                              Create
-                            </Button>
-                          </div>
-                        </form>
+                          </DialogHeader>
+                        </div>
+
+                        {/* Form Content */}
+                        <div className="px-8 py-6">
+                          <form onSubmit={handleAddPaymentMethod} className={`${isAddPaymentFullscreen ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'grid grid-cols-1 md:grid-cols-2 gap-6'}`}>
+                            {/* Title Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Title <span className="text-red-500">*</span>
+                              </Label>
+                              <Input 
+                                required 
+                                value={paymentForm.title} 
+                                onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))}
+                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                              />
+                            </div>
+
+                            {/* Type Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Type <span className="text-red-500">*</span>
+                              </Label>
+                              <select 
+                                required 
+                                className="w-full h-9 px-3 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 font-medium bg-gray-50 focus:bg-white transition-all duration-200 text-gray-900"
+                                value={paymentForm.type} 
+                                onChange={e => setPaymentForm(f => ({ ...f, type: e.target.value }))}
+                              >
+                                <option value="">Select payment type</option>
+                                <option value="Credit">Credit Card</option>
+                                <option value="Debit">Debit Card</option>
+                                <option value="Cash">Cash</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
+                                <option value="Digital Wallet">Digital Wallet</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
+
+                            {/* Description Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Description
+                              </Label>
+                              <Input 
+                                value={paymentForm.description} 
+                                onChange={e => setPaymentForm(f => ({ ...f, description: e.target.value }))}
+                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                              />
+                            </div>
+
+                            {/* Manager Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Managed by
+                              </Label>
+                              <Input 
+                                value={paymentForm.manager} 
+                                onChange={e => setPaymentForm(f => ({ ...f, manager: e.target.value }))}
+                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                              />
+                            </div>
+
+                            {/* Expires At Field */}
+                            <div className={`space-y-2 ${isAddPaymentFullscreen ? 'lg:col-span-1' : 'md:col-span-1'}`}>
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Expires at
+                              </Label>
+                              <Input 
+                                type="date" 
+                                value={paymentForm.expiresAt} 
+                                onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
+                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                              />
+                            </div>
+
+                            {/* Card Image Selection - Full Width */}
+                            <div className={`space-y-3 ${isAddPaymentFullscreen ? 'lg:col-span-2' : 'md:col-span-2'}`}>
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Card Image
+                              </Label>
+                              <div className={`grid gap-3 ${isAddPaymentFullscreen ? 'grid-cols-6 lg:grid-cols-9' : 'grid-cols-6 lg:grid-cols-9'}`}>
+                                {iconOptions.map(opt => (
+                                  <button
+                                    type="button"
+                                    key={opt.value}
+                                    className={`relative p-3 border-2 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 ${
+                                      paymentForm.icon === opt.value 
+                                        ? 'border-blue-500 bg-blue-50 shadow-lg ring-2 ring-blue-500 ring-opacity-20' 
+                                        : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                                    onClick={() => setPaymentForm(f => ({ ...f, icon: opt.value }))}
+                                    title={opt.label}
+                                  >
+                                    <img src={opt.img} alt={opt.label} className="w-12 h-8 object-contain mx-auto" />
+                                    {paymentForm.icon === opt.value && (
+                                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Action Buttons - Full Width */}
+                            <div className={`flex justify-end space-x-4 pt-6 border-t border-gray-200 ${isAddPaymentFullscreen ? 'lg:col-span-2' : 'md:col-span-2'}`}>
+                              <Button 
+                                type="button" 
+                                variant="outline" 
+                                onClick={() => setAddPaymentModalOpen(false)} 
+                                className="h-9 px-6 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-lg transition-all duration-200"
+                              >
+                                Cancel
+                              </Button>
+                              <Button 
+                                type="submit" 
+                                className="h-9 px-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200 tracking-wide"
+                              >
+                                Create Payment Method
+                              </Button>
+                            </div>
+                          </form>
+                        </div>
                       </DialogContent>
                     </Dialog>
                   </Card>
@@ -1314,8 +1616,8 @@ export default function Configuration() {
                         <Settings className="text-white" size={20} />
                       </motion.div>
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900">Field Enablement</h3>
-                        <p className="text-gray-500 text-sm">Configure which fields are enabled for subscriptions</p>
+                        <h3 className="text-lg font-semibold text-gray-900 font-inter">Field Enablement</h3>
+                        {/* Description removed as requested */}
                       </div>
                     </div>
                     <div className="space-y-6">
@@ -1324,14 +1626,14 @@ export default function Configuration() {
                         <Input
                           value={newFieldName}
                           onChange={(e) => setNewFieldName(e.target.value)}
-                          className="flex-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                          className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
                           onKeyPress={(e) => e.key === 'Enter' && addNewField()}
                         />
                         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                           <Button
                             onClick={addNewField}
                             disabled={!newFieldName.trim()}
-                            className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
+                            className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
                           >
                             <Plus className="w-4 h-4 mr-2" />
                             Add Field
@@ -1352,7 +1654,7 @@ export default function Configuration() {
                             No fields configured. Add your first field above.
                           </div>
                         ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {fields.map((field) => (
                               <motion.div
                                 key={field.name}
@@ -1403,23 +1705,7 @@ export default function Configuration() {
                         )}
                       </div>
                       
-                      {/* Summary */}
-                      <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                        <div className="text-sm text-gray-600">
-                          <span className="font-semibold">{fields.filter(f => f.enabled).length}</span> enabled fields,
-                          <span className="font-semibold ml-1">{fields.filter(f => !f.enabled).length}</span> disabled fields
-                        </div>
-                        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                          <Button
-                            onClick={saveFieldSettings}
-                            disabled={isLoading || fields.length === 0}
-                            className="flex items-center space-x-2 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg disabled:opacity-50"
-                          >
-                            <Settings className="w-4 h-4" />
-                            <span>Save Configuration</span>
-                          </Button>
-                        </motion.div>
-                      </div>
+                      {/* Removed Summary and Save Configuration */}
                     </div>
                   </Card>
                 </motion.div>
@@ -1442,8 +1728,8 @@ export default function Configuration() {
                         <Shield className="text-white" size={20} />
                       </motion.div>
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900">Compliance Fields</h3>
-                        <p className="text-gray-500 text-sm">Configure which compliance fields are enabled</p>
+                        <h3 className="text-lg font-semibold text-gray-900 font-inter">Compliance Fields</h3>
+                        {/* Description removed as requested */}
                       </div>
                     </div>
                     <div className="space-y-6">
@@ -1452,14 +1738,14 @@ export default function Configuration() {
                         <Input
                           value={newComplianceFieldName}
                           onChange={(e) => setNewComplianceFieldName(e.target.value)}
-                          className="flex-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                          className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
                           onKeyPress={(e) => e.key === 'Enter' && addNewComplianceField()}
                         />
                         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                           <Button
                             onClick={addNewComplianceField}
                             disabled={!newComplianceFieldName.trim()}
-                            className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
+                            className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
                           >
                             <Plus className="w-4 h-4 mr-2" />
                             Add Field
@@ -1480,7 +1766,7 @@ export default function Configuration() {
                             No compliance fields configured. Add your first field above.
                           </div>
                         ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {complianceFields.map((field) => (
                               <motion.div
                                 key={field._id || field.name}
@@ -1532,23 +1818,7 @@ export default function Configuration() {
                         )}
                       </div>
                       
-                      {/* Summary */}
-                      <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                        <div className="text-sm text-gray-600">
-                          <span className="font-semibold">{complianceFields.filter(f => f.enabled).length}</span> enabled fields,
-                          <span className="font-semibold ml-1">{complianceFields.filter(f => !f.enabled).length}</span> disabled fields
-                        </div>
-                        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                          <Button
-                            onClick={saveComplianceFieldSettings}
-                            disabled={isLoadingCompliance || complianceFields.length === 0}
-                            className="flex items-center space-x-2 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg disabled:opacity-50"
-                          >
-                            <Settings className="w-4 h-4" />
-                            <span>Save Configuration</span>
-                          </Button>
-                        </motion.div>
-                      </div>
+                      {/* Removed Summary and Save Configuration */}
                     </div>
                   </Card>
                 </motion.div>

@@ -225,7 +225,7 @@ return (
 <div className="p-6">
 <div className="flex items-center gap-2 mb-6">
 <Bell className="h-6 w-6" />
-<h1 className="text-2xl font-bold">Notifications</h1>
+<h1 className="text-2xl font-semibold text-gray-900">Notifications</h1>
 </div>
 <div className="animate-pulse space-y-4">
 {[...Array(3)].map((_, i) => (
@@ -240,7 +240,7 @@ return (
 	<div className="flex items-center justify-between mb-6">
 		<div className="flex items-center gap-2">
 			<Bell className="h-6 w-6" />
-			<h1 className="text-2xl font-bold">Notifications</h1>
+			<h1 className="text-2xl font-semibold text-gray-900">Notifications</h1>
 			<Badge variant="secondary" className="ml-2">
 				{filteredNotifications.length} Active
 			</Badge>
@@ -264,7 +264,7 @@ return (
 			</Select>
 			<Button 
 				variant={notificationType === 'subscription' ? "default" : "outline"} 
-				className={`px-6 py-2 font-semibold rounded-lg shadow-sm transition-colors ${
+				className={`px-6 py-2 font-medium rounded-lg shadow-sm transition-colors ${
 					notificationType === 'subscription' 
 						? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600' 
 						: 'bg-white hover:bg-blue-50 text-gray-700 border-gray-300 hover:border-blue-300'
@@ -275,7 +275,7 @@ return (
 			</Button>
 			<Button 
 				variant={notificationType === 'compliance' ? "default" : "outline"} 
-				className={`px-6 py-2 font-semibold rounded-lg transition-colors ${
+				className={`px-6 py-2 font-medium rounded-lg transition-colors ${
 					notificationType === 'compliance' 
 						? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600' 
 						: 'bg-white hover:bg-blue-50 text-gray-700 border-gray-300 hover:border-blue-300'
@@ -290,7 +290,7 @@ return (
 <Card>
 <CardContent className="flex flex-col items-center justify-center py-12">
 <Bell className="h-12 w-12 text-gray-400 mb-4" />
-<h3 className="text-lg font-semibold text-gray-600 mb-2">
+<h3 className="text-base font-medium text-gray-900 mb-2">
 {statusFilter === 'all' 
 	? (notificationType === 'subscription' ? 'No Active Subscription Notifications' : 'No Active Compliance Notifications')
 	: statusFilter === 'renewal' ? 'No Active Renewal Reminders'
@@ -330,7 +330,7 @@ return dateB - dateA;
 					<Bell className="h-4 w-4 text-orange-600" />
 				</div>
 				<div>
- 									<CardTitle className="text-lg">
+ 									<CardTitle className="text-base font-medium text-gray-900">
 		 								{notification.type === 'compliance'
 		 									? (
 		 										notification.filingName
@@ -345,14 +345,14 @@ return dateB - dateA;
  									</CardTitle>
 					<div className="flex items-center gap-2 mt-1">
 									{/* Category badge */}
-									<Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 font-semibold px-3 py-1 rounded-full">
+									<Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 font-medium px-3 py-1 rounded-full">
  												{notification.type === 'compliance'
  													? (notification.complianceCategory || notification.category || notification.filingName || notification.complianceName || notification.name || 'Compliance')
  													: (notification.category || 'Subscription')}
 									</Badge>
 									
 									{/* Reminder/Event badge */}
-									<Badge variant="default" className={`text-xs font-semibold px-3 py-1 rounded-full ${
+									<Badge variant="default" className={`text-xs font-medium px-3 py-1 rounded-full ${
 										notification.eventType === 'created' ? 'bg-green-600 text-white' :
 										notification.eventType === 'deleted' ? 'bg-red-600 text-white' :
 										'bg-blue-600 text-white'
