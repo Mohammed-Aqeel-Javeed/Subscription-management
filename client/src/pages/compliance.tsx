@@ -272,6 +272,14 @@ export default function Compliance() {
   const queryClient = useQueryClient();
   
   const handleFormChange = (field: string, value: string) => {
+    // Auto-capitalize Filing Name
+    if (field === "filingName") {
+      value = value
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    }
+    
     setForm((prev) => {
       const newState = { ...prev, [field]: value };
       if (field === "filingStartDate" || field === "filingFrequency") {
