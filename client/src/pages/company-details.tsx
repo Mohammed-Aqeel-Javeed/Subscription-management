@@ -1525,7 +1525,7 @@ transition={{ duration: 0.3 }}
 >
 <Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden">
 {/* Professional Header with Gradient */}
-<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-6">
+<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-4">
   <div className="flex items-center gap-4">
     <motion.div
       whileHover={{ scale: 1.05 }}
@@ -1536,7 +1536,6 @@ transition={{ duration: 0.3 }}
     </motion.div>
     <div>
       <h3 className="text-2xl font-bold text-white tracking-tight">Company Information</h3>
-      <p className="text-blue-100 text-sm">Manage your organization details and branding</p>
     </div>
   </div>
 </div>
@@ -1734,7 +1733,7 @@ transition={{ duration: 0.3 }}
 >
 <Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden">
 {/* Professional Header with Gradient */}
-<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-6">
+<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-4">
   <div className="flex items-center gap-4">
     <motion.div
       whileHover={{ scale: 1.05 }}
@@ -1745,7 +1744,6 @@ transition={{ duration: 0.3 }}
     </motion.div>
     <div>
       <h3 className="text-2xl font-bold text-white tracking-tight">Department Management</h3>
-      <p className="text-blue-100 text-sm">Organize your company structure and teams</p>
     </div>
   </div>
 </div>
@@ -1786,29 +1784,13 @@ return (
 <motion.div
 key={displayName + idx}
 whileHover={{ y: -5 }}
-className={`p-4 border rounded-xl transition-all duration-300 ${
-department.visible
-? 'border-indigo-200 bg-indigo-50 shadow-sm'
-: 'border-gray-200 bg-gray-50'
-}`}
+className="p-4 border border-indigo-200 bg-indigo-50 shadow-sm rounded-xl transition-all duration-300"
 >
 <div className="flex items-center justify-between">
 <div className="flex items-center space-x-3 w-full">
-<Checkbox
-checked={!!department.visible}
-onCheckedChange={(checked: boolean) => updateDepartmentVisibility(department.name, checked)}
-disabled={updateDepartmentVisibilityMutation.isPending || !department.name}
-className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 rounded"
-/>
 <span className="text-sm font-medium text-gray-900 truncate w-full">{String(displayName)}</span>
 </div>
 <div className="flex items-center space-x-2">
-{department.visible && (
-<Badge className="bg-indigo-100 text-indigo-800 text-xs font-semibold py-1 px-3 rounded-full">
-<Eye className="w-3 h-3 mr-1" />
-Visible
-</Badge>
-)}
 <Button
 variant="ghost"
 size="sm"
@@ -1833,20 +1815,10 @@ title="Delete Department"
 </div>
 
 {/* Summary */}
-<div className="flex items-center justify-between pt-4 border-t border-gray-200">
+<div className="pt-4 border-t border-gray-200">
 <div className="text-sm text-gray-600">
-<span className="font-semibold">{visibleDepartments.length}</span> visible departments,
-<span className="font-semibold ml-1">{hiddenDepartments.length}</span> hidden departments
+<span className="font-semibold">{visibleDepartments.length}</span> departments
 </div>
-<motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-<Button
-onClick={saveDepartmentSettings}
-className="flex items-center space-x-2 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
->
-<Settings className="w-4 h-4" />
-<span>Save Configuration</span>
-</Button>
-</motion.div>
 </div>
 </div>
 </Card>
@@ -1920,29 +1892,13 @@ return (
 <motion.div
 key={displayName + idx}
 whileHover={{ y: -5 }}
-className={`p-4 border rounded-xl transition-all duration-300 ${
-category.visible
-? 'border-indigo-200 bg-indigo-50 shadow-sm'
-: 'border-gray-200 bg-gray-50'
-}`}
+className="p-4 border border-indigo-200 bg-indigo-50 shadow-sm rounded-xl transition-all duration-300"
 >
 <div className="flex items-center justify-between">
 <div className="flex items-center space-x-3 w-full">
-<Checkbox
-checked={!!category.visible}
-onCheckedChange={(checked: boolean) => updateCategoryVisibility(category.name, checked)}
-disabled={updateCategoryVisibilityMutation.isPending || !category.name}
-className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 rounded"
-/>
 <span className="text-sm font-medium text-gray-900 truncate w-full">{String(displayName)}</span>
 </div>
 <div className="flex items-center space-x-2">
-{category.visible && (
-<Badge className="bg-indigo-100 text-indigo-800 text-xs font-semibold py-1 px-3 rounded-full">
-<Eye className="w-3 h-3 mr-1" />
-Visible
-</Badge>
-)}
 <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
 <Button
 variant="ghost"
@@ -1968,20 +1924,10 @@ title="Delete Category"
 )}
 </div>
 {/* Summary */}
-<div className="flex items-center justify-between pt-4 border-t border-gray-200">
+<div className="pt-4 border-t border-gray-200">
 <div className="text-sm text-gray-600">
-<span className="font-semibold">{visibleCategoryObjects.length}</span> visible categories,
-<span className="font-semibold ml-1">{hiddenCategoryObjects.length}</span> hidden categories
+<span className="font-semibold">{categories.length}</span> categories
 </div>
-<motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-<Button
-onClick={saveCategorySettings}
-className="flex items-center space-x-2 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
->
-<Settings className="w-4 h-4" />
-<span>Save Configuration</span>
-</Button>
-</motion.div>
 </div>
 </div>
 </Card>

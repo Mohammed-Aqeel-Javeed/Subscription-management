@@ -39,7 +39,7 @@ type SubscriptionModalData = Partial<Subscription> & {
   autoRenewal?: boolean;
 };
 import { z } from "zod";
-import { CreditCard, X, History, RefreshCw, Maximize2, Minimize2 } from "lucide-react";
+import { CreditCard, X, History, RefreshCw, Maximize2, Minimize2, AlertCircle } from "lucide-react";
 // Define the Category interface
 interface Category {
   name: string;
@@ -143,6 +143,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEditing = !!subscription;
+  
+  // Get tenant ID for API calls
+  const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
+  
   // Fullscreen toggle state
   const [isFullscreen, setIsFullscreen] = useState(false);
   
@@ -228,6 +232,27 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Map _id to id for frontend usage (like company-details)
   // removed employees mapping (unused)
   
+  // Query for existing service names to validate uniqueness
+  const { data: existingSubscriptions = [] } = useQuery({
+    queryKey: ["/api/subscriptions", tenantId],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/subscriptions`, { credentials: "include" });
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+  });
+  
+  // Extract existing service names for validation (excluding current subscription if editing)
+  const existingServiceNames = existingSubscriptions
+    .filter((sub: any) => {
+      if (!subscription) return true;
+      const subId = sub._id || sub.id;
+      const subscriptionId = (subscription as any)._id || (subscription as any).id;
+      return subId !== subscriptionId;
+    })
+    .map((sub: any) => sub.serviceName?.toLowerCase().trim())
+    .filter(Boolean);
+  
   // Fetch payment methods for dynamic dropdown
   const { data: paymentMethods = [], isLoading: paymentMethodsLoading } = useQuery({
     queryKey: ['/api/payment'],
@@ -292,6 +317,36 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     },
   });
   
+  // State for service name validation
+  const [serviceNameError, setServiceNameError] = useState<string>("");
+  
+  // Function to validate service name uniqueness
+  const validateServiceName = (name: string) => {
+    if (!name?.trim()) {
+      setServiceNameError("");
+      return true;
+    }
+    
+    const normalizedName = name.toLowerCase().trim();
+    const isDuplicate = existingServiceNames.includes(normalizedName);
+    
+    if (isDuplicate) {
+      setServiceNameError("Service name already exists");
+      return false;
+    }
+    
+    setServiceNameError("");
+    return true;
+  };
+  
+  // Re-validate service name when existing subscriptions change or modal opens
+  useEffect(() => {
+    const currentServiceName = form.getValues("serviceName");
+    if (currentServiceName && open) {
+      validateServiceName(currentServiceName);
+    }
+  }, [existingSubscriptions, open]);
+  
   const [startDate, setStartDate] = useState(subscription?.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "");
   const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle || "monthly");
   const [endDate, setEndDate] = useState(subscription?.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "");
@@ -308,6 +363,42 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       refetchDepartments();
     }
   }, [open, refetchCategories, refetchDepartments]);
+
+  // Reset form when modal opens for new subscription (no subscription prop)
+  useEffect(() => {
+    if (open && !subscription) {
+      // Reset all state variables
+      setStartDate("");
+      setBillingCycle("monthly");
+      setEndDate("");
+      setSelectedDepartments([]);
+      setStatus('Draft');
+      setAutoRenewal(false);
+      setServiceNameError("");
+      setLcyAmount('');
+      
+      // Reset form
+      form.reset({
+        serviceName: "",
+        vendor: "",
+        currency: "",
+        amount: "",
+        billingCycle: "monthly",
+        category: "",
+        department: "",
+        departments: [],
+        owner: "",
+        paymentMethod: "",
+        startDate: "",
+        nextRenewal: "",
+        status: "Draft",
+        reminderDays: 7,
+        reminderPolicy: "One time",
+        notes: "",
+        isActive: true,
+      });
+    }
+  }, [open, subscription, form]);
   
   useEffect(() => {
     if (subscription) {
@@ -588,6 +679,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   };
   
   const onSubmit = async (data: FormData) => {
+    // Check for service name validation errors
+    if (serviceNameError) {
+      toast({
+        title: "Validation Error",
+        description: "Please fix the service name error before submitting",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate service name uniqueness one more time before submission
+    if (data.serviceName && !validateServiceName(data.serviceName)) {
+      return;
+    }
+    
     setStatus('Active'); // Set status to Active when saving
     try {
       // Always include department as JSON string for backend
@@ -1048,7 +1154,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Service Name</FormLabel>
                       <FormControl>
                         <Input 
-                          className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
+                          className={`w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 ${serviceNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                           {...field}
                           onChange={(e) => {
                             // Auto-capitalize each word
@@ -1057,9 +1163,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                               .join(' ');
                             field.onChange(capitalizedValue);
+                            // Validate uniqueness
+                            validateServiceName(capitalizedValue);
                           }}
                         />
                       </FormControl>
+                      {serviceNameError && (
+                        <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" />
+                          {serviceNameError}
+                        </p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
