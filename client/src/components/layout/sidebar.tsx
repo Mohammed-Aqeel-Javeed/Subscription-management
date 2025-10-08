@@ -1,15 +1,15 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { CreditCard, PieChart, List, Settings, FileText, Users, User, Bell, Building2, Shield, ShieldCheck, LogOut } from "lucide-react";
+import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut } from "lucide-react";
 
 const navItems = [
-  { path: "/", label: "Dashboard", icon: PieChart },
-  { path: "/subscriptions", label: "Subscriptions", icon: List },
-  { path: "/compliance", label: "Compliance", icon: ShieldCheck },
-  { path: "/government-license", label: "Government License", icon: Shield },
-  { path: "/notifications", label: "Notifications", icon: Bell },
+  { path: "/", label: "Dashboard", icon: BarChart3 },
+  { path: "/subscriptions", label: "Subscriptions", icon: Layers },
+  { path: "/compliance", label: "Compliance", icon: Award },
+  { path: "/government-license", label: "Government License", icon: ShieldCheck },
+  { path: "/notifications", label: "Notifications", icon: BellRing },
   { path: "/reminders", label: "Setup & Configuration", icon: Settings },
   { path: "/company-details", label: "Company Details", icon: Building2 },
-  { path: "/reports", label: "Reports", icon: FileText },
+  { path: "/reports", label: "Reports", icon: FileBarChart },
   // ...removed User Management link...
 ];
 

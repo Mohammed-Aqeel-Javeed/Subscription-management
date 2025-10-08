@@ -10,6 +10,16 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+// Predefined Governing Authorities
+const GOVERNING_AUTHORITIES = [
+  "IRAS",
+  "ACRA", 
+  "CPF",
+  "AGD",
+  "MOM"
+];
+
 // Helper functions remain the same
 const mapStatus = (status: string): string => {
   return "Pending";
@@ -271,6 +281,9 @@ export default function Compliance() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
+  // State for filing name validation
+  const [filingNameError, setFilingNameError] = useState<string>("");
+  
   const handleFormChange = (field: string, value: string) => {
     // Auto-capitalize Filing Name
     if (field === "filingName") {
@@ -278,6 +291,8 @@ export default function Compliance() {
         .split(' ')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ');
+      // Validate uniqueness
+      validateFilingName(value);
     }
     
     setForm((prev) => {
@@ -327,6 +342,31 @@ export default function Compliance() {
       window.removeEventListener("login", invalidateCompliance);
     };
   }, [queryClient]);
+  
+  // Extract existing filing names for validation (excluding current item if editing)
+  const existingFilingNames = complianceItems
+    .filter((item: any) => editIndex !== null ? complianceItems.indexOf(item) !== editIndex : true)
+    .map((item: any) => item.policy?.toLowerCase().trim())
+    .filter(Boolean);
+  
+  // Function to validate filing name uniqueness
+  const validateFilingName = (name: string) => {
+    if (!name?.trim()) {
+      setFilingNameError("");
+      return true;
+    }
+    
+    const normalizedName = name.toLowerCase().trim();
+    const isDuplicate = existingFilingNames.includes(normalizedName);
+    
+    if (isDuplicate) {
+      setFilingNameError("Filing name already exists");
+      return false;
+    }
+    
+    setFilingNameError("");
+    return true;
+  };
   
   const addMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -864,11 +904,16 @@ export default function Compliance() {
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Filing Name</label>
                 <Input 
-                  className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                  className={`w-full border-slate-300 rounded-lg p-2 text-base ${filingNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                   value={form.filingName} 
                   onChange={e => handleFormChange("filingName", e.target.value)} 
-                  
                 />
+                {filingNameError && (
+                  <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {filingNameError}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Filing Frequency</label>
@@ -907,7 +952,19 @@ export default function Compliance() {
                       className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
                       placeholder="Enter or select authority"
                       value={form.filingGoverningAuthority || ''}
-                      onChange={(e) => handleFormChange('filingGoverningAuthority', e.target.value)}
+                      onChange={(e) => {
+                        handleFormChange('filingGoverningAuthority', e.target.value);
+                        // Show dropdown when user starts typing
+                        if (e.target.value && !isGoverningAuthorityOpen) {
+                          setIsGoverningAuthorityOpen(true);
+                        }
+                      }}
+                      onFocus={() => {
+                        // Show dropdown on focus if there's text
+                        if (form.filingGoverningAuthority) {
+                          setIsGoverningAuthorityOpen(true);
+                        }
+                      }}
                     />
                     <button
                       type="button"
@@ -919,30 +976,51 @@ export default function Compliance() {
                       </svg>
                     </button>
                   </div>
-                  {isGoverningAuthorityOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-[200px] overflow-hidden">
-                      <div className="max-h-[180px] overflow-y-auto p-1">
-                        <div className="text-xs font-semibold tracking-wide text-slate-500 px-2 py-1 uppercase">Authorities</div>
-                        {['IRAS', 'ACRA', 'CPF', 'AGD', 'MOM'].map(authority => (
-                          <div
-                            key={authority}
-                            className="px-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer rounded"
-                            onClick={() => {
-                              handleFormChange('filingGoverningAuthority', authority);
-                              setIsGoverningAuthorityOpen(false);
-                            }}
-                          >
-                            {authority}
-                          </div>
-                        ))}
-                        {!['IRAS', 'ACRA', 'CPF', 'AGD', 'MOM'].includes(form.filingGoverningAuthority || "") && form.filingGoverningAuthority && (
-                          <div className="px-3 py-2 text-sm italic text-slate-600 bg-amber-50 rounded">
-                            {form.filingGoverningAuthority} (custom)
-                          </div>
-                        )}
+                  {isGoverningAuthorityOpen && (() => {
+                    // Filter authorities based on input text
+                    const filteredAuthorities = GOVERNING_AUTHORITIES.filter(authority =>
+                      authority.toLowerCase().includes((form.filingGoverningAuthority || "").toLowerCase())
+                    );
+                    
+                    return (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-[200px] overflow-hidden">
+                        <div className="max-h-[180px] overflow-y-auto p-1">
+                          <div className="text-xs font-semibold tracking-wide text-slate-500 px-2 py-1 uppercase">Authorities</div>
+                          {filteredAuthorities.length > 0 ? (
+                            filteredAuthorities.map(authority => (
+                              <div
+                                key={authority}
+                                className="px-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer rounded"
+                                onClick={() => {
+                                  handleFormChange('filingGoverningAuthority', authority);
+                                  setIsGoverningAuthorityOpen(false);
+                                }}
+                              >
+                                {authority}
+                              </div>
+                            ))
+                          ) : form.filingGoverningAuthority ? (
+                            <div className="px-3 py-2 text-sm text-slate-500">
+                              No matching authorities found
+                            </div>
+                          ) : (
+                            GOVERNING_AUTHORITIES.map(authority => (
+                              <div
+                                key={authority}
+                                className="px-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer rounded"
+                                onClick={() => {
+                                  handleFormChange('filingGoverningAuthority', authority);
+                                  setIsGoverningAuthorityOpen(false);
+                                }}
+                              >
+                                {authority}
+                              </div>
+                            ))
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
               {/* Added date range & deadline fields moved from previous Submission Details section */}
@@ -1064,6 +1142,21 @@ export default function Compliance() {
                 variant="outline" 
                 className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
                 onClick={async () => {
+                  // Check for filing name validation errors
+                  if (filingNameError) {
+                    toast({
+                      title: "Validation Error",
+                      description: "Please fix the filing name error before saving",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  // Validate filing name uniqueness one more time before saving
+                  if (form.filingName && !validateFilingName(form.filingName)) {
+                    return;
+                  }
+                  
                   // Save as draft logic - save the compliance item with current form data
                   const calculatedStatus = getComplianceStatus(form.filingEndDate, form.filingSubmissionDeadline);
                   
@@ -1139,6 +1232,21 @@ export default function Compliance() {
                 type="button" 
                 className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-6 py-2 shadow-md hover:shadow-lg"
                 onClick={async () => {
+                  // Check for filing name validation errors
+                  if (filingNameError) {
+                    toast({
+                      title: "Validation Error",
+                      description: "Please fix the filing name error before saving",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  // Validate filing name uniqueness one more time before saving
+                  if (form.filingName && !validateFilingName(form.filingName)) {
+                    return;
+                  }
+                  
                   const hasSubmissionDate = !!form.filingSubmissionDate;
                   const hasSubmittedBy = !!form.submittedBy;
                   let newStartDate = form.filingStartDate;

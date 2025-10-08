@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Edit, Trash2, Search, CreditCard, AlertCircle, Calendar, XCircle, Download, Upload } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Layers, AlertCircle, Calendar, XCircle, Download, Upload } from "lucide-react";
 import Papa from 'papaparse';
 import SubscriptionModal from "@/components/modals/subscription-modal";
 import { apiRequest } from "@/lib/queryClient";
@@ -336,7 +336,7 @@ export default function Subscriptions() {
               <div className="flex-1">
                 <div className="flex items-center gap-4 mb-3">
                   <div className="p-3 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl shadow-md">
-                    <CreditCard className="h-7 w-7 text-white" />
+                    <Layers className="h-7 w-7 text-white" />
                   </div>
                   <div>
                     <Skeleton className="h-10 w-64 mb-2" />
@@ -394,7 +394,7 @@ export default function Subscriptions() {
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
               <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
-                <CreditCard className="h-6 w-6 text-white" />
+                <Layers className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Subscription Management</h1>
@@ -447,7 +447,7 @@ export default function Subscriptions() {
                   <p className="text-2xl font-bold text-white mt-1">{total}</p>
                 </div>
                 <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <CreditCard className="h-5 w-5 text-white" />
+                  <Layers className="h-5 w-5 text-white" />
                 </div>
               </div>
             </div>
