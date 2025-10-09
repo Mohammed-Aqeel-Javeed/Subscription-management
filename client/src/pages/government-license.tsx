@@ -13,12 +13,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { toast } from "../hooks/use-toast";
-import { z } from "zod";
-import { apiRequest } from "../lib/api";
 import { useToast } from "../hooks/use-toast";
+import { z } from "zod";
 import { API_BASE_URL } from "@/lib/config";
 import { Checkbox } from "../components/ui/checkbox";
+import Papa from 'papaparse';
+import { apiRequest } from "@/lib/queryClient";
 
 // Predefined Issuing Authorities (ordered to match provided screenshot)
 const ISSUING_AUTHORITIES = [
@@ -330,6 +330,89 @@ export default function GovernmentLicense() {
     },
   });
 
+  // EXPORT current (filtered) licenses to CSV
+  const handleExport = () => {
+    if (!filteredLicenses.length) {
+      toast({ title: 'No data', description: 'There are no licenses to export', variant: 'destructive'});
+      return;
+    }
+    const rows = filteredLicenses.map(license => ({
+      LicenseName: license.licenseName,
+      IssuingAuthority: license.issuingAuthorityName,
+      StartDate: license.startDate ? new Date(license.startDate).toISOString().split('T')[0] : '',
+      EndDate: license.endDate ? new Date(license.endDate).toISOString().split('T')[0] : '',
+      RenewalFee: license.renewalFee || 0,
+      ResponsiblePerson: license.responsiblePerson,
+      Department: license.department,
+      BackupContact: license.backupContact,
+      Status: license.status,
+      IssuingAuthorityEmail: license.issuingAuthorityEmail || '',
+      IssuingAuthorityPhone: license.issuingAuthorityPhone || '',
+      Details: license.details || ''
+    }));
+    const csv = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `licenses_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: 'Exported', description: 'Licenses exported to CSV' });
+  };
+
+  const triggerImport = () => fileInputRef.current?.click();
+
+  // IMPORT from CSV -> create licenses
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rows: any[] = results.data as any[];
+        if (!rows.length) {
+          toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive'});
+          return;
+        }
+        let success = 0; let failed = 0;
+        for (const row of rows) {
+          try {
+            const payload: any = {
+              licenseName: row.LicenseName || row.licenseName || '',
+              issuingAuthorityName: row.IssuingAuthority || row.issuingAuthorityName || '',
+              startDate: row.StartDate || row.startDate || new Date().toISOString().split('T')[0],
+              endDate: row.EndDate || row.endDate || new Date().toISOString().split('T')[0],
+              renewalFee: parseFloat(row.RenewalFee) || 0,
+              responsiblePerson: row.ResponsiblePerson || row.responsiblePerson || '',
+              department: row.Department || row.department || '',
+              backupContact: row.BackupContact || row.backupContact || '',
+              status: row.Status || row.status || 'Draft',
+              issuingAuthorityEmail: row.IssuingAuthorityEmail || row.issuingAuthorityEmail || '',
+              issuingAuthorityPhone: row.IssuingAuthorityPhone || row.issuingAuthorityPhone || '',
+              details: row.Details || row.details || ''
+            };
+            // Basic validation
+            if (!payload.licenseName) { failed++; continue; }
+            await apiRequest('POST', '/api/licenses', payload);
+            success++;
+          } catch (err) {
+            failed++;
+          }
+        }
+        queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
+        toast({ title: 'Import finished', description: `Imported ${success} license(s). Failed: ${failed}` });
+        e.target.value = '';
+      },
+      error: () => {
+        toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
+      }
+    });
+  };
+
   // Filter licenses based on search and status
   const filteredLicenses = licenses.filter((license) => {
     const q = (searchTerm || "").toLowerCase();
@@ -524,7 +607,7 @@ export default function GovernmentLicense() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {/* TODO export */}}
+                      onClick={handleExport}
                       className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
                     >
                       <Download className="h-3 w-3 mr-1" />
@@ -533,7 +616,7 @@ export default function GovernmentLicense() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={triggerImport}
                       className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
                     >
                       <Upload className="h-3 w-3 mr-1" />
@@ -1206,6 +1289,14 @@ export default function GovernmentLicense() {
             </Form>
           </DialogContent>
         </Dialog>
+        
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          ref={fileInputRef}
+          onChange={handleImport}
+          className="hidden"
+        />
       </div>
     </div>
   );

@@ -375,7 +375,7 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl fle
 <Users className="text-white" size={20} />
 </motion.div>
 <div>
-<h3 className="text-xl font-semibold text-gray-900">Employee Management</h3>
+<h3 className="text-2xl font-semibold text-gray-900 tracking-tight">Employee Management</h3>
 {/* Description removed as requested */}
 </div>
 <Badge className="bg-indigo-100 text-indigo-800 h-8 px-3 text-sm font-medium">
@@ -566,12 +566,12 @@ transition={{ duration: 0.5, delay: 0.3 }}
 <Table className="min-w-full divide-y divide-gray-200">
 <TableHeader className="bg-gray-50">
 <TableRow>
-<TableHead className="font-medium text-gray-700 py-3 px-4 text-sm">Employee</TableHead>
-<TableHead className="font-medium text-gray-700 py-3 px-4 text-sm">Role</TableHead>
-<TableHead className="font-medium text-gray-700 py-3 px-4 text-sm">Department</TableHead>
-<TableHead className="font-medium text-gray-700 py-3 px-4 text-sm">Email</TableHead>
-<TableHead className="font-medium text-gray-700 py-3 px-4 text-sm">Status</TableHead>
-<TableHead className="font-medium text-gray-700 text-right py-3 px-4 text-sm">Actions</TableHead>
+<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Employee</TableHead>
+<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Role</TableHead>
+<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Department</TableHead>
+<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Email</TableHead>
+<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Status</TableHead>
+<TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">Actions</TableHead>
 </TableRow>
 </TableHeader>
 <TableBody className="bg-white divide-y divide-gray-200">
@@ -858,7 +858,7 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-lg fle
 <UsersIcon className="text-white" size={20} />
 </motion.div>
 <div>
-<h3 className="text-xl font-semibold text-gray-900">User Management</h3>
+<h3 className="text-2xl font-semibold text-gray-900 tracking-tight">User Management</h3>
 {/* Description removed as requested */}
 </div>
 <Badge className="bg-indigo-100 text-indigo-800 h-8 px-3 text-sm font-medium">
@@ -1013,11 +1013,11 @@ transition={{ duration: 0.5, delay: 0.2 }}
 <Table className="min-w-full divide-y divide-gray-200">
 <TableHeader className="bg-gray-50">
 <TableRow>
-<TableHead className="font-medium text-gray-700 py-3 px-4 text-sm">User</TableHead>
-<TableHead className="font-medium text-gray-700 py-3 px-4 text-sm">Email</TableHead>
-<TableHead className="font-medium text-gray-700 py-3 px-4 text-sm">Role</TableHead>
-<TableHead className="font-medium text-gray-700 py-3 px-4 text-sm">Status</TableHead>
-<TableHead className="font-medium text-gray-700 text-right py-3 px-4 text-sm">Actions</TableHead>
+<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">User</TableHead>
+<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Email</TableHead>
+<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Role</TableHead>
+<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Status</TableHead>
+<TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">Actions</TableHead>
 </TableRow>
 </TableHeader>
 <TableBody className="bg-white divide-y divide-gray-200">
@@ -1436,7 +1436,7 @@ else if (tabParam === "subscription-category" || tabParam === "subscription") in
 const [activeTab, setActiveTab] = useState(initialTab);
 
 return (
-  <div className="min-h-screen bg-white">
+  <div className="min-h-screen bg-white font-inter">
     <div className="max-w-[1400px] mx-auto px-6 py-8">
       {/* Modern Professional Header */}
       <div className="mb-8">
@@ -1813,13 +1813,6 @@ title="Delete Department"
 )}
 </div>
 </div>
-
-{/* Summary */}
-<div className="pt-4 border-t border-gray-200">
-<div className="text-sm text-gray-600">
-<span className="font-semibold">{visibleDepartments.length}</span> departments
-</div>
-</div>
 </div>
 </Card>
 </motion.div>
@@ -1881,18 +1874,17 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 {/* Category List */}
 <div className="space-y-4">
 <h3 className="text-base font-semibold text-gray-900">Available Categories</h3>
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 {categoriesLoading ? (
 <div className="text-gray-500">Loading categories...</div>
 ) : (
-<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-{categories.map((category, idx) => {
-// Only render if name is present or fallback
+categories.map((category, idx) => {
 const displayName = typeof category.name === "string" && category.name.trim() ? category.name : `Unnamed Category ${idx + 1}`;
 return (
 <motion.div
 key={displayName + idx}
 whileHover={{ y: -5 }}
-className="p-4 border border-indigo-200 bg-indigo-50 shadow-sm rounded-xl transition-all duration-300"
+className="p-4 border border-indigo-200 bg-indigo-50 shadow-lg rounded-xl transition-all duration-300"
 >
 <div className="flex items-center justify-between">
 <div className="flex items-center space-x-3 w-full">
@@ -1919,14 +1911,8 @@ title="Delete Category"
 </div>
 </motion.div>
 );
-})}
-</div>
+})
 )}
-</div>
-{/* Summary */}
-<div className="pt-4 border-t border-gray-200">
-<div className="text-sm text-gray-600">
-<span className="font-semibold">{categories.length}</span> categories
 </div>
 </div>
 </div>

@@ -199,7 +199,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
       const data = await res.json();
       return Array.isArray(data) ? data : [];
-    }
+    },
+    refetchOnWindowFocus: true,
+    refetchInterval: 10000, // Refetch every 10 seconds to catch exchange rate updates
+    staleTime: 0 // Consider data stale immediately to ensure fresh exchange rates
   });
 
   // Fetch company info for local currency and exchange rate calculations
@@ -530,6 +533,25 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     
     calculateLcyAmount();
   }, [form.watch('amount'), form.watch('currency'), companyInfo?.defaultCurrency, currencies, subscription]);
+
+  // Force recalculation when window regains focus (in case exchange rates were updated in another tab)
+  useEffect(() => {
+    const handleFocus = () => {
+      // Small delay to ensure any data refresh has completed
+      setTimeout(() => {
+        const amount = form.watch('amount');
+        const currency = form.watch('currency');
+        if (amount && currency) {
+          // Trigger a recalculation by slightly changing and restoring a dependency
+          const currentCurrency = form.getValues('currency');
+          form.setValue('currency', currentCurrency);
+        }
+      }, 100);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [form]);
   
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
