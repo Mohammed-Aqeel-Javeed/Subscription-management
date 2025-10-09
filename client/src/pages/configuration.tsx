@@ -245,6 +245,8 @@ export default function Configuration() {
         if (res.ok) {
           await res.json();
           await fetchCurrencies(); // Refresh the list
+          // Invalidate React Query cache for currencies to update other components
+          queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
           setNewCurrency({
             name: '',
             code: '',
@@ -294,6 +296,8 @@ export default function Configuration() {
       
       if (res.ok) {
         await fetchCurrencies(); // Refresh the list
+        // Invalidate React Query cache for currencies to update other components
+        queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
         toast({
           title: "Currency Deleted",
           description: `Currency with code ${code} has been deleted.`,
@@ -343,6 +347,8 @@ export default function Configuration() {
 
       if (allSuccessful) {
         await fetchCurrencies(); // Refresh the list
+        // Invalidate React Query cache for currencies to update other components
+        queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
         setIsUpdateMode(false);
         setEditingRates({});
         toast({
