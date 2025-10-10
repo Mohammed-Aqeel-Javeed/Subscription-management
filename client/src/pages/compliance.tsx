@@ -284,6 +284,134 @@ export default function Compliance() {
   // State for filing name validation
   const [filingNameError, setFilingNameError] = useState<string>("");
   
+  // State for date validation errors
+  const [dateErrors, setDateErrors] = useState<{
+    startDate?: string;
+    endDate?: string;
+    submissionDeadline?: string;
+    submissionDate?: string;
+    paymentDate?: string;
+  }>({});
+
+  // Date validation helper functions
+  const validateDate = (dateValue: string, fieldName: string, allowFuture: boolean = false): string => {
+    if (!dateValue) return "";
+    
+    const inputDate = new Date(dateValue);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    inputDate.setHours(0, 0, 0, 0);
+    
+    if (isNaN(inputDate.getTime())) {
+      return "Invalid date format";
+    }
+    
+    // Special handling for submission date - allow future dates within submission window
+    if (fieldName === "Submission Date" && !allowFuture && inputDate > today) {
+      // Check if we have end date and submission deadline to determine valid window
+      const endDate = form.filingEndDate ? new Date(form.filingEndDate) : null;
+      const submissionDeadline = form.filingSubmissionDeadline ? new Date(form.filingSubmissionDeadline) : null;
+      
+      if (endDate && submissionDeadline) {
+        endDate.setHours(0, 0, 0, 0);
+        submissionDeadline.setHours(0, 0, 0, 0);
+        
+        // Allow future submission dates if they're within the valid submission window
+        if (inputDate >= endDate && inputDate <= submissionDeadline) {
+          return ""; // Valid - within submission window
+        }
+      }
+      
+      return `${fieldName} cannot be in the future`;
+    }
+    
+    // Check for future date restrictions for other fields
+    if (!allowFuture && inputDate > today) {
+      return `${fieldName} cannot be in the future`;
+    }
+    
+    return "";
+  };
+
+  const validateDateLogic = (): boolean => {
+    const errors: typeof dateErrors = {};
+    let isValid = true;
+    
+    const startDate = form.filingStartDate ? new Date(form.filingStartDate) : null;
+    const endDate = form.filingEndDate ? new Date(form.filingEndDate) : null;
+    const submissionDeadline = form.filingSubmissionDeadline ? new Date(form.filingSubmissionDeadline) : null;
+    const submissionDate = form.filingSubmissionDate ? new Date(form.filingSubmissionDate) : null;
+    const paymentDate = form.paymentDate ? new Date(form.paymentDate) : null;
+    
+    // Validate individual dates
+    const startDateError = validateDate(form.filingStartDate, "Start Date", true);
+    if (startDateError) {
+      errors.startDate = startDateError;
+      isValid = false;
+    }
+    
+    const submissionDateError = validateDate(form.filingSubmissionDate, "Submission Date", false);
+    if (submissionDateError) {
+      errors.submissionDate = submissionDateError;
+      isValid = false;
+    }
+    
+    const paymentDateError = validateDate(form.paymentDate, "Payment Date", false);
+    if (paymentDateError) {
+      errors.paymentDate = paymentDateError;
+      isValid = false;
+    }
+    
+    // Validate date relationships
+    if (startDate && endDate && startDate >= endDate) {
+      errors.endDate = "End Date must be after Start Date";
+      isValid = false;
+    }
+    
+    if (endDate && submissionDeadline && submissionDeadline <= endDate) {
+      errors.submissionDeadline = "Submission Deadline must be after End Date";
+      isValid = false;
+    }
+    
+    // Fixed: Allow submission ON or BEFORE the deadline, only error if AFTER deadline
+    if (submissionDate && submissionDeadline && submissionDate > submissionDeadline) {
+      errors.submissionDate = "Submission Date cannot be after the Submission Deadline";
+      isValid = false;
+    }
+    
+    // Also check that submission date is not before end date (filing period must be complete)
+    if (submissionDate && endDate && submissionDate < endDate) {
+      errors.submissionDate = "Submission Date cannot be before End Date";
+      isValid = false;
+    }
+    
+    setDateErrors(errors);
+    return isValid;
+  };
+
+  // Required field validation
+  const validateRequiredFields = (): boolean => {
+    const requiredFields = [
+      { field: 'filingName', label: 'Filing Name' },
+      { field: 'filingComplianceCategory', label: 'Compliance Category' },
+      { field: 'filingStartDate', label: 'Start Date' },
+      { field: 'filingEndDate', label: 'End Date' }
+    ];
+    
+    const missingFields = requiredFields.filter(({ field }) => !form[field as keyof typeof form]);
+    
+    if (missingFields.length > 0) {
+      toast({
+        title: "Required Fields Missing",
+        description: `Please fill in: ${missingFields.map(f => f.label).join(', ')}`,
+        variant: "destructive",
+      });
+      return false;
+    }
+    
+    return true;
+  };
+  
   const handleFormChange = (field: string, value: string) => {
     // Auto-capitalize Filing Name
     if (field === "filingName") {
@@ -301,14 +429,13 @@ export default function Compliance() {
         const startDate = field === "filingStartDate" ? value : prev.filingStartDate;
         const frequency = field === "filingFrequency" ? value : prev.filingFrequency;
         const endDate = calculateEndDate(startDate, frequency);
-        return {
-          ...newState,
-          filingStartDate: startDate,
-          filingEndDate: endDate
-        };
+        newState.filingEndDate = endDate;
       }
       return newState;
     });
+    
+    // Validate dates after form update
+    setTimeout(() => validateDateLogic(), 0);
   };
   
   // For dynamic compliance fields
@@ -849,12 +976,18 @@ export default function Compliance() {
                   <div className="space-y-3">
                     <label className="block text-sm font-medium text-slate-700">Submission Date</label>
                     <Input 
-                      className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40" 
+                      className={`w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 ${dateErrors.submissionDate ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                       type="date" 
                       value={form.filingSubmissionDate} 
                       onChange={e => handleFormChange("filingSubmissionDate", e.target.value)} 
                       disabled={editIndex === null}
                     />
+                    {dateErrors.submissionDate && (
+                      <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {dateErrors.submissionDate}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-3">
                     <label className="block text-sm font-medium text-slate-700">Submitted By</label>
@@ -902,7 +1035,9 @@ export default function Compliance() {
             {/* General Information Grid - expands to more columns in fullscreen */}
             <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1 md:grid-cols-2'}`}>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Filing Name</label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Filing Name <span className="text-red-500">*</span>
+                </label>
                 <Input 
                   className={`w-full border-slate-300 rounded-lg p-2 text-base ${filingNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                   value={form.filingName} 
@@ -929,7 +1064,9 @@ export default function Compliance() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Compliance Category</label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Compliance Category <span className="text-red-500">*</span>
+                </label>
                 <Select value={form.filingComplianceCategory} onValueChange={(val: string) => handleFormChange("filingComplianceCategory", val)}>
                   <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                     <SelectValue />
@@ -1025,31 +1162,53 @@ export default function Compliance() {
               </div>
               {/* Added date range & deadline fields moved from previous Submission Details section */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Start Date</label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Start Date <span className="text-red-500">*</span>
+                </label>
                 <Input 
-                  className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                  className={`w-full border-slate-300 rounded-lg p-2 text-base ${dateErrors.startDate ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                   type="date" 
                   value={form.filingStartDate} 
                   onChange={e => handleFormChange("filingStartDate", e.target.value)} 
                 />
+                {dateErrors.startDate && (
+                  <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {dateErrors.startDate}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">End Date</label>
+                <label className="block text-sm font-medium text-slate-700">
+                  End Date <span className="text-red-500">*</span>
+                </label>
                 <Input 
-                  className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                  className={`w-full border-slate-300 rounded-lg p-2 text-base ${dateErrors.endDate ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                   type="date" 
                   value={form.filingEndDate} 
                   onChange={e => handleFormChange("filingEndDate", e.target.value)} 
                 />
+                {dateErrors.endDate && (
+                  <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {dateErrors.endDate}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submission Deadline</label>
                 <Input 
-                  className="w-full border-slate-300 rounded-lg p-2 text-base" 
+                  className={`w-full border-slate-300 rounded-lg p-2 text-base ${dateErrors.submissionDeadline ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                   type="date" 
                   value={form.filingSubmissionDeadline} 
                   onChange={e => handleFormChange("filingSubmissionDeadline", e.target.value)} 
                 />
+                {dateErrors.submissionDeadline && (
+                  <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {dateErrors.submissionDeadline}
+                  </p>
+                )}
               </div>
               {/* Moved Reminder Days and Reminder Policy into Compliance Details */}
               <div className="space-y-2">
@@ -1082,11 +1241,17 @@ export default function Compliance() {
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Payment Date</label>
                 <Input 
-                  className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40" 
+                  className={`w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 ${dateErrors.paymentDate ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                   type="date" 
                   value={form.paymentDate} 
                   onChange={e => handleFormChange("paymentDate", e.target.value)} 
                 />
+                {dateErrors.paymentDate && (
+                  <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {dateErrors.paymentDate}
+                  </p>
+                )}
               </div>
               {/* Moved Remarks (Additional Notes) into Compliance Details; hidden when Submission view is active */}
               {!showSubmissionDetails && (
@@ -1154,6 +1319,21 @@ export default function Compliance() {
                   
                   // Validate filing name uniqueness one more time before saving
                   if (form.filingName && !validateFilingName(form.filingName)) {
+                    return;
+                  }
+                  
+                  // Validate required fields
+                  if (!validateRequiredFields()) {
+                    return;
+                  }
+                  
+                  // Validate dates before saving draft
+                  if (!validateDateLogic()) {
+                    toast({
+                      title: "Validation Error",
+                      description: "Please fix the date validation errors before saving",
+                      variant: "destructive",
+                    });
                     return;
                   }
                   
@@ -1244,6 +1424,21 @@ export default function Compliance() {
                   
                   // Validate filing name uniqueness one more time before saving
                   if (form.filingName && !validateFilingName(form.filingName)) {
+                    return;
+                  }
+                  
+                  // Validate required fields
+                  if (!validateRequiredFields()) {
+                    return;
+                  }
+                  
+                  // Validate dates before saving compliance
+                  if (!validateDateLogic()) {
+                    toast({
+                      title: "Validation Error", 
+                      description: "Please fix the date validation errors before saving",
+                      variant: "destructive",
+                    });
                     return;
                   }
                   
