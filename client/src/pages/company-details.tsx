@@ -1837,27 +1837,31 @@ exit={{ opacity: 0, y: -20 }}
 transition={{ duration: 0.3 }}
 >
 <Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden">
-<div className="flex items-center gap-4 mb-6">
-<motion.div
-whileHover={{ scale: 1.05 }}
-whileTap={{ scale: 0.95 }}
-className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
->
-<Settings className="text-white" size={20} />
-</motion.div>
-<div>
-<h3 className="text-lg font-semibold text-gray-900">Subscription Categories</h3>
-{/* Description removed as requested */}
+{/* Professional Header with Gradient */}
+<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-4">
+  <div className="flex items-center gap-4">
+    <motion.div
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shadow-md"
+    >
+      <Settings className="text-white" size={24} />
+    </motion.div>
+    <div>
+      <h3 className="text-2xl font-bold text-white tracking-tight">Subscription Categories</h3>
+    </div>
+  </div>
 </div>
-</div>
-<div className="space-y-6">
+
+{/* Content */}
+<div className="p-8 bg-gradient-to-br from-gray-50 to-white">
 {/* Add New Category */}
 <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
 <Input
 placeholder=""
 value={newCategoryName}
 onChange={(e) => setNewCategoryName(e.target.value)}
-className="flex-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
 onKeyPress={(e) => e.key === 'Enter' && addNewCategory()}
 />
 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
@@ -1871,6 +1875,7 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 </Button>
 </motion.div>
 </div>
+
 {/* Category List */}
 <div className="space-y-4">
 <h3 className="text-base font-semibold text-gray-900">Available Categories</h3>
@@ -1884,14 +1889,13 @@ return (
 <motion.div
 key={displayName + idx}
 whileHover={{ y: -5 }}
-className="p-4 border border-indigo-200 bg-indigo-50 shadow-lg rounded-xl transition-all duration-300"
+className="p-4 border border-indigo-200 bg-indigo-50 shadow-sm rounded-xl transition-all duration-300"
 >
 <div className="flex items-center justify-between">
 <div className="flex items-center space-x-3 w-full">
 <span className="text-sm font-medium text-gray-900 truncate w-full">{String(displayName)}</span>
 </div>
 <div className="flex items-center space-x-2">
-<motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
 <Button
 variant="ghost"
 size="sm"
@@ -1906,7 +1910,6 @@ title="Delete Category"
 >
 <Trash2 size={16} />
 </Button>
-</motion.div>
 </div>
 </div>
 </motion.div>

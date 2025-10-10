@@ -157,16 +157,26 @@ const getFilteredNotifications = () => {
 				String(item.id) === String(notification.complianceId) || 
 				String(item._id) === String(notification.complianceId)
 			);
-			if (!compliance) return false;
 			switch (statusFilter) {
 				case 'pending':
-					// Show reminder notifications (no eventType) for compliances still pending/active.
-					// Accept either reminderTriggerDate or reminderDate (backend may provide either) and allow those already due.
-					if (notification.eventType) return false; // exclude created/deleted
-					const compStatus = (compliance.status||'').toLowerCase();
-					if (!['pending','active','non-compliant'].includes(compStatus)) return false;
+					// Show reminder notifications (no eventType) for compliance items
+					if (notification.eventType) return false; // exclude created/deleted events
+					
+					// If we can't find the compliance item, but it's a reminder notification, show it
+					if (!compliance) {
+						return !notification.eventType; // show reminder notifications even if compliance not found
+					}
+					
+					// Check compliance status - be more inclusive for pending filter
+					const compStatus = (compliance.status || '').toLowerCase();
+					// Include more statuses that should show reminders
+					if (!['pending', 'active', 'non-compliant', 'submitted', 'under review', ''].includes(compStatus)) {
+						return false;
+					}
+					
+					// Check trigger date
 					const trigger = notification.reminderTriggerDate || notification.reminderDate;
-					if (!trigger) return true; // if no trigger date, still show as active reminder
+					if (!trigger) return true; // if no trigger date, show as active reminder
 					return new Date(trigger) <= todayDate;
 				default:
 					return true;
@@ -322,7 +332,7 @@ const dateB = isValidDate(b.reminderTriggerDate) ? new Date(b.reminderTriggerDat
 return dateB - dateA;
 })
 .map((notification) => (
-<Card key={notification.id} className="hover:shadow-md transition-shadow">
+				<Card key={notification.id} className="hover:shadow-lg hover:border-blue-200 transition-all duration-200 bg-white border border-gray-200">
 	<CardHeader className="pb-3">
 		<div className="flex items-center justify-between">
 			<div className="flex items-center gap-3">
@@ -345,7 +355,7 @@ return dateB - dateA;
  									</CardTitle>
 					<div className="flex items-center gap-2 mt-1">
 									{/* Category badge */}
-									<Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 font-medium px-3 py-1 rounded-full">
+									<Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 font-medium px-3 py-1 rounded-full hover:bg-gray-100 hover:text-gray-700">
  												{notification.type === 'compliance'
  													? (notification.complianceCategory || notification.category || notification.filingName || notification.complianceName || notification.name || 'Compliance')
  													: (notification.category || 'Subscription')}
@@ -353,9 +363,9 @@ return dateB - dateA;
 									
 									{/* Reminder/Event badge */}
 									<Badge variant="default" className={`text-xs font-medium px-3 py-1 rounded-full ${
-										notification.eventType === 'created' ? 'bg-green-600 text-white' :
-										notification.eventType === 'deleted' ? 'bg-red-600 text-white' :
-										'bg-blue-600 text-white'
+										notification.eventType === 'created' ? 'bg-green-600 text-white hover:bg-green-600 hover:text-white' :
+										notification.eventType === 'deleted' ? 'bg-red-600 text-white hover:bg-red-600 hover:text-white' :
+										'bg-blue-600 text-white hover:bg-blue-600 hover:text-white'
 									}`}>
 										{(() => {
 											// Handle event-based notifications
