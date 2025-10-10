@@ -393,8 +393,8 @@ export default function Subscriptions() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
-              <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
-                <Layers className="h-6 w-6 text-white" />
+              <div className="h-12 w-12 bg-white/30 backdrop-blur-md rounded-xl flex items-center justify-center shadow-lg border border-white/20">
+                <Layers className="h-6 w-6 text-blue-600 drop-shadow-glass" />
               </div>
               <div>
                 <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Subscription Management</h1>
