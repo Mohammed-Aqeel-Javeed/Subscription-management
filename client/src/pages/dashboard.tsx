@@ -35,6 +35,10 @@ export default function Dashboard() {
   console.log("[Dashboard] Component mounted");
   const [activeSubscriptionsModalOpen, setActiveSubscriptionsModalOpen] = useState(false);
   const [upcomingRenewalsModalOpen, setUpcomingRenewalsModalOpen] = useState(false);
+  
+  // Filter states
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  
   // Use dashboard metrics query for auth check and data
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery<DashboardMetrics>({
     queryKey: ["/api/analytics/dashboard"],
@@ -67,14 +71,7 @@ export default function Dashboard() {
       return res.json();
     }
   });
-  // Activity query removed as it's not currently used in the dashboard
-  // const { data: activity, isLoading: activityLoading } = useQuery<RecentActivity[]>({
-  //   queryKey: ["/api/analytics/activity"],
-  //   queryFn: async () => {
-  //     const res = await fetch("/api/analytics/activity", { credentials: "include" });
-  //     return res.json();
-  //   }
-  // });
+
   const { data: subscriptions, isLoading: subscriptionsLoading } = useQuery<Subscription[]>({
     queryKey: ["/api/subscriptions"],
     queryFn: async () => {
@@ -85,6 +82,11 @@ export default function Dashboard() {
       return res.json();
     }
   });
+
+  // Get unique categories from actual subscriptions (like subscriptions page does)
+  const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.category) : [])).filter(Boolean);
+  
+  // Activity query removed as it's not currently used in the dashboard
 
   // ...existing code...
   if (metricsError && metricsError.message === "Unauthorized") {
@@ -216,15 +218,17 @@ export default function Dashboard() {
                 <SelectItem value="custom">Custom range</SelectItem>
               </SelectContent>
             </Select>
-            <Select defaultValue="all">
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="software">Software</SelectItem>
-                <SelectItem value="entertainment">Entertainment</SelectItem>
-                <SelectItem value="business">Business Tools</SelectItem>
+                {uniqueCategories.map(category => (
+                  <SelectItem key={category} value={category.toLowerCase()}>
+                    {category}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

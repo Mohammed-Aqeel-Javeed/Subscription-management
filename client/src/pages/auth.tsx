@@ -141,7 +141,7 @@ export default function AuthPage() {
           <input type="password" placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required style={{ width: '80%', marginBottom: 18, padding: 12, borderRadius: 5, border: '1px solid #e0dede' }} />
           <button type="submit" style={{ width: '80%', height: 40, background: '#573b8a', color: '#fff', fontWeight: 600, fontSize: 18, border: 0, borderRadius: 5, marginTop: 10, cursor: 'pointer' }}>Login</button>
           {loginError && <div style={{ color: '#d32f2f', marginTop: 12, textAlign: 'center' }}>{loginError}</div>}
-          <button type="button" style={{ background: 'none', border: 0, color: '#573b8a', marginTop: 18, fontWeight: 500, cursor: 'pointer' }} onClick={() => setShowSignup(true)}>Don't have an account? Sign up</button>
+          <button type="button" style={{ background: 'none', border: 0, color: '#573b8a', marginTop: 18, fontWeight: 500, cursor: 'pointer' }} onClick={() => navigate("/signup")}>Don't have an account? Sign up</button>
         </form>
       </div>
     </div>

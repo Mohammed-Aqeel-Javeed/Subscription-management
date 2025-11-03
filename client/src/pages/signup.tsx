@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { UserPlus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../lib/config";
 
 export default function SignupPage() {
@@ -9,6 +10,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const navigate = useNavigate();
   // Autogenerate tenantId in frontend
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,6 +109,24 @@ export default function SignupPage() {
           <button type="submit" style={{ width: "100%", padding: 12, background: "#007bff", color: "#fff", border: 0, borderRadius: 8, fontWeight: 600, fontSize: 18, boxShadow: '0 2px 8px rgba(0,123,255,0.08)' }}>Sign Up</button>
           {error && <div style={{ color: "#d32f2f", marginTop: 12, textAlign: 'center' }}>{error}</div>}
           {success && <div style={{ color: "#388e3c", marginTop: 12, textAlign: 'center' }}>{success}</div>}
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <span style={{ color: '#666', fontSize: 14 }}>Already have an account? </span>
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              style={{ 
+                background: 'none', 
+                border: 0, 
+                color: '#007bff', 
+                fontWeight: 500, 
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontSize: 14
+              }}
+            >
+              Login
+            </button>
+          </div>
         </form>
       </div>
     </div>
