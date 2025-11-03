@@ -66,6 +66,26 @@ export default function Subscriptions() {
     staleTime: 5000,
     gcTime: 0,
   });
+  
+  // Handle URL parameter to open specific subscription modal (placed after subscriptions declaration)
+  React.useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const openSubscriptionId = searchParams.get('open');
+    
+    if (openSubscriptionId && subscriptions) {
+      // Find the subscription by ID
+      const subscription = subscriptions.find(sub => 
+        sub.id === openSubscriptionId || sub._id === openSubscriptionId
+      );
+      
+      if (subscription) {
+        setEditingSubscription(subscription);
+        setModalOpen(true);
+        // Clean up URL parameter after opening modal
+        navigate(location.pathname, { replace: true });
+      }
+    }
+  }, [location.search, subscriptions, navigate, location.pathname]);
   // Listen for login/logout/account change events and trigger immediate refetch
   React.useEffect(() => {
     function triggerImmediateRefresh() {
@@ -324,6 +344,8 @@ export default function Subscriptions() {
   // --- Summary Stats Section ---
   const total = Array.isArray(subscriptions) ? subscriptions.length : 0;
   const active = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active").length : 0;
+  const trail = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.billingCycle === "trail").length : 0;
+  const draft = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Draft").length : 0;
   // const cancelled = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Cancelled").length : 0; // not shown currently
   
   if (isLoading) {
@@ -387,10 +409,10 @@ export default function Subscriptions() {
   }
   
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="max-w-[1400px] mx-auto px-6 py-8">
         {/* Modern Professional Header */}
-        <div className="mb-8">
+        <div className="mb-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
               <div className="h-12 w-12 bg-white/30 backdrop-blur-md rounded-xl flex items-center justify-center shadow-lg border border-white/20">
@@ -402,16 +424,53 @@ export default function Subscriptions() {
             </div>
             
             <div className="flex items-center space-x-3">
+              {/* Add Subscription button - first */}
+              <Button
+                onClick={handleAddNew}
+                className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Subscription
+              </Button>
+              
+              {/* History button - second */}
               <Button
                 variant="outline"
-                size="sm"
                 onClick={() => window.location.href = '/subscription-history'}
-                className="bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200 hover:border-indigo-300 font-medium transition-all duration-200"
+                className="w-44 bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200 hover:border-indigo-300 font-medium transition-all duration-200"
               >
                 <Calendar className="h-4 w-4 mr-2" />
                 History
               </Button>
               
+              {/* Data Management Dropdown - third */}
+              <Select onValueChange={(value) => {
+                if (value === 'export') {
+                  handleExport();
+                } else if (value === 'import') {
+                  triggerImport();
+                }
+              }}>
+                <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                  <SelectValue placeholder="Data Management" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="export" className="cursor-pointer">
+                    <div className="flex items-center">
+                      <Download className="h-4 w-4 mr-2" />
+                      Export
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="import" className="cursor-pointer">
+                    <div className="flex items-center">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Cancelled button - fourth */}
               <Button
                 variant="outline"
                 size="sm"
@@ -427,31 +486,11 @@ export default function Subscriptions() {
                 <XCircle className="h-4 w-4 mr-2" />
                 {location.pathname.includes('cancelled') ? 'All Subscriptions' : 'Cancelled'}
               </Button>
-              
-              <Button
-                onClick={handleAddNew}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Subscription
-              </Button>
             </div>
           </div>
 
-          {/* Key Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-blue-100">Total Subscriptions</p>
-                  <p className="text-2xl font-bold text-white mt-1">{total}</p>
-                </div>
-                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <Layers className="h-5 w-5 text-white" />
-                </div>
-              </div>
-            </div>
-            
+          {/* Key Metrics Cards - 4 boxes in professional layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-lg p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
@@ -463,34 +502,39 @@ export default function Subscriptions() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-purple-100">Data Management</p>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleExport}
-                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
-                    >
-                      <Download className="h-3 w-3 mr-1" />
-                      Export
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={triggerImport}
-                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
-                    >
-                      <Upload className="h-3 w-3 mr-1" />
-                      Import
-                    </Button>
-                  </div>
+                  <p className="text-sm font-medium text-purple-100">Trail Subscriptions</p>
+                  <p className="text-2xl font-bold text-white mt-1">{trail}</p>
                 </div>
                 <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <Download className="h-5 w-5 text-white" />
+                  <Search className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-orange-100">Draft Subscriptions</p>
+                  <p className="text-2xl font-bold text-white mt-1">{draft}</p>
+                </div>
+                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <Edit className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-100">Total Subscriptions</p>
+                  <p className="text-2xl font-bold text-white mt-1">{total}</p>
+                </div>
+                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-white" />
                 </div>
               </div>
             </div>
@@ -537,7 +581,7 @@ export default function Subscriptions() {
         </div>
         
         {/* Professional Data Table */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden">
+        <div className="bg-white/80 backdrop-blur-sm border border-white/30 rounded-2xl shadow-2xl hover:shadow-3xl transition-all duration-300 overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -612,13 +656,15 @@ export default function Subscriptions() {
                       </TableCell>
                       <TableCell className="px-4 py-3">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          subscription.status === 'Active' 
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                            : subscription.status === 'Cancelled'
-                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                            : 'bg-gray-100 text-gray-800 border border-gray-200'
+                          subscription.billingCycle === 'trail'
+                            ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                            : subscription.status === 'Active' 
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                              : subscription.status === 'Cancelled'
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : 'bg-gray-100 text-gray-800 border border-gray-200'
                         }`}>
-                          {subscription.status}
+                          {subscription.billingCycle === 'trail' ? 'Trail' : subscription.status}
                         </span>
                       </TableCell>
                       <TableCell className="px-4 py-3">

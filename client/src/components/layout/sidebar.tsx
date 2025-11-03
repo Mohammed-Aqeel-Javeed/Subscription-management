@@ -1,5 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "../../lib/api";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: BarChart3 },
@@ -17,6 +19,20 @@ export default function Sidebar() {
   // Get current location for active state
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Fetch current user data
+  const { data: currentUser } = useQuery({
+    queryKey: ["/api/me"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/me");
+      if (!res.ok) {
+        throw new Error("Failed to fetch user data");
+      }
+      return res.json();
+    },
+    retry: false, // Don't retry on auth failure
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
 
   const handleLogout = async () => {
     try {
@@ -88,7 +104,7 @@ export default function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">
-              John Doe
+              {currentUser?.fullName || currentUser?.email || "User"}
             </p>
             <p className="text-xs text-gray-500 truncate">
               Administrator

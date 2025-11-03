@@ -2,18 +2,17 @@ import { Request } from "express";
 
 // Extend Express Request type to include user with tenantId
 export interface AuthenticatedUser {
+  userId: string;
+  email: string;
   tenantId: string;
   // ...other user properties
 }
 
-export interface AuthenticatedRequest extends Request {
-  user?: AuthenticatedUser;
-}
-
 declare global {
   namespace Express {
-    interface User extends AuthenticatedUser {}
-    interface Request extends AuthenticatedRequest {}
+    interface Request {
+      user?: AuthenticatedUser;
+    }
   }
 }
 

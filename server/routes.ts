@@ -1,14 +1,5 @@
 import type { Express } from "express";
 import type { User } from "./types";
-
-declare global {
-  namespace Express {
-    interface User {
-      tenantId: string;
-      // add other properties if needed
-    }
-  }
-}
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { ObjectId } from "mongodb";
@@ -153,6 +144,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (err) {
       res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // ===== Current User =====
+  app.get("/api/me", async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user?.userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const db = await connectToDatabase();
+      const dbUser = await db.collection("login").findOne({ _id: new ObjectId(user.userId) });
+      if (!dbUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.status(200).json({
+        userId: dbUser._id,
+        email: dbUser.email,
+        fullName: dbUser.fullName || null,
+        tenantId: dbUser.tenantId || null
+      });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch user data" });
     }
   });
 
@@ -502,6 +516,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res
         .status(500)
         .json({ success: false, message: "Error deleting notification" });
+    }
+  });
+
+  // ===== Monthly Reminders =====
+  app.get("/api/monthly-reminders/check", async (req, res) => {
+    try {
+      const { getMonthlyReminderService } = await import('./monthly-reminder.service');
+      const reminderService = getMonthlyReminderService(storage);
+      const result = await reminderService.checkAndRunDailyReminders();
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error checking monthly reminders:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to check monthly reminders",
+        error: error.message 
+      });
+    }
+  });
+
+  app.post("/api/monthly-reminders/trigger", async (req, res) => {
+    try {
+      const { getMonthlyReminderService } = await import('./monthly-reminder.service');
+      const reminderService = getMonthlyReminderService(storage);
+      const result = await reminderService.triggerManualReminders();
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error triggering monthly reminders:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to trigger monthly reminders",
+        error: error.message 
+      });
     }
   });
 

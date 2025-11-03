@@ -5,19 +5,33 @@ import { Card } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
+import { useToast } from "@/hooks/use-toast";
 
 // Dummy fallback for company name
 const COMPANY_NAME = "Your Company";
 
-// Get subscription name from query param (e.g. /subscription-user?name=ChatGPT)
-function getSubscriptionNameFromUrl() {
+// Safe error to message helper to handle 'unknown' catch variables
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+// Get subscription name from query param (e.g. /subscription-user?name=ChatGPT&id=123)
+function getSubscriptionFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  return params.get("name") || "Subscription";
+  return {
+    name: params.get("name") || "Subscription",
+    id: params.get("id") || null
+  };
 }
 
 export default function SubscriptionUserPage() {
-  const subscriptionName = getSubscriptionNameFromUrl();
-  const subscriptionId = null;
+  const { name: subscriptionName, id: subscriptionId } = getSubscriptionFromUrl();
+  const { toast } = useToast();
 
   // Fetch all employees
   const { data: employees = [], isLoading: employeesLoading } = useQuery({
@@ -47,29 +61,34 @@ export default function SubscriptionUserPage() {
   const [searchRight, setSearchRight] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // On initial mount, set selectedUsers from backend (only once)
+  // On initial mount, set selectedUsers from backend
   useEffect(() => {
     if (Array.isArray(subscriptionUsers) && subscriptionUsers.length > 0) {
       setSelectedUsers(subscriptionUsers);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [subscriptionUsers]);
 
   // Filtered employees (not already added)
   const availableEmployees = useMemo(() => {
     return employees.filter((emp) => {
       const empId = emp.id || emp._id;
+      const searchTerm = searchLeft.toLowerCase();
       return (
         !selectedUsers.some((u) => (u.id || u._id) === empId) &&
-        (emp.name?.toLowerCase().includes(searchLeft.toLowerCase()) || "")
+        (emp.name?.toLowerCase().includes(searchTerm) || 
+         emp.department?.toLowerCase().includes(searchTerm) || 
+         emp.email?.toLowerCase().includes(searchTerm))
       );
     });
   }, [employees, selectedUsers, searchLeft]);
 
   // Filtered selected users
   const filteredSelectedUsers = useMemo(() => {
+    const searchTerm = searchRight.toLowerCase();
     return selectedUsers.filter((u) =>
-      u.name?.toLowerCase().includes(searchRight.toLowerCase())
+      u.name?.toLowerCase().includes(searchTerm) ||
+      u.department?.toLowerCase().includes(searchTerm) ||
+      u.email?.toLowerCase().includes(searchTerm)
     );
   }, [selectedUsers, searchRight]);
 
@@ -106,18 +125,81 @@ export default function SubscriptionUserPage() {
 
   // Save handler
   const handleSave = async () => {
+    if (!subscriptionId) {
+      toast({
+        title: "Error",
+        description: "No subscription ID available. Cannot save users.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSaving(true);
-    // TODO: Save to backend
-    console.log("Saving selected users:", selectedUsers);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-    setIsSaving(false);
-    window.history.back();
+    try {
+      const payload = {
+        users: selectedUsers.map(user => ({
+          id: user.id || user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          department: user.department
+        }))
+      };
+
+      console.log("Saving to subscription ID:", subscriptionId);
+      console.log("Payload:", payload);
+
+      const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      console.log("Response status:", response.status);
+      console.log("Response headers:", response.headers);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
+        throw new Error(`Failed to save: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("Users saved successfully:", result);
+      
+      toast({
+        title: "Success",
+        description: "Subscription users updated successfully.",
+      });
+      
+      // Refetch to ensure data is up to date
+      await refetchSubscriptionUsers();
+      
+      // Immediately redirect to subscriptions card/modal (fast close)
+      window.location.href = `/subscriptions?open=${subscriptionId}`;
+    } catch (error: unknown) {
+      console.error("Error saving users:", error);
+      toast({
+        title: "Error",
+        description: `Failed to save users: ${getErrorMessage(error)}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Cancel handler
   const handleCancel = () => {
-    window.history.back();
+    // Redirect back to the subscription modal page
+    if (subscriptionId) {
+      window.location.href = `/subscriptions?open=${subscriptionId}`;
+    } else {
+      window.history.back();
+    }
   };
 
   // Animation variants
@@ -146,7 +228,7 @@ export default function SubscriptionUserPage() {
       y: -20, 
       opacity: 0,
       transition: {
-        duration: 0.2
+        duration: 0.6  // Slower exit animation (was 0.2)
       }
     }
   };
@@ -170,12 +252,12 @@ export default function SubscriptionUserPage() {
         </motion.div>
 
         <div className="flex flex-col lg:flex-row gap-8">
-          {/* Left column: All employees */}
+          {/* Team Members Panel (will appear second on large screens) */}
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="flex-1 bg-white rounded-2xl shadow-xl overflow-hidden"
+            className="flex-1 bg-white rounded-2xl shadow-xl overflow-hidden order-2 lg:order-2"
           >
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center mb-4">
@@ -247,7 +329,11 @@ export default function SubscriptionUserPage() {
                             </div>
                             <div>
                               <span className="text-lg font-medium text-gray-800">{emp.name}</span>
-                              <div className="text-sm text-gray-500">{emp.email || emp.department || "Team Member"}</div>
+                              <div className="text-sm text-gray-500">
+                                {emp.email && <div>{emp.email}</div>}
+                                {emp.department && <div className="text-indigo-600 font-medium">{emp.department}</div>}
+                                {!emp.email && !emp.department && <div>Team Member</div>}
+                              </div>
                             </div>
                           </div>
                           <Button
@@ -264,7 +350,6 @@ export default function SubscriptionUserPage() {
                         className="text-center py-12"
                       >
                         <div className="text-gray-400 mb-2">No team members found</div>
-                        <div className="text-sm text-gray-500">Try adjusting your search criteria</div>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -273,12 +358,12 @@ export default function SubscriptionUserPage() {
             </div>
           </motion.div>
 
-          {/* Right column: Added users */}
+          {/* Users in Subscription Panel (will appear first on large screens) */}
           <motion.div 
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
-            className="flex-1 bg-white rounded-2xl shadow-xl overflow-hidden"
+            className="flex-1 bg-white rounded-2xl shadow-xl overflow-hidden order-1 lg:order-1"
           >
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center mb-4">
@@ -345,7 +430,11 @@ export default function SubscriptionUserPage() {
                           </div>
                           <div>
                             <span className="text-lg font-medium text-gray-800">{user.name}</span>
-                            <div className="text-sm text-gray-500">{user.email || user.department || "Team Member"}</div>
+                            <div className="text-sm text-gray-500">
+                              {user.email && <div>{user.email}</div>}
+                              {user.department && <div className="text-indigo-600 font-medium">{user.department}</div>}
+                              {!user.email && !user.department && <div>Team Member</div>}
+                            </div>
                           </div>
                         </div>
                         <Button
@@ -362,7 +451,6 @@ export default function SubscriptionUserPage() {
                       className="text-center py-12"
                     >
                       <div className="text-gray-400 mb-2">No users added yet</div>
-                      <div className="text-sm text-gray-500">Add team members from the left panel</div>
                     </motion.div>
                   )}
                 </AnimatePresence>

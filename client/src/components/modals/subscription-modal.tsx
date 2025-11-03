@@ -13,12 +13,22 @@ interface SubscriptionField {
 // start date is (even if it is in the past). This prevents the off-by-one month
 // difference users saw (e.g. 19 vs 18) when toggling Auto Renewal.
 // ...existing code...
+import { cardImages } from "@/assets/card-icons/cardImages";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 // Removed unused Popover related imports
 import { useForm } from "react-hook-form";
@@ -37,6 +47,9 @@ type SubscriptionModalData = Partial<Subscription> & {
   owner?: string;
   paymentMethod?: string;
   autoRenewal?: boolean;
+  // Tolerate backend objects that use Mongo-style _id and optional name
+  _id?: string;
+  name?: string;
 };
 import { z } from "zod";
 import { CreditCard, X, History, RefreshCw, Maximize2, Minimize2, AlertCircle } from "lucide-react";
@@ -108,6 +121,9 @@ function calculateEndDate(startDate: string, billingCycle: string): string {
       break;
     case "weekly":
       endDate.setDate(endDate.getDate() + 6);
+      break;
+    case "trail":
+      endDate.setDate(endDate.getDate() + 30); // 30 days for trail period
       break;
   }
   const yyyy = endDate.getFullYear();
@@ -223,7 +239,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Employee list for Owner dropdown (from /api/employee)
   // Fetch employees from /api/employees (plural) to match company-details.tsx
-  const { data: employeesRaw = [] } = useQuery({
+  const { data: employeesRaw = [], refetch: refetchEmployees } = useQuery({
     queryKey: ['/api/employees'],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/api/employees`, { credentials: 'include' });
@@ -257,7 +273,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     .filter(Boolean);
   
   // Fetch payment methods for dynamic dropdown
-  const { data: paymentMethods = [], isLoading: paymentMethodsLoading } = useQuery({
+  const { data: paymentMethods = [], isLoading: paymentMethodsLoading, refetch: refetchPaymentMethods } = useQuery({
     queryKey: ['/api/payment'],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/api/payment`, { credentials: 'include' });
@@ -303,7 +319,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       serviceName: subscription?.serviceName || "",
       vendor: subscription?.vendor || "",
       currency: subscription?.currency || "",
-      amount: subscription?.amount !== undefined && subscription?.amount !== null ? String(subscription.amount) : "",
+      amount: subscription?.amount !== undefined && subscription?.amount !== null ? Number(subscription.amount).toFixed(2) : "",
       billingCycle: subscription?.billingCycle && subscription?.billingCycle !== "" ? subscription.billingCycle : "monthly",
       category: subscription?.category || "",
       department: subscription?.department || "",
@@ -358,6 +374,25 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Removed unused isPopoverOpen state
   const [isRenewing, setIsRenewing] = useState(false);
   const [lcyAmount, setLcyAmount] = useState<string>('');
+  const [errorDialog, setErrorDialog] = useState<{show: boolean, message: string}>({show: false, message: ''});
+  const [confirmDialog, setConfirmDialog] = useState<{show: boolean}>({show: false});
+  const [departmentModal, setDepartmentModal] = useState<{show: boolean}>({show: false});
+  const [newDepartmentName, setNewDepartmentName] = useState<string>('');
+  const [categoryModal, setCategoryModal] = useState<{show: boolean}>({show: false});
+  const [newCategoryName, setNewCategoryName] = useState<string>('');
+  const [paymentMethodModal, setPaymentMethodModal] = useState<{show: boolean}>({show: false});
+  const [newPaymentMethodName, setNewPaymentMethodName] = useState<string>('');
+  const [newPaymentMethodType, setNewPaymentMethodType] = useState<string>('');
+  const [newPaymentMethodDescription, setNewPaymentMethodDescription] = useState<string>('');
+  const [newPaymentMethodManagedBy, setNewPaymentMethodManagedBy] = useState<string>('');
+  const [newPaymentMethodExpiresAt, setNewPaymentMethodExpiresAt] = useState<string>('');
+  const [newPaymentMethodCardImage, setNewPaymentMethodCardImage] = useState<string>('visa');
+  const [ownerModal, setOwnerModal] = useState<{show: boolean}>({show: false});
+  const [newOwnerName, setNewOwnerName] = useState<string>('');
+  const [newOwnerEmail, setNewOwnerEmail] = useState<string>('');
+  const [newOwnerRole, setNewOwnerRole] = useState<string>('');
+  const [newOwnerStatus, setNewOwnerStatus] = useState<string>('Active');
+  const [newOwnerDepartment, setNewOwnerDepartment] = useState<string>('');
   
   // Refetch data when modal opens
   useEffect(() => {
@@ -425,7 +460,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         serviceName: subscription.serviceName || "",
         vendor: subscription.vendor || "",
         currency: subscription.currency || "",
-        amount: subscription.amount !== undefined && subscription.amount !== null ? String(subscription.amount) : "",
+        amount: subscription.amount !== undefined && subscription.amount !== null ? Number(subscription.amount).toFixed(2) : "",
         billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
         category: subscription.category || "",
         department: subscription.department || "",
@@ -443,7 +478,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
       // Force LCY calculation after form reset with a small delay
       setTimeout(() => {
-        const amount = subscription.amount !== undefined && subscription.amount !== null ? String(subscription.amount) : "";
+        const amount = subscription.amount !== undefined && subscription.amount !== null ? Number(subscription.amount).toFixed(2) : "";
         const currency = subscription.currency || "";
         const localCurrency = companyInfo?.defaultCurrency;
         
@@ -810,15 +845,38 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Handle renewal logic
   const handleRenew = async () => {
     if (!endDate || !billingCycle) {
-          toast({
-            title: "Cannot Renew",
-            description: "Please ensure both end date and billing cycle are set",
-            variant: "destructive",
-          });
-          return;
-        }
+      toast({
+        title: "Cannot Renew",
+        description: "Please ensure both end date and billing cycle are set",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if renewal is allowed based on dates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to start of day for accurate comparison
+    
+    const nextRenewalDate = new Date(endDate);
+    nextRenewalDate.setHours(0, 0, 0, 0);
+    
+    // If next renewal date is greater than today, show error
+    if (nextRenewalDate > today) {
+      setErrorDialog({
+        show: true,
+        message: `Subscription can only be renewed on or after ${formatDate(endDate)}. Current renewal date is in the future.`
+      });
+      return;
+    }
+
+    // Show confirmation dialog
+    setConfirmDialog({show: true});
+  };
+
+  const handleConfirmRenewal = async () => {
+    setConfirmDialog({show: false});
         
-        setIsRenewing(true);
+    setIsRenewing(true);
         
         try {
           // Always recalculate dates based on current endDate and billingCycle
@@ -984,6 +1042,119 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setIsRenewing(false);
     }
   };
+
+  // Handle adding new department
+  const handleAddDepartment = async () => {
+    if (!newDepartmentName.trim()) return;
+    
+    try {
+      const response = await apiRequest(
+        "POST",
+        "/api/company/departments",
+        { name: newDepartmentName.trim() }
+      );
+      // If no error thrown, consider success
+      await refetchDepartments();
+      // Add the new department to selected departments
+      const updatedDepartments = [...selectedDepartments, newDepartmentName.trim()];
+      setSelectedDepartments(updatedDepartments);
+      form.setValue('departments', updatedDepartments);
+      form.setValue('department', JSON.stringify(updatedDepartments));
+      setNewDepartmentName('');
+      setDepartmentModal({ show: false });
+    } catch (error) {
+      console.error('Error adding department:', error);
+    }
+  };
+
+  // Handle adding new category
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    
+    try {
+      const response = await apiRequest(
+        "POST",
+        "/api/company/categories",
+        { name: newCategoryName.trim() }
+      );
+      
+      // If no error thrown, consider success
+      await refetchCategories();
+      // Select the new category
+      form.setValue('category', newCategoryName.trim());
+      setNewCategoryName('');
+      setCategoryModal({ show: false });
+    } catch (error) {
+      console.error('Error adding category:', error);
+    }
+  };
+
+  // Handle adding new payment method
+  const handleAddPaymentMethod = async () => {
+    if (!newPaymentMethodName.trim()) return;
+    
+    try {
+      const response = await apiRequest(
+        "POST",
+        "/api/payment",
+        { 
+          name: newPaymentMethodName.trim(),
+          title: newPaymentMethodName.trim(),
+          type: newPaymentMethodType,
+          description: newPaymentMethodDescription.trim(),
+          manager: newPaymentMethodManagedBy.trim(),
+          expiresAt: newPaymentMethodExpiresAt,
+          icon: newPaymentMethodCardImage
+        }
+      );
+      
+      // If no error thrown, consider success
+      await refetchPaymentMethods();
+      // Select the new payment method
+      form.setValue('paymentMethod', newPaymentMethodName.trim());
+      setNewPaymentMethodName('');
+      setNewPaymentMethodType('');
+      setNewPaymentMethodDescription('');
+      setNewPaymentMethodManagedBy('');
+      setNewPaymentMethodExpiresAt('');
+      setNewPaymentMethodCardImage('visa');
+      setPaymentMethodModal({ show: false });
+    } catch (error) {
+      console.error('Error adding payment method:', error);
+    }
+  };
+
+  // Handle adding new owner
+  const handleAddOwner = async () => {
+    if (!newOwnerName.trim() || !newOwnerEmail.trim()) return;
+    
+    try {
+      const response = await apiRequest(
+        "POST",
+        "/api/employees",
+        { 
+          name: newOwnerName.trim(),
+          email: newOwnerEmail.trim(),
+          role: newOwnerRole,
+          status: newOwnerStatus,
+          department: newOwnerDepartment
+        }
+      );
+      
+      // If no error thrown, consider success
+      await refetchEmployees();
+      // Select the new owner
+      form.setValue('owner', newOwnerName.trim());
+      setNewOwnerName('');
+      setNewOwnerEmail('');
+  setNewOwnerRole('');
+      setNewOwnerStatus('Active');
+      setNewOwnerDepartment('');
+      setOwnerModal({ show: false });
+    } catch (error) {
+      console.error('Error adding owner:', error);
+    }
+  };
   
   // Format date for display
   const formatDate = (dateString: string) => {
@@ -1096,14 +1267,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </DialogTitle>
                 <span
                   className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold tracking-wide ${
-                    status === 'Active' 
-                      ? 'bg-emerald-500 text-white' 
-                      : status === 'Cancelled' 
-                        ? 'bg-rose-500 text-white' 
-                        : 'bg-orange-500 text-white'
+                    subscription?.billingCycle === 'trail' 
+                      ? 'bg-purple-500 text-white' 
+                      : status === 'Active' 
+                        ? 'bg-emerald-500 text-white' 
+                        : status === 'Cancelled' 
+                          ? 'bg-rose-500 text-white' 
+                          : 'bg-orange-500 text-white'
                   }`}
                 >
-                  {status}
+                  {subscription?.billingCycle === 'trail' ? 'Trail' : status}
                 </span>
               </div>
             </div>
@@ -1111,15 +1284,19 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <Button
                 type="button"
                 variant="outline"
-                className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] border-white shadow-sm"
-                onClick={() => window.location.href = "/subscription-user"}
+                className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] border-indigo-200 shadow-sm"
+                onClick={() => {
+                  const subscriptionId = subscription?._id || subscription?.id;
+                  const serviceName = subscription?.serviceName || subscription?.name || 'Subscription';
+                  window.location.href = `/subscription-user?id=${subscriptionId}&name=${encodeURIComponent(serviceName)}`;
+                }}
               >
                 User
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-white shadow-sm"
+                className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
                 onClick={handleRenew}
                 disabled={isRenewing || !endDate || !billingCycle}
               >
@@ -1134,7 +1311,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <Button
                 type="button"
                 variant="outline"
-                className={`bg-white text-indigo-600 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-white shadow-sm ${!isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm ${!isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
                   if (isEditing && subscription?.id) {
                     // Only pass the ID, removing serviceName to simplify filtering
@@ -1151,7 +1328,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 type="button"
                 variant="outline"
                 title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
-                className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
+                className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-indigo-200 shadow-sm"
                 onClick={() => setIsFullscreen(f => !f)}
               >
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -1185,8 +1362,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                               .join(' ');
                             field.onChange(capitalizedValue);
-                            // Validate uniqueness
-                            validateServiceName(capitalizedValue);
+                            // Clear any existing error when typing
+                            if (serviceNameError) {
+                              setServiceNameError("");
+                            }
+                          }}
+                          onBlur={(e) => {
+                            // Validate uniqueness only when leaving the field
+                            validateServiceName(e.target.value);
                           }}
                         />
                       </FormControl>
@@ -1279,6 +1462,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               }
                               field.onChange(val);
                             }}
+                            onBlur={e => {
+                              // Format to 2 decimal places on blur
+                              const value = parseFloat(e.target.value);
+                              if (!isNaN(value)) {
+                                field.onChange(value.toFixed(2));
+                              }
+                            }}
                           />
                         </FormControl>
                         <FormMessage />
@@ -1296,17 +1486,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       value={lcyAmount}
                       readOnly
                       className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-gray-50 text-gray-600 shadow-sm"
-                      placeholder={
-                        !companyInfo?.defaultCurrency ? 'Set local currency in Company Details' :
-                        !form.watch('currency') ? 'Select currency' :
-                        form.watch('currency') === companyInfo?.defaultCurrency ? 'Same as amount' :
-                        !currencies.find((c: any) => c.code === form.watch('currency'))?.exchangeRate ? 'Set exchange rate in Currency Settings' :
-                        'Calculated automatically'
-                      }
+                      placeholder=""
                     />
                     {form.watch('currency') && form.watch('currency') !== companyInfo?.defaultCurrency && lcyAmount && (
                       <div className="text-xs text-gray-500 mt-2 font-medium">
-                        Exchange rate: {currencies.find((c: any) => c.code === form.watch('currency'))?.exchangeRate || 'Not set'}
+                        1 {companyInfo?.defaultCurrency || 'LCY'} = {currencies.find((c: any) => c.code === form.watch('currency'))?.exchangeRate || 'Not set'} {form.watch('currency')}
                       </div>
                     )}
                   </div>
@@ -1338,6 +1522,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             <SelectItem value="yearly" className={`${billingCycle === 'yearly' ? 'selected' : ''} dropdown-item`}>Yearly</SelectItem>
                             <SelectItem value="quarterly" className={`${billingCycle === 'quarterly' ? 'selected' : ''} dropdown-item`}>Quarterly</SelectItem>
                             <SelectItem value="weekly" className={`${billingCycle === 'weekly' ? 'selected' : ''} dropdown-item`}>Weekly</SelectItem>
+                            <SelectItem value="trail" className={`${billingCycle === 'trail' ? 'selected' : ''} dropdown-item`}>Trail</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -1376,7 +1561,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         value={field.value || ""}
                         onValueChange={(value) => {
                           if (value === "add-new-category") {
-                            window.location.href = "/company-details?tab=subscription-category";
+                            setCategoryModal({ show: true });
                           } else {
                             field.onChange(value);
                           }
@@ -1469,7 +1654,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           {/* Add Department option at the end */}
                           <div
                             className="dropdown-item font-medium border-t border-gray-200 mt-1 pt-2 text-black cursor-pointer px-2 py-2"
-                            onClick={() => window.location.href = "/company-details?tab=department"}
+                            onClick={() => setDepartmentModal({ show: true })}
                           >
                             + New
                           </div>
@@ -1495,7 +1680,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         value={field.value || ''}
                         onValueChange={(value) => {
                           if (value === "add-new-payment-method") {
-                            window.location.href = "/reminders?tab=payment";
+                            setPaymentMethodModal({ show: true });
                           } else {
                             field.onChange(value);
                           }
@@ -1545,7 +1730,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         value={field.value || ''}
                         onValueChange={(value) => {
                           if (value === "add-new-owner") {
-                            window.location.href = "/company-details?tab=employees";
+                            setOwnerModal({ show: true });
                           } else {
                             field.onChange(value);
                           }
@@ -1563,15 +1748,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               </SelectItem>
                             ))
                           ) : null}
-                          <div className="border-t">
-                            <button
-                              type="button"
-                              className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
-                              onClick={() => window.location.href = '/company-details?tab=employee'}
-                            >
-                              + New
-                            </button>
-                          </div>
+                          {/* Add Owner option at the end */}
+                          <SelectItem 
+                            value="add-new-owner" 
+                            className="dropdown-item font-medium border-t border-gray-200 mt-1 pt-2 text-black"
+                          >
+                            + New
+                          </SelectItem>
                           {employeesRaw.length === 0 && (
                             <SelectItem value="no-owner" disabled className="dropdown-item disabled">No owners found</SelectItem>
                           )}
@@ -1791,24 +1974,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       onClick={() => {
                         const newAutoRenewal = !autoRenewal;
                         setAutoRenewal(newAutoRenewal);
-                        // Auto-update next renewal date when enabled based on commitment cycle
+                        // Auto-update dates when Auto Renewal is enabled
                         if (newAutoRenewal) {
                           const cycle = form.watch("billingCycle") || billingCycle;
-                          let s = form.watch("startDate") || startDate;
-                          let n = form.watch("nextRenewal") || endDate;
                           const todayStr = new Date().toISOString().split('T')[0];
-                          if (n === todayStr) {
-                            s = todayStr;
-                            n = calculateEndDate(todayStr, cycle);
-                            form.setValue("startDate", s);
-                            setStartDate(s);
-                            form.setValue("nextRenewal", n);
-                            setEndDate(n);
-                          } else if (cycle && s) {
-                            const nextDate = calculateEndDate(s, cycle);
-                            form.setValue("nextRenewal", nextDate);
-                            setEndDate(nextDate);
-                          }
+                          
+                          // Always set start date to today when enabling Auto Renewal
+                          const newStartDate = todayStr;
+                          const newEndDate = calculateEndDate(newStartDate, cycle);
+                          
+                          // Update form values and state
+                          form.setValue("startDate", newStartDate);
+                          setStartDate(newStartDate);
+                          form.setValue("nextRenewal", newEndDate);
+                          setEndDate(newEndDate);
                         }
                       }}
                       aria-pressed={autoRenewal}
@@ -1892,7 +2071,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <Button 
                   type="button" 
                   variant="outline" 
-                  className="border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
+                  className="border-gray-300 text-gray-700 hover:bg-gray-100 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
                   onClick={() => onOpenChange(false)}
                 >
                   Exit
@@ -1918,6 +2097,437 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           </Form>
         </DialogContent>
       </Dialog>
+      
+      {/* Error Dialog (portal-based for reliable interactions) */}
+      <AlertDialog open={errorDialog.show} onOpenChange={(open) => !open && setErrorDialog({ show: false, message: "" })}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              Cannot Renew Yet
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-900 font-medium">
+              {errorDialog.message}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction 
+              onClick={() => setErrorDialog({ show: false, message: "" })}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={confirmDialog.show} onOpenChange={(open) => !open && setConfirmDialog({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-gray-900">
+              Confirm Renewal
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700">
+              Are you sure you want to renew this subscription?
+              <br /><br />
+              This will extend the subscription period and update the renewal dates.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDialog({ show: false })}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+            >
+              Cancel
+            </Button>
+            <AlertDialogAction 
+              onClick={handleConfirmRenewal}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Department Creation Modal */}
+  <AlertDialog open={departmentModal.show} onOpenChange={(open) => !open && setDepartmentModal({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl font-inter">
+          <AlertDialogHeader className="bg-indigo-600 text-white p-6 rounded-t-lg -m-6 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-lg">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm2 6a2 2 0 104 0 2 2 0 00-4 0zm6 0a2 2 0 104 0 2 2 0 00-4 0z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <AlertDialogTitle className="text-xl font-semibold text-white">
+                Add New Department
+              </AlertDialogTitle>
+            </div>
+          </AlertDialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Department Name</label>
+              <Input
+                placeholder=""
+                value={newDepartmentName}
+                onChange={(e) => setNewDepartmentName(e.target.value)}
+                className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddDepartment();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter className="flex gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDepartmentModal({ show: false });
+                setNewDepartmentName('');
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddDepartment}
+              disabled={!newDepartmentName.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
+            >
+              Add Department
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Category Creation Modal */}
+      <AlertDialog open={categoryModal.show} onOpenChange={(open) => !open && setCategoryModal({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl font-inter">
+          <AlertDialogHeader className="bg-indigo-600 text-white p-6 rounded-t-lg -m-6 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-lg">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3 7a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 13a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <AlertDialogTitle className="text-xl font-semibold text-white">
+                Add New Category
+              </AlertDialogTitle>
+            </div>
+          </AlertDialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category Name</label>
+              <Input
+                placeholder=""
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddCategory();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter className="flex gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCategoryModal({ show: false });
+                setNewCategoryName('');
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddCategory}
+              disabled={!newCategoryName.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
+            >
+              Add Category
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Payment Method Creation Modal */}
+      <AlertDialog open={paymentMethodModal.show} onOpenChange={(open) => !open && setPaymentMethodModal({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-white border border-gray-200 shadow-2xl font-inter">
+          <AlertDialogHeader className="bg-blue-600 text-white p-6 rounded-t-lg -m-6 mb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 p-2 rounded-lg">
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
+                  </svg>
+                </div>
+                <AlertDialogTitle className="text-xl font-semibold text-white">
+                  Create Payment Method
+                </AlertDialogTitle>
+              </div>
+              
+            </div>
+          </AlertDialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Title <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  placeholder=""
+                  value={newPaymentMethodName}
+                  onChange={(e) => setNewPaymentMethodName(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddPaymentMethod();
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Type <span className="text-red-500">*</span>
+                </label>
+                <Select value={newPaymentMethodType} onValueChange={setNewPaymentMethodType}>
+                  <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+                    <SelectValue placeholder="Select payment type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Credit">Credit Card</SelectItem>
+                    <SelectItem value="Debit">Debit Card</SelectItem>
+                    <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="Digital Wallet">Digital Wallet</SelectItem>
+                    <SelectItem value="Cash">Cash</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <Input
+                  placeholder=""
+                  value={newPaymentMethodDescription}
+                  onChange={(e) => setNewPaymentMethodDescription(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Managed by</label>
+                <Input
+                  placeholder=""
+                  value={newPaymentMethodManagedBy}
+                  onChange={(e) => setNewPaymentMethodManagedBy(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                />
+              </div>
+            </div>
+            <div className="w-1/2 pr-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Expires at</label>
+              <Input
+                type="date"
+                placeholder="dd-mm-yyyy"
+                value={newPaymentMethodExpiresAt}
+                onChange={(e) => setNewPaymentMethodExpiresAt(e.target.value)}
+                className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Card Image</label>
+              <div className="grid grid-cols-5 gap-3">
+                {[
+                  { value: 'visa', label: 'Visa', img: cardImages.visa },
+                  { value: 'mastercard', label: 'MasterCard', img: cardImages.mastercard },
+                  { value: 'paypal', label: 'PayPal', img: cardImages.paypal },
+                  { value: 'amex', label: 'Amex', img: cardImages.amex },
+                  { value: 'apple_pay', label: 'Apple Pay', img: cardImages.apple_pay },
+                  { value: 'google_pay', label: 'Google Pay', img: cardImages.google_pay },
+                  { value: 'bank', label: 'Bank', img: cardImages.bank },
+                  { value: 'cash', label: 'Cash', img: cardImages.cash },
+                  { value: 'other', label: 'Other', img: cardImages.other },
+                ].map((card) => (
+                  <button
+                    key={card.value}
+                    type="button"
+                    onClick={() => setNewPaymentMethodCardImage(card.value)}
+                    className={`relative p-3 border-2 rounded-lg bg-white hover:bg-gray-100 transition-all duration-200 transform hover:scale-105 ${
+                      newPaymentMethodCardImage === card.value 
+                        ? 'border-blue-500 bg-blue-50 shadow-lg ring-2 ring-blue-500 ring-opacity-20' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    title={card.label}
+                  >
+                    <img src={card.img} alt={card.label} className="w-12 h-8 object-contain mx-auto" />
+                    {newPaymentMethodCardImage === card.value && (
+                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <AlertDialogFooter className="flex gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPaymentMethodModal({ show: false });
+                setNewPaymentMethodName('');
+                setNewPaymentMethodType('');
+                setNewPaymentMethodDescription('');
+                setNewPaymentMethodManagedBy('');
+                setNewPaymentMethodExpiresAt('');
+                setNewPaymentMethodCardImage('visa');
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddPaymentMethod}
+              disabled={!newPaymentMethodName.trim() || !newPaymentMethodType}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
+            >
+              Create Payment Method
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Owner Creation Modal */}
+      <AlertDialog open={ownerModal.show} onOpenChange={(open) => !open && setOwnerModal({ show: false })}>
+  <AlertDialogContent className="sm:max-w-[500px] bg-white border border-gray-200 shadow-2xl font-inter">
+          <AlertDialogHeader className="bg-indigo-600 text-white p-6 rounded-t-lg -m-6 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-lg">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <AlertDialogTitle className="text-xl font-semibold text-white">
+                Add New User
+              </AlertDialogTitle>
+            </div>
+          </AlertDialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <Input
+                  placeholder=""
+                  value={newOwnerName}
+                  onChange={(e) => setNewOwnerName(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddOwner();
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                <Input
+                  type="email"
+                  placeholder=""
+                  value={newOwnerEmail}
+                  onChange={(e) => setNewOwnerEmail(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                <Select value={newOwnerDepartment} onValueChange={setNewOwnerDepartment}>
+                  <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.isArray(departments) && departments.length > 0 ? (
+                      departments
+                        .filter((dept) => dept.visible)
+                        .map((dept) => (
+                          <SelectItem key={dept.name} value={dept.name}>
+                            {dept.name}
+                          </SelectItem>
+                        ))
+                    ) : (
+                      <SelectItem value="no-department" disabled>
+                        No departments found
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <Input
+                  placeholder=""
+                  value={newOwnerRole}
+                  onChange={(e) => setNewOwnerRole(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <Select value={newOwnerStatus} onValueChange={setNewOwnerStatus}>
+                  <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <AlertDialogFooter className="flex gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOwnerModal({ show: false });
+                setNewOwnerName('');
+                setNewOwnerEmail('');
+                setNewOwnerRole('');
+                setNewOwnerStatus('Active');
+                setNewOwnerDepartment('');
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddOwner}
+              disabled={!newOwnerName.trim() || !newOwnerEmail.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
+            >
+              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              Create User
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -46,6 +46,9 @@ import { ObjectId as EmployeeObjectId } from "mongodb";
 // --- Ledger API ---
 import { ObjectId as LedgerObjectId } from "mongodb";
 
+// --- Subscription API ---
+import { ObjectId } from "mongodb";
+
 
 import { Router } from "express";
 // @ts-ignore
@@ -633,7 +636,6 @@ router.get("/api/compliance/list", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch compliance data", error });
   }
 });
-import { ObjectId } from "mongodb";
 // Delete a compliance filing from the database
 router.delete("/api/compliance/:id", async (req, res) => {
   try {
@@ -2332,6 +2334,105 @@ router.delete("/api/company-info/:id", async (req, res) => {
     console.error("Error deleting company info:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     res.status(500).json({ message: "Failed to delete company information", error: errorMessage });
+  }
+});
+
+// --- Subscription Users Management API ---
+
+// Get users for a specific subscription
+router.get("/api/subscriptions/:id/users", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("subscriptions");
+    const { id } = req.params;
+    
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    let subscriptionId;
+    try {
+      subscriptionId = new ObjectId(id);
+    } catch {
+      return res.status(400).json({ message: "Invalid subscription ID format" });
+    }
+
+    const subscription = await collection.findOne({ _id: subscriptionId, tenantId });
+    if (!subscription) {
+      return res.status(404).json({ message: "Subscription not found or access denied" });
+    }
+
+    // Return the users array from the subscription, or empty array if none
+    res.status(200).json(subscription.users || []);
+  } catch (error: unknown) {
+    console.error("Error fetching subscription users:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to fetch subscription users", error: errorMessage });
+  }
+});
+
+// Update users for a specific subscription
+router.put("/api/subscriptions/:id/users", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("subscriptions");
+    const historyCollection = db.collection("history");
+    const { id } = req.params;
+    const { users } = req.body;
+    
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    if (!Array.isArray(users)) {
+      return res.status(400).json({ message: "Users must be an array" });
+    }
+
+    let subscriptionId;
+    try {
+      subscriptionId = new ObjectId(id);
+    } catch {
+      return res.status(400).json({ message: "Invalid subscription ID format" });
+    }
+
+    // Get the document before update
+    const oldDoc = await collection.findOne({ _id: subscriptionId, tenantId });
+    if (!oldDoc) {
+      return res.status(404).json({ message: "Subscription not found or access denied" });
+    }
+
+    // Update the subscription with the new users
+    const result = await collection.updateOne(
+      { _id: subscriptionId, tenantId },
+      { 
+        $set: { 
+          users: users,
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Subscription not found or access denied" });
+    }
+
+    // Create history record
+    await historyCollection.insertOne({
+      subscriptionId,
+      tenantId,
+      action: "update",
+      timestamp: new Date(),
+      updatedFields: { users },
+      serviceName: oldDoc.serviceName || oldDoc.name || "Unknown Service"
+    });
+
+    res.status(200).json({ message: "Subscription users updated successfully" });
+  } catch (error: unknown) {
+    console.error("Error updating subscription users:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to update subscription users", error: errorMessage });
   }
 });
 

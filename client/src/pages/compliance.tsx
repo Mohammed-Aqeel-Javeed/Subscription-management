@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Download, Upload } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import Papa from 'papaparse';
 
 // Predefined Governing Authorities
 const GOVERNING_AUTHORITIES = [
@@ -243,6 +244,7 @@ export default function Compliance() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [showSubmissionDetails, setShowSubmissionDetails] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   
   const [form, setForm] = useState({
     filingName: "",
@@ -547,6 +549,100 @@ export default function Compliance() {
     }
   });
   
+  // EXPORT current (filtered) compliance items to CSV
+  const handleExport = () => {
+    if (!filteredItems.length) {
+      toast({ title: 'No data', description: 'There are no compliance items to export', variant: 'destructive'});
+      return;
+    }
+    const rows = filteredItems.map((item: ComplianceItem) => ({
+      Policy: item.policy,
+      Category: item.category,
+      Status: item.status,
+      GoverningAuthority: item.governingAuthority || '',
+      StartDate: item.lastAudit ? new Date(item.lastAudit).toISOString().split('T')[0] : '',
+      EndDate: item.endDate ? new Date(item.endDate).toISOString().split('T')[0] : '',
+      SubmissionDeadline: item.submissionDeadline ? new Date(item.submissionDeadline).toISOString().split('T')[0] : '',
+      Frequency: item.frequency || '',
+      SubmissionDate: item.filingSubmissionDate ? new Date(item.filingSubmissionDate).toISOString().split('T')[0] : '',
+      SubmittedBy: item.submittedBy || '',
+      Amount: item.amount || '',
+      PaymentDate: item.paymentDate ? new Date(item.paymentDate).toISOString().split('T')[0] : '',
+      ReminderDays: item.reminderDays || '',
+      ReminderPolicy: item.reminderPolicy || '',
+      Remarks: item.remarks || ''
+    }));
+    const csv = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `compliance_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: 'Exported', description: 'Compliance data exported to CSV' });
+  };
+
+  const triggerImport = () => fileInputRef.current?.click();
+
+  // IMPORT from CSV -> create compliance items
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rows: any[] = results.data as any[];
+        if (!rows.length) {
+          toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive'});
+          return;
+        }
+        let success = 0; let failed = 0;
+        for (const row of rows) {
+          try {
+            const payload: any = {
+              policy: row.Policy || row.policy || '',
+              category: row.Category || row.category || '',
+              status: row.Status || row.status || 'Pending',
+              governingAuthority: row.GoverningAuthority || row.governingAuthority || '',
+              lastAudit: row.StartDate || row.startDate || new Date().toISOString().split('T')[0],
+              endDate: row.EndDate || row.endDate || '',
+              submissionDeadline: row.SubmissionDeadline || row.submissionDeadline || '',
+              frequency: row.Frequency || row.frequency || 'Monthly',
+              filingSubmissionDate: row.SubmissionDate || row.submissionDate || '',
+              submittedBy: row.SubmittedBy || row.submittedBy || '',
+              amount: row.Amount || row.amount || '',
+              paymentDate: row.PaymentDate || row.paymentDate || '',
+              reminderDays: parseInt(row.ReminderDays) || 7,
+              reminderPolicy: row.ReminderPolicy || row.reminderPolicy || 'One time',
+              remarks: row.Remarks || row.remarks || '',
+              issues: 0
+            };
+            // Basic validation
+            if (!payload.policy || !payload.category) { failed++; continue; }
+            await fetch('/api/compliance/insert', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            success++;
+          } catch (err) {
+            failed++;
+          }
+        }
+        queryClient.invalidateQueries({ queryKey: ['compliance'] });
+        toast({ title: 'Import finished', description: `Imported ${success} row(s). Failed: ${failed}` });
+        e.target.value = '';
+      },
+      error: () => {
+        toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
+      }
+    });
+  };
+
   const uniqueCategories = Array.from(new Set(complianceItems.map((item: ComplianceItem) => item.category))).filter(Boolean);
   const filteredItems = complianceItems.filter((item: ComplianceItem) => {
     const matchesSearch = item.policy?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -645,8 +741,8 @@ export default function Compliance() {
             </div>
           </div>
 
-          {/* Key Metrics Cards with Search and Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          {/* Key Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
@@ -671,21 +767,53 @@ export default function Compliance() {
               </div>
             </div>
 
-            {/* Search Bar */}
-            <div className="flex items-center">
-              <div className="relative w-full">
+            <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-purple-100">Data Management</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExport}
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
+                    >
+                      <Download className="h-3 w-3 mr-1" />
+                      Export
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={triggerImport}
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
+                    >
+                      <Upload className="h-3 w-3 mr-1" />
+                      Import
+                    </Button>
+                  </div>
+                </div>
+                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <Download className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            {/* Removed duplicate inline search and category filter to avoid duplication */}
+          </div>
+
+          {/* Search and Filters Row */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-4">
+              <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
                   placeholder="Search compliance filings..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-full border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm"
+                  className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm"
                 />
               </div>
-            </div>
-
-            {/* Category Filter */}
-            <div className="flex items-center">
+              
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
                   <SelectValue placeholder="All Categories" />
@@ -1338,8 +1466,6 @@ export default function Compliance() {
                   }
                   
                   // Save as draft logic - save the compliance item with current form data
-                  const calculatedStatus = getComplianceStatus(form.filingEndDate, form.filingSubmissionDeadline);
-                  
                   let saveData = {
                     policy: form.filingName,
                     category: form.filingComplianceCategory,
@@ -1575,6 +1701,15 @@ export default function Compliance() {
           </form>
         </DialogContent>
       </Dialog>
+      
+      {/* Hidden file input for import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImport}
+        accept=".csv"
+        style={{ display: 'none' }}
+      />
     </div>
   );
 }
