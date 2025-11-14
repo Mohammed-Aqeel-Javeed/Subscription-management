@@ -1,14 +1,16 @@
-// Payment card icon imports for configuration page
-// High-quality public icon URLs with better reliability
-const visa = 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@9/icons/visa.svg';
-const mastercard = 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@9/icons/mastercard.svg';
-const paypal = 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@9/icons/paypal.svg';
-const amex = 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@9/icons/americanexpress.svg';
-const apple_pay = 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@9/icons/applepay.svg';
-const google_pay = 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@9/icons/googlepay.svg';
-const bank = 'https://cdn.jsdelivr.net/gh/twbs/icons@main/icons/bank.svg';
-const cash = 'https://cdn.jsdelivr.net/gh/twbs/icons@main/icons/cash-coin.svg';
-const other = 'https://cdn.jsdelivr.net/gh/twbs/icons@main/icons/question-circle.svg';
+// Payment card icon imports for configuration page - LOCAL HIGH QUALITY LOGOS
+// All icons stored locally in /public/assets/payment-icons/ for offline reliability
+const visa = '/assets/payment-icons/visa.svg';
+const mastercard = '/assets/payment-icons/mastercard.svg';
+const paypal = '/assets/payment-icons/paypal.svg';
+const amex = '/assets/payment-icons/amex.svg';
+const apple_pay = '/assets/payment-icons/apple-pay.svg';
+const google_pay = '/assets/payment-icons/google-pay.svg';
+
+// Generic payment types: colorful emoji SVGs stored locally
+const bank = '/assets/payment-icons/bank.svg'; // 🏦 Bank
+const cash = '/assets/payment-icons/cash.svg'; // 💵 Banknote
+const other = '/assets/payment-icons/other.svg'; // 💳 Credit card
 
 // Additional icons shown in your image
 const user = 'https://cdn.jsdelivr.net/gh/twbs/icons@main/icons/person-circle.svg';

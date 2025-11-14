@@ -473,8 +473,18 @@ export default function Configuration() {
       .finally(() => setIsLoadingCompliance(false));
   }, []);
   
-  // Add new field and persist to backend immediately
+  // Add new field and persist to backend immediately (MAX 4 FIELDS)
   const addNewField = async () => {
+    // Check if already at maximum limit
+    if (fields.length >= 4) {
+      toast({
+        title: "Limit Reached",
+        description: "Maximum 4 fields allowed. Delete a field to add a new one.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (newFieldName.trim() && !fields.find(f => f.name.toLowerCase() === newFieldName.toLowerCase())) {
       const updatedFields = [
         ...fields,
@@ -1169,11 +1179,22 @@ export default function Configuration() {
                       </div>
                       <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                         <Button
-                          onClick={() => setAddPaymentModalOpen(true)}
+                          onClick={() => {
+                            if (paymentMethods.length >= 4) {
+                              toast({ 
+                                title: 'Limit Reached', 
+                                description: 'Maximum 4 payment methods allowed.',
+                                variant: 'destructive'
+                              });
+                              return;
+                            }
+                            setAddPaymentModalOpen(true);
+                          }}
                           className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
+                          disabled={paymentMethods.length >= 4}
                         >
                           <Plus className="w-4 h-4 mr-2" />
-                          Add Payment Method
+                          Add Payment Method {paymentMethods.length >= 4 && '(Max 4)'}
                         </Button>
                       </motion.div>
                     </div>
@@ -1194,8 +1215,12 @@ export default function Configuration() {
                           >
                             <div className="flex items-center gap-3 mb-3">
                               {iconObj ? (
-                                <div className="flex-shrink-0 p-2 bg-gray-100 rounded-lg">
-                                  <img src={iconObj.img} alt={iconObj.label} className="w-10 h-6 object-contain" />
+                                <div className="flex-shrink-0 p-3 bg-gray-100 rounded-lg min-w-[72px] min-h-[56px] flex items-center justify-center">
+                                  {method.icon === 'other' ? (
+                                    <span className="text-xs font-bold text-gray-700">OTHERS</span>
+                                  ) : (
+                                    <img src={iconObj.img} alt={iconObj.label} className="w-12 h-8 object-contain" />
+                                  )}
                                 </div>
                               ) : (
                                 <div className="w-14 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
@@ -1369,12 +1394,12 @@ export default function Configuration() {
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Card Image
                               </Label>
-                              <div className={`grid gap-3 ${isEditPaymentFullscreen ? 'grid-cols-6 lg:grid-cols-9' : 'grid-cols-6 lg:grid-cols-9'}`}>
+                              <div className={`grid gap-3 ${isEditPaymentFullscreen ? 'grid-cols-5 lg:grid-cols-9' : 'grid-cols-4 md:grid-cols-5'}`}>
                                 {iconOptions.map(opt => (
                                   <button
                                     type="button"
                                     key={opt.value}
-                                    className={`relative p-3 border-2 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 ${
+                                    className={`relative p-2 border-2 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 min-h-[60px] ${
                                       paymentForm.icon === opt.value 
                                         ? 'border-indigo-500 bg-indigo-50 shadow-lg ring-2 ring-indigo-500 ring-opacity-20' 
                                         : 'border-gray-200 hover:border-gray-300'
@@ -1382,7 +1407,13 @@ export default function Configuration() {
                                     onClick={() => setPaymentForm(f => ({ ...f, icon: opt.value }))}
                                     title={opt.label}
                                   >
-                                    <img src={opt.img} alt={opt.label} className="w-12 h-8 object-contain mx-auto" />
+                                    {opt.value === 'other' ? (
+                                      <div className="w-full h-10 flex items-center justify-center">
+                                        <span className="text-xs font-bold text-gray-700 whitespace-nowrap">OTHERS</span>
+                                      </div>
+                                    ) : (
+                                      <img src={opt.img} alt={opt.label} className="w-14 h-10 object-contain mx-auto" />
+                                    )}
                                     {paymentForm.icon === opt.value && (
                                       <div className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center">
                                         <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -1528,12 +1559,12 @@ export default function Configuration() {
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Card Image
                               </Label>
-                              <div className={`grid gap-3 ${isAddPaymentFullscreen ? 'grid-cols-6 lg:grid-cols-9' : 'grid-cols-6 lg:grid-cols-9'}`}>
+                              <div className={`grid gap-3 ${isAddPaymentFullscreen ? 'grid-cols-5 lg:grid-cols-9' : 'grid-cols-4 md:grid-cols-5'}`}>
                                 {iconOptions.map(opt => (
                                   <button
                                     type="button"
                                     key={opt.value}
-                                    className={`relative p-3 border-2 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 ${
+                                    className={`relative p-2 border-2 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 min-h-[60px] ${
                                       paymentForm.icon === opt.value 
                                         ? 'border-blue-500 bg-blue-50 shadow-lg ring-2 ring-blue-500 ring-opacity-20' 
                                         : 'border-gray-200 hover:border-gray-300'
@@ -1541,7 +1572,13 @@ export default function Configuration() {
                                     onClick={() => setPaymentForm(f => ({ ...f, icon: opt.value }))}
                                     title={opt.label}
                                   >
-                                    <img src={opt.img} alt={opt.label} className="w-12 h-8 object-contain mx-auto" />
+                                    {opt.value === 'other' ? (
+                                      <div className="w-full h-10 flex items-center justify-center">
+                                        <span className="text-xs font-bold text-gray-700 whitespace-nowrap">OTHERS</span>
+                                      </div>
+                                    ) : (
+                                      <img src={opt.img} alt={opt.label} className="w-14 h-10 object-contain mx-auto" />
+                                    )}
                                     {paymentForm.icon === opt.value && (
                                       <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                                         <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -1634,15 +1671,17 @@ export default function Configuration() {
                           onChange={(e) => setNewFieldName(e.target.value)}
                           className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
                           onKeyPress={(e) => e.key === 'Enter' && addNewField()}
+                          disabled={fields.length >= 4}
+                          placeholder={fields.length >= 4 ? "Maximum 4 fields reached" : "Enter field name"}
                         />
                         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                           <Button
                             onClick={addNewField}
-                            disabled={!newFieldName.trim()}
+                            disabled={!newFieldName.trim() || fields.length >= 4}
                             className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
                           >
                             <Plus className="w-4 h-4 mr-2" />
-                            Add Field
+                            {fields.length >= 4 ? 'Max 4 Fields' : 'Add Field'}
                           </Button>
                         </motion.div>
                       </div>

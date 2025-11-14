@@ -1,14 +1,17 @@
 // Simple monthly reminder service for sending email reminders on the 25th of every month
 // This service identifies subscriptions renewing next month and logs/emails the owners
 
+import { emailService } from './email.service.js';
+
 export class MonthlyReminderService {
   constructor(private storage: any) {} // Using any for now to avoid type issues
 
   /**
-   * Runs on the 25th of every month to send reminder emails
+   * Runs on the 5th of every month to send reminder emails
    * for subscriptions renewing next month
+   * @param specificTenantId - Optional: only process reminders for this tenant
    */
-  async sendMonthlyReminders(): Promise<{ success: boolean; message: string; data?: any }> {
+  async sendMonthlyReminders(specificTenantId?: string): Promise<{ success: boolean; message: string; data?: any }> {
     try {
       console.log('Starting monthly reminder process...');
       
@@ -19,14 +22,45 @@ export class MonthlyReminderService {
       
       console.log(`Looking for renewals between ${nextMonth.toISOString().split('T')[0]} and ${endOfNextMonth.toISOString().split('T')[0]}`);
       
-      // For now, process reminders for default tenant
-      const result = await this.processTenantReminders('default', nextMonth, endOfNextMonth);
+      // Get all tenants or use specific tenant
+      let allTenants: string[];
+      if (specificTenantId) {
+        allTenants = [specificTenantId];
+        console.log(`Processing only for specified tenant: ${specificTenantId}`);
+      } else {
+        allTenants = await this.getAllTenantIds();
+        console.log(`Found ${allTenants.length} tenants: ${allTenants.join(', ')}`);
+      }
+      
+      let totalResult = {
+        renewals: [] as any[],
+        emailsSent: 0,
+        emailResults: [] as any[],
+        debugDetails: [] as any[],
+        ownerSummaries: [] as any[]
+      };
+      
+      // Process reminders for all tenants
+      for (const tenantId of allTenants) {
+        console.log(`Processing reminders for tenant: ${tenantId}`);
+        const result = await this.processTenantReminders(tenantId, nextMonth, endOfNextMonth);
+        
+        totalResult.renewals.push(...result.renewals);
+        totalResult.emailsSent += result.emailsSent;
+        totalResult.emailResults.push(...(result.emailResults || []));
+        totalResult.ownerSummaries.push(...(result.ownerSummaries || []));
+        
+        // Send admin summary email PER TENANT (not combined)
+        if (result.ownerSummaries && result.ownerSummaries.length > 0) {
+          await this.sendAdminSummaryEmailForTenant(tenantId, result.ownerSummaries, nextMonth);
+        }
+      }
       
       console.log('Monthly reminder process completed');
       return {
         success: true,
         message: 'Monthly reminders processed successfully',
-        data: result
+        data: totalResult
       };
     } catch (error: any) {
       console.error('Error in monthly reminder process:', error);
@@ -37,26 +71,59 @@ export class MonthlyReminderService {
     }
   }
 
+  private async getAllTenantIds(): Promise<string[]> {
+    try {
+      // Dynamically fetch all unique tenant IDs from subscriptions collection
+      const db = await this.storage['getDb']();
+      const tenants = await db.collection('subscriptions')
+        .distinct('tenantId', { isActive: true });
+      
+      console.log(`Found ${tenants.length} active tenants: ${tenants.join(', ')}`);
+      return tenants.filter((t: any) => t); // Filter out null/undefined
+    } catch (error) {
+      console.error('Error fetching tenant IDs:', error);
+      // Fallback to known tenant if dynamic fetch fails
+      return ['tenant-3ylxgng5x-1755678829258'];
+    }
+  }
+
   private async processTenantReminders(tenantId: string, startDate: Date, endDate: Date): Promise<any> {
     try {
+      console.log(`\n=== Processing tenant: ${tenantId} ===`);
+      
       // Get all subscriptions for this tenant that renew next month
       const subscriptions = await this.storage.getSubscriptions(tenantId);
+      console.log(`Found ${subscriptions.length} total subscriptions for tenant ${tenantId}`);
+      
+      if (subscriptions.length > 0) {
+        console.log('Subscription details:');
+        subscriptions.forEach((sub: any, index: number) => {
+          console.log(`  ${index + 1}. ${sub.serviceName} - Next Renewal: ${sub.nextRenewal} (${new Date(sub.nextRenewal).toLocaleDateString()})`);
+        });
+      }
       
       const nextMonthRenewals = subscriptions.filter((sub: any) => {
-        if (!sub.nextRenewal) return false;
+        if (!sub.nextRenewal) {
+          console.log(`  Skipping ${sub.serviceName} - no nextRenewal date`);
+          return false;
+        }
         const renewalDate = new Date(sub.nextRenewal);
-        return renewalDate >= startDate && renewalDate <= endDate;
+        const inRange = renewalDate >= startDate && renewalDate <= endDate;
+        console.log(`  ${sub.serviceName}: ${renewalDate.toLocaleDateString()} - ${inRange ? 'INCLUDED' : 'excluded'} (range: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()})`);
+        return inRange;
       });
 
+      console.log(`Found ${nextMonthRenewals.length} renewals for tenant ${tenantId} in date range`);
+
       if (nextMonthRenewals.length === 0) {
-        console.log(`No renewals found for tenant ${tenantId} next month`);
+        console.log(`No renewals found for tenant ${tenantId} next month\n`);
         return { renewals: [], emailsSent: 0 };
       }
 
       console.log(`Found ${nextMonthRenewals.length} renewals for tenant ${tenantId}`);
 
-      // Group subscriptions by owner
-      const subscriptionsByOwner = this.groupSubscriptionsByOwner(nextMonthRenewals);
+      // Group subscriptions by owner (pass tenantId for proper lookup)
+      const subscriptionsByOwner = await this.groupSubscriptionsByOwner(nextMonthRenewals, tenantId);
 
       const emailResults = [];
       const owners = Array.from(subscriptionsByOwner.entries());
@@ -74,10 +141,25 @@ export class MonthlyReminderService {
       // Create monthly reminder records for tracking
       await this.createMonthlyReminderRecords(tenantId, nextMonthRenewals);
 
+      // Create owner summaries for admin email
+      const ownerSummaries = [];
+      const ownerEntries = Array.from(subscriptionsByOwner.entries());
+      
+      for (const [ownerEmail, ownerSubscriptions] of ownerEntries) {
+        const ownerName = ownerSubscriptions[0]?.owner || this.extractNameFromEmail(ownerEmail);
+        
+        ownerSummaries.push({
+          ownerEmail,
+          ownerName,
+          subscriptions: ownerSubscriptions
+        });
+      }
+
       return {
         renewals: nextMonthRenewals,
         emailsSent: emailResults.length,
-        emailResults
+        emailResults,
+        ownerSummaries
       };
 
     } catch (error) {
@@ -86,27 +168,31 @@ export class MonthlyReminderService {
     }
   }
 
-  private groupSubscriptionsByOwner(subscriptions: any[]): Map<string, any[]> {
+  private async groupSubscriptionsByOwner(subscriptions: any[], tenantId: string): Promise<Map<string, any[]>> {
     const grouped = new Map<string, any[]>();
     
     for (const subscription of subscriptions) {
       // Try to get owner email
       let ownerEmail = '';
+      // Prefer explicit ownerEmail if present
+      if (subscription.ownerEmail && this.isValidEmail(subscription.ownerEmail)) {
+        ownerEmail = subscription.ownerEmail;
+      }
       
-      if (subscription.owner) {
-        // If owner is an email address
+      if (!ownerEmail && subscription.owner) {
+        // If owner is an email address, use it directly
         if (this.isValidEmail(subscription.owner)) {
           ownerEmail = subscription.owner;
         } else {
-          // For now, skip non-email owners - you can enhance this to lookup employee emails
-          console.log(`Owner '${subscription.owner}' is not an email address for subscription: ${subscription.serviceName}`);
-          continue;
+          // If owner is a name, lookup email from employees in the same tenant
+          ownerEmail = await this.getEmployeeEmailByName(subscription.owner, tenantId);
+          console.log(`Looking up email for owner "${subscription.owner}" in tenant ${tenantId}: ${ownerEmail || 'not found'}`);
         }
       }
       
-      // Skip if no owner email
+      // Skip if no owner email found
       if (!ownerEmail) {
-        console.log(`No owner email found for subscription: ${subscription.serviceName}`);
+        console.log(`No owner email found for subscription: ${subscription.serviceName} (owner: ${subscription.owner})`);
         continue;
       }
       
@@ -119,9 +205,46 @@ export class MonthlyReminderService {
     return grouped;
   }
 
+  private async getEmployeeEmailByName(employeeName: string, tenantId?: string): Promise<string> {
+    try {
+      // Get employees from the database for the specific tenant
+      console.log(`Looking up email for employee: "${employeeName}" in tenant: ${tenantId || 'unknown'}`);
+      
+      if (!tenantId) {
+        console.log('❌ No tenant ID provided for employee lookup');
+        return '';
+      }
+      
+      let employees = await this.storage.getUsers(tenantId);
+      console.log(`Found ${employees.length} employees in tenant ${tenantId}`);
+      
+      // Log all employees for debugging
+      employees.forEach((emp: any) => {
+        console.log(`  Employee: "${emp.name}" → ${emp.email}`);
+      });
+      
+      // Find employee by name (case-insensitive)
+      const employee = employees.find((emp: any) => 
+        emp.name && emp.name.toLowerCase().trim() === employeeName.toLowerCase().trim()
+      );
+      
+      if (employee && employee.email) {
+        console.log(`✅ Found email for "${employeeName}": ${employee.email}`);
+        return employee.email;
+      }
+      
+      console.log(`❌ Employee "${employeeName}" not found in any tenant`);
+      return '';
+    } catch (error) {
+      console.error(`Error looking up employee email for "${employeeName}":`, error);
+      return '';
+    }
+  }
+
   private async prepareReminderEmail(ownerEmail: string, subscriptions: any[], nextMonth: Date): Promise<any> {
     try {
-      const ownerName = this.extractNameFromEmail(ownerEmail);
+      // Get actual owner name from subscription data, or extract from email
+      const ownerName = subscriptions[0]?.owner || this.extractNameFromEmail(ownerEmail);
       const monthName = nextMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
       
       const emailData = {
@@ -135,14 +258,15 @@ export class MonthlyReminderService {
           currency: sub.currency || 'USD',
           nextRenewal: sub.nextRenewal,
           billingCycle: sub.billingCycle || 'Monthly',
-          category: sub.category
+          category: sub.category,
+          departments: sub.departments || []
         })),
         totalAmount: subscriptions.reduce((total, sub) => total + (parseFloat(sub.amount || 0)), 0),
         totalCount: subscriptions.length
       };
 
-      // For now, just log the email data - you can integrate with actual email service later
-      console.log(`\n📧 REMINDER EMAIL TO: ${ownerEmail}`);
+      // Send actual email using email service
+      console.log(`\n📧 SENDING REMINDER EMAIL TO: ${ownerEmail}`);
       console.log(`Subject: 📅 Subscription Renewals for ${monthName}`);
       console.log(`Subscriptions (${emailData.totalCount}):`);
       
@@ -150,14 +274,35 @@ export class MonthlyReminderService {
         console.log(`  ${index + 1}. ${sub.serviceName} - ${sub.currency} ${sub.amount} (${new Date(sub.nextRenewal).toLocaleDateString()})`);
       });
       
-      console.log(`Total Estimated Amount: ${emailData.subscriptions[0]?.currency || 'USD'} ${emailData.totalAmount.toFixed(2)}\n`);
+      console.log(`Total Estimated Amount: ${emailData.subscriptions[0]?.currency || 'USD'} ${emailData.totalAmount.toFixed(2)}`);
+
+      // Generate HTML email content
+      const htmlContent = emailService.generateReminderEmailHTML(
+        emailData.subscriptions,
+        ownerName,
+        monthName
+      );
+
+      // Send the actual email
+      const emailSent = await emailService.sendEmail({
+        to: ownerEmail,
+        subject: `📅 Subscription Renewals for ${monthName}`,
+        html: htmlContent
+      });
+
+      if (emailSent) {
+        console.log(`✅ Email sent successfully to ${ownerEmail}\n`);
+      } else {
+        console.log(`❌ Failed to send email to ${ownerEmail}\n`);
+      }
 
       return {
         success: true,
         ownerEmail,
         subscriptionCount: emailData.totalCount,
         totalAmount: emailData.totalAmount,
-        emailData
+        emailData,
+        emailSent: emailSent
       };
     } catch (error: any) {
       console.error(`Error preparing reminder email for ${ownerEmail}:`, error);
@@ -174,11 +319,11 @@ export class MonthlyReminderService {
       for (const subscription of subscriptions) {
         const reminderData = {
           subscriptionId: subscription.id,
-          alertDays: 30, // Sent ~30 days before (since we send on 25th for next month)
+          alertDays: 30, // Sent ~30 days before (since we send on 10th for next month)
           emailEnabled: true,
           whatsappEnabled: false,
           reminderType: 'monthly_recurring',
-          monthlyDay: 25
+         monthlyDay: 11
         };
 
         await this.storage.createReminder(reminderData, tenantId);
@@ -199,28 +344,135 @@ export class MonthlyReminderService {
   }
 
   /**
-   * Check if today is the 25th and run reminders if so
+   * Send admin summary email with owner reminders for a specific tenant
+   */
+  private async sendAdminSummaryEmailForTenant(tenantId: string, ownerSummaries: any[], nextMonth: Date): Promise<void> {
+    try {
+      if (ownerSummaries.length === 0) {
+        console.log(`No subscriptions to include in admin summary for tenant ${tenantId}.`);
+        return;
+      }
+
+      // Get admin users from THIS TENANT ONLY
+      const adminEmails = await this.getAdminEmailsForTenant(tenantId);
+      
+      if (adminEmails.length === 0) {
+        console.log(`❌ No admin users found for tenant ${tenantId}. Skipping admin summary email.`);
+        console.log('💡 Tip: Add users with role="admin" in the Users section to receive admin summaries.');
+        return;
+      }
+
+      const monthName = nextMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const totalCount = ownerSummaries.reduce((sum, owner) => sum + owner.subscriptions.length, 0);
+
+      console.log(`\n📧 SENDING ADMIN SUMMARY EMAIL FOR TENANT: ${tenantId}`);
+      console.log(`Admin emails: ${adminEmails.join(', ')}`);
+      console.log(`Total owners: ${ownerSummaries.length}`);
+      console.log(`Total subscriptions: ${totalCount}`);
+
+      // Generate HTML email content for admin
+      const htmlContent = emailService.generateAdminSummaryEmailHTML(
+        ownerSummaries,
+        totalCount,
+        monthName
+      );
+
+      // Send email to all admins in this tenant
+      let successCount = 0;
+      for (const adminEmail of adminEmails) {
+        const emailSent = await emailService.sendEmail({
+          to: adminEmail,
+          subject: `📊 Admin Summary - ${totalCount} Subscriptions Renewing in ${monthName}`,
+          html: htmlContent
+        });
+
+        if (emailSent) {
+          console.log(`✅ Admin summary email sent successfully to ${adminEmail}`);
+          successCount++;
+        } else {
+          console.log(`❌ Failed to send admin summary email to ${adminEmail}`);
+        }
+      }
+
+      console.log(`\n📊 Admin Summary for ${tenantId}: ${successCount}/${adminEmails.length} emails sent successfully\n`);
+    } catch (error: any) {
+      console.error(`Error sending admin summary email for tenant ${tenantId}:`, error);
+    }
+  }
+
+  /**
+   * Get admin user emails for a specific tenant
+   */
+  private async getAdminEmailsForTenant(tenantId: string): Promise<string[]> {
+    try {
+      const adminEmails: string[] = [];
+      
+      // Fetch admin users from this tenant only
+      const users = await this.storage.getUsers(tenantId);
+      
+      // Filter users with admin role
+      const adminUsers = users.filter((user: any) => 
+        user.role === 'admin' && user.email && this.isValidEmail(user.email)
+      );
+      
+      // Add their emails to the list
+      adminUsers.forEach((user: any) => {
+        if (!adminEmails.includes(user.email)) {
+          adminEmails.push(user.email);
+        }
+      });
+      
+      return adminEmails;
+    } catch (error) {
+      console.error(`Error getting admin emails for tenant ${tenantId}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Check if today is the 10th and run reminders if so
    */
   async checkAndRunDailyReminders(): Promise<{ shouldRun: boolean; result?: any }> {
     const today = new Date();
     const dayOfMonth = today.getDate();
     
-    if (dayOfMonth === 25) {
-      console.log('Today is the 25th - running monthly reminders');
+    if (dayOfMonth === 13) {
+      console.log('Today is the 13th - running monthly reminders');
       const result = await this.sendMonthlyReminders();
       return { shouldRun: true, result };
     } else {
-      console.log(`Today is the ${dayOfMonth}th - monthly reminders run on the 25th`);
+      console.log(`Today is the ${dayOfMonth}th - monthly reminders run on the 13th`);
       return { shouldRun: false };
     }
   }
 
   /**
    * Manual trigger for testing or admin use
+   * @param specificTenantId - Optional: only process reminders for this tenant
    */
-  async triggerManualReminders(): Promise<any> {
+  async triggerManualReminders(specificTenantId?: string): Promise<any> {
     console.log('Manually triggering monthly reminders (ignoring date)');
-    return await this.sendMonthlyReminders();
+    if (specificTenantId) {
+      console.log(`Processing only for tenant: ${specificTenantId}`);
+    }
+    
+    // Add debug information to the response
+    const debugInfo = {
+      currentDate: new Date().toISOString(),
+      specificTenant: specificTenantId || 'all tenants',
+      dateRange: {
+        nextMonthStart: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(),
+        nextMonthEnd: new Date(new Date().getFullYear(), new Date().getMonth() + 2, 0).toISOString()
+      }
+    };
+    
+    const result = await this.sendMonthlyReminders(specificTenantId);
+    
+    // Add debug info to result
+    return {
+      ...result,
+      debugInfo
+    };
   }
 }
 

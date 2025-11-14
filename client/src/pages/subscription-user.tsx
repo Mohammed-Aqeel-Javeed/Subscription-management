@@ -60,6 +60,7 @@ export default function SubscriptionUserPage() {
   const [searchLeft, setSearchLeft] = useState("");
   const [searchRight, setSearchRight] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [showTeamMembers, setShowTeamMembers] = useState(false);
 
   // On initial mount, set selectedUsers from backend
   useEffect(() => {
@@ -235,7 +236,7 @@ export default function SubscriptionUserPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-[100rem] mx-auto px-4">
         {/* Header */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
@@ -251,30 +252,27 @@ export default function SubscriptionUserPage() {
           </p>
         </motion.div>
 
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Team Members Panel (will appear second on large screens) */}
+        <div className={`grid gap-6 ${showTeamMembers ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+          {/* Users in Subscription Panel (always visible on left) */}
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="flex-1 bg-white rounded-2xl shadow-xl overflow-hidden order-2 lg:order-2"
+            className="w-full bg-white rounded-2xl shadow-xl overflow-hidden"
           >
-            <div className="p-6 border-b border-gray-200">
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-gray-800">
-                  {COMPANY_NAME}'s Team Members
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Users in <span className="text-indigo-600">{subscriptionName}</span>
                 </h2>
-                <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                  {availableEmployees.length} available
-                </Badge>
               </div>
               <div className="flex gap-3">
                 <div className="relative flex-1">
                   <Input
-                    placeholder="Search team members..."
-                    value={searchLeft}
-                    onChange={(e) => setSearchLeft(e.target.value)}
-                    className="pl-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
+                    placeholder=""
+                    value={searchRight}
+                    onChange={(e) => setSearchRight(e.target.value)}
+                    className="pl-10 h-11 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm"
                   />
                   <svg 
                     className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" 
@@ -291,172 +289,276 @@ export default function SubscriptionUserPage() {
                     />
                   </svg>
                 </div>
-                <Button
-                  onClick={handleAddAll}
-                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={availableEmployees.length === 0}
-                >
-                  Add All
-                </Button>
+                {!showTeamMembers ? (
+                  <Button
+                    onClick={() => setShowTeamMembers(true)}
+                    className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 h-11 px-6"
+                  >
+                    <svg 
+                      className="w-5 h-5 mr-2" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24" 
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M12 6v6m0 0v6m0-6h6m-6 0H6" 
+                      />
+                    </svg>
+                    Add Team Member
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleRemoveAll}
+                    className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed h-11 px-6"
+                    disabled={selectedUsers.length === 0}
+                  >
+                    Remove All
+                  </Button>
+                )}
               </div>
             </div>
             
-            <div className="p-4 max-h-[500px] overflow-y-auto">
-              {employeesLoading ? (
-                <div className="flex justify-center items-center h-64">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            <div className="overflow-hidden max-h-[600px] overflow-y-auto">
+              {filteredSelectedUsers.length > 0 ? (
+                <div className="w-full">
+                  <table className="w-full table-fixed">
+                    <thead className="bg-gray-50 border-b-2 border-gray-200 sticky top-0 z-10">
+                      <tr>
+                        <th className="w-[30%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">User</th>
+                        <th className="w-[30%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
+                        <th className="w-[20%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Department</th>
+                        <th className="w-[20%] px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      <AnimatePresence>
+                        {filteredSelectedUsers.map((user, index) => (
+                          <motion.tr
+                            key={user.id || user._id}
+                            variants={itemVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            layout
+                            className="hover:bg-indigo-50 transition-colors duration-150"
+                            style={{ 
+                              transitionDelay: `${index * 30}ms` 
+                            }}
+                          >
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
+                                  {user.name?.split(" ").map((n: string) => n[0]).join("").toUpperCase()}
+                                </div>
+                                <div className="font-medium text-gray-900 truncate">{user.name || 'Unnamed'}</div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-gray-600 truncate">{user.email || '—'}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {user.department ? (
+                                <Badge className="bg-indigo-100 text-indigo-800 hover:bg-indigo-200 font-medium">
+                                  {user.department}
+                                </Badge>
+                              ) : (
+                                <span className="text-sm text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                              <Button
+                                onClick={() => handleRemoveUser(user)}
+                                size="sm"
+                                className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-200 transform hover:scale-105"
+                              >
+                                Remove
+                              </Button>
+                            </td>
+                          </motion.tr>
+                        ))}
+                      </AnimatePresence>
+                    </tbody>
+                  </table>
                 </div>
               ) : (
                 <motion.div 
-                  variants={containerVariants}
+                  variants={itemVariants}
                   initial="hidden"
                   animate="visible"
-                  className="space-y-3"
+                  className="text-center py-16"
                 >
-                  <AnimatePresence>
-                    {availableEmployees.length > 0 ? (
-                      availableEmployees.map((emp) => (
-                        <motion.div
-                          key={emp.id || emp._id}
-                          variants={itemVariants}
-                          layout
-                          exit="exit"
-                          className="flex items-center justify-between bg-gray-50 hover:bg-indigo-50 rounded-xl px-4 py-3 transition-colors duration-200 border border-gray-200"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
-                              {emp.name?.split(" ").map((n: string) => n[0]).join("")}
-                            </div>
-                            <div>
-                              <span className="text-lg font-medium text-gray-800">{emp.name}</span>
-                              <div className="text-sm text-gray-500">
-                                {emp.email && <div>{emp.email}</div>}
-                                {emp.department && <div className="text-indigo-600 font-medium">{emp.department}</div>}
-                                {!emp.email && !emp.department && <div>Team Member</div>}
-                              </div>
-                            </div>
-                          </div>
-                          <Button
-                            onClick={() => handleAddUser(emp)}
-                            className="bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-500 hover:to-emerald-600 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105"
-                          >
-                            Add
-                          </Button>
-                        </motion.div>
-                      ))
-                    ) : (
-                      <motion.div 
-                        variants={itemVariants}
-                        className="text-center py-12"
-                      >
-                        <div className="text-gray-400 mb-2">No team members found</div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  <svg className="mx-auto h-16 w-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <p className="text-gray-400 text-lg font-medium">No users added yet</p>
+                  <p className="text-gray-400 text-sm mt-1">Click "Add Team Member" to get started</p>
                 </motion.div>
               )}
             </div>
           </motion.div>
 
-          {/* Users in Subscription Panel (will appear first on large screens) */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-            className="flex-1 bg-white rounded-2xl shadow-xl overflow-hidden order-1 lg:order-1"
-          >
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-gray-800">
-                  Users in <span className="text-indigo-600">{subscriptionName}</span>
-                </h2>
-                <Badge variant="secondary" className="bg-purple-100 text-purple-800">
-                  {selectedUsers.length} added
-                </Badge>
-              </div>
-              <div className="flex gap-3">
-                <div className="relative flex-1">
-                  <Input
-                    placeholder="Search added users..."
-                    value={searchRight}
-                    onChange={(e) => setSearchRight(e.target.value)}
-                    className="pl-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
-                  />
-                  <svg 
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24" 
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                      strokeWidth={2} 
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
-                    />
-                  </svg>
-                </div>
-                <Button
-                  onClick={handleRemoveAll}
-                  className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={selectedUsers.length === 0}
-                >
-                  Remove All
-                </Button>
-              </div>
-            </div>
-            
-            <div className="p-4 max-h-[500px] overflow-y-auto">
+          {/* Team Members Panel (conditionally shown on right) */}
+          <AnimatePresence>
+            {showTeamMembers && (
               <motion.div 
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="space-y-3"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.5 }}
+                className="w-full bg-white rounded-2xl shadow-xl overflow-hidden"
               >
-                <AnimatePresence>
-                  {filteredSelectedUsers.length > 0 ? (
-                    filteredSelectedUsers.map((user) => (
-                      <motion.div
-                        key={user.id || user._id}
-                        variants={itemVariants}
-                        layout
-                        exit="exit"
-                        className="flex items-center justify-between bg-gray-50 hover:bg-purple-50 rounded-xl px-4 py-3 transition-colors duration-200 border border-gray-200"
+                <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-emerald-50 to-green-50">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      {COMPANY_NAME}'s Team Members
+                    </h2>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowTeamMembers(false)}
+                      className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full h-8 w-8 p-0"
+                    >
+                      <svg 
+                        className="w-5 h-5" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24" 
+                        xmlns="http://www.w3.org/2000/svg"
                       >
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
-                            {user.name?.split(" ").map((n: string) => n[0]).join("")}
-                          </div>
-                          <div>
-                            <span className="text-lg font-medium text-gray-800">{user.name}</span>
-                            <div className="text-sm text-gray-500">
-                              {user.email && <div>{user.email}</div>}
-                              {user.department && <div className="text-indigo-600 font-medium">{user.department}</div>}
-                              {!user.email && !user.department && <div>Team Member</div>}
-                            </div>
-                          </div>
-                        </div>
-                        <Button
-                          onClick={() => handleRemoveUser(user)}
-                          className="bg-gradient-to-r from-red-400 to-rose-500 hover:from-red-500 hover:to-rose-600 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105"
-                        >
-                          Remove
-                        </Button>
-                      </motion.div>
-                    ))
+                        <path 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                          strokeWidth={2} 
+                          d="M6 18L18 6M6 6l12 12" 
+                        />
+                      </svg>
+                    </Button>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="relative flex-1">
+                      <Input
+                        placeholder=""
+                        value={searchLeft}
+                        onChange={(e) => setSearchLeft(e.target.value)}
+                        className="pl-10 h-11 border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 rounded-lg shadow-sm"
+                      />
+                      <svg 
+                        className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24" 
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                          strokeWidth={2} 
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
+                        />
+                      </svg>
+                    </div>
+                    <Button
+                      onClick={handleAddAll}
+                      className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed h-11 px-6"
+                      disabled={availableEmployees.length === 0}
+                    >
+                      Add All
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="overflow-hidden max-h-[600px] overflow-y-auto">
+                  {employeesLoading ? (
+                    <div className="flex justify-center items-center h-64">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+                    </div>
+                  ) : availableEmployees.length > 0 ? (
+                    <div className="w-full">
+                      <table className="w-full table-fixed">
+                        <thead className="bg-gray-50 border-b-2 border-gray-200 sticky top-0 z-10">
+                          <tr>
+                            <th className="w-[30%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Team Member</th>
+                            <th className="w-[30%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
+                            <th className="w-[20%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Department</th>
+                            <th className="w-[20%] px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          <AnimatePresence>
+                            {availableEmployees.map((emp, index) => (
+                              <motion.tr
+                                key={emp.id || emp._id}
+                                variants={itemVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                layout
+                                className="hover:bg-emerald-50 transition-colors duration-150"
+                                style={{ 
+                                  transitionDelay: `${index * 30}ms` 
+                                }}
+                              >
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
+                                      {emp.name?.split(" ").map((n: string) => n[0]).join("").toUpperCase()}
+                                    </div>
+                                    <div className="font-medium text-gray-900 truncate">{emp.name || 'Unnamed'}</div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="text-sm text-gray-600 truncate">{emp.email || '—'}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  {emp.department ? (
+                                    <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium">
+                                      {emp.department}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-sm text-gray-400">—</span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <Button
+                                    onClick={() => handleAddUser(emp)}
+                                    size="sm"
+                                    className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-semibold shadow-md transition-all duration-200 transform hover:scale-105"
+                                  >
+                                    Add
+                                  </Button>
+                                </td>
+                              </motion.tr>
+                            ))}
+                          </AnimatePresence>
+                        </tbody>
+                      </table>
+                    </div>
                   ) : (
                     <motion.div 
                       variants={itemVariants}
-                      className="text-center py-12"
+                      initial="hidden"
+                      animate="visible"
+                      className="text-center py-16"
                     >
-                      <div className="text-gray-400 mb-2">No users added yet</div>
+                      <svg className="mx-auto h-16 w-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      <p className="text-gray-400 text-lg font-medium">
+                        {searchLeft ? 'No team members found' : 'All team members have been added'}
+                      </p>
+                      <p className="text-gray-400 text-sm mt-1">
+                        {searchLeft ? 'Try adjusting your search terms' : 'Great! Everyone is included'}
+                      </p>
                     </motion.div>
                   )}
-                </AnimatePresence>
+                </div>
               </motion.div>
-            </div>
-          </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Bottom buttons */}

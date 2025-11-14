@@ -1269,7 +1269,10 @@ router.get("/api/company/departments", async (req, res) => {
     const departments = items
       .filter(item => typeof item.name === "string" && item.name.trim())
       .map(item => ({
+        _id: item._id,
         name: item.name,
+        departmentHead: item.departmentHead || "",
+        email: item.email || "",
         visible: typeof item.visible === "boolean" ? item.visible : true
       }));
     res.status(200).json(departments);
@@ -1283,25 +1286,87 @@ router.post("/api/company/departments", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
-    let { name } = req.body;
+    let { name, departmentHead, email } = req.body;
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Department name required" });
     }
     name = name.trim();
-    // Prevent duplicate department names
-    const exists = await collection.findOne({ name });
-    if (exists) {
-      return res.status(409).json({ message: "Department already exists" });
+    
+    // Validate departmentHead if provided
+    if (departmentHead && typeof departmentHead !== "string") {
+      return res.status(400).json({ message: "Invalid department head" });
     }
+    departmentHead = departmentHead?.trim() || "";
+    
+    // Validate email if provided
+    if (email && typeof email !== "string") {
+      return res.status(400).json({ message: "Invalid email" });
+    }
+    email = email?.trim() || "";
+    
     // Multi-tenancy: set tenantId
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    const result = await collection.insertOne({ name, visible: true, tenantId });
+    
+    // Prevent duplicate department names within the same tenant
+    const exists = await collection.findOne({ name, tenantId });
+    if (exists) {
+      return res.status(409).json({ message: "Department already exists" });
+    }
+    const result = await collection.insertOne({ 
+      name, 
+      departmentHead, 
+      email, 
+      visible: true, 
+      tenantId 
+    });
+    
     res.status(201).json({ insertedId: result.insertedId });
   } catch (error) {
     res.status(500).json({ message: "Failed to add department", error });
+  }
+});
+
+// Update department (name, departmentHead, email)
+router.put("/api/company/departments/:id", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("departments");
+    const { id } = req.params;
+    const { name, departmentHead, email } = req.body;
+    
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ message: "Department name required" });
+    }
+    
+    // Validate departmentHead if provided
+    const validDepartmentHead = typeof departmentHead === "string" ? departmentHead.trim() : "";
+    
+    // Validate email if provided
+    const validEmail = typeof email === "string" ? email.trim() : "";
+    
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    
+    // Get the old department data to check if email/head changed
+    const oldDepartment = await collection.findOne({ _id: new (require('mongodb').ObjectId)(id), tenantId });
+    
+    const result = await collection.updateOne(
+      { _id: new (require('mongodb').ObjectId)(id), tenantId },
+      { $set: { name: name.trim(), departmentHead: validDepartmentHead, email: validEmail } }
+    );
+    
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+    
+    res.status(200).json({ message: "Department updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update department", error });
   }
 });
 
