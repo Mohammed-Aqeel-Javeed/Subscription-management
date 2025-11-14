@@ -119,13 +119,13 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     }
   };
 
-  // Run reminder check immediately on startup (in case server restarted on the 7th)
+  // Run reminder check immediately on startup (in case server restarted on the 13th)
   checkMonthlyReminders();
   
   // Schedule reminder check to run every 24 hours
-  // This will automatically send emails on the 7th of each month
+  // This will automatically send emails on the 13th of each month
   setInterval(checkMonthlyReminders, 24 * 60 * 60 * 1000);
-  log("Monthly reminder scheduler initialized - will check daily at server startup time", "reminders");
+  log("Monthly reminder scheduler initialized - will send on 13th of each month", "reminders");
 
   // Schedule automatic yearly reminder checks
   const { YearlyReminderService } = await import("./yearly-reminder.service.js");
@@ -236,8 +236,26 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     }
   };
 
-  // Send department head notifications on startup
-  sendDepartmentHeadNotifications();
+  // Check if today is the 13th and send department head notifications
+  const checkAndSendDepartmentNotifications = async () => {
+    const today = new Date();
+    const dayOfMonth = today.getDate();
+    
+    if (dayOfMonth === 13) {
+      log("Today is the 13th - sending department head notifications", "departments");
+      await sendDepartmentHeadNotifications();
+    } else {
+      log(`Today is the ${dayOfMonth}th - department head notifications run on the 13th`, "departments");
+    }
+  };
+
+  // Run department notification check immediately on startup (if it's the 13th)
+  checkAndSendDepartmentNotifications();
+  
+  // Schedule department notification check to run every 24 hours at midnight
+  // This will check daily and send on the 13th of each month
+  setInterval(checkAndSendDepartmentNotifications, 24 * 60 * 60 * 1000);
+  log("Department head notification scheduler initialized - will send on 13th of each month", "departments");
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
