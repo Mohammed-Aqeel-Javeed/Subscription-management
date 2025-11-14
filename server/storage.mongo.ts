@@ -142,7 +142,10 @@ export class MongoStorage implements IStorage {
         vendor: s.vendor || "",
         amount: s.amount?.toString() ?? "0",
         billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
+        commitmentCycle: s.commitmentCycle || null,
+        paymentFrequency: s.paymentFrequency || null,
         category: s.category && s.category !== "" ? s.category : "Software",
+        departments: s.departments || [],
         startDate: s.startDate ? new Date(s.startDate) : new Date(),
         nextRenewal: s.nextRenewal ? new Date(s.nextRenewal) : new Date(),
         status: s.status && s.status !== "" ? s.status : "Active",
@@ -151,8 +154,10 @@ export class MongoStorage implements IStorage {
         notes: s.notes || null,
         isActive: typeof s.isActive === 'boolean' ? s.isActive : true,
         createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
-        updatedBy: s.updatedBy || null
-      }));
+        updatedBy: s.updatedBy || null,
+        owner: s.owner || null,  // Add the owner field
+        ownerEmail: s.ownerEmail || null
+      } as any));
   }
 
   async getSubscription(id: string, tenantId: string): Promise<Subscription | undefined> {
@@ -168,7 +173,10 @@ export class MongoStorage implements IStorage {
         vendor: subscription.vendor || "",
         amount: subscription.amount?.toString() ?? "0",
         billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
+        commitmentCycle: subscription.commitmentCycle || null,
+        paymentFrequency: subscription.paymentFrequency || null,
         category: subscription.category && subscription.category !== "" ? subscription.category : "Software",
+        departments: subscription.departments || [],
         startDate: subscription.startDate ? new Date(subscription.startDate) : new Date(),
         nextRenewal: subscription.nextRenewal ? new Date(subscription.nextRenewal) : new Date(),
         status: subscription.status && subscription.status !== "" ? subscription.status : "Active",
@@ -177,8 +185,10 @@ export class MongoStorage implements IStorage {
         notes: subscription.notes || null,
         isActive: typeof subscription.isActive === 'boolean' ? subscription.isActive : true,
         createdAt: subscription.createdAt ? new Date(subscription.createdAt) : new Date(),
-        updatedBy: subscription.updatedBy || null
-      };
+        updatedBy: subscription.updatedBy || null,
+        owner: subscription.owner || null,  // Add the owner field
+        ownerEmail: subscription.ownerEmail || null
+      } as any;
   }
 
   async createSubscription(subscription: InsertSubscription, tenantId: string): Promise<Subscription> {
@@ -224,7 +234,9 @@ export class MongoStorage implements IStorage {
         notes: doc.notes || null,
         isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
         createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
-        updatedBy: doc.updatedBy || null
+        updatedBy: doc.updatedBy || null,
+        owner: doc.owner || null,
+        ownerEmail: doc.ownerEmail || null
       };
   }
 
@@ -261,7 +273,9 @@ export class MongoStorage implements IStorage {
           notes: doc.notes || null,
           isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
           createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
-          updatedBy: doc.updatedBy || null
+          updatedBy: doc.updatedBy || null,
+          owner: doc.owner || null,
+          ownerEmail: doc.ownerEmail || null
         };
   }
 

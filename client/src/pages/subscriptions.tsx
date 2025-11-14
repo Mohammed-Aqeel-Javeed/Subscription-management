@@ -47,6 +47,7 @@ export default function Subscriptions() {
   const [vendorFilter, setVendorFilter] = useState("all");
   const initialIsCancelledView = location.pathname.includes('cancelled');
   const [statusFilter, setStatusFilter] = useState(initialIsCancelledView ? "Cancelled" : "all");
+  const [metricsFilter, setMetricsFilter] = useState<"all" | "active" | "trail" | "draft" | "cancelled">("all");
   React.useEffect(() => {
     if (location.pathname.includes('cancelled')) {
       setStatusFilter('Cancelled');
@@ -284,7 +285,20 @@ export default function Subscriptions() {
     const matchesCategory = categoryFilter === "all" || sub.category === categoryFilter;
     const matchesVendor = vendorFilter === "all" || sub.vendor === vendorFilter;
     const matchesStatus = statusFilter === "all" || sub.status === statusFilter;
-    return matchesSearch && matchesCategory && matchesVendor && matchesStatus;
+    
+    // Apply metrics filter
+    let matchesMetrics = true;
+    if (metricsFilter === "active") {
+      matchesMetrics = sub.status === "Active" && sub.billingCycle !== "trail";
+    } else if (metricsFilter === "trail") {
+      matchesMetrics = sub.billingCycle === "trail";
+    } else if (metricsFilter === "draft") {
+      matchesMetrics = sub.status === "Draft";
+    } else if (metricsFilter === "cancelled") {
+      matchesMetrics = sub.status === "Cancelled";
+    }
+    
+    return matchesSearch && matchesCategory && matchesVendor && matchesStatus && matchesMetrics;
   }) : [];
   
   const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.category) : []));
@@ -343,10 +357,10 @@ export default function Subscriptions() {
   
   // --- Summary Stats Section ---
   const total = Array.isArray(subscriptions) ? subscriptions.length : 0;
-  const active = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active").length : 0;
+  const active = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active" && sub.billingCycle !== "trail").length : 0;
   const trail = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.billingCycle === "trail").length : 0;
   const draft = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Draft").length : 0;
-  // const cancelled = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Cancelled").length : 0; // not shown currently
+  const cancelled = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Cancelled").length : 0;
   
   if (isLoading) {
     return (
@@ -489,9 +503,12 @@ export default function Subscriptions() {
             </div>
           </div>
 
-          {/* Key Metrics Cards - 4 boxes in professional layout */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-lg p-4 shadow-sm">
+          {/* Key Metrics Cards - 3 boxes in professional layout */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+            <div 
+              onClick={() => setMetricsFilter(metricsFilter === "active" ? "all" : "active")}
+              className={`bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-lg p-4 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 ${metricsFilter === "active" ? "ring-4 ring-emerald-300" : ""}`}
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-emerald-100">Active Services</p>
@@ -503,7 +520,10 @@ export default function Subscriptions() {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 shadow-sm">
+            <div 
+              onClick={() => setMetricsFilter(metricsFilter === "trail" ? "all" : "trail")}
+              className={`bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 ${metricsFilter === "trail" ? "ring-4 ring-purple-300" : ""}`}
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-purple-100">Trail Subscriptions</p>
@@ -515,7 +535,10 @@ export default function Subscriptions() {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg p-4 shadow-sm">
+            <div 
+              onClick={() => setMetricsFilter(metricsFilter === "draft" ? "all" : "draft")}
+              className={`bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg p-4 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 ${metricsFilter === "draft" ? "ring-4 ring-orange-300" : ""}`}
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-orange-100">Draft Subscriptions</p>
@@ -527,17 +550,6 @@ export default function Subscriptions() {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-blue-100">Total Subscriptions</p>
-                  <p className="text-2xl font-bold text-white mt-1">{total}</p>
-                </div>
-                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <Layers className="h-5 w-5 text-white" />
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Search and Filters Row */}
@@ -629,7 +641,12 @@ export default function Subscriptions() {
                     >
                       <TableCell className="px-4 py-3">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{subscription.serviceName}</div>
+                          <button
+                            onClick={() => handleEdit(subscription)}
+                            className="text-sm font-medium text-gray-900 hover:text-blue-600 underline hover:no-underline transition-all duration-200 cursor-pointer text-left"
+                          >
+                            {subscription.serviceName}
+                          </button>
                           {subscription.notes && (
                             <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">{subscription.notes}</div>
                           )}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { API_BASE_URL } from "@/lib/config";
 // Type for dynamic subscription fields
 interface SubscriptionField {
@@ -78,6 +78,7 @@ const formSchema = z.object({
   department: z.string().optional(),
   departments: z.array(z.string()).optional(),
   owner: z.string().optional(),
+  ownerEmail: z.string().email('Please enter a valid email').optional(),
   status: z.string().optional(),
   paymentFrequency: z.string().optional(),
   reminderDays: z.number().optional(),
@@ -325,6 +326,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       department: subscription?.department || "",
       departments: parseDepartments(subscription?.department),
       owner: subscription?.owner || "",
+      ownerEmail: (subscription as any)?.ownerEmail || "",
       paymentMethod: subscription?.paymentMethod || "",
       startDate: subscription?.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "",
       nextRenewal: subscription?.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "",
@@ -378,6 +380,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [confirmDialog, setConfirmDialog] = useState<{show: boolean}>({show: false});
   const [departmentModal, setDepartmentModal] = useState<{show: boolean}>({show: false});
   const [newDepartmentName, setNewDepartmentName] = useState<string>('');
+  const [newDepartmentHead, setNewDepartmentHead] = useState<string>('');
+  const [newDepartmentEmail, setNewDepartmentEmail] = useState<string>('');
   const [categoryModal, setCategoryModal] = useState<{show: boolean}>({show: false});
   const [newCategoryName, setNewCategoryName] = useState<string>('');
   const [paymentMethodModal, setPaymentMethodModal] = useState<{show: boolean}>({show: false});
@@ -393,6 +397,37 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [newOwnerRole, setNewOwnerRole] = useState<string>('');
   const [newOwnerStatus, setNewOwnerStatus] = useState<string>('Active');
   const [newOwnerDepartment, setNewOwnerDepartment] = useState<string>('');
+  
+  // Vendor autocomplete state
+  const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
+  const [vendorSuggestions, setVendorSuggestions] = useState<string[]>([]);
+  const vendorInputRef = useRef<HTMLInputElement>(null);
+  
+  // Predefined vendor list
+  const VENDOR_LIST = [
+    "Netflix", "Disney+", "Amazon Prime / Prime Video", "Apple TV+", "HBO GO (Asia)", "Viu", "iQIYI", 
+    "meWATCH Prime (Mediacorp)", "Spotify", "Apple Music", "YouTube Premium", "Tidal", "Audible",
+    "PlayStation Plus", "Xbox Game Pass", "Nintendo Switch Online", "Microsoft 365", "Zoom", 
+    "Google Workspace", "Slack", "Notion", "Dropbox", "Box", "iCloud+", "Asana", "Monday.com", 
+    "Trello", "Miro", "DocuSign", "Calendly", "Adobe Acrobat / Sign", "Adobe Creative Cloud", 
+    "Figma", "Canva Pro", "Sketch", "Affinity (V2)", "Procreate (add-ons)", "Shutterstock", 
+    "Envato Elements", "GitHub", "GitLab", "Bitbucket", "JetBrains", "AWS", "Microsoft Azure", 
+    "Google Cloud Platform", "DigitalOcean", "Linode / Akamai", "Cloudflare", "Vercel", "Netlify", 
+    "Heroku", "Datadog", "New Relic", "Sentry", "PagerDuty", "Auth0 (Okta)", "Twilio", "SendGrid", 
+    "Mailgun", "Salesforce", "HubSpot", "Pipedrive", "Zoho", "Mailchimp", "Klaviyo", "Intercom", 
+    "Zendesk", "Freshdesk / Freshworks", "Typeform", "SurveyMonkey", "Buffer", "Hootsuite", 
+    "SEMrush", "Ahrefs", "Xero", "QuickBooks Online", "FreshBooks", "SAP Concur", "Expensify", 
+    "Stripe (Billing)", "Chargebee", "Zuora", "PayPal (subscriptions)", "Osome", "Sleek", 
+    "JustLogin", "Talenox", "Swingvy", "QuickHR", "StaffAny", "Employment Hero", "Deel", "Remote", 
+    "Rippling", "Workday", "SAP SuccessFactors", "1Password", "LastPass", "Dashlane", "Norton 360", 
+    "Bitdefender", "ESET", "Kaspersky", "Malwarebytes", "Backblaze", "CrashPlan", "Acronis", 
+    "NordVPN", "ExpressVPN", "Surfshark", "Proton VPN", "Singtel", "StarHub", "M1", "MyRepublic", 
+    "ViewQwest", "WhizComms", "Simba (TPG)", "The Straits Times", "The Business Times", 
+    "Lianhe Zaobao", "The Edge Singapore", "Tech in Asia+", "Nikkei Asia", "Financial Times", 
+    "The Economist", "Bloomberg", "The Wall Street Journal", "GrabUnlimited (Grab)", "Deliveroo Plus", 
+    "Foodpanda Pro", "Amazon Prime (Fresh benefits)", "ClassPass", "Strava", "Fitbit Premium", 
+    "Apple Fitness+", "Calm", "Headspace"
+  ];
   
   // Refetch data when modal opens
   useEffect(() => {
@@ -426,6 +461,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         department: "",
         departments: [],
         owner: "",
+        ownerEmail: "",
         paymentMethod: "",
         startDate: "",
         nextRenewal: "",
@@ -466,6 +502,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         department: subscription.department || "",
         departments: depts,
         owner: subscription.owner || "",
+        ownerEmail: (subscription as any)?.ownerEmail || "",
         paymentMethod: subscription.paymentMethod || "",
         startDate: start,
         nextRenewal: end,
@@ -518,6 +555,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         department: "",
         departments: [],
         owner: "",
+        ownerEmail: "",
         paymentMethod: "",
         startDate: "",
         nextRenewal: "",
@@ -1051,7 +1089,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const response = await apiRequest(
         "POST",
         "/api/company/departments",
-        { name: newDepartmentName.trim() }
+        { 
+          name: newDepartmentName.trim(),
+          departmentHead: newDepartmentHead.trim(),
+          email: newDepartmentEmail.trim()
+        }
       );
       // If no error thrown, consider success
       await refetchDepartments();
@@ -1061,6 +1103,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       form.setValue('departments', updatedDepartments);
       form.setValue('department', JSON.stringify(updatedDepartments));
       setNewDepartmentName('');
+      setNewDepartmentHead('');
+      setNewDepartmentEmail('');
       setDepartmentModal({ show: false });
     } catch (error) {
       console.error('Error adding department:', error);
@@ -1145,6 +1189,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       await refetchEmployees();
       // Select the new owner
       form.setValue('owner', newOwnerName.trim());
+      form.setValue('ownerEmail', newOwnerEmail.trim());
       setNewOwnerName('');
       setNewOwnerEmail('');
   setNewOwnerRole('');
@@ -1387,14 +1432,63 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   control={form.control}
                   name="vendor"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="relative">
                       <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Vendor</FormLabel>
                       <FormControl>
-                        <Input 
-                          className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
-                          {...field} 
-                          
-                        />
+                        <div className="relative">
+                          <Input 
+                            className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
+                            value={field.value || ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              field.onChange(value);
+                              
+                              // Filter vendor suggestions based on input
+                              if (value.trim()) {
+                                const filtered = VENDOR_LIST.filter(vendor => 
+                                  vendor.toLowerCase().includes(value.toLowerCase())
+                                );
+                                setVendorSuggestions(filtered);
+                                setShowVendorSuggestions(filtered.length > 0);
+                              } else {
+                                setVendorSuggestions([]);
+                                setShowVendorSuggestions(false);
+                              }
+                            }}
+                            onFocus={(e) => {
+                              const value = e.target.value;
+                              if (value.trim()) {
+                                const filtered = VENDOR_LIST.filter(vendor => 
+                                  vendor.toLowerCase().includes(value.toLowerCase())
+                                );
+                                setVendorSuggestions(filtered);
+                                setShowVendorSuggestions(filtered.length > 0);
+                              }
+                            }}
+                            onBlur={() => {
+                              // Delay hiding to allow click on suggestion
+                              setTimeout(() => setShowVendorSuggestions(false), 200);
+                            }}
+                            autoComplete="off"
+                          />
+                          {showVendorSuggestions && vendorSuggestions.length > 0 && (
+                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                              {vendorSuggestions.map((vendor, index) => (
+                                <div
+                                  key={index}
+                                  className="px-4 py-2 hover:bg-indigo-50 cursor-pointer transition-colors text-sm"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    field.onChange(vendor);
+                                    setShowVendorSuggestions(false);
+                                  }}
+                                >
+                                  {vendor}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1733,6 +1827,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             setOwnerModal({ show: true });
                           } else {
                             field.onChange(value);
+                            // Auto-fill ownerEmail if employee exists
+                            const emp = employeesRaw.find((e: any) => e.name === value);
+                            if (emp?.email) {
+                              form.setValue('ownerEmail', emp.email);
+                            }
                           }
                         }}
                         disabled={employeesRaw.length === 0}
@@ -1764,10 +1863,29 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     </FormItem>
                   )}
                 />
+                {/* Owner Email field - free text to bypass lookup */}
+                <FormField
+                  control={form.control}
+                  name="ownerEmail"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="block text-sm font-medium text-slate-700">Owner Email</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="email"
+                          placeholder="owner@example.com"
+                          className="w-full border-slate-300 rounded-lg p-2 text-base"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 
                 {/* Dynamic Fields from Configuration - now rendered after all static fields */}
                 {dynamicFields.length > 0 && (
-                  <div className={`grid gap-6 mb-6 ${isFullscreen ? 'grid-cols-1 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
+                  <>
                     {dynamicFields.map((field) => (
                       <FormField
                         key={field.name}
@@ -1812,7 +1930,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         )}
                       />
                     ))}
-                  </div>
+                  </>
                 )}
               </div>
               {/* Professional Renewal Section Header */}
@@ -2182,6 +2300,35 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 }}
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Department Head</label>
+              <Input
+                placeholder=""
+                value={newDepartmentHead}
+                onChange={(e) => setNewDepartmentHead(e.target.value)}
+                className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddDepartment();
+                  }
+                }}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+              <Input
+                type="email"
+                placeholder=""
+                value={newDepartmentEmail}
+                onChange={(e) => setNewDepartmentEmail(e.target.value)}
+                className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddDepartment();
+                  }
+                }}
+              />
+            </div>
           </div>
           <AlertDialogFooter className="flex gap-2 mt-6">
             <Button
@@ -2189,6 +2336,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               onClick={() => {
                 setDepartmentModal({ show: false });
                 setNewDepartmentName('');
+                setNewDepartmentHead('');
+                setNewDepartmentEmail('');
               }}
               className="bg-gray-100 hover:bg-gray-200 text-gray-700"
             >

@@ -519,39 +519,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ===== Monthly Reminders =====
-  app.get("/api/monthly-reminders/check", async (req, res) => {
-    try {
-      const { getMonthlyReminderService } = await import('./monthly-reminder.service');
-      const reminderService = getMonthlyReminderService(storage);
-      const result = await reminderService.checkAndRunDailyReminders();
-      res.json(result);
-    } catch (error: any) {
-      console.error('Error checking monthly reminders:', error);
-      res.status(500).json({ 
-        success: false, 
-        message: "Failed to check monthly reminders",
-        error: error.message 
-      });
-    }
-  });
-
-  app.post("/api/monthly-reminders/trigger", async (req, res) => {
-    try {
-      const { getMonthlyReminderService } = await import('./monthly-reminder.service');
-      const reminderService = getMonthlyReminderService(storage);
-      const result = await reminderService.triggerManualReminders();
-      res.json(result);
-    } catch (error: any) {
-      console.error('Error triggering monthly reminders:', error);
-      res.status(500).json({ 
-        success: false, 
-        message: "Failed to trigger monthly reminders",
-        error: error.message 
-      });
-    }
-  });
-
   const httpServer = createServer(app);
   return httpServer;
 }

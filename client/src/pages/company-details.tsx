@@ -1208,7 +1208,23 @@ duration: 1000,
 });
 
 // Department configuration with visibility settings (dynamic)
-type Department = { name: string; visible: boolean; tenantId?: string };
+type Department = { 
+  _id?: string;
+  name: string; 
+  departmentHead?: string;
+  email?: string;
+  visible: boolean; 
+  tenantId?: string 
+};
+
+// Department schema for validation
+const departmentSchema = z.object({
+  name: z.string().min(1, "Department name is required"),
+  departmentHead: z.string().min(1, "Department head is required"),
+  email: z.string().email("Invalid email address"),
+});
+
+type DepartmentFormValues = z.infer<typeof departmentSchema>;
 const {
 data: departments = [],
 isLoading: departmentsLoading,
@@ -1221,7 +1237,7 @@ refetchOnMount: true,
 staleTime: 0,
 });
 const addDepartmentMutation = useMutation({
-mutationFn: async (newDepartment: { name: string }) => {
+mutationFn: async (newDepartment: { name: string; departmentHead: string; email: string }) => {
 return await apiRequest("POST", "/api/company/departments", {
   ...newDepartment,
   visible: true
@@ -1230,10 +1246,11 @@ return await apiRequest("POST", "/api/company/departments", {
 onSuccess: () => {
 queryClient.invalidateQueries({ queryKey: ["/api/company/departments"] });
 refetchDepartments();
-setNewDepartmentName("");
+setDepartmentModalOpen(false);
+departmentForm.reset();
 toast({
 title: "Department Added",
-description: `${newDepartmentName} department has been added successfully`,
+description: `Department has been added successfully`,
 duration: 1000,
 });
 },
@@ -1246,6 +1263,33 @@ duration: 1000,
 });
 },
 });
+
+const updateDepartmentMutation = useMutation({
+mutationFn: async ({ id, data }: { id: string; data: { name: string; departmentHead: string; email: string } }) => {
+return await apiRequest("PUT", `/api/company/departments/${id}`, data);
+},
+onSuccess: () => {
+queryClient.invalidateQueries({ queryKey: ["/api/company/departments"] });
+refetchDepartments();
+setDepartmentModalOpen(false);
+setEditingDepartment(undefined);
+departmentForm.reset();
+toast({
+title: "Department Updated",
+description: `Department has been updated successfully`,
+duration: 1000,
+});
+},
+onError: (error: any) => {
+toast({
+title: "Error",
+description: error.message || "Failed to update department",
+variant: "destructive",
+duration: 1000,
+});
+},
+});
+
 const updateDepartmentVisibilityMutation = useMutation({
 mutationFn: async ({ name, visible }: { name: string; visible: boolean }) => {
 return await apiRequest("PATCH", `/api/company/departments/${encodeURIComponent(name)}`, { visible });
@@ -1285,8 +1329,19 @@ duration: 1000,
 });
 
 const [newCategoryName, setNewCategoryName] = useState('');
-const [newDepartmentName, setNewDepartmentName] = useState('');
+const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
+const [editingDepartment, setEditingDepartment] = useState<Department | undefined>();
 const { toast } = useToast();
+
+// Department form
+const departmentForm = useForm<DepartmentFormValues>({
+  resolver: zodResolver(departmentSchema),
+  defaultValues: {
+    name: "",
+    departmentHead: "",
+    email: "",
+  },
+});
 
 const addNewCategory = () => {
 if (
@@ -1299,12 +1354,11 @@ addCategoryMutation.mutate({ name: newCategoryName.trim() });
 }
 };
 
-const addNewDepartment = () => {
-if (
-newDepartmentName.trim() &&
-!departments.find(d => typeof d.name === "string" && d.name.toLowerCase() === newDepartmentName.toLowerCase())
-) {
-addDepartmentMutation.mutate({ name: newDepartmentName.trim() });
+const onSubmitDepartment = (data: DepartmentFormValues) => {
+if (editingDepartment && editingDepartment._id) {
+  updateDepartmentMutation.mutate({ id: editingDepartment._id, data });
+} else {
+  addDepartmentMutation.mutate(data);
 }
 };
 
@@ -1751,24 +1805,136 @@ transition={{ duration: 0.3 }}
 {/* Content */}
 <div className="p-8 bg-gradient-to-br from-gray-50 to-white">
 {/* Add New Department */}
-<div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
-<Input
-placeholder=""
-value={newDepartmentName}
-onChange={(e) => setNewDepartmentName(e.target.value)}
-className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
-onKeyPress={(e) => e.key === 'Enter' && addNewDepartment()}
-/>
-<motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-<Button
-onClick={addNewDepartment}
-disabled={!newDepartmentName.trim()}
-className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
->
-<Plus className="w-4 h-4 mr-2" />
-Add Department
-</Button>
-</motion.div>
+<div className="flex items-center justify-end space-x-4 p-4 bg-gray-50 rounded-xl">
+<Dialog open={departmentModalOpen} onOpenChange={setDepartmentModalOpen}>
+  <DialogTrigger asChild>
+    <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+      <Button
+        onClick={() => {
+          setEditingDepartment(undefined);
+          departmentForm.reset({
+            name: "",
+            departmentHead: "",
+            email: "",
+          });
+          setDepartmentModalOpen(true);
+        }}
+        className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Add Department
+      </Button>
+    </motion.div>
+  </DialogTrigger>
+  <DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
+    {/* Header with Gradient Background */}
+    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+      <DialogHeader>
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
+            <Building2 className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <DialogTitle className="text-2xl font-bold tracking-tight text-white">
+              {editingDepartment ? 'Edit Department' : 'Add New Department'}
+            </DialogTitle>
+          </div>
+        </div>
+      </DialogHeader>
+    </div>
+
+    {/* Form Content */}
+    <div className="px-8 py-6">
+      <Form {...departmentForm}>
+        <form onSubmit={departmentForm.handleSubmit(onSubmitDepartment)} className="grid grid-cols-1 gap-6">
+          {/* Department Name */}
+          <FormField
+            control={departmentForm.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-gray-700 font-medium text-sm">Department Name</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  />
+                </FormControl>
+                <FormMessage className="text-red-600" />
+              </FormItem>
+            )}
+          />
+
+          {/* Department Head */}
+          <FormField
+            control={departmentForm.control}
+            name="departmentHead"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-gray-700 font-medium text-sm">Department Head</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  />
+                </FormControl>
+                <FormMessage className="text-red-600" />
+              </FormItem>
+            )}
+          />
+
+          {/* Email */}
+          <FormField
+            control={departmentForm.control}
+            name="email"
+            render={({ field, fieldState }) => (
+              <FormItem>
+                <FormLabel className="text-gray-700 font-medium text-sm">Email Address</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    type="email"
+                    className={`border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+                      fieldState.error ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+                    }`}
+                  />
+                </FormControl>
+                <FormMessage className="text-red-600" />
+              </FormItem>
+            )}
+          />
+
+          {/* Action Buttons */}
+          <div className="flex justify-end space-x-3 pt-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDepartmentModalOpen(false);
+                setEditingDepartment(undefined);
+                departmentForm.reset();
+              }}
+              className="border-gray-300 text-gray-700 rounded-lg h-10 px-4"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={addDepartmentMutation.isPending || updateDepartmentMutation.isPending}
+              className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
+            >
+              <Building2 className="w-4 h-4 mr-2" />
+              {addDepartmentMutation.isPending || updateDepartmentMutation.isPending
+                ? (editingDepartment ? 'Updating...' : 'Creating...') 
+                : (editingDepartment ? 'Update Department' : 'Create Department')
+              }
+            </Button>
+          </div>
+        </form>
+      </Form>
+    </div>
+  </DialogContent>
+</Dialog>
 </div>
 
 {/* Department List */}
@@ -1781,33 +1947,55 @@ Add Department
 departments.map((department, idx) => {
 const displayName = typeof department.name === "string" && department.name.trim() ? department.name : `Unnamed Department ${idx + 1}`;
 return (
-<motion.div
-key={displayName + idx}
-whileHover={{ y: -5 }}
-className="p-4 border border-indigo-200 bg-indigo-50 shadow-sm rounded-xl transition-all duration-300"
->
-<div className="flex items-center justify-between">
-<div className="flex items-center space-x-3 w-full">
-<span className="text-sm font-medium text-gray-900 truncate w-full">{String(displayName)}</span>
-</div>
-<div className="flex items-center space-x-2">
-<Button
-variant="ghost"
-size="sm"
-onClick={() => {
-if (department.name && window.confirm(`Delete department '${displayName}'?`)) {
-deleteDepartmentMutation.mutate(department.name);
-}
-}}
-disabled={deleteDepartmentMutation.isPending || !department.name}
-className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-8 w-8"
-title="Delete Department"
->
-<Trash2 size={16} />
-</Button>
-</div>
-</div>
-</motion.div>
+  <motion.div
+    key={displayName + idx}
+    whileHover={{ y: -5 }}
+    className="p-5 border border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm rounded-xl transition-all duration-300"
+  >
+    <div className="flex items-start justify-between mb-3">
+      <div className="flex items-center space-x-3">
+        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center shadow-md">
+          <Building2 className="text-white" size={20} />
+        </div>
+        <div>
+          <span className="text-base font-semibold text-gray-900 block">{String(displayName)}</span>
+        </div>
+      </div>
+      <div className="flex items-center space-x-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            departmentForm.reset({
+              name: department.name || "",
+              departmentHead: department.departmentHead || "",
+              email: department.email || "",
+            });
+            setEditingDepartment(department);
+            setDepartmentModalOpen(true);
+          }}
+          className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-full p-1 h-8 w-8"
+          title="Edit Department"
+        >
+          <Edit size={16} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            if (department.name && window.confirm(`Delete department '${displayName}'?`)) {
+              deleteDepartmentMutation.mutate(department.name);
+            }
+          }}
+          disabled={deleteDepartmentMutation.isPending || !department.name}
+          className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-8 w-8"
+          title="Delete Department"
+        >
+          <Trash2 size={16} />
+        </Button>
+      </div>
+    </div>
+  </motion.div>
 );
 })
 )}

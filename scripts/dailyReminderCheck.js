@@ -19,7 +19,7 @@ async function runDailyReminderCheck() {
       console.log('✅ Monthly reminders were sent!');
       console.log('Result:', JSON.stringify(result.result, null, 2));
     } else {
-      console.log('ℹ️  No reminders to send today (not the 25th)');
+      console.log('ℹ️  No reminders to send today (not the 4th)');
     }
     
     process.exit(0);
