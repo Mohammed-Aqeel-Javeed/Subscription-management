@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api";
+import { UnifiedImportExport } from "../unified-import-export";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: BarChart3 },
@@ -95,6 +96,11 @@ export default function Sidebar() {
             );
           })}
         </ul>
+        
+        {/* Import/Export Button in Navigation */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <UnifiedImportExport />
+        </div>
       </nav>
       
       <div className="p-4 border-t border-gray-200 bg-white/60 backdrop-blur-sm">

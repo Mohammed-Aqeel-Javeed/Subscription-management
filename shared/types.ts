@@ -74,6 +74,7 @@ export type Subscription = {
 	amount: number | string;
 	billingCycle: string;
 	category: string;
+	paymentMethod?: string;
 	startDate: string;
 	nextRenewal: string;
 	status: string;
