@@ -21,6 +21,7 @@ export const subscriptions = pgTable("subscriptions", {
   billingCycle: text("billing_cycle").notNull(), // monthly, yearly, quarterly, weekly
   category: text("category").notNull(),
   departments: text("departments").array().notNull().default([]), // Array of department names
+  paymentMethod: text("payment_method"), // Payment method name
   startDate: timestamp("start_date").notNull(),
   nextRenewal: timestamp("next_renewal").notNull(),
   status: text("status").notNull().default("Active"), // Active, Cancelled

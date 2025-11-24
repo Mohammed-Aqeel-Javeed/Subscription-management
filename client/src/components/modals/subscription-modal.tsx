@@ -42,11 +42,11 @@ import { useToast } from "@/hooks/use-toast";
 import type { InsertSubscription, Subscription } from "@shared/schema";
 // Extend Subscription for modal usage to include extra fields
 type SubscriptionModalData = Partial<Subscription> & {
-  currency?: string;
-  department?: string;
-  owner?: string;
-  paymentMethod?: string;
-  autoRenewal?: boolean;
+  currency?: string | null;
+  department?: string | null;
+  owner?: string | null;
+  paymentMethod?: string | null;
+  autoRenewal?: boolean | null;
   // Tolerate backend objects that use Mongo-style _id and optional name
   _id?: string;
   name?: string;
@@ -102,6 +102,17 @@ function parseInputDate(dateStr: string): Date {
     return new Date(`${yyyy}-${mm}-${dd}`);
   }
   return new Date(dateStr);
+}
+// Safely convert value to YYYY-MM-DD string or empty if invalid
+function toISODateOnly(val: any): string {
+  if (!val) return "";
+  const d = parseInputDate(String(val));
+  if (isNaN(d.getTime())) return "";
+  try {
+    return d.toISOString().split('T')[0];
+  } catch {
+    return "";
+  }
 }
 function calculateEndDate(startDate: string, billingCycle: string): string {
   if (!startDate || !billingCycle) return "";
@@ -300,7 +311,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   }, [open]);
   
   // Parse departments from subscription if it exists
-  const parseDepartments = (deptString?: string) => {
+  const parseDepartments = (deptString?: string | null) => {
     if (!deptString) return [];
     try {
       // If it's already an array (from editing), return it
@@ -368,9 +379,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     }
   }, [existingSubscriptions, open]);
   
-  const [startDate, setStartDate] = useState(subscription?.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "");
+  const [startDate, setStartDate] = useState(subscription?.startDate ? toISODateOnly(subscription.startDate) : "");
   const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle || "monthly");
-  const [endDate, setEndDate] = useState(subscription?.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "");
+  const [endDate, setEndDate] = useState(subscription?.nextRenewal ? toISODateOnly(subscription.nextRenewal) : "");
   // Removed unused endDateManuallySet state
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(parseDepartments(subscription?.department));
   // Removed unused isPopoverOpen state
@@ -401,7 +412,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Vendor autocomplete state
   const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
   const [vendorSuggestions, setVendorSuggestions] = useState<string[]>([]);
-  const vendorInputRef = useRef<HTMLInputElement>(null);
   
   // Predefined vendor list
   const VENDOR_LIST = [
@@ -476,8 +486,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   useEffect(() => {
     if (subscription) {
-      const start = subscription.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "";
-      const end = subscription.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "";
+      const start = subscription.startDate ? toISODateOnly(subscription.startDate) : "";
+      const end = subscription.nextRenewal ? toISODateOnly(subscription.nextRenewal) : "";
       const depts = parseDepartments(subscription.department);
       
       setStartDate(start);
@@ -1086,7 +1096,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (!newDepartmentName.trim()) return;
     
     try {
-      const response = await apiRequest(
+      await apiRequest(
         "POST",
         "/api/company/departments",
         { 
@@ -1116,7 +1126,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (!newCategoryName.trim()) return;
     
     try {
-      const response = await apiRequest(
+      await apiRequest(
         "POST",
         "/api/company/categories",
         { name: newCategoryName.trim() }
@@ -1138,7 +1148,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (!newPaymentMethodName.trim()) return;
     
     try {
-      const response = await apiRequest(
+      await apiRequest(
         "POST",
         "/api/payment",
         { 
@@ -1172,8 +1182,22 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const handleAddOwner = async () => {
     if (!newOwnerName.trim() || !newOwnerEmail.trim()) return;
     
+    // Check for duplicate email
+    const emailExists = employeesRaw.some((emp: any) => 
+      emp.email?.toLowerCase() === newOwnerEmail.trim().toLowerCase()
+    );
+    
+    if (emailExists) {
+      toast({
+        title: "Error",
+        description: "An employee with this email already exists",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
-      const response = await apiRequest(
+      await apiRequest(
         "POST",
         "/api/employees",
         { 
@@ -1198,6 +1222,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setOwnerModal({ show: false });
     } catch (error) {
       console.error('Error adding owner:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add employee. Please try again.",
+        variant: "destructive",
+      });
     }
   };
   
@@ -1826,9 +1855,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           if (value === "add-new-owner") {
                             setOwnerModal({ show: true });
                           } else {
-                            field.onChange(value);
+                            // Find employee by unique ID (stored as "name|email" or just name)
+                            const empId = value.includes('|') ? value.split('|')[0] : value;
+                            const emp = employeesRaw.find((e: any) => {
+                              if (value.includes('|')) {
+                                const [name, email] = value.split('|');
+                                return e.name === name && e.email === email;
+                              }
+                              return e.name === value;
+                            });
+                            
+                            field.onChange(emp?.name || value);
                             // Auto-fill ownerEmail if employee exists
-                            const emp = employeesRaw.find((e: any) => e.name === value);
                             if (emp?.email) {
                               form.setValue('ownerEmail', emp.email);
                             }
@@ -1841,11 +1879,26 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
                           {employeesRaw.length > 0 ? (
-                            employeesRaw.map((emp: any) => (
-                              <SelectItem key={emp._id || emp.id || emp.name} value={emp.name} className="dropdown-item">
-                                {emp.name}
-                              </SelectItem>
-                            ))
+                            employeesRaw.map((emp: any) => {
+                              // Check if there are duplicate names
+                              const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                              const displayName = duplicateNames.length > 1 
+                                ? `${emp.name} (${emp.email})` 
+                                : emp.name;
+                              const uniqueValue = duplicateNames.length > 1
+                                ? `${emp.name}|${emp.email}`
+                                : emp.name;
+                              
+                              return (
+                                <SelectItem 
+                                  key={emp._id || emp.id || emp.email} 
+                                  value={uniqueValue} 
+                                  className="dropdown-item"
+                                >
+                                  {displayName}
+                                </SelectItem>
+                              );
+                            })
                           ) : null}
                           {/* Add Owner option at the end */}
                           <SelectItem 
@@ -2474,12 +2527,34 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Managed by</label>
-                <Input
-                  placeholder=""
-                  value={newPaymentMethodManagedBy}
-                  onChange={(e) => setNewPaymentMethodManagedBy(e.target.value)}
-                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
-                />
+                <Select value={newPaymentMethodManagedBy} onValueChange={setNewPaymentMethodManagedBy}>
+                  <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+                    <SelectValue placeholder="Select employee" />
+                  </SelectTrigger>
+                  <SelectContent className="dropdown-content">
+                    {employeesRaw.length > 0 ? (
+                      employeesRaw.map((emp: any) => {
+                        // Check if there are duplicate names
+                        const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                        const displayName = duplicateNames.length > 1 
+                          ? `${emp.name} (${emp.email})` 
+                          : emp.name;
+                        
+                        return (
+                          <SelectItem 
+                            key={emp._id || emp.id || emp.email} 
+                            value={emp.name} 
+                            className="dropdown-item"
+                          >
+                            {displayName}
+                          </SelectItem>
+                        );
+                      })
+                    ) : (
+                      <SelectItem value="no-employee" disabled className="dropdown-item disabled">No employees found</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="w-1/2 pr-2">

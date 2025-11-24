@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,17 +7,29 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search } from "lucide-react";
-import { cardImages } from "@/assets/card-icons/cardImages";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE_URL } from "@/lib/config";
+import * as XLSX from 'xlsx';
 export default function Configuration() {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  // Fetch employees for Managed by dropdown
+  const { data: employeesRaw = [] } = useQuery({
+    queryKey: ['/api/employees'],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/employees`, { credentials: 'include' });
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+  });
   
   // Handle tab switching from URL parameters
   const [activeTab, setActiveTab] = useState(() => {
@@ -63,10 +75,10 @@ export default function Configuration() {
     setPaymentForm({
       title: method.title || method.name || '',
       type: method.type || '',
-      description: method.description || '',
-      icon: method.icon || '',
       manager: method.manager || '',
       expiresAt: method.expiresAt || '',
+      financialInstitution: method.financialInstitution || '',
+      lastFourDigits: method.lastFourDigits || '',
     });
     setEditPaymentModalOpen(true);
     setEditingPaymentId(method._id);
@@ -88,10 +100,10 @@ export default function Configuration() {
       body: JSON.stringify({
         name: paymentForm.title,
         type: paymentForm.type,
-        description: paymentForm.description,
-        icon: paymentForm.icon,
         manager: paymentForm.manager,
         expiresAt: paymentForm.expiresAt,
+        financialInstitution: paymentForm.financialInstitution,
+        lastFourDigits: paymentForm.lastFourDigits,
       }),
     })
       .then(res => res.json())
@@ -122,6 +134,40 @@ export default function Configuration() {
       .then(data => setPaymentMethods(data))
       .catch(() => setPaymentMethods([]));
   }, []);
+
+  // Fetch subscriptions to count payment method usage
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  useEffect(() => {
+    fetch("/api/subscriptions")
+      .then(res => res.json())
+      .then(data => setSubscriptions(data))
+      .catch(() => setSubscriptions([]));
+  }, []);
+
+  // Payment method subscription modal state
+  const [paymentSubsModalOpen, setPaymentSubsModalOpen] = useState(false);
+  const [selectedPaymentSubs, setSelectedPaymentSubs] = useState<{paymentMethod: string; subscriptions: any[]}>({
+    paymentMethod: '',
+    subscriptions: []
+  });
+
+  // Get subscriptions for a payment method
+  const getPaymentMethodSubscriptions = (paymentMethodName: string) => {
+    return subscriptions.filter(sub => {
+      return sub.paymentMethod && 
+             sub.paymentMethod.toLowerCase().trim() === paymentMethodName.toLowerCase().trim();
+    });
+  };
+
+  // Open payment method subscriptions modal
+  const openPaymentSubsModal = (paymentMethodName: string) => {
+    const subs = getPaymentMethodSubscriptions(paymentMethodName);
+    setSelectedPaymentSubs({
+      paymentMethod: paymentMethodName,
+      subscriptions: subs
+    });
+    setPaymentSubsModalOpen(true);
+  };
   
   // Currencies state and handlers
   interface Currency {
@@ -146,6 +192,776 @@ export default function Configuration() {
     visible: true,
     created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
   });
+
+  // Autocomplete state
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [filteredCurrencies, setFilteredCurrencies] = useState<Array<{code: string, description: string, symbol: string}>>([]);
+  
+  // File input refs for Excel import
+  const currencyFileInputRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * EXCEL IMPORT/EXPORT FUNCTIONALITY
+   * 
+   * Currency Excel Format:
+   * - Currency Code (required): 3-letter code (e.g., USD, EUR, INR)
+   * - Description (required): Full name (e.g., United States Dollar)
+   * - Symbol (required): Currency symbol (e.g., $, €, ₹)
+   * - Exchange Rate (optional): Rate against local currency
+   * - Created (auto): Date when currency was created
+   * - Last Updated (auto): Date when rate was last updated
+   * 
+   * Payment Method Excel Format:
+   * - Title (required): Payment method name
+   * - Type (required): Credit, Debit, Cash, Bank Transfer, Digital Wallet, Other
+   * - Description (optional): Additional details
+   * - Icon (optional): visa, mastercard, paypal, amex, apple_pay, google_pay, bank, cash, other
+   * - Manager (optional): Person responsible
+   * - Expires At (optional): Expiration date (YYYY-MM-DD format)
+   */
+
+  // Complete currency list for autocomplete
+  const currencyList = [
+    { code: "AED", description: "UAE Dirham", symbol: "د.إ" },
+    { code: "AFN", description: "Afghan Afghani", symbol: "؋" },
+    { code: "ALL", description: "Albanian Lek", symbol: "L" },
+    { code: "AMD", description: "Armenian Dram", symbol: "֏" },
+    { code: "ANG", description: "Netherlands Antillean Guilder", symbol: "ƒ" },
+    { code: "AOA", description: "Angolan Kwanza", symbol: "Kz" },
+    { code: "ARS", description: "Argentine Peso", symbol: "$" },
+    { code: "AUD", description: "Australian Dollar", symbol: "A$" },
+    { code: "AWG", description: "Aruban Florin", symbol: "ƒ" },
+    { code: "AZN", description: "Azerbaijani Manat", symbol: "₼" },
+    { code: "BAM", description: "Bosnia and Herzegovina Convertible Mark", symbol: "KM" },
+    { code: "BBD", description: "Barbadian Dollar", symbol: "Bds$" },
+    { code: "BDT", description: "Bangladeshi Taka", symbol: "৳" },
+    { code: "BGN", description: "Bulgarian Lev", symbol: "лв" },
+    { code: "BHD", description: "Bahraini Dinar", symbol: ".د.ب" },
+    { code: "BIF", description: "Burundian Franc", symbol: "FBu" },
+    { code: "BMD", description: "Bermudian Dollar", symbol: "$" },
+    { code: "BND", description: "Brunei Dollar", symbol: "B$" },
+    { code: "BOB", description: "Bolivian Boliviano", symbol: "Bs." },
+    { code: "BRL", description: "Brazilian Real", symbol: "R$" },
+    { code: "BSD", description: "Bahamian Dollar", symbol: "$" },
+    { code: "BTN", description: "Bhutanese Ngultrum", symbol: "Nu." },
+    { code: "BWP", description: "Botswana Pula", symbol: "P" },
+    { code: "BYN", description: "Belarusian Ruble", symbol: "Br" },
+    { code: "BZD", description: "Belize Dollar", symbol: "BZ$" },
+    { code: "CAD", description: "Canadian Dollar", symbol: "C$" },
+    { code: "CDF", description: "Congolese Franc", symbol: "FC" },
+    { code: "CHF", description: "Swiss Franc", symbol: "CHF" },
+    { code: "CLP", description: "Chilean Peso", symbol: "$" },
+    { code: "CNY", description: "Chinese Yuan", symbol: "¥" },
+    { code: "COP", description: "Colombian Peso", symbol: "$" },
+    { code: "CRC", description: "Costa Rican Colón", symbol: "₡" },
+    { code: "CUP", description: "Cuban Peso", symbol: "$" },
+    { code: "CVE", description: "Cape Verdean Escudo", symbol: "$" },
+    { code: "CZK", description: "Czech Koruna", symbol: "Kč" },
+    { code: "DJF", description: "Djiboutian Franc", symbol: "Fdj" },
+    { code: "DKK", description: "Danish Krone", symbol: "kr" },
+    { code: "DOP", description: "Dominican Peso", symbol: "RD$" },
+    { code: "DZD", description: "Algerian Dinar", symbol: "دج" },
+    { code: "EGP", description: "Egyptian Pound", symbol: "£" },
+    { code: "ERN", description: "Eritrean Nakfa", symbol: "Nkf" },
+    { code: "ETB", description: "Ethiopian Birr", symbol: "Br" },
+    { code: "EUR", description: "Euro", symbol: "€" },
+    { code: "FJD", description: "Fijian Dollar", symbol: "FJ$" },
+    { code: "FKP", description: "Falkland Islands Pound", symbol: "£" },
+    { code: "FOK", description: "Faroese Króna", symbol: "kr" },
+    { code: "GBP", description: "British Pound Sterling", symbol: "£" },
+    { code: "GEL", description: "Georgian Lari", symbol: "₾" },
+    { code: "GGP", description: "Guernsey Pound", symbol: "£" },
+    { code: "GHS", description: "Ghanaian Cedi", symbol: "₵" },
+    { code: "GIP", description: "Gibraltar Pound", symbol: "£" },
+    { code: "GMD", description: "Gambian Dalasi", symbol: "D" },
+    { code: "GNF", description: "Guinean Franc", symbol: "FG" },
+    { code: "GTQ", description: "Guatemalan Quetzal", symbol: "Q" },
+    { code: "GYD", description: "Guyanese Dollar", symbol: "G$" },
+    { code: "HKD", description: "Hong Kong Dollar", symbol: "HK$" },
+    { code: "HNL", description: "Honduran Lempira", symbol: "L" },
+    { code: "HRK", description: "Croatian Kuna", symbol: "kn" },
+    { code: "HTG", description: "Haitian Gourde", symbol: "G" },
+    { code: "HUF", description: "Hungarian Forint", symbol: "Ft" },
+    { code: "IDR", description: "Indonesian Rupiah", symbol: "Rp" },
+    { code: "ILS", description: "Israeli New Shekel", symbol: "₪" },
+    { code: "IMP", description: "Isle of Man Pound", symbol: "£" },
+    { code: "INR", description: "Indian Rupee", symbol: "₹" },
+    { code: "IQD", description: "Iraqi Dinar", symbol: "ع.د" },
+    { code: "IRR", description: "Iranian Rial", symbol: "﷼" },
+    { code: "ISK", description: "Icelandic Króna", symbol: "kr" },
+    { code: "JEP", description: "Jersey Pound", symbol: "£" },
+    { code: "JMD", description: "Jamaican Dollar", symbol: "J$" },
+    { code: "JOD", description: "Jordanian Dinar", symbol: "د.ا" },
+    { code: "JPY", description: "Japanese Yen", symbol: "¥" },
+    { code: "KES", description: "Kenyan Shilling", symbol: "KSh" },
+    { code: "KGS", description: "Kyrgyzstani Som", symbol: "лв" },
+    { code: "KHR", description: "Cambodian Riel", symbol: "៛" },
+    { code: "KID", description: "Kiribati Dollar", symbol: "$" },
+    { code: "KMF", description: "Comorian Franc", symbol: "CF" },
+    { code: "KRW", description: "South Korean Won", symbol: "₩" },
+    { code: "KWD", description: "Kuwaiti Dinar", symbol: "د.ك" },
+    { code: "KYD", description: "Cayman Islands Dollar", symbol: "CI$" },
+    { code: "KZT", description: "Kazakhstani Tenge", symbol: "₸" },
+    { code: "LAK", description: "Lao Kip", symbol: "₭" },
+    { code: "LBP", description: "Lebanese Pound", symbol: "ل.ل" },
+    { code: "LKR", description: "Sri Lankan Rupee", symbol: "Rs" },
+    { code: "LRD", description: "Liberian Dollar", symbol: "L$" },
+    { code: "LSL", description: "Lesotho Loti", symbol: "L" },
+    { code: "LYD", description: "Libyan Dinar", symbol: "ل.د" },
+    { code: "MAD", description: "Moroccan Dirham", symbol: "د.م." },
+    { code: "MDL", description: "Moldovan Leu", symbol: "L" },
+    { code: "MGA", description: "Malagasy Ariary", symbol: "Ar" },
+    { code: "MKD", description: "Macedonian Denar", symbol: "ден" },
+    { code: "MMK", description: "Myanmar Kyat", symbol: "K" },
+    { code: "MNT", description: "Mongolian Tögrög", symbol: "₮" },
+    { code: "MOP", description: "Macanese Pataca", symbol: "MOP$" },
+    { code: "MRU", description: "Mauritanian Ouguiya", symbol: "UM" },
+    { code: "MUR", description: "Mauritian Rupee", symbol: "Rs" },
+    { code: "MVR", description: "Maldivian Rufiyaa", symbol: "Rf" },
+    { code: "MWK", description: "Malawian Kwacha", symbol: "MK" },
+    { code: "MXN", description: "Mexican Peso", symbol: "$" },
+    { code: "MYR", description: "Malaysian Ringgit", symbol: "RM" },
+    { code: "MZN", description: "Mozambican Metical", symbol: "MT" },
+    { code: "NAD", description: "Namibian Dollar", symbol: "N$" },
+    { code: "NGN", description: "Nigerian Naira", symbol: "₦" },
+    { code: "NIO", description: "Nicaraguan Córdoba", symbol: "C$" },
+    { code: "NOK", description: "Norwegian Krone", symbol: "kr" },
+    { code: "NPR", description: "Nepalese Rupee", symbol: "Rs" },
+    { code: "NZD", description: "New Zealand Dollar", symbol: "NZ$" },
+    { code: "OMR", description: "Omani Rial", symbol: "﷼" },
+    { code: "PAB", description: "Panamanian Balboa", symbol: "B/." },
+    { code: "PEN", description: "Peruvian Sol", symbol: "S/" },
+    { code: "PGK", description: "Papua New Guinean Kina", symbol: "K" },
+    { code: "PHP", description: "Philippine Peso", symbol: "₱" },
+    { code: "PKR", description: "Pakistani Rupee", symbol: "Rs" },
+    { code: "PLN", description: "Polish Złoty", symbol: "zł" },
+    { code: "PYG", description: "Paraguayan Guaraní", symbol: "₲" },
+    { code: "QAR", description: "Qatari Riyal", symbol: "ر.ق" },
+    { code: "RON", description: "Romanian Leu", symbol: "lei" },
+    { code: "RSD", description: "Serbian Dinar", symbol: "дин." },
+    { code: "RUB", description: "Russian Ruble", symbol: "₽" },
+    { code: "RWF", description: "Rwandan Franc", symbol: "RF" },
+    { code: "SAR", description: "Saudi Riyal", symbol: "ر.س" },
+    { code: "SBD", description: "Solomon Islands Dollar", symbol: "SI$" },
+    { code: "SCR", description: "Seychellois Rupee", symbol: "Rs" },
+    { code: "SDG", description: "Sudanese Pound", symbol: "£" },
+    { code: "SEK", description: "Swedish Krona", symbol: "kr" },
+    { code: "SGD", description: "Singapore Dollar", symbol: "S$" },
+    { code: "SHP", description: "Saint Helena Pound", symbol: "£" },
+    { code: "SLE", description: "Sierra Leonean Leone", symbol: "Le" },
+    { code: "SOS", description: "Somali Shilling", symbol: "Sh" },
+    { code: "SRD", description: "Surinamese Dollar", symbol: "$" },
+    { code: "SSP", description: "South Sudanese Pound", symbol: "£" },
+    { code: "STN", description: "São Tomé and Príncipe Dobra", symbol: "Db" },
+    { code: "SYP", description: "Syrian Pound", symbol: "£" },
+    { code: "SZL", description: "Eswatini Lilangeni", symbol: "L" },
+    { code: "THB", description: "Thai Baht", symbol: "฿" },
+    { code: "TJS", description: "Tajikistani Somoni", symbol: "SM" },
+    { code: "TMT", description: "Turkmenistani Manat", symbol: "m" },
+    { code: "TND", description: "Tunisian Dinar", symbol: "د.ت" },
+    { code: "TOP", description: "Tongan Paʻanga", symbol: "T$" },
+    { code: "TRY", description: "Turkish Lira", symbol: "₺" },
+    { code: "TTD", description: "Trinidad and Tobago Dollar", symbol: "TT$" },
+    { code: "TVD", description: "Tuvaluan Dollar", symbol: "$" },
+    { code: "TWD", description: "New Taiwan Dollar", symbol: "NT$" },
+    { code: "TZS", description: "Tanzanian Shilling", symbol: "Sh" },
+    { code: "UAH", description: "Ukrainian Hryvnia", symbol: "₴" },
+    { code: "UGX", description: "Ugandan Shilling", symbol: "USh" },
+    { code: "USD", description: "United States Dollar", symbol: "$" },
+    { code: "UYU", description: "Uruguayan Peso", symbol: "$U" },
+    { code: "UZS", description: "Uzbekistani So'm", symbol: "лв" },
+    { code: "VES", description: "Venezuelan Bolívar", symbol: "Bs." },
+    { code: "VND", description: "Vietnamese Đồng", symbol: "₫" },
+    { code: "VUV", description: "Vanuatu Vatu", symbol: "Vt" },
+    { code: "WST", description: "Samoan Tala", symbol: "T" },
+    { code: "XAF", description: "Central African CFA Franc", symbol: "FCFA" },
+    { code: "XCD", description: "East Caribbean Dollar", symbol: "EC$" },
+    { code: "XOF", description: "West African CFA Franc", symbol: "CFA" },
+    { code: "XPF", description: "CFP Franc", symbol: "₣" },
+    { code: "YER", description: "Yemeni Rial", symbol: "﷼" },
+    { code: "ZAR", description: "South African Rand", symbol: "R" },
+    { code: "ZMW", description: "Zambian Kwacha", symbol: "ZK" },
+    { code: "ZWL", description: "Zimbabwean Dollar", symbol: "Z$" }
+  ];
+
+  // Handle currency code input change with autocomplete
+  const handleCurrencyCodeChange = (value: string) => {
+    const upperValue = value.toUpperCase();
+    setNewCurrency({ ...newCurrency, code: upperValue });
+    
+    if (upperValue.length > 0) {
+      const filtered = currencyList.filter(curr => 
+        curr.code.startsWith(upperValue)
+      );
+      setFilteredCurrencies(filtered);
+      setShowDropdown(filtered.length > 0);
+    } else {
+      setShowDropdown(false);
+      setFilteredCurrencies([]);
+    }
+  };
+
+  // Handle currency selection from dropdown
+  const handleCurrencySelect = (currency: {code: string, description: string, symbol: string}) => {
+    setNewCurrency({
+      ...newCurrency,
+      code: currency.code,
+      name: currency.description,
+      symbol: currency.symbol
+    });
+    setShowDropdown(false);
+    setFilteredCurrencies([]);
+  };
+
+  // Download Combined Template (Currency + Payment Methods)
+  const downloadCombinedTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    
+    // Currency Sheet
+    const currencyTemplateData = [
+      {
+        'Currency Code': 'USD',
+        'Description': 'United States Dollar',
+        'Symbol': '$',
+        'Exchange Rate': '1.00',
+        'Created': '',
+        'Last Updated': ''
+      },
+      {
+        'Currency Code': 'EUR',
+        'Description': 'Euro',
+        'Symbol': '€',
+        'Exchange Rate': '0.85',
+        'Created': '',
+        'Last Updated': ''
+      },
+      {
+        'Currency Code': 'GBP',
+        'Description': 'British Pound Sterling',
+        'Symbol': '£',
+        'Exchange Rate': '0.73',
+        'Created': '',
+        'Last Updated': ''
+      }
+    ];
+    
+    const wsCurrency = XLSX.utils.json_to_sheet(currencyTemplateData);
+    wsCurrency['!cols'] = [
+      { wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsCurrency, 'Currency');
+    
+    // Payment Methods Sheet
+    const paymentTemplateData = [
+      {
+        'Title': 'Corporate Visa',
+        'Type': 'Credit',
+        'Description': 'Company credit card',
+        'Icon': 'visa',
+        'Manager': 'John Doe',
+        'Expires At': '2025-12-31'
+      },
+      {
+        'Title': 'Business PayPal',
+        'Type': 'Digital Wallet',
+        'Description': 'PayPal business account',
+        'Icon': 'paypal',
+        'Manager': 'Jane Smith',
+        'Expires At': ''
+      },
+      {
+        'Title': 'Company Bank Account',
+        'Type': 'Bank Transfer',
+        'Description': 'Primary business bank account',
+        'Icon': 'bank',
+        'Manager': 'Finance Team',
+        'Expires At': ''
+      }
+    ];
+    
+    const wsPayment = XLSX.utils.json_to_sheet(paymentTemplateData);
+    wsPayment['!cols'] = [
+      { wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 15 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsPayment, 'Payment Methods');
+    
+    XLSX.writeFile(wb, 'Configuration_Template.xlsx');
+    
+    toast({
+      title: "Template Downloaded",
+      description: "Excel template with Currency and Payment Methods sheets downloaded successfully",
+    });
+  };
+
+  // Export All Data (Currency + Payment Methods)
+  const exportAllToExcel = () => {
+    const wb = XLSX.utils.book_new();
+    
+    // Currency Sheet
+    const currencyExportData = currencies.map(currency => ({
+      'Currency Code': currency.code,
+      'Description': currency.name,
+      'Symbol': currency.symbol,
+      'Exchange Rate': currency.exchangeRate || '',
+      'Created': currency.created || '',
+      'Last Updated': currency.lastUpdated || ''
+    }));
+    
+    const wsCurrency = XLSX.utils.json_to_sheet(currencyExportData);
+    wsCurrency['!cols'] = [
+      { wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsCurrency, 'Currency');
+    
+    // Payment Methods Sheet
+    const paymentExportData = paymentMethods.map(method => ({
+      'Title': method.name || method.title,
+      'Type': method.type,
+      'Description': method.description || '',
+      'Icon': method.icon || '',
+      'Manager': method.manager || '',
+      'Expires At': method.expiresAt || ''
+    }));
+    
+    const wsPayment = XLSX.utils.json_to_sheet(paymentExportData);
+    wsPayment['!cols'] = [
+      { wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 15 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsPayment, 'Payment Methods');
+    
+    XLSX.writeFile(wb, `Configuration_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+    
+    toast({
+      title: "Export Successful",
+      description: `Exported ${currencies.length} currencies and ${paymentMethods.length} payment methods to Excel`,
+    });
+  };
+
+  // Import Combined Excel (Currency + Payment Methods)
+  const importCombinedExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        let currencySuccess = 0;
+        let currencyError = 0;
+        let paymentSuccess = 0;
+        let paymentError = 0;
+
+        // Import Currency Sheet
+        if (workbook.SheetNames.includes('Currency')) {
+          const currencySheet = workbook.Sheets['Currency'];
+          const currencyData = XLSX.utils.sheet_to_json(currencySheet) as any[];
+
+          for (const row of currencyData) {
+            try {
+              const currencyData = {
+                code: (row['Currency Code'] || '').toString().trim().toUpperCase(),
+                name: (row['Description'] || '').toString().trim(),
+                symbol: (row['Symbol'] || '').toString().trim(),
+                exchangeRate: (row['Exchange Rate'] || '').toString().trim(),
+              };
+
+              if (!currencyData.code || !currencyData.name || !currencyData.symbol) {
+                currencyError++;
+                continue;
+              }
+
+              const exists = currencies.find(c => c.code === currencyData.code);
+              const method = exists ? 'PUT' : 'POST';
+              const url = exists 
+                ? `${API_BASE_URL}/api/currencies/${currencyData.code}` 
+                : `${API_BASE_URL}/api/currencies`;
+
+              const res = await fetch(url, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(currencyData),
+              });
+
+              if (res.ok) {
+                currencySuccess++;
+              } else {
+                currencyError++;
+              }
+            } catch (error) {
+              currencyError++;
+            }
+          }
+        }
+
+        // Import Payment Methods Sheet
+        if (workbook.SheetNames.includes('Payment Methods')) {
+          const paymentSheet = workbook.Sheets['Payment Methods'];
+          const paymentData = XLSX.utils.sheet_to_json(paymentSheet) as any[];
+
+          for (const row of paymentData) {
+            try {
+              const paymentData = {
+                name: (row['Title'] || '').toString().trim(),
+                type: (row['Type'] || '').toString().trim(),
+                description: (row['Description'] || '').toString().trim(),
+                icon: (row['Icon'] || '').toString().trim(),
+                manager: (row['Manager'] || '').toString().trim(),
+                expiresAt: (row['Expires At'] || '').toString().trim(),
+              };
+
+              if (!paymentData.name || !paymentData.type) {
+                paymentError++;
+                continue;
+              }
+
+              const res = await fetch("/api/payment", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(paymentData),
+              });
+
+              if (res.ok) {
+                paymentSuccess++;
+              } else {
+                paymentError++;
+              }
+            } catch (error) {
+              paymentError++;
+            }
+          }
+        }
+
+        // Refresh data
+        await fetchCurrencies();
+        const refreshRes = await fetch("/api/payment");
+        const refreshData = await refreshRes.json();
+        setPaymentMethods(refreshData);
+        queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
+
+        toast({
+          title: "Import Complete",
+          description: `Currencies: ${currencySuccess} success, ${currencyError} failed. Payment Methods: ${paymentSuccess} success, ${paymentError} failed.`,
+          variant: (currencyError > 0 || paymentError > 0) ? "destructive" : "default",
+        });
+      } catch (error) {
+        toast({
+          title: "Import Failed",
+          description: "Failed to parse Excel file. Please check the file format.",
+          variant: "destructive",
+        });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    
+    // Reset file input
+    if (currencyFileInputRef.current) {
+      currencyFileInputRef.current.value = '';
+    }
+  };
+
+  // Download Currency Template
+  const downloadCurrencyTemplate = () => {
+    const templateData = [
+      {
+        'Currency Code': 'USD',
+        'Description': 'United States Dollar',
+        'Symbol': '$',
+        'Exchange Rate': '1.00',
+        'Created': '',
+        'Last Updated': ''
+      },
+      {
+        'Currency Code': 'EUR',
+        'Description': 'Euro',
+        'Symbol': '€',
+        'Exchange Rate': '0.85',
+        'Created': '',
+        'Last Updated': ''
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Currencies');
+    
+    const wscols = [
+      { wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+    ];
+    ws['!cols'] = wscols;
+
+    XLSX.writeFile(wb, 'Currency_Template.xlsx');
+    
+    toast({
+      title: "Template Downloaded",
+      description: "Use this template to import currencies",
+    });
+  };
+
+  // Download Payment Method Template
+  const downloadPaymentTemplate = () => {
+    const templateData = [
+      {
+        'Title': 'Corporate Visa',
+        'Type': 'Credit',
+        'Description': 'Company credit card',
+        'Icon': 'visa',
+        'Manager': 'John Doe',
+        'Expires At': '2025-12-31'
+      },
+      {
+        'Title': 'Business PayPal',
+        'Type': 'Digital Wallet',
+        'Description': 'PayPal business account',
+        'Icon': 'paypal',
+        'Manager': 'Jane Smith',
+        'Expires At': ''
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Payment Methods');
+    
+    const wscols = [
+      { wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 15 }
+    ];
+    ws['!cols'] = wscols;
+
+    XLSX.writeFile(wb, 'PaymentMethod_Template.xlsx');
+    
+    toast({
+      title: "Template Downloaded",
+      description: "Use this template to import payment methods. Valid icons: visa, mastercard, paypal, amex, apple_pay, google_pay, bank, cash, other",
+    });
+  };
+
+  // Excel Export for Currencies
+  const exportCurrenciesToExcel = () => {
+    const exportData = currencies.map(currency => ({
+      'Currency Code': currency.code,
+      'Description': currency.name,
+      'Symbol': currency.symbol,
+      'Exchange Rate': currency.exchangeRate || '',
+      'Created': currency.created || '',
+      'Last Updated': currency.lastUpdated || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Currencies');
+    
+    // Auto-size columns
+    const maxWidth = 20;
+    const wscols = [
+      { wch: 15 }, // Currency Code
+      { wch: 30 }, // Description
+      { wch: 10 }, // Symbol
+      { wch: 15 }, // Exchange Rate
+      { wch: 15 }, // Created
+      { wch: 15 }  // Last Updated
+    ];
+    ws['!cols'] = wscols;
+
+    XLSX.writeFile(wb, `Currencies_${new Date().toISOString().split('T')[0]}.xlsx`);
+    
+    toast({
+      title: "Export Successful",
+      description: `${currencies.length} currencies exported to Excel`,
+    });
+  };
+
+  // Excel Import for Currencies
+  const importCurrenciesFromExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const row of jsonData) {
+          try {
+            const currencyData = {
+              code: (row['Currency Code'] || '').toString().trim().toUpperCase(),
+              name: (row['Description'] || '').toString().trim(),
+              symbol: (row['Symbol'] || '').toString().trim(),
+              exchangeRate: (row['Exchange Rate'] || '').toString().trim(),
+            };
+
+            if (!currencyData.code || !currencyData.name || !currencyData.symbol) {
+              errorCount++;
+              continue;
+            }
+
+            // Check if currency already exists
+            const exists = currencies.find(c => c.code === currencyData.code);
+            const method = exists ? 'PUT' : 'POST';
+            const url = exists 
+              ? `${API_BASE_URL}/api/currencies/${currencyData.code}` 
+              : `${API_BASE_URL}/api/currencies`;
+
+            const res = await fetch(url, {
+              method,
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify(currencyData),
+            });
+
+            if (res.ok) {
+              successCount++;
+            } else {
+              errorCount++;
+            }
+          } catch (error) {
+            errorCount++;
+          }
+        }
+
+        await fetchCurrencies();
+        queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
+
+        toast({
+          title: "Import Complete",
+          description: `Successfully imported ${successCount} currencies. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
+          variant: errorCount > 0 ? "destructive" : "default",
+        });
+      } catch (error) {
+        toast({
+          title: "Import Failed",
+          description: "Failed to parse Excel file. Please check the file format.",
+          variant: "destructive",
+        });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    
+    // Reset file input
+    if (currencyFileInputRef.current) {
+      currencyFileInputRef.current.value = '';
+    }
+  };
+
+  // Excel Export for Payment Methods
+  const exportPaymentMethodsToExcel = () => {
+    const exportData = paymentMethods.map(method => ({
+      'Title': method.name || method.title,
+      'Type': method.type,
+      'Description': method.description || '',
+      'Icon': method.icon || '',
+      'Manager': method.manager || '',
+      'Expires At': method.expiresAt || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Payment Methods');
+    
+    // Auto-size columns
+    const wscols = [
+      { wch: 20 }, // Title
+      { wch: 15 }, // Type
+      { wch: 30 }, // Description
+      { wch: 15 }, // Icon
+      { wch: 20 }, // Manager
+      { wch: 15 }  // Expires At
+    ];
+    ws['!cols'] = wscols;
+
+    XLSX.writeFile(wb, `PaymentMethods_${new Date().toISOString().split('T')[0]}.xlsx`);
+    
+    toast({
+      title: "Export Successful",
+      description: `${paymentMethods.length} payment methods exported to Excel`,
+    });
+  };
+
+  // Excel Import for Payment Methods
+  const importPaymentMethodsFromExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const row of jsonData) {
+          try {
+            const paymentData = {
+              name: (row['Title'] || '').toString().trim(),
+              type: (row['Type'] || '').toString().trim(),
+              description: (row['Description'] || '').toString().trim(),
+              icon: (row['Icon'] || '').toString().trim(),
+              manager: (row['Manager'] || '').toString().trim(),
+              expiresAt: (row['Expires At'] || '').toString().trim(),
+            };
+
+            if (!paymentData.name || !paymentData.type) {
+              errorCount++;
+              continue;
+            }
+
+            const res = await fetch("/api/payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(paymentData),
+            });
+
+            if (res.ok) {
+              successCount++;
+            } else {
+              errorCount++;
+            }
+          } catch (error) {
+            errorCount++;
+          }
+        }
+
+        // Refetch payment methods
+        const refreshRes = await fetch("/api/payment");
+        const refreshData = await refreshRes.json();
+        setPaymentMethods(refreshData);
+        queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
+
+        toast({
+          title: "Import Complete",
+          description: `Successfully imported ${successCount} payment methods. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
+          variant: errorCount > 0 ? "destructive" : "default",
+        });
+      } catch (error) {
+        toast({
+          title: "Import Failed",
+          description: "Failed to parse Excel file. Please check the file format.",
+          variant: "destructive",
+        });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    
+    // Reset file input
+    if (currencyFileInputRef.current) {
+      currencyFileInputRef.current.value = '';
+    }
+  };
   
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [currenciesLoading, setCurrenciesLoading] = useState(true);
@@ -406,8 +1222,6 @@ export default function Configuration() {
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
   const [newComplianceFieldName, setNewComplianceFieldName] = useState('');
   const [isLoadingCompliance, setIsLoadingCompliance] = useState(true);
-  
-  const { toast } = useToast();
   
   // Fetch enabled fields from backend on mount
   useEffect(() => {
@@ -733,10 +1547,10 @@ export default function Configuration() {
       body: JSON.stringify({
         name: paymentForm.title,
         type: paymentForm.type,
-        description: paymentForm.description,
-        icon: paymentForm.icon,
         manager: paymentForm.manager,
         expiresAt: paymentForm.expiresAt,
+        financialInstitution: paymentForm.financialInstitution,
+        lastFourDigits: paymentForm.lastFourDigits,
       }),
     })
       .then(res => res.json())
@@ -750,10 +1564,10 @@ export default function Configuration() {
         setPaymentForm({
           title: '',
           type: '',
-          description: '',
-          icon: '',
           manager: '',
           expiresAt: '',
+          financialInstitution: '',
+          lastFourDigits: '',
         });
         toast({ title: 'Payment method added', description: 'A new payment method has been added.' });
       });
@@ -767,36 +1581,63 @@ export default function Configuration() {
   const [paymentForm, setPaymentForm] = useState({
     title: '',
     type: '',
-    description: '',
-    icon: '',
     manager: '',
     expiresAt: '',
+    financialInstitution: '',
+    lastFourDigits: '',
   });
   
-  // Card image options for payment method
-  const iconOptions = [
-    { value: 'visa', label: 'Visa', img: cardImages.visa },
-    { value: 'mastercard', label: 'MasterCard', img: cardImages.mastercard },
-    { value: 'paypal', label: 'PayPal', img: cardImages.paypal },
-    { value: 'amex', label: 'Amex', img: cardImages.amex },
-    { value: 'apple_pay', label: 'Apple Pay', img: cardImages.apple_pay },
-    { value: 'google_pay', label: 'Google Pay', img: cardImages.google_pay },
-    { value: 'bank', label: 'Bank', img: cardImages.bank },
-    { value: 'cash', label: 'Cash', img: cardImages.cash },
-    { value: 'other', label: 'Other', img: cardImages.other },
-  ];
+
   
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-[1400px] mx-auto px-6 py-8">
         {/* Modern Professional Header */}
         <div className="mb-8">
-          <div className="flex items-center space-x-4 mb-6">
-            <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
-              <Settings className="h-6 w-6 text-white" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-4">
+              <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
+                <Settings className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Setup & Configuration</h1>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Setup & Configuration</h1>
+            
+            {/* Consolidated Excel Import/Export Buttons */}
+            <div className="flex items-center gap-3">
+              <input
+                ref={currencyFileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={importCombinedExcel}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                onClick={downloadCombinedTemplate}
+                className="border-purple-300 text-purple-700 hover:bg-purple-50 shadow-sm"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Template
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => currencyFileInputRef.current?.click()}
+                className="border-green-300 text-green-700 hover:bg-green-50 shadow-sm"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Import
+              </Button>
+              <Button
+                variant="outline"
+                onClick={exportAllToExcel}
+                disabled={currencies.length === 0 && paymentMethods.length === 0}
+                className="border-blue-300 text-blue-700 hover:bg-blue-50 shadow-sm"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
             </div>
           </div>
         </div>
@@ -978,16 +1819,46 @@ export default function Configuration() {
                             {/* Form Content */}
                             <div className="px-8 py-6">
                               <form className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Currency Code Field */}
-                                <div className="space-y-2">
+                                {/* Currency Code Field with Autocomplete */}
+                                <div className="space-y-2 relative">
                                   <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                     Currency Code <span className="text-red-500">*</span>
                                   </Label>
                                   <Input
                                     value={newCurrency.code}
-                                    onChange={(e) => setNewCurrency({ ...newCurrency, code: e.target.value })}
+                                    onChange={(e) => handleCurrencyCodeChange(e.target.value)}
+                                    onFocus={() => {
+                                      if (newCurrency.code && filteredCurrencies.length > 0) {
+                                        setShowDropdown(true);
+                                      }
+                                    }}
+                                    onBlur={() => {
+                                      // Delay to allow click on dropdown item
+                                      setTimeout(() => setShowDropdown(false), 200);
+                                    }}
+                                    placeholder="Type to search..."
                                     className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                                    autoComplete="off"
                                   />
+                                  {/* Autocomplete Dropdown */}
+                                  {showDropdown && filteredCurrencies.length > 0 && (
+                                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                      {filteredCurrencies.map((curr) => (
+                                        <button
+                                          key={curr.code}
+                                          type="button"
+                                          onClick={() => handleCurrencySelect(curr)}
+                                          className="w-full px-4 py-2 text-left hover:bg-blue-50 transition-colors duration-150 flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                                        >
+                                          <div>
+                                            <div className="font-semibold text-gray-900">{curr.code}</div>
+                                            <div className="text-sm text-gray-600">{curr.description}</div>
+                                          </div>
+                                          <div className="text-lg font-bold text-blue-600">{curr.symbol}</div>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
 
                                 {/* Description Field */}
@@ -1099,7 +1970,7 @@ export default function Configuration() {
                                           placeholder="Rate"
                                         />
                                       ) : (
-                                        currency.exchangeRate || '-'
+                                        currency.exchangeRate ? parseFloat(currency.exchangeRate).toFixed(2) : '-'
                                       )}
                                     </td>
                                     <td className="py-3 px-4 text-sm text-gray-500">
@@ -1177,6 +2048,7 @@ export default function Configuration() {
                           className="pl-10 w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-gray-50 focus:bg-white transition-all duration-200"
                         />
                       </div>
+                      
                       <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                         <Button
                           onClick={() => {
@@ -1206,7 +2078,7 @@ export default function Configuration() {
                           method.type.toLowerCase().includes(paymentSearchTerm.toLowerCase())
                         )
                         .map((method, idx) => {
-                        const iconObj = iconOptions.find(opt => opt.value === method.icon);
+                        const subsCount = getPaymentMethodSubscriptions(method.name).length;
                         return (
                           <motion.div 
                             key={idx} 
@@ -1214,28 +2086,19 @@ export default function Configuration() {
                             className="bg-white border border-gray-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-200"
                           >
                             <div className="flex items-center gap-3 mb-3">
-                              {iconObj ? (
-                                <div className="flex-shrink-0 p-3 bg-gray-100 rounded-lg min-w-[72px] min-h-[56px] flex items-center justify-center">
-                                  {method.icon === 'other' ? (
-                                    <span className="text-xs font-bold text-gray-700">OTHERS</span>
-                                  ) : (
-                                    <img src={iconObj.img} alt={iconObj.label} className="w-12 h-8 object-contain" />
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="w-14 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
-                                  <CreditCard className="w-5 h-5 text-gray-400" />
-                                </div>
-                              )}
                               <div className="flex-1 min-w-0">
                                 <div className="font-semibold text-gray-900 truncate">{method.name}</div>
                                 <div className="text-sm text-gray-500">{method.type}</div>
                               </div>
+                              {/* Subscription Count Badge */}
+                              <button
+                                onClick={() => openPaymentSubsModal(method.name)}
+                                className="flex-shrink-0 bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-semibold text-sm hover:bg-blue-200 transition-colors cursor-pointer"
+                                title="View subscriptions using this payment method"
+                              >
+                                {subsCount}
+                              </button>
                             </div>
-                            
-                            {method.description && (
-                              <p className="text-sm text-gray-600 mb-3 line-clamp-2">{method.description}</p>
-                            )}
                             
                             <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
                               <Button 
@@ -1279,6 +2142,61 @@ export default function Configuration() {
                         </div>
                       )}
                     </div>
+                    
+                    {/* Payment Method Subscriptions Modal */}
+                    <Dialog open={paymentSubsModalOpen} onOpenChange={setPaymentSubsModalOpen}>
+                      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+                          <DialogHeader>
+                            <DialogTitle className="text-2xl font-bold tracking-tight text-white">
+                              Subscriptions using {selectedPaymentSubs.paymentMethod}
+                            </DialogTitle>
+                            <p className="text-blue-100 mt-1 font-medium">
+                              {selectedPaymentSubs.subscriptions.length} subscription{selectedPaymentSubs.subscriptions.length !== 1 ? 's' : ''} found
+                            </p>
+                          </DialogHeader>
+                        </div>
+                        
+                        <div className="px-8 py-6">
+                          {selectedPaymentSubs.subscriptions.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500">
+                              <CreditCard className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                              <p>No subscriptions are using this payment method</p>
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Service Name</TableHead>
+                                    <TableHead>Owner</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Amount</TableHead>
+                                    <TableHead>Status</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {selectedPaymentSubs.subscriptions.map((sub: any, idx) => (
+                                    <TableRow key={idx}>
+                                      <TableCell className="font-medium">{sub.serviceName || sub.name || '-'}</TableCell>
+                                      <TableCell>{sub.owner || '-'}</TableCell>
+                                      <TableCell>{sub.category || '-'}</TableCell>
+                                      <TableCell>${parseFloat(String(sub.amount || 0)).toFixed(2)}</TableCell>
+                                      <TableCell>
+                                        <Badge className={sub.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                                          {sub.status}
+                                        </Badge>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    
                     {/* Edit Payment Method Modal */}
                     <Dialog open={editPaymentModalOpen} onOpenChange={setEditPaymentModalOpen}>
                       <DialogContent className={`${isEditPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
@@ -1315,16 +2233,15 @@ export default function Configuration() {
                         {/* Form Content */}
                         <div className="px-8 py-6">
                           <form onSubmit={handleEditPaymentMethod} className={`${isEditPaymentFullscreen ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'grid grid-cols-1 md:grid-cols-2 gap-6'}`}>
-                            {/* Title Field */}
+                            {/* Name Field */}
                             <div className="space-y-2">
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                Title <span className="text-red-500">*</span>
+                                Name <span className="text-red-500">*</span>
                               </Label>
                               <Input 
                                 required 
                                 value={paymentForm.title} 
                                 onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))}
-                                placeholder=""
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>
@@ -1350,28 +2267,56 @@ export default function Configuration() {
                               </select>
                             </div>
 
-                            {/* Description Field */}
-                            <div className="space-y-2">
-                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                Description
-                              </Label>
-                              <Input 
-                                value={paymentForm.description} 
-                                onChange={e => setPaymentForm(f => ({ ...f, description: e.target.value }))}
-                                placeholder=""
-                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
-                              />
-                            </div>
-
                             {/* Manager Field */}
                             <div className="space-y-2">
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Managed by
                               </Label>
+                              <Select
+                                value={paymentForm.manager}
+                                onValueChange={(value) => setPaymentForm(f => ({ ...f, manager: value }))}
+                              >
+                                <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
+                                  <SelectValue placeholder="Select employee" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {employeesRaw.length > 0 ? (
+                                    employeesRaw.map((emp: any) => (
+                                      <SelectItem key={emp._id || emp.id || emp.name} value={emp.name}>
+                                        {emp.name}
+                                      </SelectItem>
+                                    ))
+                                  ) : (
+                                    <SelectItem value="no-employee" disabled>No employees found</SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {/* Financial Institution Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Financial Institution
+                              </Label>
                               <Input 
-                                value={paymentForm.manager} 
-                                onChange={e => setPaymentForm(f => ({ ...f, manager: e.target.value }))}
-                                placeholder=""
+                                value={paymentForm.financialInstitution} 
+                                onChange={e => setPaymentForm(f => ({ ...f, financialInstitution: e.target.value }))}
+                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                              />
+                            </div>
+
+                            {/* Last 4 Digits Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Last 4 Digits
+                              </Label>
+                              <Input 
+                                value={paymentForm.lastFourDigits} 
+                                onChange={e => {
+                                  const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                  setPaymentForm(f => ({ ...f, lastFourDigits: value }));
+                                }}
+                                maxLength={4}
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>
@@ -1387,43 +2332,6 @@ export default function Configuration() {
                                 onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
-                            </div>
-
-                            {/* Card Image Selection - Full Width */}
-                            <div className={`space-y-3 ${isEditPaymentFullscreen ? 'lg:col-span-2' : 'md:col-span-2'}`}>
-                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                Card Image
-                              </Label>
-                              <div className={`grid gap-3 ${isEditPaymentFullscreen ? 'grid-cols-5 lg:grid-cols-9' : 'grid-cols-4 md:grid-cols-5'}`}>
-                                {iconOptions.map(opt => (
-                                  <button
-                                    type="button"
-                                    key={opt.value}
-                                    className={`relative p-2 border-2 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 min-h-[60px] ${
-                                      paymentForm.icon === opt.value 
-                                        ? 'border-indigo-500 bg-indigo-50 shadow-lg ring-2 ring-indigo-500 ring-opacity-20' 
-                                        : 'border-gray-200 hover:border-gray-300'
-                                    }`}
-                                    onClick={() => setPaymentForm(f => ({ ...f, icon: opt.value }))}
-                                    title={opt.label}
-                                  >
-                                    {opt.value === 'other' ? (
-                                      <div className="w-full h-10 flex items-center justify-center">
-                                        <span className="text-xs font-bold text-gray-700 whitespace-nowrap">OTHERS</span>
-                                      </div>
-                                    ) : (
-                                      <img src={opt.img} alt={opt.label} className="w-14 h-10 object-contain mx-auto" />
-                                    )}
-                                    {paymentForm.icon === opt.value && (
-                                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center">
-                                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                        </svg>
-                                      </div>
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
                             </div>
 
                             {/* Action Buttons - Full Width */}
@@ -1483,10 +2391,10 @@ export default function Configuration() {
                         {/* Form Content */}
                         <div className="px-8 py-6">
                           <form onSubmit={handleAddPaymentMethod} className={`${isAddPaymentFullscreen ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'grid grid-cols-1 md:grid-cols-2 gap-6'}`}>
-                            {/* Title Field */}
+                            {/* Name Field */}
                             <div className="space-y-2">
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                Title <span className="text-red-500">*</span>
+                                Name <span className="text-red-500">*</span>
                               </Label>
                               <Input 
                                 required 
@@ -1517,26 +2425,56 @@ export default function Configuration() {
                               </select>
                             </div>
 
-                            {/* Description Field */}
-                            <div className="space-y-2">
-                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                Description
-                              </Label>
-                              <Input 
-                                value={paymentForm.description} 
-                                onChange={e => setPaymentForm(f => ({ ...f, description: e.target.value }))}
-                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
-                              />
-                            </div>
-
                             {/* Manager Field */}
                             <div className="space-y-2">
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Managed by
                               </Label>
+                              <Select
+                                value={paymentForm.manager}
+                                onValueChange={(value) => setPaymentForm(f => ({ ...f, manager: value }))}
+                              >
+                                <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
+                                  <SelectValue placeholder="Select employee" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {employeesRaw.length > 0 ? (
+                                    employeesRaw.map((emp: any) => (
+                                      <SelectItem key={emp._id || emp.id || emp.name} value={emp.name}>
+                                        {emp.name}
+                                      </SelectItem>
+                                    ))
+                                  ) : (
+                                    <SelectItem value="no-employee" disabled>No employees found</SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {/* Financial Institution Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Financial Institution
+                              </Label>
                               <Input 
-                                value={paymentForm.manager} 
-                                onChange={e => setPaymentForm(f => ({ ...f, manager: e.target.value }))}
+                                value={paymentForm.financialInstitution} 
+                                onChange={e => setPaymentForm(f => ({ ...f, financialInstitution: e.target.value }))}
+                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                              />
+                            </div>
+
+                            {/* Last 4 Digits Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Last 4 Digits
+                              </Label>
+                              <Input 
+                                value={paymentForm.lastFourDigits} 
+                                onChange={e => {
+                                  const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                  setPaymentForm(f => ({ ...f, lastFourDigits: value }));
+                                }}
+                                maxLength={4}
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>
@@ -1552,43 +2490,6 @@ export default function Configuration() {
                                 onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
-                            </div>
-
-                            {/* Card Image Selection - Full Width */}
-                            <div className={`space-y-3 ${isAddPaymentFullscreen ? 'lg:col-span-2' : 'md:col-span-2'}`}>
-                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                Card Image
-                              </Label>
-                              <div className={`grid gap-3 ${isAddPaymentFullscreen ? 'grid-cols-5 lg:grid-cols-9' : 'grid-cols-4 md:grid-cols-5'}`}>
-                                {iconOptions.map(opt => (
-                                  <button
-                                    type="button"
-                                    key={opt.value}
-                                    className={`relative p-2 border-2 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 min-h-[60px] ${
-                                      paymentForm.icon === opt.value 
-                                        ? 'border-blue-500 bg-blue-50 shadow-lg ring-2 ring-blue-500 ring-opacity-20' 
-                                        : 'border-gray-200 hover:border-gray-300'
-                                    }`}
-                                    onClick={() => setPaymentForm(f => ({ ...f, icon: opt.value }))}
-                                    title={opt.label}
-                                  >
-                                    {opt.value === 'other' ? (
-                                      <div className="w-full h-10 flex items-center justify-center">
-                                        <span className="text-xs font-bold text-gray-700 whitespace-nowrap">OTHERS</span>
-                                      </div>
-                                    ) : (
-                                      <img src={opt.img} alt={opt.label} className="w-14 h-10 object-contain mx-auto" />
-                                    )}
-                                    {paymentForm.icon === opt.value && (
-                                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                        </svg>
-                                      </div>
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
                             </div>
 
                             {/* Action Buttons - Full Width */}

@@ -1216,15 +1216,15 @@ router.post("/api/company/categories", async (req, res) => {
       return res.status(400).json({ message: "Category name required" });
     }
     name = name.trim();
-    // Prevent duplicate category names
-    const exists = await collection.findOne({ name });
-    if (exists) {
-      return res.status(409).json({ message: "Category already exists" });
-    }
-    // Multi-tenancy: set tenantId
+    // Multi-tenancy: get tenantId
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    // Prevent duplicate category names WITHIN THIS TENANT
+    const exists = await collection.findOne({ name, tenantId });
+    if (exists) {
+      return res.status(409).json({ message: "Category already exists" });
     }
     const result = await collection.insertOne({ name, visible: true, tenantId });
     res.status(201).json({ insertedId: result.insertedId });

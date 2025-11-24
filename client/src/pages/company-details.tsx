@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search } from "lucide-react";
+import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,6 +25,7 @@ import type { User as UserType, InsertUser, CompanyInfo, InsertCompanyInfo } fro
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 // CSV Utilities
 const convertToCSV = (employees: any[]) => {
@@ -69,6 +70,11 @@ const [searchTerm, setSearchTerm] = useState("");
 const fileInputRef = React.useRef<HTMLInputElement>(null);
 const { toast } = useToast();
 const queryClient = useQueryClient();
+
+// Fetch all subscriptions for employee count
+const { data: subscriptions = [] } = useQuery<any[]>({
+  queryKey: ["/api/subscriptions"],
+});
 
 // Refetch employees on login/logout or page refresh
 React.useEffect(() => {
@@ -480,7 +486,7 @@ name="department"
 render={({ field }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Department</FormLabel>
-<Select onValueChange={field.onChange} defaultValue={field.value}>
+<Select onValueChange={field.onChange} value={field.value}>
 <FormControl>
 <SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
 <SelectValue />
@@ -962,7 +968,7 @@ name="status"
 render={({ field }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Status</FormLabel>
-<Select onValueChange={field.onChange} defaultValue={field.value}>
+<Select onValueChange={field.onChange} value={field.value}>
 <FormControl>
 <SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
 <SelectValue placeholder="Select status" />
@@ -1331,7 +1337,286 @@ duration: 1000,
 const [newCategoryName, setNewCategoryName] = useState('');
 const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
 const [editingDepartment, setEditingDepartment] = useState<Department | undefined>();
+const [departmentSearchTerm, setDepartmentSearchTerm] = useState('');
+const [expandedDepartment, setExpandedDepartment] = useState<string | null>(null);
+const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+const [selectedDepartmentForDetails, setSelectedDepartmentForDetails] = useState<string | null>(null);
+const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
+const [selectedEmployeeSubscriptions, setSelectedEmployeeSubscriptions] = useState<{employeeName: string; subscriptions: any[]}>({employeeName: '', subscriptions: []});
 const { toast } = useToast();
+
+// File input ref for Excel import
+const companyFileInputRef = React.useRef<HTMLInputElement>(null);
+
+// Excel Template Download (Departments, Employees, Subscription Categories)
+const downloadCombinedTemplate = () => {
+  const wb = XLSX.utils.book_new();
+  
+  // Departments Sheet
+  const departmentTemplateData = [
+    {
+      'Department Name': 'IT',
+      'Department Head': 'John Doe',
+      'Email': 'john.doe@company.com',
+    },
+    {
+      'Department Name': 'HR',
+      'Department Head': 'Jane Smith',
+      'Email': 'jane.smith@company.com',
+    },
+    {
+      'Department Name': 'Finance',
+      'Department Head': 'Bob Johnson',
+      'Email': 'bob.johnson@company.com',
+    }
+  ];
+  
+  const wsDept = XLSX.utils.json_to_sheet(departmentTemplateData);
+  wsDept['!cols'] = [{ wch: 20 }, { wch: 25 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(wb, wsDept, 'Departments');
+  
+  // Employees Sheet
+  const employeeTemplateData = [
+    {
+      'Name': 'John Doe',
+      'Email': 'john.doe@company.com',
+      'Department': 'IT',
+      'Role': 'Software Engineer',
+      'Status': 'active'
+    },
+    {
+      'Name': 'Jane Smith',
+      'Email': 'jane.smith@company.com',
+      'Department': 'HR',
+      'Role': 'HR Manager',
+      'Status': 'active'
+    },
+    {
+      'Name': 'Bob Johnson',
+      'Email': 'bob.johnson@company.com',
+      'Department': 'Finance',
+      'Role': 'Accountant',
+      'Status': 'active'
+    }
+  ];
+  
+  const wsEmp = XLSX.utils.json_to_sheet(employeeTemplateData);
+  wsEmp['!cols'] = [{ wch: 20 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, wsEmp, 'Employees');
+  
+  // Subscription Categories Sheet
+  const categoryTemplateData = [
+    { 'Category Name': 'Cloud Services' },
+    { 'Category Name': 'Software Licenses' },
+    { 'Category Name': 'Marketing Tools' },
+    { 'Category Name': 'Communication' }
+  ];
+  
+  const wsCat = XLSX.utils.json_to_sheet(categoryTemplateData);
+  wsCat['!cols'] = [{ wch: 25 }];
+  XLSX.utils.book_append_sheet(wb, wsCat, 'Subscription Categories');
+  
+  XLSX.writeFile(wb, 'CompanyDetails_Template.xlsx');
+  
+  toast({
+    title: "Template Downloaded",
+    description: "Excel template with Departments, Employees, and Categories downloaded successfully",
+  });
+};
+
+// Export All Data (Departments, Employees, Subscription Categories)
+const exportAllToExcel = () => {
+  const wb = XLSX.utils.book_new();
+  
+  // Departments Sheet
+  const departmentExportData = departments.map(dept => ({
+    'Department Name': dept.name,
+    'Department Head': dept.departmentHead || '',
+    'Email': dept.email || '',
+  }));
+  
+  const wsDept = XLSX.utils.json_to_sheet(departmentExportData);
+  wsDept['!cols'] = [{ wch: 20 }, { wch: 25 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(wb, wsDept, 'Departments');
+  
+  // Employees Sheet
+  const employeeExportData = employeesData.map((emp: any) => ({
+    'Name': emp.name,
+    'Email': emp.email,
+    'Department': emp.department,
+    'Role': emp.role,
+    'Status': emp.status
+  }));
+  
+  const wsEmp = XLSX.utils.json_to_sheet(employeeExportData);
+  wsEmp['!cols'] = [{ wch: 20 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, wsEmp, 'Employees');
+  
+  // Subscription Categories Sheet
+  const categoryExportData = categories.map(cat => ({
+    'Category Name': cat.name
+  }));
+  
+  const wsCat = XLSX.utils.json_to_sheet(categoryExportData);
+  wsCat['!cols'] = [{ wch: 25 }];
+  XLSX.utils.book_append_sheet(wb, wsCat, 'Subscription Categories');
+  
+  XLSX.writeFile(wb, `CompanyDetails_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+  
+  toast({
+    title: "Export Successful",
+    description: `Exported ${departments.length} departments, ${employeesData.length} employees, and ${categories.length} categories to Excel`,
+  });
+};
+
+// Import Combined Excel (Departments, Employees, Subscription Categories)
+const importCombinedExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const data = new Uint8Array(e.target?.result as ArrayBuffer);
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      let deptSuccess = 0;
+      let deptError = 0;
+      let empSuccess = 0;
+      let empError = 0;
+      let catSuccess = 0;
+      let catError = 0;
+
+      // Import Departments Sheet
+      if (workbook.SheetNames.includes('Departments')) {
+        const deptSheet = workbook.Sheets['Departments'];
+        const deptData = XLSX.utils.sheet_to_json(deptSheet) as any[];
+
+        for (const row of deptData) {
+          try {
+            const departmentData = {
+              name: (row['Department Name'] || '').toString().trim(),
+              departmentHead: (row['Department Head'] || '').toString().trim(),
+              email: (row['Email'] || '').toString().trim(),
+              visible: true
+            };
+
+            if (!departmentData.name || !departmentData.departmentHead || !departmentData.email) {
+              deptError++;
+              continue;
+            }
+
+            const res = await apiRequest("POST", "/api/company/departments", departmentData);
+            if (res.ok) {
+              deptSuccess++;
+            } else {
+              deptError++;
+            }
+          } catch (error) {
+            deptError++;
+          }
+        }
+      }
+
+      // Import Employees Sheet
+      if (workbook.SheetNames.includes('Employees')) {
+        const empSheet = workbook.Sheets['Employees'];
+        const empData = XLSX.utils.sheet_to_json(empSheet) as any[];
+
+        for (const row of empData) {
+          try {
+            const employeeData = {
+              name: (row['Name'] || '').toString().trim(),
+              email: (row['Email'] || '').toString().trim(),
+              department: (row['Department'] || '').toString().trim(),
+              role: (row['Role'] || '').toString().trim(),
+              status: (row['Status'] || 'active').toString().trim().toLowerCase()
+            };
+
+            if (!employeeData.name || !employeeData.email || !employeeData.department || !employeeData.role) {
+              empError++;
+              continue;
+            }
+
+            const res = await apiRequest("POST", "/api/employees", employeeData);
+            if (res.ok) {
+              empSuccess++;
+            } else {
+              empError++;
+            }
+          } catch (error) {
+            empError++;
+          }
+        }
+      }
+
+      // Import Subscription Categories Sheet
+      if (workbook.SheetNames.includes('Subscription Categories')) {
+        const catSheet = workbook.Sheets['Subscription Categories'];
+        const catData = XLSX.utils.sheet_to_json(catSheet) as any[];
+
+        for (const row of catData) {
+          try {
+            const categoryName = (row['Category Name'] || '').toString().trim();
+
+            if (!categoryName) {
+              catError++;
+              continue;
+            }
+
+            const res = await apiRequest("POST", "/api/company/categories", {
+              name: categoryName,
+              visible: true
+            });
+            
+            if (res.ok) {
+              catSuccess++;
+            } else {
+              catError++;
+            }
+          } catch (error) {
+            catError++;
+          }
+        }
+      }
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/company/departments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/categories"] });
+      refetchDepartments();
+      refetchCategories();
+
+      toast({
+        title: "Import Complete",
+        description: `Departments: ${deptSuccess} success, ${deptError} failed. Employees: ${empSuccess} success, ${empError} failed. Categories: ${catSuccess} success, ${catError} failed.`,
+        variant: (deptError > 0 || empError > 0 || catError > 0) ? "destructive" : "default",
+      });
+    } catch (error) {
+      toast({
+        title: "Import Failed",
+        description: "Failed to parse Excel file. Please check the file format.",
+        variant: "destructive",
+      });
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  
+  // Reset file input
+  if (companyFileInputRef.current) {
+    companyFileInputRef.current.value = '';
+  }
+};
+
+// Fetch employees for department counts
+const { data: employeesData = [] } = useQuery<any[]>({
+  queryKey: ["/api/employees"],
+});
+
+// Fetch subscriptions for department counts
+const { data: subscriptionsData = [] } = useQuery<any[]>({
+  queryKey: ["/api/subscriptions"],
+});
 
 // Department form
 const departmentForm = useForm<DepartmentFormValues>({
@@ -1361,6 +1646,54 @@ if (editingDepartment && editingDepartment._id) {
   addDepartmentMutation.mutate(data);
 }
 };
+
+// Get employee count for a department
+const getEmployeeCount = (deptName: string) => {
+  return employeesData.filter(emp => emp.department === deptName).length;
+};
+
+// Get subscription count for a department
+const getSubscriptionCount = (deptName: string) => {
+  return subscriptionsData.filter(sub => {
+    if (Array.isArray(sub.departments)) {
+      return sub.departments.includes(deptName);
+    }
+    if (typeof sub.departments === 'string') {
+      return sub.departments.includes(deptName) || sub.departments.includes(`"${deptName}"`);
+    }
+    return false;
+  }).length;
+};
+
+// Get employees for a department
+const getDepartmentEmployees = (deptName: string) => {
+  return employeesData.filter(emp => emp.department === deptName);
+};
+
+// Get subscriptions for a department
+const getDepartmentSubscriptions = (deptName: string) => {
+  return subscriptionsData.filter(sub => {
+    if (Array.isArray(sub.departments)) {
+      return sub.departments.includes(deptName);
+    }
+    if (typeof sub.departments === 'string') {
+      return sub.departments.includes(deptName) || sub.departments.includes(`"${deptName}"`);
+    }
+    return false;
+  });
+};
+
+// Get subscriptions for a specific employee
+const getEmployeeSubscriptions = (employeeName: string, deptName: string) => {
+  const deptSubs = getDepartmentSubscriptions(deptName);
+  // Filter subscriptions to only show those where the employee is the owner
+  return deptSubs.filter(sub => sub.owner === employeeName);
+};
+
+// Filter departments by search term
+const filteredDepartments = departments.filter(dept => 
+  dept.name?.toLowerCase().includes(departmentSearchTerm.toLowerCase())
+);
 
 const updateCategoryVisibilityMutation = useMutation({
 mutationFn: async ({ name, visible }: { name: string; visible: boolean }) => {
@@ -1494,13 +1827,51 @@ return (
     <div className="max-w-[1400px] mx-auto px-6 py-8">
       {/* Modern Professional Header */}
       <div className="mb-8">
-        <div className="flex items-center space-x-4 mb-6">
-          <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
-            <Building2 className="h-6 w-6 text-white" />
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
+              <Building2 className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Company Details</h1>
+              {/* Description removed as requested */}
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Company Details</h1>
-            {/* Description removed as requested */}
+          
+          {/* Consolidated Excel Import/Export Buttons */}
+          <div className="flex items-center gap-3">
+            <input
+              ref={companyFileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={importCombinedExcel}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              onClick={downloadCombinedTemplate}
+              className="border-purple-300 text-purple-700 hover:bg-purple-50 shadow-sm"
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Template
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => companyFileInputRef.current?.click()}
+              className="border-green-300 text-green-700 hover:bg-green-50 shadow-sm"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Import
+            </Button>
+            <Button
+              variant="outline"
+              onClick={exportAllToExcel}
+              disabled={departments.length === 0 && employeesData.length === 0 && categories.length === 0}
+              className="border-blue-300 text-blue-700 hover:bg-blue-50 shadow-sm"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
           </div>
         </div>
       </div>
@@ -1804,8 +2175,17 @@ transition={{ duration: 0.3 }}
 
 {/* Content */}
 <div className="p-8 bg-gradient-to-br from-gray-50 to-white">
-{/* Add New Department */}
-<div className="flex items-center justify-end space-x-4 p-4 bg-gray-50 rounded-xl">
+{/* Search and Add Department */}
+<div className="flex items-center justify-between space-x-4 p-4 bg-gray-50 rounded-xl mb-6">
+<div className="relative flex-1 max-w-sm">
+  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+  <Input
+    placeholder="Search departments..."
+    value={departmentSearchTerm}
+    onChange={(e) => setDepartmentSearchTerm(e.target.value)}
+    className="pl-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+  />
+</div>
 <Dialog open={departmentModalOpen} onOpenChange={setDepartmentModalOpen}>
   <DialogTrigger asChild>
     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
@@ -1940,28 +2320,30 @@ transition={{ duration: 0.3 }}
 {/* Department List */}
 <div className="space-y-4">
 <h3 className="text-base font-semibold text-gray-900">Available Departments</h3>
-<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 {departmentsLoading ? (
 <div className="text-gray-500">Loading departments...</div>
 ) : (
-departments.map((department, idx) => {
+filteredDepartments.map((department, idx) => {
 const displayName = typeof department.name === "string" && department.name.trim() ? department.name : `Unnamed Department ${idx + 1}`;
+const empCount = getEmployeeCount(department.name);
+const subCount = getSubscriptionCount(department.name);
 return (
   <motion.div
     key={displayName + idx}
     whileHover={{ y: -5 }}
-    className="p-5 border border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm rounded-xl transition-all duration-300"
+    className="p-4 border border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm rounded-xl transition-all duration-300"
   >
     <div className="flex items-start justify-between mb-3">
-      <div className="flex items-center space-x-3">
-        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center shadow-md">
-          <Building2 className="text-white" size={20} />
+      <div className="flex items-center space-x-2">
+        <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center shadow-md">
+          <Building2 className="text-white" size={18} />
         </div>
         <div>
-          <span className="text-base font-semibold text-gray-900 block">{String(displayName)}</span>
+          <span className="text-sm font-semibold text-gray-900 block">{String(displayName)}</span>
         </div>
       </div>
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-1">
         <Button
           variant="ghost"
           size="sm"
@@ -1974,10 +2356,10 @@ return (
             setEditingDepartment(department);
             setDepartmentModalOpen(true);
           }}
-          className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-full p-1 h-8 w-8"
+          className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-full p-1 h-7 w-7"
           title="Edit Department"
         >
-          <Edit size={16} />
+          <Edit size={14} />
         </Button>
         <Button
           variant="ghost"
@@ -1988,19 +2370,185 @@ return (
             }
           }}
           disabled={deleteDepartmentMutation.isPending || !department.name}
-          className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-8 w-8"
+          className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-7 w-7"
           title="Delete Department"
         >
-          <Trash2 size={16} />
+          <Trash2 size={14} />
         </Button>
       </div>
+    </div>
+    
+    {/* Count badges - clickable to open modal */}
+    <div className="flex items-center space-x-3 mt-3">
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => {
+          setSelectedDepartmentForDetails(department.name);
+          setDetailsModalOpen(true);
+        }}
+        className="flex items-center space-x-1 bg-white px-3 py-1.5 rounded-lg shadow-sm hover:shadow-md transition-all border border-indigo-200 cursor-pointer"
+      >
+        <Users className="w-4 h-4 text-indigo-600" />
+        <span className="text-sm font-semibold text-indigo-600">{empCount}</span>
+      </motion.button>
     </div>
   </motion.div>
 );
 })
-)}
+)
+}
 </div>
 </div>
+
+{/* Department Details Modal */}
+<Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
+  <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white">
+    {/* Header with Gradient Background */}
+    <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-8 py-6 rounded-t-2xl">
+      <DialogHeader>
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
+            <Building2 className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <DialogTitle className="text-2xl font-bold tracking-tight text-white">
+              {selectedDepartmentForDetails} Department Details
+            </DialogTitle>
+          </div>
+        </div>
+      </DialogHeader>
+    </div>
+
+    {/* Table Content */}
+    <div className="p-8">
+      <Table className="min-w-full divide-y divide-gray-200">
+        <TableHeader className="bg-gray-50">
+          <TableRow>
+            <TableHead className="h-12 px-6 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Employee</TableHead>
+            <TableHead className="h-12 px-6 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">Subscriptions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody className="bg-white divide-y divide-gray-200">
+          {selectedDepartmentForDetails && getDepartmentEmployees(selectedDepartmentForDetails).length > 0 ? (
+            getDepartmentEmployees(selectedDepartmentForDetails).map((emp: any) => {
+              const empSubCount = getEmployeeSubscriptions(emp.name, selectedDepartmentForDetails).length;
+              return (
+                <TableRow key={emp._id} className="hover:bg-gray-50 transition-colors">
+                  <TableCell className="px-6 py-4">
+                    <div className="font-medium text-gray-900 text-sm">{emp.name}</div>
+                    <div className="text-xs text-gray-500">{emp.email}</div>
+                  </TableCell>
+                  <TableCell className="px-6 py-4 text-center">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        setSelectedEmployeeSubscriptions({
+                          employeeName: emp.name,
+                          subscriptions: getEmployeeSubscriptions(emp.name, selectedDepartmentForDetails)
+                        });
+                        setSubscriptionModalOpen(true);
+                      }}
+                      className="inline-flex items-center space-x-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-lg shadow-sm hover:shadow-md hover:bg-blue-200 transition-all border border-blue-200 cursor-pointer font-semibold"
+                    >
+                      <span>{empSubCount}</span>
+                    </motion.button>
+                  </TableCell>
+                </TableRow>
+              );
+            })
+          ) : (
+            <TableRow>
+              <TableCell colSpan={2} className="text-center py-8">
+                <div className="flex flex-col items-center justify-center">
+                  <Users className="w-12 h-12 text-gray-400 mb-3" />
+                  <p className="text-base font-medium text-gray-900">No employees found</p>
+                  <p className="text-gray-500 mt-1 text-sm">This department has no employees assigned</p>
+                </div>
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  </DialogContent>
+</Dialog>
+
+{/* Employee Subscriptions Modal */}
+<Dialog open={subscriptionModalOpen} onOpenChange={setSubscriptionModalOpen}>
+  <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white">
+    {/* Header with Gradient Background */}
+    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+      <DialogHeader>
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
+            <Monitor className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <DialogTitle className="text-2xl font-bold tracking-tight text-white">
+              {selectedEmployeeSubscriptions.employeeName}'s Subscriptions
+            </DialogTitle>
+          </div>
+        </div>
+      </DialogHeader>
+    </div>
+
+    {/* Subscriptions List */}
+    <div className="p-8">
+      {selectedEmployeeSubscriptions.subscriptions.length > 0 ? (
+        <Table className="min-w-full divide-y divide-gray-200">
+          <TableHeader className="bg-gray-50">
+            <TableRow>
+              <TableHead className="h-12 px-6 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Service</TableHead>
+              <TableHead className="h-12 px-6 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Billing Cycle</TableHead>
+              <TableHead className="h-12 px-6 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Next Renewal</TableHead>
+              <TableHead className="h-12 px-6 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Category</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="bg-white divide-y divide-gray-200">
+            {selectedEmployeeSubscriptions.subscriptions.map((sub: any, index: number) => (
+              <motion.tr
+                key={sub.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.05 }}
+                className="hover:bg-gray-50 transition-colors"
+              >
+                <TableCell className="px-6 py-4">
+                  <div className="font-semibold text-gray-900 text-sm">{sub.serviceName}</div>
+                </TableCell>
+                <TableCell className="px-6 py-4">
+                  <div className="text-sm text-gray-600">{sub.billingCycle || '-'}</div>
+                </TableCell>
+                <TableCell className="px-6 py-4">
+                  <div className="text-sm text-gray-600">
+                    {sub.nextRenewal ? new Date(sub.nextRenewal).toLocaleDateString() : '-'}
+                  </div>
+                </TableCell>
+                <TableCell className="px-6 py-4">
+                  {sub.category ? (
+                    <Badge className="bg-indigo-100 text-indigo-800 rounded-full px-3 py-1">
+                      {sub.category}
+                    </Badge>
+                  ) : (
+                    <span className="text-sm text-gray-400">-</span>
+                  )}
+                </TableCell>
+              </motion.tr>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <div className="text-center py-12">
+          <Monitor className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <p className="text-base font-medium text-gray-900">No subscriptions assigned</p>
+          <p className="text-gray-500 mt-1 text-sm">This employee has no subscriptions in this department</p>
+        </div>
+      )}
+    </div>
+  </DialogContent>
+</Dialog>
 </div>
 </Card>
 </motion.div>

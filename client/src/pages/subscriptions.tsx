@@ -280,8 +280,8 @@ export default function Subscriptions() {
   const filteredSubscriptions = Array.isArray(subscriptions) ? subscriptions.filter(sub => {
     // Only show subscriptions for current tenant
     if (tenantId && sub.tenantId !== tenantId) return false;
-    const matchesSearch = sub.serviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         sub.vendor.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (sub.serviceName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (sub.vendor || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === "all" || sub.category === categoryFilter;
     const matchesVendor = vendorFilter === "all" || sub.vendor === vendorFilter;
     const matchesStatus = statusFilter === "all" || sub.status === statusFilter;
@@ -657,7 +657,7 @@ export default function Subscriptions() {
                       </TableCell>
                       <TableCell className="px-4 py-3 text-right">
                         <span className="text-sm font-medium text-gray-900">
-                          ${Math.round(parseFloat(String(subscription.amount)))}
+                          ${parseFloat(String(subscription.amount)).toFixed(2)}
                         </span>
                       </TableCell>
                       <TableCell className="px-4 py-3">
