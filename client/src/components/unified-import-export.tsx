@@ -219,94 +219,84 @@ export function UnifiedImportExport() {
     const supportRow = instructionsSheet.addRow(['📞 Need Help? Check the system documentation or contact support.']);
     supportRow.getCell(1).font = { italic: true, color: { argb: 'FF6B7280' } };
     
+    // Create hidden sheet for currency list (to avoid 255 character limit in dropdown)
+    const currencyListSheet = workbook.addWorksheet('_CurrencyList');
+    currencyListSheet.state = 'hidden';
+    const formattedCurrencies = currencyList.map(c => `${c.symbol} ${c.description} (${c.code})`);
+    formattedCurrencies.forEach((currency, index) => {
+      currencyListSheet.getCell(`A${index + 1}`).value = currency;
+    });
+    
     // 1. CURRENCIES SHEET
     const currencySheet = workbook.addWorksheet('Currencies');
     currencySheet.columns = [
-      { header: 'Currency Code', key: 'code', width: 15 },
-      { header: 'Description', key: 'description', width: 30 },
+      { header: 'Currency', key: 'currency', width: 40 },
       { header: 'Exch.Rate against 1 LCY', key: 'rate', width: 22 }
     ];
     
     // Add NOTE instruction row
     const noteRow = currencySheet.getRow(2);
     noteRow.getCell(1).value = '⚠️ NOTE';
-    noteRow.getCell(2).value = 'Description & Symbol have formulas - Don\'t delete! Just clear & reuse';
-    noteRow.getCell(3).value = 'Select currency from dropdown';
+    noteRow.getCell(2).value = 'Select currency from dropdown (format: $ United States Dollar (USD))';
     noteRow.getCell(1).font = { bold: true, color: { argb: 'FFDC2626' } };
-    noteRow.getCell(2).font = { italic: true, color: { argb: 'FF2563EB' } };
-    noteRow.getCell(3).font = { italic: true, color: { argb: 'FF059669' } };
+    noteRow.getCell(2).font = { italic: true, color: { argb: 'FF059669' } };
     noteRow.commit();
     
-    // Add sample rows with formulas
+    // Add sample rows
     const usdRow = currencySheet.getRow(3);
-    usdRow.getCell(1).value = 'USD';
-    usdRow.getCell(2).value = {
-      formula: 'IF(A3<>"",IFERROR(VLOOKUP(A3,Lookup!A:B,2,FALSE),""),"")',
-      result: 'United States Dollar'
-    };
-    usdRow.getCell(3).value = '1.00';
+    usdRow.getCell(1).value = '$ United States Dollar (USD)';
+    usdRow.getCell(2).value = '1.00';
     usdRow.commit();
     
     const eurRow = currencySheet.getRow(4);
-    eurRow.getCell(1).value = 'EUR';
-    eurRow.getCell(2).value = {
-      formula: 'IF(A4<>"",IFERROR(VLOOKUP(A4,Lookup!A:B,2,FALSE),""),"")',
-      result: 'Euro'
-    };
-    eurRow.getCell(3).value = '0.85';
+    eurRow.getCell(1).value = '€ Euro (EUR)';
+    eurRow.getCell(2).value = '0.85';
     eurRow.commit();
     
     const inrRow = currencySheet.getRow(5);
-    inrRow.getCell(1).value = 'INR';
-    inrRow.getCell(2).value = {
-      formula: 'IF(A5<>"",IFERROR(VLOOKUP(A5,Lookup!A:B,2,FALSE),""),"")',
-      result: 'Indian Rupee'
-    };
-    inrRow.getCell(3).value = '83.12';
+    inrRow.getCell(1).value = '₹ Indian Rupee (INR)';
+    inrRow.getCell(2).value = '83.12';
     inrRow.commit();
     
-    // Add dropdown validation for Currency Code column (A3:A500) - skip NOTE row
+    // Add dropdown list validation ONLY (duplicate check will happen on import)
     for (let i = 3; i <= 500; i++) {
       const cell = currencySheet.getCell(`A${i}`);
       cell.dataValidation = {
         type: 'list',
         allowBlank: true,
-        formulae: [`Lookup!$A$2:$A$${currencyList.length + 1}`],
+        formulae: [`_CurrencyList!$A$1:$A$${formattedCurrencies.length}`],
         showInputMessage: true,
         promptTitle: 'Select Currency',
-        prompt: 'Choose a currency code. Description will auto-fill automatically!',
+        prompt: 'Choose a currency from the dropdown. Duplicates will be highlighted in red and blocked during import.',
         showErrorMessage: true,
-        errorStyle: 'error',
-        errorTitle: 'Invalid Currency',
-        error: 'Please select a currency code from the dropdown list.'
+        errorStyle: 'warning',
+        errorTitle: 'Select from List',
+        error: 'Please select a currency from the dropdown list.'
       };
-      
-      // Add duplicate validation for Currency Code
-      if (i > 2) {
-        const duplicateValidation = currencySheet.getCell(`A${i}`);
-        duplicateValidation.dataValidation = {
-          type: 'custom',
-          allowBlank: true,
-          formulae: [`COUNTIF($A$3:$A$500,A${i})<=1`],
-          showInputMessage: true,
-          promptTitle: 'Select Currency',
-          prompt: 'Choose a currency code. No duplicates allowed.',
-          showErrorMessage: true,
-          errorStyle: 'error',
-          errorTitle: 'Duplicate Currency',
-          error: 'This currency code already exists! Please use a unique code.'
-        };
-      }
-      
-      // Add Description auto-fill formula for rows 6-500 (rows 3-5 already have formulas)
-      if (i >= 6) {
-        const descCell = currencySheet.getCell(`B${i}`);
-        descCell.value = {
-          formula: `IF(A${i}<>"",IFERROR(VLOOKUP(A${i},Lookup!A:B,2,FALSE),""),"")`,
-          result: ''
-        };
-      }
     }
+    
+    // Add conditional formatting to highlight duplicates in Currency column
+    currencySheet.addConditionalFormatting({
+      ref: 'A3:A500',
+      rules: [
+        {
+          type: 'expression',
+          priority: 1,
+          formulae: ['COUNTIF($A$3:$A$500,A3)>1'],
+          style: {
+            fill: {
+              type: 'pattern',
+              pattern: 'solid',
+              bgColor: { argb: 'FFFEE2E2' }
+            },
+            font: {
+              color: { argb: 'FFDC2626' },
+              bold: true
+            }
+          }
+        }
+      ]
+    });
     
     // 2. CATEGORIES SHEET
     const catSheet = workbook.addWorksheet('Categories');
@@ -760,10 +750,8 @@ export function UnifiedImportExport() {
       const currRes = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
       const currencies = await currRes.json();
       const currData = currencies.map((curr: any) => ({
-        'Currency Code': curr.code,
-        'Description': curr.name,
-        'Symbol': curr.symbol,
-        'Exchange Rate': curr.exchangeRate || ''
+        'Currency': `${curr.symbol} ${curr.name} (${curr.code})`,
+        'Exch.Rate against 1 LCY': curr.exchangeRate || ''
       }));
       
       // Fetch and export Payment Methods
@@ -1089,16 +1077,25 @@ export function UnifiedImportExport() {
           const duplicatesWithExisting: string[] = [];
           
           for (const row of currencies) {
-            const code = (row['Currency Code'] || '').toString().trim().toUpperCase();
-            if (code && code !== '⚠️ NOTE' && !code.includes('NOTE')) {
+            // Parse the new format: "$ United States Dollar (USD)"
+            const currencyStr = (row['Currency'] || '').toString().trim();
+            if (!currencyStr || currencyStr.includes('⚠️ NOTE') || currencyStr.includes('NOTE')) {
+              continue;
+            }
+            
+            // Extract code from format "Symbol Description (CODE)"
+            const codeMatch = currencyStr.match(/\(([A-Z]{3})\)$/);
+            const code = codeMatch ? codeMatch[1] : '';
+            
+            if (code) {
               if (importCurrencies.has(code)) {
-                duplicatesInImport.push(code);
+                duplicatesInImport.push(currencyStr);
               }
               importCurrencies.add(code);
               
               // Check against existing
               if (existingCurrencies.includes(code)) {
-                duplicatesWithExisting.push(code);
+                duplicatesWithExisting.push(currencyStr);
               }
             }
           }
@@ -1113,7 +1110,7 @@ export function UnifiedImportExport() {
           if (duplicatesInImport.length > 0) {
             toast({
               title: "Import Failed - Duplicate Currencies",
-              description: `Duplicate currency codes in Excel: ${duplicatesInImport.join(', ')}`,
+              description: `Duplicate currencies in Excel: ${duplicatesInImport.join(', ')}`,
               variant: "destructive",
             });
             return;
@@ -1121,29 +1118,31 @@ export function UnifiedImportExport() {
           
           for (const row of currencies) {
             try {
-              const currencyCode = (row['Currency Code'] || '').toString().trim().toUpperCase();
+              const currencyStr = (row['Currency'] || '').toString().trim();
               
               // Skip instruction/note rows
-              if (currencyCode === '⚠️ NOTE' || currencyCode.includes('NOTE')) {
+              if (!currencyStr || currencyStr.includes('⚠️ NOTE') || currencyStr.includes('NOTE')) {
                 continue;
               }
+              
+              // Parse format: "$ United States Dollar (USD)"
+              const codeMatch = currencyStr.match(/\(([A-Z]{3})\)$/);
+              const symbolMatch = currencyStr.match(/^([^\s]+)/);
+              const descMatch = currencyStr.match(/^[^\s]+\s+(.+?)\s+\([A-Z]{3}\)$/);
+              
+              const currencyCode = codeMatch ? codeMatch[1] : '';
+              const symbol = symbolMatch ? symbolMatch[1] : '';
+              const description = descMatch ? descMatch[1] : '';
               
               // Check if currency already exists
               if (currencyCode && existingCurrencies.includes(currencyCode)) {
                 currError++;
                 continue;
               }
-              
-              // Auto-fill description and symbol if only code is provided
-              let description = row['Description'];
-              let symbol = row['Symbol'];
-              
-              if (currencyCode && (!description || !symbol)) {
-                const matchedCurrency = currencyList.find(c => c.code === currencyCode);
-                if (matchedCurrency) {
-                  description = description || matchedCurrency.description;
-                  symbol = symbol || matchedCurrency.symbol;
-                }
+              // Check if currency already exists
+              if (currencyCode && existingCurrencies.includes(currencyCode)) {
+                currError++;
+                continue;
               }
               
               const res = await fetch(`${API_BASE_URL}/api/currencies`, {

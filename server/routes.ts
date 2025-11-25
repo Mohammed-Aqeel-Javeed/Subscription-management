@@ -270,7 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Signup =====
   app.post("/api/signup", async (req, res) => {
     try {
-      const { fullName, email, password, tenantId } = req.body;
+      const { fullName, email, password, tenantId, defaultCurrency } = req.body;
       if (!fullName || !email || !password || !tenantId) {
         return res
           .status(400)
@@ -303,7 +303,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Hash the password before storing
       const hashedPassword = await bcrypt.hash(password, 10);
-      const doc = { fullName, email, password: hashedPassword, tenantId, createdAt: new Date() };
+      const doc = { 
+        fullName, 
+        email, 
+        password: hashedPassword, 
+        tenantId, 
+        defaultCurrency: defaultCurrency || null,
+        createdAt: new Date() 
+      };
       await db.collection("signup").insertOne(doc);
       await db.collection("login").insertOne(doc);
       
@@ -390,7 +397,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: dbUser._id,
         email: dbUser.email,
         fullName: dbUser.fullName || null,
-        tenantId: dbUser.tenantId || null
+        tenantId: dbUser.tenantId || null,
+        defaultCurrency: dbUser.defaultCurrency || null
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch user data" });

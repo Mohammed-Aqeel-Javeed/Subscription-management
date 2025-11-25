@@ -21,6 +21,10 @@ function generateUserGuide() {
     [''],
     ['1. INTRODUCTION & GETTING STARTED'],
     [''],
+    ['Getting Started:'],
+    ['By clicking the link below, you can access the Subscription Tracker platform to login or sign up:'],
+    ['🔗 https://subscription-management-6uje.onrender.com'],
+    [''],
     ['What is Subscription Tracker?'],
     ['Subscription Tracker is a comprehensive platform designed to help businesses manage their subscriptions,'],
     ['track expenses, handle compliance, and maintain payment methods efficiently.'],
@@ -117,6 +121,15 @@ function generateUserGuide() {
     wsIntro['A1'].s = {
       font: { bold: true, sz: 16 },
       alignment: { horizontal: 'center' }
+    };
+  }
+
+  // Make the URL clickable (row 18, column A)
+  if (wsIntro['A18']) {
+    wsIntro['A18'].l = { Target: "https://subscription-management-6uje.onrender.com" };
+    wsIntro['A18'].s = {
+      font: { color: { rgb: "0563C1" }, underline: true },
+      fill: { fgColor: { rgb: "FFFFFF" } }
     };
   }
 
