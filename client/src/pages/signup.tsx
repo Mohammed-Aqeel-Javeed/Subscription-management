@@ -10,10 +10,82 @@ export default function SignupPage() {
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [companyCurrency, setCompanyCurrency] = useState("");
+  const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
+  const [filteredCurrencies, setFilteredCurrencies] = useState<Array<{code: string, description: string, symbol: string}>>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  
+  // Complete currency list
+  const currencyList = [
+    { code: "USD", description: "United States Dollar", symbol: "$" },
+    { code: "EUR", description: "Euro", symbol: "€" },
+    { code: "GBP", description: "British Pound Sterling", symbol: "£" },
+    { code: "INR", description: "Indian Rupee", symbol: "₹" },
+    { code: "JPY", description: "Japanese Yen", symbol: "¥" },
+    { code: "CNY", description: "Chinese Yuan", symbol: "¥" },
+    { code: "AUD", description: "Australian Dollar", symbol: "A$" },
+    { code: "CAD", description: "Canadian Dollar", symbol: "C$" },
+    { code: "CHF", description: "Swiss Franc", symbol: "CHF" },
+    { code: "AED", description: "UAE Dirham", symbol: "د.إ" },
+    { code: "SAR", description: "Saudi Riyal", symbol: "ر.س" },
+    { code: "SGD", description: "Singapore Dollar", symbol: "S$" },
+    { code: "HKD", description: "Hong Kong Dollar", symbol: "HK$" },
+    { code: "NZD", description: "New Zealand Dollar", symbol: "NZ$" },
+    { code: "KRW", description: "South Korean Won", symbol: "₩" },
+    { code: "SEK", description: "Swedish Krona", symbol: "kr" },
+    { code: "NOK", description: "Norwegian Krone", symbol: "kr" },
+    { code: "DKK", description: "Danish Krone", symbol: "kr" },
+    { code: "ZAR", description: "South African Rand", symbol: "R" },
+    { code: "BRL", description: "Brazilian Real", symbol: "R$" },
+    { code: "MXN", description: "Mexican Peso", symbol: "$" },
+    { code: "RUB", description: "Russian Ruble", symbol: "₽" },
+    { code: "TRY", description: "Turkish Lira", symbol: "₺" },
+    { code: "PLN", description: "Polish Złoty", symbol: "zł" },
+    { code: "THB", description: "Thai Baht", symbol: "฿" },
+    { code: "IDR", description: "Indonesian Rupiah", symbol: "Rp" },
+    { code: "MYR", description: "Malaysian Ringgit", symbol: "RM" },
+    { code: "PHP", description: "Philippine Peso", symbol: "₱" },
+    { code: "VND", description: "Vietnamese Đồng", symbol: "₫" },
+    { code: "EGP", description: "Egyptian Pound", symbol: "£" },
+    { code: "NGN", description: "Nigerian Naira", symbol: "₦" },
+    { code: "PKR", description: "Pakistani Rupee", symbol: "Rs" },
+    { code: "BDT", description: "Bangladeshi Taka", symbol: "৳" },
+    { code: "ILS", description: "Israeli New Shekel", symbol: "₪" },
+    { code: "ARS", description: "Argentine Peso", symbol: "$" },
+    { code: "CLP", description: "Chilean Peso", symbol: "$" },
+    { code: "COP", description: "Colombian Peso", symbol: "$" },
+    { code: "CZK", description: "Czech Koruna", symbol: "Kč" },
+    { code: "HUF", description: "Hungarian Forint", symbol: "Ft" },
+    { code: "RON", description: "Romanian Leu", symbol: "lei" }
+  ];
+  
+  // Handle currency input change with autocomplete
+  const handleCurrencyChange = (value: string) => {
+    const upperValue = value.toUpperCase();
+    setCompanyCurrency(upperValue);
+    
+    if (upperValue.length > 0) {
+      const filtered = currencyList.filter(curr => 
+        curr.code.startsWith(upperValue) || 
+        curr.description.toUpperCase().includes(upperValue)
+      );
+      setFilteredCurrencies(filtered);
+      setShowCurrencyDropdown(filtered.length > 0);
+    } else {
+      setShowCurrencyDropdown(false);
+      setFilteredCurrencies([]);
+    }
+  };
+  
+  // Handle currency selection from dropdown
+  const handleCurrencySelect = (currency: {code: string, description: string, symbol: string}) => {
+    setCompanyCurrency(currency.code);
+    setShowCurrencyDropdown(false);
+    setFilteredCurrencies([]);
+  };
   // Autogenerate tenantId in frontend
 
   // Email validation function
@@ -67,7 +139,7 @@ export default function SignupPage() {
     setError("");
     setSuccess("");
 
-    if (!fullName || !email || !password || !confirmPassword) {
+    if (!fullName || !email || !password || !confirmPassword || !companyCurrency) {
       setError("Please fill in all fields.");
       return;
     }
@@ -84,6 +156,13 @@ export default function SignupPage() {
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
+      return;
+    }
+    
+    // Validate currency code
+    const validCurrency = currencyList.find(c => c.code === companyCurrency);
+    if (!validCurrency) {
+      setError("Please select a valid currency from the list.");
       return;
     }
 
@@ -144,7 +223,7 @@ export default function SignupPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ fullName, email, password, tenantId })
+        body: JSON.stringify({ fullName, email, password, tenantId, defaultCurrency: companyCurrency })
       });
 
       const signupData = await signupRes.json();
@@ -204,6 +283,67 @@ export default function SignupPage() {
               {email && !isValidEmail(email) && (
                 <div style={{ color: '#d32f2f', fontSize: 12, marginTop: 4 }}>
                   Please enter a valid email address
+                </div>
+              )}
+            </div>
+            <div style={{ marginBottom: 16, position: 'relative' }}>
+              <label style={{ fontWeight: 500 }}>Company Currency</label>
+              <input
+                type="text"
+                value={companyCurrency}
+                onChange={e => handleCurrencyChange(e.target.value)}
+                onFocus={() => {
+                  if (companyCurrency && filteredCurrencies.length > 0) {
+                    setShowCurrencyDropdown(true);
+                  }
+                }}
+                onBlur={() => {
+                  // Delay to allow click on dropdown item
+                  setTimeout(() => setShowCurrencyDropdown(false), 200);
+                }}
+                placeholder="Type currency code (e.g., USD, EUR, INR)"
+                required
+                style={{ width: "100%", padding: 10, marginTop: 6, borderRadius: 6, border: '1px solid #ddd', fontSize: 16 }}
+                autoComplete="off"
+              />
+              {/* Autocomplete Dropdown */}
+              {showCurrencyDropdown && filteredCurrencies.length > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  zIndex: 50,
+                  width: '100%',
+                  marginTop: 4,
+                  background: 'white',
+                  border: '1px solid #ddd',
+                  borderRadius: 8,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  maxHeight: 240,
+                  overflowY: 'auto'
+                }}>
+                  {filteredCurrencies.map((curr) => (
+                    <button
+                      key={curr.code}
+                      type="button"
+                      onClick={() => handleCurrencySelect(curr)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        textAlign: 'left',
+                        background: 'transparent',
+                        border: 0,
+                        borderBottom: '1px solid #f0f0f0',
+                        cursor: 'pointer',
+                        transition: 'background 0.15s',
+                        fontSize: 14
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#f5f7fa')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <div style={{ fontWeight: 600, color: '#222' }}>
+                        {curr.symbol} {curr.description} ({curr.code})
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>

@@ -1818,11 +1818,11 @@ export default function Configuration() {
 
                             {/* Form Content */}
                             <div className="px-8 py-6">
-                              <form className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Currency Code Field with Autocomplete */}
+                              <form className="grid grid-cols-1 gap-6">
+                                {/* Currency Selection Field with Autocomplete */}
                                 <div className="space-y-2 relative">
                                   <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                    Currency Code <span className="text-red-500">*</span>
+                                    Currency <span className="text-red-500">*</span>
                                   </Label>
                                   <Input
                                     value={newCurrency.code}
@@ -1836,7 +1836,7 @@ export default function Configuration() {
                                       // Delay to allow click on dropdown item
                                       setTimeout(() => setShowDropdown(false), 200);
                                     }}
-                                    placeholder="Type to search..."
+                                    placeholder="Type currency code to search..."
                                     className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                                     autoComplete="off"
                                   />
@@ -1851,38 +1851,12 @@ export default function Configuration() {
                                           className="w-full px-4 py-2 text-left hover:bg-blue-50 transition-colors duration-150 flex items-center justify-between border-b border-gray-100 last:border-b-0"
                                         >
                                           <div>
-                                            <div className="font-semibold text-gray-900">{curr.code}</div>
-                                            <div className="text-sm text-gray-600">{curr.description}</div>
+                                            <div className="font-semibold text-gray-900">{curr.symbol} {curr.description} ({curr.code})</div>
                                           </div>
-                                          <div className="text-lg font-bold text-blue-600">{curr.symbol}</div>
                                         </button>
                                       ))}
                                     </div>
                                   )}
-                                </div>
-
-                                {/* Description Field */}
-                                <div className="space-y-2">
-                                  <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                    Description <span className="text-red-500">*</span>
-                                  </Label>
-                                  <Input
-                                    value={newCurrency.name}
-                                    onChange={(e) => setNewCurrency({ ...newCurrency, name: e.target.value })}
-                                    className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
-                                  />
-                                </div>
-
-                                {/* Symbol Field */}
-                                <div className="space-y-2">
-                                  <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                    Symbol <span className="text-red-500">*</span>
-                                  </Label>
-                                  <Input
-                                    value={newCurrency.symbol}
-                                    onChange={(e) => setNewCurrency({ ...newCurrency, symbol: e.target.value })}
-                                    className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
-                                  />
                                 </div>
 
                                 {/* Exchange Rate Field */}
@@ -1901,7 +1875,7 @@ export default function Configuration() {
                                 </div>
 
                                 {/* Action Buttons - Full Width */}
-                                <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200 md:col-span-2">
+                                <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
                                   <Button 
                                     type="button" 
                                     variant="outline" 
@@ -1934,9 +1908,7 @@ export default function Configuration() {
                             <table className="w-full">
                               <thead className="bg-gray-50">
                                 <tr>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">CURRENCY CODE</th>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">DESCRIPTION</th>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">SYMBOL</th>
+                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">CURRENCY</th>
                                   <th className={`py-3 px-4 text-left text-sm font-semibold ${isUpdateMode ? 'text-blue-600 bg-blue-50' : 'text-gray-900'}`}>
                                     Exch.Rate against 1 LCY {isUpdateMode && <span className="text-xs">(Editable)</span>}
                                   </th>
@@ -1948,16 +1920,16 @@ export default function Configuration() {
                               <tbody className="divide-y divide-gray-200 bg-white">
                                 {currencies.length === 0 ? (
                                   <tr>
-                                    <td colSpan={7} className="py-8 text-center text-gray-500">
+                                    <td colSpan={5} className="py-8 text-center text-gray-500">
                                       No currencies found. Add your first currency to get started.
                                     </td>
                                   </tr>
                                 ) : (
                                   currencies.map((currency) => (
                                   <tr key={currency.code}>
-                                    <td className="py-3 px-4 text-sm text-gray-900">{currency.code}</td>
-                                    <td className="py-3 px-4 text-sm text-gray-900">{currency.name}</td>
-                                    <td className="py-3 px-4 text-sm text-gray-900">{currency.symbol}</td>
+                                    <td className="py-3 px-4 text-sm text-gray-900">
+                                      {currency.symbol} {currency.name} ({currency.code})
+                                    </td>
                                     <td className="py-3 px-4 text-sm text-gray-500">
                                       {isUpdateMode ? (
                                         <Input

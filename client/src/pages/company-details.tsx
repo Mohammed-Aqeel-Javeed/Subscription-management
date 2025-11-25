@@ -1130,6 +1130,21 @@ const { data: companyData, isLoading: companyLoading } = useQuery<CompanyInfo | 
   refetchOnWindowFocus: false,
 });
 
+// Fetch user data to get defaultCurrency from signup
+const { data: userData } = useQuery<{ defaultCurrency?: string } | null>({
+  queryKey: ["/api/me"],
+  queryFn: async () => {
+    try {
+      const response = await apiRequest("GET", "/api/me");
+      return await response.json();
+    } catch (err: any) {
+      return null;
+    }
+  },
+  retry: 1,
+  refetchOnWindowFocus: false,
+});
+
 // Update company info state when data is fetched
 useEffect(() => {
   if (companyData) {
@@ -1140,10 +1155,16 @@ useEffect(() => {
       country: companyData.country || "",
       financialYearEnd: companyData.financialYearEnd || "",
       companyLogo: companyData.companyLogo || "",
-      defaultCurrency: companyData.defaultCurrency || "",
+      defaultCurrency: companyData.defaultCurrency || userData?.defaultCurrency || "",
     });
+  } else if (userData?.defaultCurrency) {
+    // If no company data exists yet, populate from user's signup data
+    setCompanyInfo(prev => ({
+      ...prev,
+      defaultCurrency: userData.defaultCurrency || "",
+    }));
   }
-}, [companyData]);
+}, [companyData, userData]);
 
 // Company info mutation
 const saveCompanyMutation = useMutation({
