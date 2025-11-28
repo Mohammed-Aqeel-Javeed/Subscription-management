@@ -66,6 +66,10 @@ class EmailService {
     if (!this.isConfigured || !this.transporter) {
       console.log('📧 EMAIL SERVICE NOT CONFIGURED - Would send email to:', emailData.to);
       console.log('Subject:', emailData.subject);
+      console.log('SMTP_USER:', process.env.SMTP_USER || 'NOT_SET');
+      console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT_SET');
+      console.log('SMTP_HOST:', process.env.SMTP_HOST || 'NOT_SET');
+      console.log('SMTP_PORT:', process.env.SMTP_PORT || 'NOT_SET');
       return false;
     }
 
@@ -77,11 +81,22 @@ class EmailService {
         html: emailData.html
       };
 
+      console.log('📧 Attempting to send email...');
+      console.log('From:', mailOptions.from);
+      console.log('To:', mailOptions.to);
+      console.log('Subject:', mailOptions.subject);
+      
       const info = await this.transporter.sendMail(mailOptions);
-      console.log('Email sent successfully:', info.messageId);
+      console.log('✅ Email sent successfully:', info.messageId);
+      console.log('Response:', info.response);
       return true;
-    } catch (error) {
-      console.error('Error sending email:', error);
+    } catch (error: any) {
+      console.error('❌ Error sending email:', error.message);
+      console.error('Error code:', error.code);
+      console.error('Error command:', error.command);
+      if (error.response) {
+        console.error('SMTP Response:', error.response);
+      }
       return false;
     }
   }
