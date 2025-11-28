@@ -237,14 +237,7 @@ export default function SignupPage() {
         return;
       }
 
-      // If devOtp is provided (for testing), automatically fill it
-      if (data.devOtp) {
-        setOtp(data.devOtp);
-        setSuccess(`OTP for testing: ${data.devOtp} (auto-filled)`);
-      } else {
-        setSuccess("OTP sent to your email! Please check your inbox.");
-      }
-      
+      setSuccess("OTP sent to your email! Please check your inbox.");
       setStep("otp");
     } catch (err) {
       setError("Network error - please check if the server is running");
