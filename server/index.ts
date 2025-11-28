@@ -2,6 +2,10 @@ import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 // @ts-ignore
 import { registerRoutes } from "./routes.js";
+import dotenv from "dotenv";
+
+// Load environment variables from .env file
+dotenv.config();
 
 function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
