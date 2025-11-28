@@ -1196,16 +1196,6 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
             allDuplicates.push({sheet: 'Currencies', items: duplicatesWithExisting});
           }
           
-          if (duplicatesInImport.length > 0) {
-            toast({
-              title: "Import Failed - Duplicate Currencies",
-              description: `Duplicate currencies in Excel: ${duplicatesInImport.join(', ')}`,
-              variant: "destructive",
-              duration: 5000,
-            });
-            return;
-          }
-          
           for (const row of currencies) {
             try {
               const currencyStr = (row['Currency'] || '').toString().trim();
