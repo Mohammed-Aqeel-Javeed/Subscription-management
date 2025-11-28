@@ -4,9 +4,13 @@ interface EmailConfig {
   host: string;
   port: number;
   secure: boolean;
+  requireTLS: boolean;
   auth: {
     user: string;
     pass: string;
+  };
+  tls?: {
+    rejectUnauthorized: boolean;
   };
 }
 
@@ -25,30 +29,40 @@ class EmailService {
   }
 
   private setupTransporter() {
-    // Default configuration - should be moved to environment variables
+    // Gmail SMTP configuration with proper settings
     const config: EmailConfig = {
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+      secure: false, // false for port 587, true for port 465
       auth: {
         user: process.env.SMTP_USER || '',
         pass: process.env.SMTP_PASS || ''
+      },
+      requireTLS: true, // Must be true for Gmail
+      tls: {
+        rejectUnauthorized: false
       }
     };
 
     console.log('🔧 Email service configuration:');
     console.log(`   Host: ${config.host}`);
     console.log(`   Port: ${config.port}`);
+    console.log(`   Secure: ${config.secure}`);
+    console.log(`   RequireTLS: true`);
     console.log(`   User: ${config.auth.user}`);
     console.log(`   Pass: ${config.auth.pass ? '***HIDDEN***' : 'NOT_SET'}`);
 
     if (config.auth.user && config.auth.pass) {
       try {
-          // Nodemailer exposes `createTransport`, not `createTransporter`
-          this.transporter = nodemailer.createTransport({
-            ...config,
-            tls: { rejectUnauthorized: false }
-          });
+        // Nodemailer exposes `createTransport`, not `createTransporter`
+        this.transporter = nodemailer.createTransport({
+          host: config.host,
+          port: config.port,
+          secure: config.secure,
+          requireTLS: true,
+          auth: config.auth,
+          tls: { rejectUnauthorized: false }
+        });
         this.isConfigured = true;
         console.log('✅ Email service configured successfully');
       } catch (error) {
