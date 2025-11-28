@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, FileSpreadsheet } from "lucide-react";
+import ReactCountryFlag from "react-country-flag";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -195,7 +196,7 @@ export default function Configuration() {
 
   // Autocomplete state
   const [showDropdown, setShowDropdown] = useState(false);
-  const [filteredCurrencies, setFilteredCurrencies] = useState<Array<{code: string, description: string, symbol: string}>>([]);
+  const [filteredCurrencies, setFilteredCurrencies] = useState<Array<{code: string, description: string, symbol: string, countryCode?: string}>>([]);
   
   // File input refs for Excel import
   const currencyFileInputRef = useRef<HTMLInputElement>(null);
@@ -219,6 +220,166 @@ export default function Configuration() {
    * - Manager (optional): Person responsible
    * - Expires At (optional): Expiration date (YYYY-MM-DD format)
    */
+
+  // Map currency code to ISO country code for flag rendering
+  const getCountryCodeForCurrency = (code: string): string | undefined => {
+    const map: Record<string, string> = {
+      AED: "AE",
+      AFN: "AF",
+      ALL: "AL",
+      AMD: "AM",
+      ANG: "CW",
+      AOA: "AO",
+      ARS: "AR",
+      AUD: "AU",
+      AWG: "AW",
+      AZN: "AZ",
+      BAM: "BA",
+      BBD: "BB",
+      BDT: "BD",
+      BGN: "BG",
+      BHD: "BH",
+      BIF: "BI",
+      BMD: "BM",
+      BND: "BN",
+      BOB: "BO",
+      BRL: "BR",
+      BSD: "BS",
+      BTN: "BT",
+      BWP: "BW",
+      BYN: "BY",
+      BZD: "BZ",
+      CAD: "CA",
+      CDF: "CD",
+      CHF: "CH",
+      CLP: "CL",
+      CNY: "CN",
+      COP: "CO",
+      CRC: "CR",
+      CUP: "CU",
+      CVE: "CV",
+      CZK: "CZ",
+      DJF: "DJ",
+      DKK: "DK",
+      DOP: "DO",
+      DZD: "DZ",
+      EGP: "EG",
+      ERN: "ER",
+      ETB: "ET",
+      EUR: "EU",
+      FJD: "FJ",
+      FKP: "FK",
+      GBP: "GB",
+      GEL: "GE",
+      GHS: "GH",
+      GIP: "GI",
+      GMD: "GM",
+      GNF: "GN",
+      GTQ: "GT",
+      GYD: "GY",
+      HKD: "HK",
+      HNL: "HN",
+      HRK: "HR",
+      HTG: "HT",
+      HUF: "HU",
+      IDR: "ID",
+      ILS: "IL",
+      INR: "IN",
+      IQD: "IQ",
+      IRR: "IR",
+      ISK: "IS",
+      JMD: "JM",
+      JOD: "JO",
+      JPY: "JP",
+      KES: "KE",
+      KGS: "KG",
+      KHR: "KH",
+      KMF: "KM",
+      KWD: "KW",
+      KZT: "KZ",
+      LAK: "LA",
+      LBP: "LB",
+      LKR: "LK",
+      LRD: "LR",
+      LSL: "LS",
+      LYD: "LY",
+      MAD: "MA",
+      MDL: "MD",
+      MGA: "MG",
+      MKD: "MK",
+      MMK: "MM",
+      MNT: "MN",
+      MOP: "MO",
+      MRU: "MR",
+      MUR: "MU",
+      MVR: "MV",
+      MWK: "MW",
+      MXN: "MX",
+      MYR: "MY",
+      MZN: "MZ",
+      NAD: "NA",
+      NGN: "NG",
+      NIO: "NI",
+      NOK: "NO",
+      NPR: "NP",
+      NZD: "NZ",
+      OMR: "OM",
+      PAB: "PA",
+      PEN: "PE",
+      PGK: "PG",
+      PHP: "PH",
+      PKR: "PK",
+      PLN: "PL",
+      PYG: "PY",
+      QAR: "QA",
+      RON: "RO",
+      RSD: "RS",
+      RUB: "RU",
+      RWF: "RW",
+      SAR: "SA",
+      SBD: "SB",
+      SCR: "SC",
+      SDG: "SD",
+      SEK: "SE",
+      SGD: "SG",
+      SHP: "SH",
+      SLE: "SL",
+      SOS: "SO",
+      SRD: "SR",
+      SSP: "SS",
+      STN: "ST",
+      SZL: "SZ",
+      THB: "TH",
+      TJS: "TJ",
+      TMT: "TM",
+      TND: "TN",
+      TOP: "TO",
+      TRY: "TR",
+      TTD: "TT",
+      TVD: "TV",
+      TWD: "TW",
+      TZS: "TZ",
+      UAH: "UA",
+      UGX: "UG",
+      USD: "US",
+      UYU: "UY",
+      UZS: "UZ",
+      VES: "VE",
+      VND: "VN",
+      VUV: "VU",
+      WST: "WS",
+      XAF: "CF",
+      XCD: "AG",
+      XOF: "SN",
+      XPF: "PF",
+      YER: "YE",
+      ZAR: "ZA",
+      ZMW: "ZM",
+      ZWL: "ZW",
+    };
+
+    return map[code as keyof typeof map];
+  };
 
   // Complete currency list for autocomplete
   const currencyList = [
@@ -390,9 +551,18 @@ export default function Configuration() {
     setNewCurrency({ ...newCurrency, code: upperValue });
     
     if (upperValue.length > 0) {
-      const filtered = currencyList.filter(curr => 
-        curr.code.startsWith(upperValue)
-      );
+      const search = upperValue.trim();
+      const filtered = currencyList
+        .filter(curr => {
+          const codeMatch = curr.code.toUpperCase().startsWith(search);
+          const nameMatch = curr.description.toUpperCase().includes(search);
+          return codeMatch || nameMatch;
+        })
+        .map(curr => ({
+          ...curr,
+          countryCode: getCountryCodeForCurrency(curr.code),
+        }));
+
       setFilteredCurrencies(filtered);
       setShowDropdown(filtered.length > 0);
     } else {
@@ -402,7 +572,7 @@ export default function Configuration() {
   };
 
   // Handle currency selection from dropdown
-  const handleCurrencySelect = (currency: {code: string, description: string, symbol: string}) => {
+  const handleCurrencySelect = (currency: {code: string, description: string, symbol: string, countryCode?: string}) => {
     setNewCurrency({
       ...newCurrency,
       code: currency.code,
@@ -1850,8 +2020,17 @@ export default function Configuration() {
                                           onClick={() => handleCurrencySelect(curr)}
                                           className="w-full px-4 py-2 text-left hover:bg-blue-50 transition-colors duration-150 flex items-center justify-between border-b border-gray-100 last:border-b-0"
                                         >
-                                          <div>
-                                            <div className="font-semibold text-gray-900">{curr.symbol} {curr.description} ({curr.code})</div>
+                                          <div className="flex items-center gap-2">
+                                            {curr.countryCode && (
+                                              <ReactCountryFlag
+                                                svg
+                                                countryCode={curr.countryCode}
+                                                style={{ width: "1.25rem", height: "1.25rem", borderRadius: "999px" }}
+                                              />
+                                            )}
+                                            <span className="font-semibold text-gray-900">
+                                              {curr.description} ({curr.code})
+                                            </span>
                                           </div>
                                         </button>
                                       ))}

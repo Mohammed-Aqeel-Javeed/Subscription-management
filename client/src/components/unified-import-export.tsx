@@ -61,7 +61,7 @@ const currencyList = [
   { code: "ZAR", description: "South African Rand", symbol: "R" }
 ];
 
-export function UnifiedImportExport() {
+export function UnifiedImportExport({ localCurrency = "LCY" }) {
   const [isOpen, setIsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -73,19 +73,59 @@ export function UnifiedImportExport() {
     }[];
   }>({show: false, duplicates: []});
 
-  // Auto-close duplicate alert after 10 seconds
+  // Resolve effective local currency for templates:
+  // 1) explicit prop value (if not default "LCY")
+  // 2) companyInfo.defaultCurrency from backend
+  // 3) /api/me defaultCurrency fallback
+  const [resolvedLocalCurrency, setResolvedLocalCurrency] = useState(localCurrency);
+
   useEffect(() => {
-    if (duplicateAlert.show) {
-      const timer = setTimeout(() => {
-        setDuplicateAlert({show: false, duplicates: []});
-      }, 10000);
-      return () => clearTimeout(timer);
+    const fetchLocalCurrency = async () => {
+      try {
+        // If caller passed a real currency code, respect it
+        if (localCurrency && localCurrency !== "LCY") {
+          setResolvedLocalCurrency(localCurrency);
+          return;
+        }
+
+        // Try company-info first
+        const companyRes = await fetch(`${API_BASE_URL}/api/company-info`, {
+          credentials: "include",
+        });
+        if (companyRes.ok) {
+          const companyData = await companyRes.json();
+          if (companyData?.defaultCurrency) {
+            setResolvedLocalCurrency(companyData.defaultCurrency);
+            return;
+          }
+        }
+
+        // Fallback: user profile from /api/me
+        const meRes = await fetch(`${API_BASE_URL}/api/me`, {
+          credentials: "include",
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData?.defaultCurrency) {
+            setResolvedLocalCurrency(meData.defaultCurrency);
+            return;
+          }
+        }
+      } catch {
+        // Silent failure - keep default LCY label
+      }
+    };
+
+    // Only try to resolve if still at default placeholder
+    if (!resolvedLocalCurrency || resolvedLocalCurrency === "LCY") {
+      fetchLocalCurrency();
     }
-  }, [duplicateAlert.show]);
+  }, [localCurrency, resolvedLocalCurrency]);
 
   // Download Unified Template with Dropdowns using ExcelJS
   const downloadTemplate = async () => {
-    const workbook = new ExcelJS.Workbook();
+    try {
+      const workbook = new ExcelJS.Workbook();
     
     // Create hidden lookup sheet for dropdowns and formulas
     const lookupSheet = workbook.addWorksheet('Lookup');
@@ -197,10 +237,28 @@ export function UnifiedImportExport() {
     instructionsSheet.addRow(['   • Notes: Additional notes']);
     instructionsSheet.addRow([]);
     
+    // Compliance
+    const complianceRow = instructionsSheet.addRow(['7️⃣ Compliance Sheet']);
+    complianceRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF059669' } };
+    instructionsSheet.addRow(['   • Filing Name: Name of the compliance filing (required)']);
+    instructionsSheet.addRow(['   • Policy: Associated policy or regulation']);
+    instructionsSheet.addRow(['   • Filing Frequency: Select from dropdown (Monthly, Quarterly, Yearly, etc.)']);
+    instructionsSheet.addRow(['   • Compliance Category: Select from dropdown (Tax, Legal, Financial, etc.)']);
+    instructionsSheet.addRow(['   • Governing Authority: Regulatory body or authority']);
+    instructionsSheet.addRow(['   • Start Date: Compliance period start (format dd/mm/yyyy)']);
+    instructionsSheet.addRow(['   • End Date: Compliance period end (format dd/mm/yyyy)']);
+    instructionsSheet.addRow(['   • Submission Deadline: Deadline for submission (format dd/mm/yyyy)']);
+    instructionsSheet.addRow(['   • Submission Date: Actual submission date (format dd/mm/yyyy)']);
+    instructionsSheet.addRow(['   • Status: Select from dropdown (Pending, Completed, Overdue, etc.)']);
+    instructionsSheet.addRow(['   • Reminder Policy: Reminder frequency for deadlines']);
+    instructionsSheet.addRow(['   • Reminder Days: Days before deadline to send reminder']);
+    instructionsSheet.addRow(['   • Remarks: Additional notes or comments']);
+    instructionsSheet.addRow([]);
+    
     // Important Notes
     const notesRow = instructionsSheet.addRow(['⚠️ Important Notes']);
     notesRow.getCell(1).font = { size: 14, bold: true, color: { argb: 'FFDC2626' } };
-    instructionsSheet.addRow(['   ✓ Fill sheets in order: Currencies → Categories → Departments → Employees → Payment Methods → Subscriptions']);
+    instructionsSheet.addRow(['   ✓ Fill sheets in order: Currencies → Categories → Departments → Employees → Payment Methods → Subscriptions → Compliance']);
     instructionsSheet.addRow(['   ✓ Employee emails must be unique (duplicates will be rejected)']);
     instructionsSheet.addRow(['   ✓ Dates must be in dd/mm/yyyy format (e.g., 20/11/2025)']);
     instructionsSheet.addRow(['   ✓ Use dropdowns whenever available - they ensure data consistency']);
@@ -229,15 +287,16 @@ export function UnifiedImportExport() {
     
     // 1. CURRENCIES SHEET
     const currencySheet = workbook.addWorksheet('Currencies');
+    const lcyLabel = resolvedLocalCurrency || localCurrency || "LCY";
     currencySheet.columns = [
       { header: 'Currency', key: 'currency', width: 40 },
-      { header: 'Exch.Rate against 1 LCY', key: 'rate', width: 22 }
+      { header: `Exch.Rate against 1 ${lcyLabel}`, key: 'rate', width: 22 }
     ];
     
     // Add NOTE instruction row
     const noteRow = currencySheet.getRow(2);
     noteRow.getCell(1).value = '⚠️ NOTE';
-    noteRow.getCell(2).value = 'Select currency from dropdown (format: $ United States Dollar (USD))';
+    noteRow.getCell(2).value = `Select currency from dropdown (format: $ United States Dollar (USD)).\nExchange rate should be against 1 ${lcyLabel}`;
     noteRow.getCell(1).font = { bold: true, color: { argb: 'FFDC2626' } };
     noteRow.getCell(2).font = { italic: true, color: { argb: 'FF059669' } };
     noteRow.commit();
@@ -511,7 +570,7 @@ export function UnifiedImportExport() {
       vendorsSheet.addRow({ name: vendor });
     });
     
-    // 7. SUBSCRIPTIONS SHEET (Last)
+    // 7. SUBSCRIPTIONS SHEET
     const subsSheet = workbook.addWorksheet('Subscriptions');
     subsSheet.columns = [
       { header: 'Service Name', key: 'serviceName', width: 20 },
@@ -687,13 +746,21 @@ export function UnifiedImportExport() {
     });
     
     // Save file
-    const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), 'Subscription_Tracker_Template.xlsx');
-    
-    toast({
-      title: "Template Downloaded",
-      description: "Template with currency dropdown created successfully!",
-    });
+      const buffer = await workbook.xlsx.writeBuffer();
+      saveAs(new Blob([buffer]), 'Subscription_Tracker_Template.xlsx');
+      
+      toast({
+        title: "Template Downloaded",
+        description: "Template with currency dropdown created successfully!",
+      });
+    } catch (error) {
+      console.error('Template generation error:', error);
+      toast({
+        title: "Failed to download template",
+        description: "Please try again. If the problem persists, contact support.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Export All Data
@@ -853,6 +920,7 @@ export function UnifiedImportExport() {
               title: "Import Failed - Duplicate Categories",
               description: `Duplicate categories in Excel: ${duplicatesInImport.join(', ')}`,
               variant: "destructive",
+              duration: 5000,
             });
             return;
           }
@@ -932,6 +1000,7 @@ export function UnifiedImportExport() {
               title: "Import Failed - Duplicate Departments",
               description: `Duplicate departments in Excel: ${duplicatesInImport.join(', ')}`,
               variant: "destructive",
+              duration: 5000,
             });
             return;
           }
@@ -983,13 +1052,22 @@ export function UnifiedImportExport() {
             existingEmails = existingEmployees.map((emp: any) => emp.email?.toLowerCase()).filter(Boolean);
           } catch {}
           
-          // Check for duplicate emails within import data
+          // Check for duplicate emails within import data and missing emails
           const importEmails = new Set<string>();
           const duplicatesInImport: string[] = [];
           const duplicatesWithExisting: string[] = [];
+          const missingEmails: string[] = [];
           
           for (const row of employees) {
+            const name = row['Full Name']?.toString().trim();
             const email = row['Email']?.toString().trim().toLowerCase();
+            
+            // Check if email is missing
+            if (!email && name) {
+              missingEmails.push(name);
+              continue;
+            }
+            
             if (email) {
               if (importEmails.has(email)) {
                 duplicatesInImport.push(email);
@@ -1009,6 +1087,9 @@ export function UnifiedImportExport() {
           if (duplicatesWithExisting.length > 0 && duplicatesInImport.length === 0) {
             allDuplicates.push({sheet: 'Employees', items: duplicatesWithExisting});
           }
+          if (missingEmails.length > 0) {
+            allDuplicates.push({sheet: 'Employees', items: missingEmails.map(name => `${name} (Missing Email)`)});
+          }
           
           // If duplicates found, show error and stop import
           if (duplicatesInImport.length > 0) {
@@ -1016,16 +1097,24 @@ export function UnifiedImportExport() {
               title: "Import Failed",
               description: `Duplicate emails found in Excel: ${duplicatesInImport.join(', ')}`,
               variant: "destructive",
+              duration: 5000,
             });
             return;
           }
           
           for (const row of employees) {
             try {
+              const name = row['Full Name']?.toString().trim();
               const email = row['Email']?.toString().trim();
               
+              // Skip if email is missing (already caught in validation above)
+              if (!email || !name) {
+                empError++;
+                continue;
+              }
+              
               // Check if email already exists in system
-              if (email && existingEmails.includes(email.toLowerCase())) {
+              if (existingEmails.includes(email.toLowerCase())) {
                 empError++;
                 continue; // Skip this employee
               }
@@ -1112,6 +1201,7 @@ export function UnifiedImportExport() {
               title: "Import Failed - Duplicate Currencies",
               description: `Duplicate currencies in Excel: ${duplicatesInImport.join(', ')}`,
               variant: "destructive",
+              duration: 5000,
             });
             return;
           }
@@ -1215,6 +1305,7 @@ export function UnifiedImportExport() {
               title: "Import Failed - Duplicate Payment Methods",
               description: `Duplicate payment methods in Excel: ${duplicatesInImport.join(', ')}`,
               variant: "destructive",
+              duration: 5000,
             });
             return;
           }
@@ -1293,6 +1384,7 @@ export function UnifiedImportExport() {
               title: "Import Failed - Duplicate Subscriptions",
               description: `Duplicate subscriptions in Excel: ${duplicatesInImport.join(', ')}`,
               variant: "destructive",
+              duration: 5000,
             });
             return;
           }
@@ -1458,10 +1550,12 @@ export function UnifiedImportExport() {
         <div 
           className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           onClick={() => setDuplicateAlert({show: false, duplicates: []})}
+          style={{ overflow: 'auto', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif" }}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden animate-in zoom-in-95 duration-200"
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full my-4 animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
+            style={{ maxHeight: 'calc(100vh - 2rem)' }}
           >
             {/* Header */}
             <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-5 flex items-center justify-between">
@@ -1482,26 +1576,17 @@ export function UnifiedImportExport() {
             </div>
             
             {/* Content */}
-            <div className="px-6 py-5 overflow-y-auto max-h-[calc(80vh-140px)]">
-              <p className="text-gray-700 text-base mb-4 leading-relaxed">
-                The following items already exist in your system and cannot be imported:
-              </p>
-              
+            <div className="px-6 py-5 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
               <div className="space-y-4">
-                {duplicateAlert.duplicates.map((dup, idx) => (
-                  <div key={idx} className="bg-red-50 border-l-4 border-red-500 rounded-r-lg p-4">
+                {duplicateAlert.duplicates.map((duplicate, index) => (
+                  <div key={index} className="bg-red-50 border border-red-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-red-100 text-red-800 text-sm font-semibold">
-                        {dup.sheet}
-                      </span>
-                      <span className="text-gray-500 text-sm">({dup.items.length} duplicate{dup.items.length > 1 ? 's' : ''})</span>
+                      <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                      <h4 className="font-semibold text-red-800 text-sm">{duplicate.sheet}</h4>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {dup.items.map((item, itemIdx) => (
-                        <span 
-                          key={itemIdx}
-                          className="inline-flex items-center px-3 py-1 rounded-full bg-white border border-red-200 text-red-700 text-sm capitalize"
-                        >
+                    <div className="space-y-1">
+                      {duplicate.items.map((item, itemIndex) => (
+                        <span key={itemIndex} className="inline-block bg-white px-3 py-1 rounded-md text-xs text-red-700 border border-red-100 mr-2 mb-2">
                           {item}
                         </span>
                       ))}
@@ -1512,10 +1597,10 @@ export function UnifiedImportExport() {
             </div>
             
             {/* Footer */}
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end">
+            <div className="bg-white px-6 py-5 border-t border-gray-100 flex justify-center">
               <button
                 onClick={() => setDuplicateAlert({show: false, duplicates: []})}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors shadow-sm"
+                className="px-8 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
               >
                 Got it
               </button>
