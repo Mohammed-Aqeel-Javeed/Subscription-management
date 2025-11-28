@@ -1111,6 +1111,15 @@ const [companyInfo, setCompanyInfo] = useState<InsertCompanyInfo>({
   defaultCurrency: "",
 });
 
+const [isInitialized, setIsInitialized] = useState(false);
+
+// Reset initialization when component mounts/unmounts
+useEffect(() => {
+  return () => {
+    // Only reset on unmount, not on mount
+  };
+}, []);
+
 // Fetch company information
 const { data: companyData, isLoading: companyLoading } = useQuery<CompanyInfo | null>({
   queryKey: ["/api/company-info"],
@@ -1143,28 +1152,54 @@ const { data: userData } = useQuery<{ defaultCurrency?: string } | null>({
   },
   retry: 1,
   refetchOnWindowFocus: false,
+  staleTime: 5 * 60 * 1000, // Keep data fresh for 5 minutes
 });
 
 // Update company info state when data is fetched
 useEffect(() => {
+  console.log('Company Details - userData:', userData);
+  console.log('Company Details - companyData:', companyData);
+  
   if (companyData) {
-    setCompanyInfo({
-      tenantId: companyData.tenantId || "",
-      companyName: companyData.companyName || "",
-      address: companyData.address || "",
-      country: companyData.country || "",
-      financialYearEnd: companyData.financialYearEnd || "",
-      companyLogo: companyData.companyLogo || "",
-      defaultCurrency: companyData.defaultCurrency || userData?.defaultCurrency || "",
+    setCompanyInfo((prev) => {
+      const newInfo = {
+        tenantId: companyData.tenantId || prev.tenantId || "",
+        companyName: companyData.companyName || prev.companyName || "",
+        address: companyData.address || prev.address || "",
+        country: companyData.country || prev.country || "",
+        financialYearEnd: companyData.financialYearEnd || prev.financialYearEnd || "",
+        companyLogo: companyData.companyLogo || prev.companyLogo || "",
+        // IMPORTANT: never overwrite an existing non-empty defaultCurrency with empty
+        defaultCurrency:
+          companyData.defaultCurrency ||
+          prev.defaultCurrency ||
+          userData?.defaultCurrency ||
+          "",
+      };
+      console.log('Set companyInfo with companyData, defaultCurrency:', newInfo.defaultCurrency);
+      return newInfo;
     });
-  } else if (userData?.defaultCurrency) {
+    setIsInitialized(true);
+  } else if (userData && !isInitialized) {
     // If no company data exists yet, populate from user's signup data
-    setCompanyInfo(prev => ({
-      ...prev,
-      defaultCurrency: userData.defaultCurrency || "",
-    }));
+    console.log('Setting defaultCurrency from userData:', userData.defaultCurrency);
+    setCompanyInfo((prev) => {
+      const newInfo = {
+        tenantId: prev.tenantId || "",
+        companyName: prev.companyName || "",
+        address: prev.address || "",
+        country: prev.country || "",
+        financialYearEnd: prev.financialYearEnd || "",
+        companyLogo: prev.companyLogo || "",
+        // Only set from userData if we don't already have a value
+        defaultCurrency: prev.defaultCurrency || userData.defaultCurrency || "",
+      };
+      console.log('Updated companyInfo from userData:', newInfo);
+      return newInfo;
+    });
+    setIsInitialized(true);
   }
-}, [companyData, userData]);
+}, [companyData, userData, isInitialized]);
 
 // Company info mutation
 const saveCompanyMutation = useMutation({
@@ -2105,36 +2140,58 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
 {/* Local Currency */}
 <div className="space-y-2">
   <Label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Local Currency</Label>
-  <Select
-    value={companyInfo.defaultCurrency || ''}
-    onValueChange={(val) => setCompanyInfo(prev => ({ ...prev, defaultCurrency: val }))}
-  >
-    <SelectTrigger className="w-full bg-white border border-gray-300 rounded-lg p-3 h-12 text-base font-medium shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200">
-      <SelectValue placeholder={currenciesLoading ? 'Loading…' : 'Select currency'} />
-    </SelectTrigger>
-    <SelectContent className="dropdown-content">
-      {currencies && currencies.length > 0 ? (
-        currencies.map((curr: any) => (
-          <SelectItem key={curr.code} value={curr.code} className="dropdown-item">
-            {curr.code}
-          </SelectItem>
-        ))
-      ) : (
-        <SelectItem value="no-currency" disabled className="dropdown-item disabled">
-          No currencies configured
-        </SelectItem>
-      )}
-      <div className="border-t">
-        <button
-          type="button"
-          className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
-          onClick={() => window.location.href = '/configuration?tab=currency'}
-        >
-          + New
-        </button>
-      </div>
-    </SelectContent>
-  </Select>
+  {(() => {
+    // Derive an effective selected currency: prefer saved companyInfo, then userData from signup
+    const selectedCurrency = companyInfo.defaultCurrency || userData?.defaultCurrency || '';
+
+    return (
+      <Select
+        value={selectedCurrency}
+        onValueChange={(val) => {
+          console.log('Currency selected:', val);
+          setCompanyInfo(prev => ({ ...prev, defaultCurrency: val }));
+        }}
+      >
+        <SelectTrigger className="w-full bg-white border border-gray-300 rounded-lg p-3 h-12 text-base font-medium shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200">
+          <SelectValue placeholder={currenciesLoading ? 'Loading…' : 'Select currency'} />
+        </SelectTrigger>
+        <SelectContent className="dropdown-content">
+          {/* Ensure the currently selected currency is always present as an option, even if currencies list is empty */}
+          {selectedCurrency && !currencies.find((c: any) => c.code === selectedCurrency) && (
+            <SelectItem key={selectedCurrency} value={selectedCurrency} className="dropdown-item">
+              {selectedCurrency}
+            </SelectItem>
+          )}
+          {currencies && currencies.length > 0 ? (
+            currencies.map((curr: any) => {
+              console.log('Currency option:', curr.code, 'matches:', curr.code === selectedCurrency);
+              return (
+                <SelectItem key={curr.code} value={curr.code} className="dropdown-item">
+                  {curr.code}
+                </SelectItem>
+              );
+            })
+          ) : (
+            !selectedCurrency && (
+              <SelectItem value="no-currency" disabled className="dropdown-item disabled">
+                No currencies configured
+              </SelectItem>
+            )
+          )}
+          <div className="border-t">
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
+              onClick={() => window.location.href = '/configuration?tab=currency'}
+            >
+              + New
+            </button>
+          </div>
+        </SelectContent>
+      </Select>
+    );
+  })()}
+  <div className="text-xs text-gray-500">Current value: {companyInfo.defaultCurrency || userData?.defaultCurrency || 'None'}</div>
 </div>
 
 {/* Financial Year End */}

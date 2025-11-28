@@ -1,55 +1,14 @@
 import React, { useState } from "react";
-import { LogIn, UserPlus } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../lib/config";
 
 export default function AuthPage() {
-  const [showSignup, setShowSignup] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
-  const [signupName, setSignupName] = useState("");
-  const [signupEmail, setSignupEmail] = useState("");
-  const [signupPassword, setSignupPassword] = useState("");
-  const [signupConfirm, setSignupConfirm] = useState("");
-  const [signupError, setSignupError] = useState("");
-  const [signupSuccess, setSignupSuccess] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-
-  // Slide animation styles
-  const mainStyle = {
-    width: 350,
-    height: 500,
-    margin: "4rem auto",
-    background: "#fff",
-    borderRadius: 10,
-    boxShadow: "5px 20px 50px #0002",
-    overflow: "hidden",
-    position: "relative" as const,
-    transition: "box-shadow 0.3s"
-  };
-  const slideStyle = {
-    position: "absolute" as const,
-    width: "100%",
-    height: "100%",
-    top: "0px",
-    left: showSignup ? "0px" : "100%",
-    background: "#fff",
-    borderRadius: "10px",
-    boxShadow: showSignup ? "0 2px 16px #0001" : "none",
-    transition: "left 0.6s cubic-bezier(.68,-0.55,.27,1.55)"
-  };
-  const loginStyle = {
-    position: "absolute" as const,
-    width: "100%",
-    height: "100%",
-    top: "0px",
-    left: showSignup ? "-100%" : "0px",
-    background: "#fff",
-    borderRadius: "10px",
-    boxShadow: !showSignup ? "0 2px 16px #0001" : "none",
-    transition: "left 0.6s cubic-bezier(.68,-0.55,.27,1.55)"
-  };
 
   // Login handler
   const handleLogin = async (e: React.FormEvent) => {
@@ -59,7 +18,6 @@ export default function AuthPage() {
       setLoginError("Please enter both email and password.");
       return;
     }
-    // Only backend validation for login
     try {
       const res = await fetch(`${API_BASE_URL}/api/login`, {
         method: "POST",
@@ -72,7 +30,6 @@ export default function AuthPage() {
         setLoginError(data.message || "Login failed");
         return;
       }
-      // Check if cookie is set (optional: check response for user)
       sessionStorage.setItem("isAuthenticated", "true");
       navigate("/dashboard");
     } catch (err) {
@@ -80,69 +37,437 @@ export default function AuthPage() {
     }
   };
 
-  // Signup handler
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSignupError("");
-    setSignupSuccess("");
-    if (!signupName || !signupEmail || !signupPassword || !signupConfirm) {
-      setSignupError("Please fill in all fields.");
-      return;
-    }
-    if (signupPassword !== signupConfirm) {
-      setSignupError("Passwords do not match.");
-      return;
-    }
-    try {
-      // Store signup in login collection
-  const res = await fetch(`${API_BASE_URL}/api/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName: signupName, email: signupEmail, password: signupPassword })
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setSignupError(data.message || "Signup failed");
-        return;
-      }
-      setSignupSuccess("Signup successful!");
-      setTimeout(() => {
-        setShowSignup(false);
-        setSignupSuccess("");
-      }, 1200);
-    } catch {
-      setSignupError("Network error");
-    }
-  };
-
   return (
-    <div style={mainStyle}>
-      {/* Signup Slide */}
-      <div style={slideStyle}>
-        <form onSubmit={handleSignup} style={{ padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%' }}>
-          <UserPlus size={40} color="#573b8a" style={{ marginBottom: 16 }} />
-          <label style={{ color: '#573b8a', fontSize: 28, fontWeight: 700, marginBottom: 24 }}>Sign up</label>
-          <input type="text" placeholder="User name" value={signupName} onChange={e => setSignupName(e.target.value)} required style={{ width: '80%', marginBottom: 18, padding: 12, borderRadius: 5, border: '1px solid #e0dede' }} />
-          <input type="email" placeholder="Email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required style={{ width: '80%', marginBottom: 18, padding: 12, borderRadius: 5, border: '1px solid #e0dede' }} />
-          <input type="password" placeholder="Password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} required style={{ width: '80%', marginBottom: 18, padding: 12, borderRadius: 5, border: '1px solid #e0dede' }} />
-          <input type="password" placeholder="Confirm Password" value={signupConfirm} onChange={e => setSignupConfirm(e.target.value)} required style={{ width: '80%', marginBottom: 18, padding: 12, borderRadius: 5, border: '1px solid #e0dede' }} />
-          <button type="submit" style={{ width: '80%', height: 40, background: '#573b8a', color: '#fff', fontWeight: 600, fontSize: 18, border: 0, borderRadius: 5, marginTop: 10, cursor: 'pointer' }}>Sign up</button>
-          {signupError && <div style={{ color: '#d32f2f', marginTop: 12, textAlign: 'center' }}>{signupError}</div>}
-          {signupSuccess && <div style={{ color: '#388e3c', marginTop: 12, textAlign: 'center' }}>{signupSuccess}</div>}
-          <button type="button" style={{ background: 'none', border: 0, color: '#573b8a', marginTop: 18, fontWeight: 500, cursor: 'pointer' }} onClick={() => setShowSignup(false)}>Already have an account? Login</button>
-        </form>
-      </div>
-      {/* Login Slide */}
-      <div style={loginStyle}>
-        <form onSubmit={handleLogin} style={{ padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%' }}>
-          <LogIn size={40} color="#573b8a" style={{ marginBottom: 16 }} />
-          <label style={{ color: '#573b8a', fontSize: 28, fontWeight: 700, marginBottom: 24 }}>Login</label>
-          <input type="email" placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required style={{ width: '80%', marginBottom: 18, padding: 12, borderRadius: 5, border: '1px solid #e0dede' }} />
-          <input type="password" placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required style={{ width: '80%', marginBottom: 18, padding: 12, borderRadius: 5, border: '1px solid #e0dede' }} />
-          <button type="submit" style={{ width: '80%', height: 40, background: '#573b8a', color: '#fff', fontWeight: 600, fontSize: 18, border: 0, borderRadius: 5, marginTop: 10, cursor: 'pointer' }}>Login</button>
-          {loginError && <div style={{ color: '#d32f2f', marginTop: 12, textAlign: 'center' }}>{loginError}</div>}
-          <button type="button" style={{ background: 'none', border: 0, color: '#573b8a', marginTop: 18, fontWeight: 500, cursor: 'pointer' }} onClick={() => navigate("/signup")}>Don't have an account? Sign up</button>
-        </form>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
+        padding: "0.75rem",
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 880,
+          borderRadius: 16,
+          overflow: "hidden",
+          display: "grid",
+          gridTemplateColumns: "1.1fr 1fr",
+          background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
+          boxShadow: "0 24px 80px rgba(15, 23, 42, 0.45)",
+        }}
+      >
+        {/* Left marketing / hero panel */}
+        <div
+          style={{
+            padding: "2rem 2.25rem",
+            color: "#f9fafb",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
+            <img
+              src="/assets/logo.png"
+              alt="SubsTracker Logo"
+              style={{
+                width: 52,
+                height: 52,
+                filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.35)) brightness(1.05)",
+              }}
+            />
+            <div
+              style={{
+                fontWeight: 700,
+                fontSize: 24,
+                letterSpacing: "0.03em",
+                color: "#f9fafb",
+              }}
+            >
+              SubsTracker
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 32 }}>
+            <h1
+              style={{
+                fontSize: 32,
+                fontWeight: 700,
+                color: "#ffffff",
+                marginBottom: 16,
+                lineHeight: 1.2,
+              }}
+            >
+              Welcome Back
+            </h1>
+            <p
+              style={{
+                fontSize: 16,
+                color: "#e0e7ff",
+                lineHeight: 1.6,
+                marginBottom: 24,
+              }}
+            >
+              Login in to access your subscription dashboard and manage all your services in one place.
+            </p>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 20,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <span style={{ fontSize: 20 }}>📊</span>
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, color: "#ffffff", marginBottom: 2 }}>
+                  Real-time Analytics
+                </div>
+                <div style={{ fontSize: 14, color: "#c7d2fe" }}>
+                  Track spending patterns and insights
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <span style={{ fontSize: 20 }}>🔔</span>
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, color: "#ffffff", marginBottom: 2 }}>
+                  Smart Reminders
+                </div>
+                <div style={{ fontSize: 14, color: "#c7d2fe" }}>
+                  Never miss a renewal deadline
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <span style={{ fontSize: 20 }}>🛡️</span>
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, color: "#ffffff", marginBottom: 2 }}>
+                  Secure & Private
+                </div>
+                <div style={{ fontSize: 14, color: "#c7d2fe" }}>
+                  Your data is encrypted and protected
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right signup/login card */}
+        <div
+          style={{
+            background: "#ffffff",
+            padding: "2.5rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{ width: "100%", maxWidth: 380 }}>
+            {/* Login Form */}
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
+              >
+                <h2
+                  style={{
+                    fontWeight: 700,
+                    fontSize: 22,
+                    color: "#111827",
+                    marginBottom: 4,
+                  }}
+                >
+                  Login
+                </h2>
+                <p style={{ color: "#6b7280", fontSize: 12 }}>
+                  Welcome back! Please login to your account.
+                </p>
+              </div>
+
+              <form onSubmit={handleLogin}>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={e => setLoginEmail(e.target.value)}
+                    required
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      marginTop: 6,
+                      borderRadius: 999,
+                      border: "1px solid #e5e7eb",
+                      fontSize: 15,
+                      background: "#f9fafb",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
+                    Password
+                  </label>
+                  <div style={{ position: "relative", marginTop: 6 }}>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={loginPassword}
+                      onChange={e => setLoginPassword(e.target.value)}
+                      required
+                      style={{
+                        width: "100%",
+                        padding: "10px 40px 10px 12px",
+                        borderRadius: 999,
+                        border: "1px solid #e5e7eb",
+                        fontSize: 15,
+                        background: "#f9fafb",
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: "absolute",
+                        right: 12,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#6b7280",
+                      }}
+                    >
+                      {showPassword ? (
+                        <EyeOff size={18} />
+                      ) : (
+                        <Eye size={18} />
+                      )}
+                    </button>
+                  </div>
+                  <div style={{ textAlign: "right", marginTop: 8 }}>
+                    <button
+                      type="button"
+                      style={{
+                        background: "transparent",
+                        border: 0,
+                        color: "#4f46e5",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 500,
+                        textDecoration: "none",
+                      }}
+                      onClick={() => {
+                        // TODO: Implement forgot password functionality
+                        console.log("Forgot password clicked");
+                      }}
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  style={{
+                    width: "100%",
+                    padding: 10,
+                    background: "linear-gradient(90deg, #4f46e5, #7c3aed)",
+                    color: "#fff",
+                    border: 0,
+                    borderRadius: 999,
+                    fontWeight: 600,
+                    fontSize: 15,
+                    boxShadow: "0 14px 30px rgba(79,70,229,0.35)",
+                    cursor: "pointer",
+                    marginTop: 4,
+                  }}
+                >
+                  Login
+                </button>
+
+                {loginError && (
+                  <div
+                    style={{
+                      color: "#dc2626",
+                      marginTop: 12,
+                      textAlign: "center",
+                      fontSize: 13,
+                    }}
+                  >
+                    {loginError}
+                  </div>
+                )}
+              </form>
+
+              {/* Social Sign-in */}
+              <div style={{ marginTop: 24, marginBottom: 20 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    marginBottom: 16,
+                  }}
+                >
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: "#e5e7eb",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: "#6b7280",
+                      padding: "0 8px",
+                    }}
+                  >
+                    Or continue with
+                  </span>
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: "#e5e7eb",
+                    }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                  }}
+                >
+                  <button
+                    type="button"
+                    style={{
+                      flex: 1,
+                      padding: "7px 9px",
+                      borderRadius: 999,
+                      border: "1px solid #e5e7eb",
+                      background: "#ffffff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      color: "#374151",
+                    }}
+                  >
+                    <img
+                      src="/assets/social/google.svg"
+                      alt="Google logo"
+                      style={{ width: 28, height: 28 }}
+                    />
+                    <span>Google</span>
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      flex: 1,
+                      padding: "8px 10px",
+                      borderRadius: 999,
+                      border: "1px solid #e5e7eb",
+                      background: "#ffffff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      color: "#1d4ed8",
+                    }}
+                  >
+                    <img
+                      src="/assets/social/facebook.svg"
+                      alt="Facebook logo"
+                      style={{ width: 18, height: 18, borderRadius: 999 }}
+                    />
+                    <span>Facebook</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ textAlign: "center", marginTop: 10, fontSize: 12 }}>
+              <span style={{ color: "#6b7280" }}>Don't have an account? </span>
+              <button
+                type="button"
+                onClick={() => navigate("/signup")}
+                style={{
+                  background: "transparent",
+                  border: 0,
+                  color: "#4f46e5",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Sign up
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
