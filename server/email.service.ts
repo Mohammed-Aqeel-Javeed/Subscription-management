@@ -4,13 +4,9 @@ interface EmailConfig {
   host: string;
   port: number;
   secure: boolean;
-  requireTLS: boolean;
   auth: {
     user: string;
     pass: string;
-  };
-  tls?: {
-    rejectUnauthorized: boolean;
   };
 }
 
@@ -29,40 +25,30 @@ class EmailService {
   }
 
   private setupTransporter() {
-    // Gmail SMTP configuration with proper settings
+    // Default configuration - should be moved to environment variables
     const config: EmailConfig = {
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false, // false for port 587, true for port 465
+      secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
       auth: {
         user: process.env.SMTP_USER || '',
         pass: process.env.SMTP_PASS || ''
-      },
-      requireTLS: true, // Must be true for Gmail
-      tls: {
-        rejectUnauthorized: false
       }
     };
 
     console.log('🔧 Email service configuration:');
     console.log(`   Host: ${config.host}`);
     console.log(`   Port: ${config.port}`);
-    console.log(`   Secure: ${config.secure}`);
-    console.log(`   RequireTLS: true`);
     console.log(`   User: ${config.auth.user}`);
     console.log(`   Pass: ${config.auth.pass ? '***HIDDEN***' : 'NOT_SET'}`);
 
     if (config.auth.user && config.auth.pass) {
       try {
-        // Nodemailer exposes `createTransport`, not `createTransporter`
-        this.transporter = nodemailer.createTransport({
-          host: config.host,
-          port: config.port,
-          secure: config.secure,
-          requireTLS: true,
-          auth: config.auth,
-          tls: { rejectUnauthorized: false }
-        });
+          // Nodemailer exposes `createTransport`, not `createTransporter`
+          this.transporter = nodemailer.createTransport({
+            ...config,
+            tls: { rejectUnauthorized: false }
+          });
         this.isConfigured = true;
         console.log('✅ Email service configured successfully');
       } catch (error) {
@@ -80,10 +66,6 @@ class EmailService {
     if (!this.isConfigured || !this.transporter) {
       console.log('📧 EMAIL SERVICE NOT CONFIGURED - Would send email to:', emailData.to);
       console.log('Subject:', emailData.subject);
-      console.log('SMTP_USER:', process.env.SMTP_USER || 'NOT_SET');
-      console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT_SET');
-      console.log('SMTP_HOST:', process.env.SMTP_HOST || 'NOT_SET');
-      console.log('SMTP_PORT:', process.env.SMTP_PORT || 'NOT_SET');
       return false;
     }
 
@@ -95,22 +77,11 @@ class EmailService {
         html: emailData.html
       };
 
-      console.log('📧 Attempting to send email...');
-      console.log('From:', mailOptions.from);
-      console.log('To:', mailOptions.to);
-      console.log('Subject:', mailOptions.subject);
-      
       const info = await this.transporter.sendMail(mailOptions);
-      console.log('✅ Email sent successfully:', info.messageId);
-      console.log('Response:', info.response);
+      console.log('Email sent successfully:', info.messageId);
       return true;
-    } catch (error: any) {
-      console.error('❌ Error sending email:', error.message);
-      console.error('Error code:', error.code);
-      console.error('Error command:', error.command);
-      if (error.response) {
-        console.error('SMTP Response:', error.response);
-      }
+    } catch (error) {
+      console.error('Error sending email:', error);
       return false;
     }
   }
