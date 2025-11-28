@@ -44,8 +44,11 @@ class EmailService {
 
     if (config.auth.user && config.auth.pass) {
       try {
-        // Nodemailer exposes `createTransport`, not `createTransporter`
-        this.transporter = nodemailer.createTransport(config);
+          // Nodemailer exposes `createTransport`, not `createTransporter`
+          this.transporter = nodemailer.createTransport({
+            ...config,
+            tls: { rejectUnauthorized: false }
+          });
         this.isConfigured = true;
         console.log('✅ Email service configured successfully');
       } catch (error) {
