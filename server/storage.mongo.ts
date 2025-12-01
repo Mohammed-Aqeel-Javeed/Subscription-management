@@ -1,6 +1,7 @@
 import { Db, ObjectId } from "mongodb";
 import { connectToDatabase } from "./mongo.js";
 import type { IStorage } from "./storage";
+import { encryptSubscriptionData, decryptSubscriptionData } from "./encryption.service.js";
 // @ts-ignore
 import type { User, InsertUser, Subscription, InsertSubscription, Reminder, InsertReminder, DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, NotificationItem } from "../../shared/schema.js";
 
@@ -135,12 +136,14 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const subs = await db.collection("subscriptions").find(getTenantFilter(tenantId)).toArray();
     // Map MongoDB _id to id (number) and ensure all required Subscription fields
-      return subs.map(s => ({
+      return subs.map(s => {
+        const decrypted = decryptSubscriptionData(s);
+        return ({
         id: s._id?.toString() || '',
         tenantId: s.tenantId || tenantId,
-        serviceName: s.serviceName || "",
-        vendor: s.vendor || "",
-        amount: s.amount?.toString() ?? "0",
+        serviceName: decrypted.serviceName || "",
+        vendor: decrypted.vendor || "",
+        amount: String(decrypted.amount || "0"),
         billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
         commitmentCycle: s.commitmentCycle || null,
         paymentFrequency: s.paymentFrequency || null,
@@ -155,9 +158,10 @@ export class MongoStorage implements IStorage {
         isActive: typeof s.isActive === 'boolean' ? s.isActive : true,
         createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
         updatedBy: s.updatedBy || null,
-        owner: s.owner || null,  // Add the owner field
-        ownerEmail: s.ownerEmail || null
-      } as any));
+        owner: decrypted.owner || null,  // Add the owner field
+        ownerEmail: decrypted.ownerEmail || null
+      } as any);
+      });
   }
 
   async getSubscription(id: string, tenantId: string): Promise<Subscription | undefined> {
@@ -166,12 +170,13 @@ export class MongoStorage implements IStorage {
     let filter: any = { $or: [ { _id: new ObjectId(id), tenantId }, { id, tenantId } ] };
     const subscription = await db.collection("subscriptions").findOne(filter);
     if (!subscription) return undefined;
+      const decrypted = decryptSubscriptionData(subscription);
       return {
         id: subscription._id?.toString() || '',
         tenantId: subscription.tenantId || tenantId,
-        serviceName: subscription.serviceName || "",
-        vendor: subscription.vendor || "",
-        amount: subscription.amount?.toString() ?? "0",
+        serviceName: decrypted.serviceName || "",
+        vendor: decrypted.vendor || "",
+        amount: String(decrypted.amount || "0"),
         billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
         commitmentCycle: subscription.commitmentCycle || null,
         paymentFrequency: subscription.paymentFrequency || null,
@@ -182,7 +187,7 @@ export class MongoStorage implements IStorage {
         status: subscription.status && subscription.status !== "" ? subscription.status : "Active",
         reminderDays: subscription.reminderDays || 7,
         reminderPolicy: subscription.reminderPolicy && subscription.reminderPolicy !== "" ? subscription.reminderPolicy : "One time",
-        notes: subscription.notes || null,
+        notes: decrypted.notes || null,
         isActive: typeof subscription.isActive === 'boolean' ? subscription.isActive : true,
         createdAt: subscription.createdAt ? new Date(subscription.createdAt) : new Date(),
         updatedBy: subscription.updatedBy || null,
@@ -194,36 +199,59 @@ export class MongoStorage implements IStorage {
   async createSubscription(subscription: InsertSubscription, tenantId: string): Promise<Subscription> {
     console.log(`🚀 CREATESUBSCRIPTION CALLED - Enhanced logging version active!`);
     console.log(`🚀 Creating subscription: ${subscription.serviceName} for tenant: ${tenantId}`);
+    console.log(`📝 BEFORE encryption:`, {
+      serviceName: subscription.serviceName,
+      amount: subscription.amount,
+      vendor: subscription.vendor,
+      paymentMethod: subscription.paymentMethod
+    });
     
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
+    // Encrypt sensitive data before storing
+    const encrypted = encryptSubscriptionData(subscription);
+    console.log(`🔐 AFTER encryption:`, {
+      serviceName: encrypted.serviceName?.substring(0, 50) + '...',
+      amount: encrypted.amount?.substring(0, 50) + '...',
+      vendor: encrypted.vendor?.substring(0, 50) + '...',
+      paymentMethod: encrypted.paymentMethod?.substring(0, 50) + '...'
+    });
+    
     // Don't destructure updatedAt, just spread subscription
-    const doc = { ...subscription, tenantId, _id: new ObjectId(), createdAt: new Date(), updatedAt: new Date(), updatedBy: null };
+    const doc = { ...encrypted, tenantId, _id: new ObjectId(), createdAt: new Date(), updatedAt: new Date(), updatedBy: null };
+    console.log(`💾 BEFORE DB insert - doc fields:`, {
+      serviceName: doc.serviceName?.substring(0, 50) + '...',
+      amount: doc.amount?.substring(0, 50) + '...',
+      vendor: doc.vendor?.substring(0, 50) + '...',
+      paymentMethod: doc.paymentMethod?.substring(0, 50) + '...'
+    });
+    
     await db.collection("subscriptions").insertOne(doc);
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
     
     // Create notification event for subscription creation
     try {
-      console.log(`🔄 About to create notification event for subscription: ${doc.serviceName}`);
+      console.log(`🔄 About to create notification event for subscription: ${subscription.serviceName}`);
       await this.createNotificationEvent(
         tenantId,
         'created',
         doc._id.toString(),
-        doc.serviceName,
+        subscription.serviceName,
         doc.category
       );
-      console.log(`✅ Notification event creation completed for subscription: ${doc.serviceName}`);
+      console.log(`✅ Notification event creation completed for subscription: ${subscription.serviceName}`);
     } catch (notificationError) {
       console.error(`❌ Failed to create notification event for ${doc.serviceName}:`, notificationError);
       // Don't throw - let subscription creation succeed even if notification fails
     }
+      const decrypted = decryptSubscriptionData(doc);
       return {
         id: doc._id?.toString() || '',
         tenantId: doc.tenantId || tenantId,
-        serviceName: doc.serviceName || "",
-        vendor: doc.vendor || "",
-        amount: doc.amount?.toString() ?? "0",
+        serviceName: decrypted.serviceName || "",
+        vendor: decrypted.vendor || "",
+        amount: String(decrypted.amount || "0"),
         billingCycle: doc.billingCycle || "monthly",
         category: doc.category || "Software",
         startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
@@ -231,7 +259,7 @@ export class MongoStorage implements IStorage {
         status: doc.status || "Active",
         reminderDays: doc.reminderDays || 7,
         reminderPolicy: doc.reminderPolicy || "One time",
-        notes: doc.notes || null,
+        notes: decrypted.notes || null,
         isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
         createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
         updatedBy: doc.updatedBy || null,
@@ -244,10 +272,12 @@ export class MongoStorage implements IStorage {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
     let filter: any = { $or: [ { _id: new ObjectId(id), tenantId }, { id, tenantId } ] };
+    // Encrypt sensitive data before updating
+    const encrypted = encryptSubscriptionData(subscription);
     // Don't destructure updatedAt, just spread subscription
     const result = await db.collection("subscriptions").findOneAndUpdate(
       filter,
-      { $set: subscription },
+      { $set: encrypted },
       { returnDocument: "after" }
     );
     if (!result || !result.value) return undefined;
@@ -257,12 +287,13 @@ export class MongoStorage implements IStorage {
     }
     await this.generateAndInsertRemindersForSubscription(result.value, tenantId);
     const doc = result.value;
+        const decrypted = decryptSubscriptionData(doc);
         return {
           id: doc._id?.toString() || '',
           tenantId: doc.tenantId || tenantId,
-          serviceName: doc.serviceName || "",
-          vendor: doc.vendor || "",
-          amount: doc.amount?.toString() ?? "0",
+          serviceName: decrypted.serviceName || "",
+          vendor: decrypted.vendor || "",
+          amount: String(decrypted.amount || "0"),
           billingCycle: doc.billingCycle || "monthly",
           category: doc.category || "Software",
           startDate: doc.startDate ? new Date(doc.startDate) : new Date(),
@@ -270,7 +301,7 @@ export class MongoStorage implements IStorage {
           status: doc.status || "Active",
           reminderDays: doc.reminderDays || 7,
           reminderPolicy: doc.reminderPolicy || "One time",
-          notes: doc.notes || null,
+          notes: decrypted.notes || null,
           isActive: typeof doc.isActive === 'boolean' ? doc.isActive : true,
           createdAt: doc.createdAt ? new Date(doc.createdAt) : new Date(),
           updatedBy: doc.updatedBy || null,

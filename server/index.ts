@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 // @ts-ignore
 import { registerRoutes } from "./routes.js";
+import { enforceHttps, securityHeaders, sanitizeHeaders } from "./middleware/security.middleware.js";
 
 function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -16,7 +17,13 @@ function log(message: string, source = "express") {
 
 
 const app = express();
-// CORS must be the first middleware
+
+// Security middleware - Must be first
+app.use(enforceHttps);
+app.use(securityHeaders);
+app.use(sanitizeHeaders);
+
+// CORS must be after security headers
 app.use(cors({
   origin: [
     "https://subscription-management-6uje.onrender.com",
