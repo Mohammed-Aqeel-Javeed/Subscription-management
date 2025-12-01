@@ -848,14 +848,21 @@ router.get("/api/subscriptions", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
+    
+    // Import decryption function
+    const { decryptSubscriptionData } = await import("./encryption.service.js");
+    
     const subscriptions = await collection.find({ tenantId }).toArray();
     
-    // Transform MongoDB documents to have consistent id field
-    const transformedSubscriptions = subscriptions.map(sub => ({
-      ...sub,
-      id: sub._id?.toString(), // Add id field from _id
-      _id: sub._id?.toString()  // Convert _id to string
-    }));
+    // Transform MongoDB documents to have consistent id field AND decrypt sensitive data
+    const transformedSubscriptions = subscriptions.map(sub => {
+      const decrypted = decryptSubscriptionData(sub);
+      return {
+        ...decrypted,
+        id: sub._id?.toString(), // Add id field from _id
+        _id: sub._id?.toString()  // Convert _id to string
+      };
+    });
     
     res.status(200).json(transformedSubscriptions);
   } catch (error) {
@@ -892,12 +899,19 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
     // Get subscription data before deleting for notification event
     const subscriptionToDelete = await collection.findOne(filter);
     
+    // Decrypt subscription data for notification
+    let decryptedSubscription = subscriptionToDelete;
+    if (subscriptionToDelete) {
+      const { decryptSubscriptionData } = await import("./encryption.service.js");
+      decryptedSubscription = decryptSubscriptionData(subscriptionToDelete);
+    }
+    
     const result = await collection.deleteOne(filter);
     if (result.deletedCount === 1) {
       // Create notification event for subscription deletion
-      if (subscriptionToDelete) {
+      if (decryptedSubscription) {
         try {
-          console.log(`🔄 [SUBTRACKERR] Creating deletion notification event for subscription: ${subscriptionToDelete.serviceName}`);
+          console.log(`🔄 [SUBTRACKERR] Creating deletion notification event for subscription: ${decryptedSubscription.serviceName}`);
           
           const notificationEvent = {
             _id: new ObjectId(),
@@ -905,9 +919,9 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
             type: 'subscription',
             eventType: 'deleted',
             subscriptionId: id,
-            subscriptionName: subscriptionToDelete.serviceName,
-            category: subscriptionToDelete.category || 'Software',
-            message: `Subscription ${subscriptionToDelete.serviceName} deleted`,
+            subscriptionName: decryptedSubscription.serviceName,
+            category: decryptedSubscription.category || 'Software',
+            message: `Subscription ${decryptedSubscription.serviceName} deleted`,
             read: false,
             timestamp: new Date().toISOString(),
             createdAt: new Date().toISOString(),
@@ -918,7 +932,7 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
           const notificationResult = await db.collection("notification_events").insertOne(notificationEvent);
           console.log(`✅ [SUBTRACKERR] Deletion notification event created successfully with ID: ${notificationResult.insertedId}`);
         } catch (notificationError) {
-          console.error(`❌ [SUBTRACKERR] Failed to create deletion notification event for ${subscriptionToDelete.serviceName}:`, notificationError);
+          console.error(`❌ [SUBTRACKERR] Failed to create deletion notification event for ${decryptedSubscription?.serviceName}:`, notificationError);
           // Don't throw - let deletion succeed even if notification fails
         }
       }
@@ -1110,7 +1124,7 @@ router.post("/api/currencies", async (req, res) => {
       name: name.trim(),
       symbol: symbol.trim(),
       isoNumber: isoNumber || "",
-      exchangeRate: exchangeRate || "",
+      exchangeRate: exchangeRate !== undefined && exchangeRate !== null ? Number(exchangeRate) : 1,
       visible: true,
       created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
       createdAt: new Date(),
@@ -1423,6 +1437,10 @@ router.post("/api/subscriptions", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
+    
+    // Import encryption functions
+    const { encryptSubscriptionData } = await import("./encryption.service.js");
+    
     // Prepare subscription document with timestamps and tenantId
     const subscription = {
       ...req.body,
@@ -1430,8 +1448,12 @@ router.post("/api/subscriptions", async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    // Create the subscription
-    const result = await collection.insertOne(subscription);
+    
+    // ENCRYPT sensitive data before storing
+    const encryptedSubscription = encryptSubscriptionData(subscription);
+    
+    // Create the subscription with encrypted data
+    const result = await collection.insertOne(encryptedSubscription);
     const subscriptionId = result.insertedId;
     // Get the complete subscription document
     const createdSubscription = await collection.findOne({ _id: subscriptionId });
@@ -1644,6 +1666,10 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
+    
+    // Import encryption functions
+    const { encryptSubscriptionData } = await import("./encryption.service.js");
+    
     // Always try to create an ObjectId from the ID
     let subscriptionId;
     try {
@@ -1661,9 +1687,13 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     if ('tenantId' in req.body) {
       delete req.body.tenantId;
     }
+    
+    // ENCRYPT sensitive fields in the update payload
+    const encryptedPayload = encryptSubscriptionData(req.body);
+    
     const update = { 
       $set: { 
-        ...req.body,
+        ...encryptedPayload,
         status: req.body.status || oldDoc.status, // Preserve status if not provided
         updatedAt: new Date(),  // Add updatedAt timestamp
         tenantId // Always set tenantId from user/session, not from payload (last)

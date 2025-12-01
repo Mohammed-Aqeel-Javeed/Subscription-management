@@ -72,6 +72,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       items: string[];
     }[];
   }>({show: false, duplicates: []});
+  const hasSuccessfulImportsRef = useRef(false);
 
   // Resolve effective local currency for templates:
   // 1) explicit prop value (if not default "LCY")
@@ -214,7 +215,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     instructionsSheet.addRow(['   • Description: Optional description']);
     instructionsSheet.addRow(['   • Managed by: Select employee from dropdown (references Employees sheet)']);
     instructionsSheet.addRow(['   • Financial Institution: Bank or institution name (e.g., HSBC Bank)']);
-    instructionsSheet.addRow(['   • Expires at: Expiration date in MM/YYYY format (e.g., 12/2027)']);
+    instructionsSheet.addRow(['   • Expires at: Expiration date in MM/YYYY format ONLY (e.g., 12/2027)']);
     instructionsSheet.addRow(['   • Used in: Subscriptions sheet for payment method selection']);
     instructionsSheet.addRow([]);
     
@@ -331,6 +332,23 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         errorStyle: 'warning',
         errorTitle: 'Select from List',
         error: 'Please select a currency from the dropdown list.'
+      };
+      
+      // Exchange Rate validation - must be numeric with 2 decimal places
+      const rateCell = currencySheet.getCell(`B${i}`);
+      rateCell.numFmt = '0.00'; // Format as number with 2 decimal places
+      rateCell.dataValidation = {
+        type: 'decimal',
+        operator: 'greaterThan',
+        allowBlank: false,
+        formulae: [0],
+        showInputMessage: true,
+        promptTitle: 'Exchange Rate Required',
+        prompt: 'Enter the exchange rate as a number (e.g., 1.00, 83.12). Must be greater than 0.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Exchange Rate',
+        error: 'Please enter a valid number greater than 0. Decimal values are allowed.'
       };
     }
     
@@ -457,6 +475,21 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         errorTitle: 'Invalid Department',
         error: 'Please select a valid department.'
       };
+      
+      // Status dropdown (E column) - active or inactive
+      const statusCell = empSheet.getCell(`E${i}`);
+      statusCell.dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: ['"active,inactive"'],
+        showInputMessage: true,
+        promptTitle: 'Select Status',
+        prompt: 'Choose employee status: active or inactive.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Status',
+        error: 'Please select either "active" or "inactive".'
+      };
     }
     
     // 5. PAYMENT METHODS SHEET
@@ -530,9 +563,21 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid employee.'
       };
       
-      // Set Expires at column (E) to text format for all rows to preserve slashes
+      // Expires at validation - MM/YYYY format only (E column)
       const expiresAtCell = paySheet.getCell(`E${i}`);
-      expiresAtCell.numFmt = '@';
+      expiresAtCell.numFmt = '@'; // Text format to preserve slashes
+      expiresAtCell.dataValidation = {
+        type: 'custom',
+        allowBlank: true,
+        formulae: [`AND(LEN(E${i})=7,ISNUMBER(VALUE(LEFT(E${i},2))),MID(E${i},3,1)="/",ISNUMBER(VALUE(RIGHT(E${i},4))),VALUE(LEFT(E${i},2))>=1,VALUE(LEFT(E${i},2))<=12,VALUE(RIGHT(E${i},4))>=2020)`],
+        showInputMessage: true,
+        promptTitle: 'Expiry Date Format',
+        prompt: 'Enter expiry date in MM/YYYY format (e.g., 12/2027). Month must be 01-12.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Expiry Date',
+        error: 'Please use MM/YYYY format (e.g., 12/2027). Month must be between 01 and 12.'
+      };
     }
     
     // 6. VENDORS SHEET (Hidden)
@@ -619,6 +664,9 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     
     // Add Commitment cycle dropdown and other validations for Subscriptions
     const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trail'];
+    const subscriptionStatuses = ['Active', 'Inactive', 'Cancelled', 'Suspended', 'Trial'];
+    const reminderPolicies = ['One time', 'Recurring', 'None'];
+    
     for (let i = 2; i <= 500; i++) {
       // Service Name duplicate validation (A column)
       const serviceNameCell = subsSheet.getCell(`A${i}`);
@@ -650,6 +698,23 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid vendor from the dropdown list.'
       };
       
+      // Amount validation - numeric with 2 decimal places (C column)
+      const amountCell = subsSheet.getCell(`C${i}`);
+      amountCell.numFmt = '0.00'; // Format as number with 2 decimal places
+      amountCell.dataValidation = {
+        type: 'decimal',
+        operator: 'greaterThanOrEqual',
+        allowBlank: false,
+        formulae: [0],
+        showInputMessage: true,
+        promptTitle: 'Amount Required',
+        prompt: 'Enter the subscription amount as a number (e.g., 15.99, 100.00). Must be 0 or greater.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Amount',
+        error: 'Please enter a valid number. Decimal values are allowed (e.g., 15.99).'
+      };
+      
       // Commitment cycle dropdown (D column)
       const cycleCell = subsSheet.getCell(`D${i}`);
       cycleCell.dataValidation = {
@@ -678,6 +743,21 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       // Set date format for Start Date column to text format (preserves slashes)
       const startDateCell = subsSheet.getCell(`E${i}`);
       startDateCell.numFmt = '@';
+      
+      // Status dropdown (G column)
+      const statusCell = subsSheet.getCell(`G${i}`);
+      statusCell.dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: [`"${subscriptionStatuses.join(',')}"`],
+        showInputMessage: true,
+        promptTitle: 'Select Status',
+        prompt: 'Choose subscription status from the dropdown.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Status',
+        error: 'Please select a valid status: Active, Inactive, Cancelled, Suspended, or Trial.'
+      };
       
       // Category dropdown (H2:H500) - references Categories sheet
       const categoryCell = subsSheet.getCell(`H${i}`);
@@ -732,6 +812,37 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
           result: ''
         };
       }
+      
+      // Reminder Policy dropdown (L column)
+      const reminderPolicyCell = subsSheet.getCell(`L${i}`);
+      reminderPolicyCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${reminderPolicies.join(',')}"`],
+        showInputMessage: true,
+        promptTitle: 'Select Reminder Policy',
+        prompt: 'Choose reminder policy: One time, Recurring, or None.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Reminder Policy',
+        error: 'Please select a valid reminder policy from the dropdown.'
+      };
+      
+      // Reminder Days validation - integer between 1 and 365 (M column)
+      const reminderDaysCell = subsSheet.getCell(`M${i}`);
+      reminderDaysCell.dataValidation = {
+        type: 'whole',
+        operator: 'between',
+        allowBlank: true,
+        formulae: [1, 365],
+        showInputMessage: true,
+        promptTitle: 'Reminder Days',
+        prompt: 'Enter the number of days before renewal to send a reminder (1-365).',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Reminder Days',
+        error: 'Please enter a whole number between 1 and 365.'
+      };
     }
     
     // Style header rows for all sheets
@@ -1225,6 +1336,12 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
                 continue;
               }
               
+              // Find exchange rate column (handles any currency code like SGD, USD, LCY, etc.)
+              const exchangeRateKey = Object.keys(row).find(key => 
+                key.startsWith('Exch.Rate against 1') || key === 'Exchange Rate'
+              );
+              const exchangeRate = exchangeRateKey ? parseFloat(row[exchangeRateKey]) || 1 : 1;
+              
               const res = await fetch(`${API_BASE_URL}/api/currencies`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -1233,7 +1350,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
                   code: currencyCode,
                   name: description,
                   symbol: symbol,
-                  exchangeRate: row['Exch.Rate against 1 LCY'] || row['Exchange Rate'] || 1
+                  exchangeRate: exchangeRate
                 }),
               });
               if (res.ok) {
@@ -1499,14 +1616,25 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
 
         // Show specific error for all duplicates
         if (allDuplicates.length > 0) {
+          // Track if any items were successfully imported
+          hasSuccessfulImportsRef.current = totalSuccess > 0;
+          
           setDuplicateAlert({
             show: true,
             duplicates: allDuplicates
           });
-          // Don't refresh page if there are only duplicates and nothing succeeded
-          if (totalSuccess === 0) {
-            return;
+          
+          // Show import summary if some items succeeded
+          if (totalSuccess > 0) {
+            toast({
+              title: "Import Partially Complete",
+              description: results.join(' | '),
+              variant: "destructive",
+            });
           }
+          
+          // Don't refresh page when duplicates are shown - user needs to close the dialog first
+          return;
         }
 
         // Show import summary
@@ -1533,13 +1661,22 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     }
   };
 
+  const handleCloseDuplicateDialog = () => {
+    setDuplicateAlert({show: false, duplicates: []});
+    // Reload page if some items were successfully imported
+    if (hasSuccessfulImportsRef.current) {
+      window.location.reload();
+    }
+    hasSuccessfulImportsRef.current = false;
+  };
+
   return (
     <>
       {/* Custom Centered Alert for Duplicate Items */}
       {duplicateAlert.show && (
         <div 
           className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setDuplicateAlert({show: false, duplicates: []})}
+          onClick={handleCloseDuplicateDialog}
           style={{ overflow: 'auto', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif" }}
         >
           <div 
@@ -1557,7 +1694,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
                 </div>
               </div>
               <button
-                onClick={() => setDuplicateAlert({show: false, duplicates: []})}
+                onClick={handleCloseDuplicateDialog}
                 className="text-white hover:bg-red-800 rounded-lg p-2 transition-colors"
                 aria-label="Close"
               >
@@ -1589,7 +1726,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
             {/* Footer */}
             <div className="bg-white px-6 py-5 border-t border-gray-100 flex justify-center">
               <button
-                onClick={() => setDuplicateAlert({show: false, duplicates: []})}
+                onClick={handleCloseDuplicateDialog}
                 className="px-8 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
               >
                 Got it
