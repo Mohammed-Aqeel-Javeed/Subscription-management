@@ -38,6 +38,7 @@ export default function Dashboard() {
   
   // Filter states
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [dateRange, setDateRange] = useState("6months");
   
   // Use dashboard metrics query for auth check and data
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery<DashboardMetrics>({
@@ -128,10 +129,66 @@ export default function Dashboard() {
   // Filter active subscriptions
   const activeSubscriptions = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active") : [];
   
+  // Apply filters to subscriptions
+  const getDateRangeMonths = () => {
+    switch(dateRange) {
+      case "3months": return 3;
+      case "6months": return 6;
+      case "12months": return 12;
+      default: return 6;
+    }
+  };
+
+  const filteredSubscriptions = activeSubscriptions.filter(sub => {
+    // Category filter
+    if (categoryFilter !== "all" && sub.category !== categoryFilter) {
+      return false;
+    }
+    
+    // Date range filter - check if subscription has renewed or will renew in the selected date range
+    const months = getDateRangeMonths();
+    const rangeStartDate = new Date();
+    rangeStartDate.setMonth(rangeStartDate.getMonth() - months);
+    
+    const nextRenewal = new Date(sub.nextRenewal);
+    const subscriptionStartDate = new Date(sub.startDate);
+    
+    // Include subscription if it renewed or will renew within the date range
+    return nextRenewal >= rangeStartDate || subscriptionStartDate >= rangeStartDate;
+  });
+
+  // Calculate filtered metrics
+  const calculateMonthlySpend = () => {
+    return filteredSubscriptions.reduce((total, sub) => {
+      const amount = parseFloat(String(sub.amount)) || 0;
+      switch(sub.billingCycle) {
+        case "monthly": return total + amount;
+        case "yearly": return total + (amount / 12);
+        case "quarterly": return total + (amount / 3);
+        default: return total;
+      }
+    }, 0);
+  };
+
+  const calculateYearlySpend = () => {
+    return filteredSubscriptions.reduce((total, sub) => {
+      const amount = parseFloat(String(sub.amount)) || 0;
+      switch(sub.billingCycle) {
+        case "monthly": return total + (amount * 12);
+        case "yearly": return total + amount;
+        case "quarterly": return total + (amount * 4);
+        default: return total;
+      }
+    }, 0);
+  };
+
+  const filteredMonthlySpend = calculateMonthlySpend();
+  const filteredYearlySpend = calculateYearlySpend();
+  
   // Filter upcoming renewals (next 30 days)
   const now = new Date();
   const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const upcomingRenewals = activeSubscriptions.filter(sub => {
+  const upcomingRenewals = filteredSubscriptions.filter(sub => {
     const renewalDate = new Date(sub.nextRenewal);
     // Reset time portions to compare only dates
     renewalDate.setHours(0, 0, 0, 0);
@@ -208,14 +265,14 @@ export default function Dashboard() {
         {/* Date Filter */}
         <div className="mb-6 flex justify-between items-center">
           <div className="flex space-x-4">
-            <Select defaultValue="6months">
+            <Select value={dateRange} onValueChange={setDateRange}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Last 6 months" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="3months">Last 3 months</SelectItem>
                 <SelectItem value="6months">Last 6 months</SelectItem>
                 <SelectItem value="12months">Last 12 months</SelectItem>
-                <SelectItem value="custom">Custom range</SelectItem>
               </SelectContent>
             </Select>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -225,7 +282,7 @@ export default function Dashboard() {
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
                 {uniqueCategories.map(category => (
-                  <SelectItem key={category} value={category.toLowerCase()}>
+                  <SelectItem key={category} value={category}>
                     {category}
                   </SelectItem>
                 ))}
@@ -241,7 +298,7 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm font-medium text-blue-100">Monthly Spend</p>
                 <p className="text-2xl font-bold text-white mt-1">
-                  ${metrics?.monthlySpend.toLocaleString() || '0'}
+                  ${filteredMonthlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </p>
                 <p className={`text-sm mt-1 flex items-center text-blue-200`}>
                   {getGrowthIcon(-12)} 12% from last month
@@ -258,7 +315,7 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm font-medium text-green-100">Yearly Spend</p>
                 <p className="text-2xl font-bold text-white mt-1">
-                  ${metrics?.yearlySpend.toLocaleString() || '0'}
+                  ${filteredYearlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </p>
                 <p className={`text-sm mt-1 flex items-center text-green-200`}>
                   {getGrowthIcon(8)} 8% from last year
@@ -278,7 +335,7 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm font-medium text-purple-100">Active Subscriptions</p>
                 <p className="text-2xl font-bold text-white mt-1">
-                  {metrics?.activeSubscriptions || 0}
+                  {filteredSubscriptions.length}
                 </p>
                 <p className="text-sm text-purple-200 mt-1 flex items-center">
                   <Users className="w-4 h-4 mr-1" /> Click to view details
@@ -348,7 +405,7 @@ export default function Dashboard() {
         <Dialog open={activeSubscriptionsModalOpen} onOpenChange={setActiveSubscriptionsModalOpen}>
     <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
             <DialogHeader>
-              <DialogTitle>Active Subscriptions ({activeSubscriptions.length})</DialogTitle>
+              <DialogTitle>Active Subscriptions ({filteredSubscriptions.length})</DialogTitle>
             </DialogHeader>
             <div className="overflow-x-auto">
               <Table>
@@ -364,7 +421,7 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activeSubscriptions.map((subscription) => (
+                  {filteredSubscriptions.map((subscription) => (
                     <TableRow key={subscription.id}>
                       <TableCell className="font-medium">{subscription.serviceName}</TableCell>
                       <TableCell>{subscription.vendor}</TableCell>

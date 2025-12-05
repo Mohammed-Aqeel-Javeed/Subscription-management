@@ -2478,7 +2478,8 @@ export default function Configuration() {
                                 Expires at
                               </Label>
                               <Input 
-                                type="date" 
+                                type="month" 
+                                placeholder="MM/YYYY"
                                 value={paymentForm.expiresAt} 
                                 onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
@@ -2636,7 +2637,8 @@ export default function Configuration() {
                                 Expires at
                               </Label>
                               <Input 
-                                type="date" 
+                                type="month" 
+                                placeholder="MM/YYYY"
                                 value={paymentForm.expiresAt} 
                                 onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"

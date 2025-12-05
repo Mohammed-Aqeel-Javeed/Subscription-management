@@ -167,7 +167,7 @@ export default function ComplianceDashboard() {
     <ErrorBoundary>
       <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">        
         {/* Top tab buttons */}
-        <div className="flex justify-between items-center gap-4 mb-8">
+        <div className="flex justify-end items-center gap-4 mb-8">
           <div className="flex gap-4">
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
               <Button

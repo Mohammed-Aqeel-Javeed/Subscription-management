@@ -225,16 +225,16 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     instructionsSheet.addRow(['   • Service Name: Subscription service name (auto-capitalizes first letter)']);
     instructionsSheet.addRow(['   • Vendor: Select from dropdown (90+ popular vendors available)']);
     instructionsSheet.addRow(['   • Amount: Subscription cost']);
-    instructionsSheet.addRow(['   • Commitment cycle: Select from dropdown (Monthly, Yearly, Quarterly, Weekly, Trail)']);
+    instructionsSheet.addRow(['   • Commitment cycle: Select from dropdown (Monthly, Yearly, Quarterly, Weekly, Trail, Pay-as-you-go)']);
     instructionsSheet.addRow(['   • Start Date: Format dd/mm/yyyy (e.g., 01/01/2025)']);
     instructionsSheet.addRow(['   • Next Renewal: Auto-calculates based on Start Date + Commitment cycle']);
-    instructionsSheet.addRow(['   • Status: Subscription status (Active, Inactive, etc.)']);
+    instructionsSheet.addRow(['   • Status: Select from dropdown (Active or Inactive)']);
     instructionsSheet.addRow(['   • Category: Select from dropdown (references Categories sheet)']);
     instructionsSheet.addRow(['   • Departments: Enter department names separated by | (e.g., IT|Marketing)']);
     instructionsSheet.addRow(['   • Owner: Select from dropdown (references Employees sheet)']);
     instructionsSheet.addRow(['   • Owner Email: Auto-fills when you select Owner']);
-    instructionsSheet.addRow(['   • Reminder Policy: Reminder frequency']);
-    instructionsSheet.addRow(['   • Reminder Days: Days before renewal to send reminder']);
+    instructionsSheet.addRow(['   • Reminder Policy: Select from dropdown (One time, Two times, Until Renewal)']);
+    instructionsSheet.addRow(['   • Reminder Days: Days before renewal to send reminder (e.g., 7 for one week before)']);
     instructionsSheet.addRow(['   • Notes: Additional notes']);
     instructionsSheet.addRow([]);
     
@@ -284,6 +284,14 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     const formattedCurrencies = currencyList.map(c => `${c.symbol} ${c.description} (${c.code})`);
     formattedCurrencies.forEach((currency, index) => {
       currencyListSheet.getCell(`A${index + 1}`).value = currency;
+    });
+    
+    // Create hidden sheet with just currency codes for subscription dropdown
+    const currencyCodesSheet = workbook.addWorksheet('_CurrencyCodes');
+    currencyCodesSheet.state = 'veryHidden';
+    const currencyCodes = currencyList.map(c => c.code);
+    currencyCodes.forEach((code, index) => {
+      currencyCodesSheet.getCell(`A${index + 1}`).value = code;
     });
     
     // 1. CURRENCIES SHEET
@@ -375,27 +383,38 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       ]
     });
     
+    // Create helper sheet to extract currency codes from Currencies sheet (for Subscriptions dropdown)
+    const currencyExtractSheet = workbook.addWorksheet('_CurrencyExtract');
+    currencyExtractSheet.state = 'veryHidden';
+    // Add formulas to extract the code from format like "$ United States Dollar (USD)"
+    for (let i = 1; i <= 500; i++) {
+      const extractCell = currencyExtractSheet.getCell(`A${i}`);
+      extractCell.value = {
+        formula: `IF(Currencies!A${i+2}<>"",TRIM(RIGHT(SUBSTITUTE(Currencies!A${i+2},"(",REPT(" ",100)),100)),"")`
+      };
+    }
+    
     // 2. CATEGORIES SHEET
     const catSheet = workbook.addWorksheet('Categories');
     catSheet.columns = [{ header: 'Category Name', key: 'name', width: 25 }];
-    catSheet.addRow({ name: 'Software & SaaS' });
-    catSheet.addRow({ name: 'Entertainment' });
-    catSheet.addRow({ name: 'Cloud Services' });
     
-    // Add duplicate validation for Category Name
+    // Add only one example category (users can add more)
+    catSheet.addRow({ name: 'Productivity & Collaboration' });
+    
+    // Add category dropdown for Categories sheet (A2:A500) - references hidden CategoryList
     for (let i = 2; i <= 500; i++) {
-      const cell = catSheet.getCell(`A${i}`);
-      cell.dataValidation = {
-        type: 'custom',
-        allowBlank: false,
-        formulae: [`COUNTIF($A$2:$A$500,A${i})=1`],
+      const categoryCell = catSheet.getCell(`A${i}`);
+      categoryCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['CategoryList!$A$2:$A$12'],
         showInputMessage: true,
-        promptTitle: 'Category Name Required',
-        prompt: 'Enter a unique category name. Duplicates are not allowed.',
+        promptTitle: 'Select Category',
+        prompt: 'Choose a category from the dropdown or type your own.',
         showErrorMessage: true,
-        errorStyle: 'error',
-        errorTitle: 'Duplicate Category',
-        error: 'This category name already exists! Please use a unique name.'
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Category',
+        error: 'Please select a valid category from the dropdown list.'
       };
     }
     
@@ -615,12 +634,40 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       vendorsSheet.addRow({ name: vendor });
     });
     
+    // 6b. CATEGORY LIST SHEET (Hidden - for dropdown suggestions)
+    const categoryListSheet = workbook.addWorksheet('CategoryList');
+    categoryListSheet.state = 'veryHidden';
+    categoryListSheet.columns = [{ header: 'Category Name', key: 'name', width: 30 }];
+    
+    // Add all default category suggestions
+    const DEFAULT_CATEGORY_LIST = [
+      'Productivity & Collaboration',
+      'Accounting & Finance',
+      'CRM & Sales',
+      'Development & Hosting',
+      'Design & Creative Tools',
+      'Marketing & SEO',
+      'Communication Tools',
+      'Security & Compliance',
+      'HR & Admin',
+      'Subscription Infrastructure',
+      'Office Infrastructure'
+    ];
+    
+    DEFAULT_CATEGORY_LIST.forEach(category => {
+      categoryListSheet.addRow({ name: category });
+    });
+    
     // 7. SUBSCRIPTIONS SHEET
     const subsSheet = workbook.addWorksheet('Subscriptions');
     subsSheet.columns = [
       { header: 'Service Name', key: 'serviceName', width: 20 },
+      { header: 'Website', key: 'website', width: 30 },
       { header: 'Vendor', key: 'vendor', width: 20 },
+      { header: 'Currency', key: 'currency', width: 12 },
+      { header: 'Qty', key: 'qty', width: 10 },
       { header: 'Amount', key: 'amount', width: 12 },
+      { header: 'Total Amount', key: 'totalAmount', width: 15 },
       { header: 'Commitment cycle', key: 'billingCycle', width: 18 },
       { header: 'Start Date', key: 'startDate', width: 15 },
       { header: 'Next Renewal', key: 'nextRenewal', width: 15 },
@@ -637,37 +684,53 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     // Add sample row with formula for Next Renewal
     const sampleRow = subsSheet.getRow(2);
     sampleRow.getCell(1).value = 'Netflix';
-    sampleRow.getCell(2).value = 'Netflix Inc';
-    sampleRow.getCell(3).value = 15.99;
-    sampleRow.getCell(4).value = 'Monthly';
-    sampleRow.getCell(5).value = '01/01/2025';
-    sampleRow.getCell(5).numFmt = '@'; // Text format to preserve slashes
-    // Next Renewal formula (column 6/F)
-    sampleRow.getCell(6).value = {
-      formula: `IF(AND(E2<>"",D2<>""),TEXT(IF(D2="Monthly",DATE(YEAR(E2),MONTH(E2)+1,DAY(E2))-1,IF(D2="Quarterly",DATE(YEAR(E2),MONTH(E2)+3,DAY(E2))-1,IF(D2="Yearly",DATE(YEAR(E2)+1,MONTH(E2),DAY(E2))-1,IF(D2="Weekly",E2+6,IF(D2="Trail",E2+30,""))))),"dd/mm/yyyy"),"")`,
+    sampleRow.getCell(2).value = 'https://www.netflix.com';
+    sampleRow.getCell(3).value = 'Netflix Inc';
+    sampleRow.getCell(4).value = 'SGD';
+    sampleRow.getCell(5).value = 1;
+    sampleRow.getCell(6).value = 15.99;
+    // Total Amount formula (column 7/G) = Qty * Amount
+    sampleRow.getCell(7).value = {
+      formula: 'E2*F2',
+      result: 15.99
+    };
+    sampleRow.getCell(8).value = 'Monthly';
+    sampleRow.getCell(9).value = '01/01/2025';
+    sampleRow.getCell(9).numFmt = '@'; // Text format to preserve slashes
+    // Next Renewal formula (column 10/J)
+    sampleRow.getCell(10).value = {
+      formula: `IF(AND(I2<>"",H2<>""),TEXT(IF(H2="Monthly",DATE(YEAR(I2),MONTH(I2)+1,DAY(I2))-1,IF(H2="Quarterly",DATE(YEAR(I2),MONTH(I2)+3,DAY(I2))-1,IF(H2="Yearly",DATE(YEAR(I2)+1,MONTH(I2),DAY(I2))-1,IF(H2="Weekly",I2+6,IF(H2="Trail",I2+30,""))))),"dd/mm/yyyy"),"")`,
       result: '31/01/2025'
     };
-    sampleRow.getCell(6).numFmt = '@'; // Text format to preserve slashes
-    sampleRow.getCell(7).value = 'Active';
-    sampleRow.getCell(8).value = 'Entertainment';
-    sampleRow.getCell(9).value = 'Marketing';
-    sampleRow.getCell(10).value = 'John Doe';
-    // Owner Email formula (column 11/K) - VLOOKUP to get email from Employees sheet
-    sampleRow.getCell(11).value = {
-      formula: `IF(J2<>"",IFERROR(VLOOKUP(J2,Employees!A:B,2,FALSE),""),"")`,
+    sampleRow.getCell(10).numFmt = '@'; // Text format to preserve slashes
+    sampleRow.getCell(11).value = 'Active';
+    sampleRow.getCell(12).value = 'Entertainment';
+    sampleRow.getCell(13).value = 'Marketing';
+    sampleRow.getCell(14).value = 'John Doe';
+    // Owner Email formula (column 15/O) - VLOOKUP to get email from Employees sheet
+    sampleRow.getCell(15).value = {
+      formula: `IF(N2<>"",IFERROR(VLOOKUP(N2,Employees!A:B,2,FALSE),""),"")`,
       result: 'john@company.com'
     };
-    sampleRow.getCell(12).value = 'One time';
-    sampleRow.getCell(13).value = 7;
-    sampleRow.getCell(14).value = 'Team streaming subscription';
+    sampleRow.getCell(16).value = 'One time';
+    sampleRow.getCell(17).value = 7;
+    sampleRow.getCell(18).value = 'Team streaming subscription';
     sampleRow.commit();
     
     // Add Commitment cycle dropdown and other validations for Subscriptions
-    const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trail'];
-    const subscriptionStatuses = ['Active', 'Inactive', 'Cancelled', 'Suspended', 'Trial'];
-    const reminderPolicies = ['One time', 'Recurring', 'None'];
+    const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trail', 'Pay-as-you-go'];
+    const subscriptionStatuses = ['Active', 'Inactive'];
+    const reminderPolicies = ['One time', 'Two times', 'Until Renewal'];
     
     for (let i = 2; i <= 500; i++) {
+      // Total Amount formula for all rows (column G/7) = Qty * Amount (only if both exist)
+      const totalAmountCell = subsSheet.getCell(`G${i}`);
+      totalAmountCell.value = {
+        formula: `IF(AND(E${i}<>"",F${i}<>""),E${i}*F${i},"")`
+      };
+      totalAmountCell.numFmt = '0.00'; // Format as number with 2 decimal places
+      totalAmountCell.protection = { locked: true }; // Lock the cell
+      
       // Service Name duplicate validation (A column)
       const serviceNameCell = subsSheet.getCell(`A${i}`);
       serviceNameCell.dataValidation = {
@@ -683,8 +746,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'This service name already exists! Please use a unique name.'
       };
       
-      // Vendor dropdown (B column) - references Vendors sheet
-      const vendorCell = subsSheet.getCell(`B${i}`);
+      // Vendor dropdown (C column) - references Vendors sheet
+      const vendorCell = subsSheet.getCell(`C${i}`);
       vendorCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -698,8 +761,39 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid vendor from the dropdown list.'
       };
       
-      // Amount validation - numeric with 2 decimal places (C column)
-      const amountCell = subsSheet.getCell(`C${i}`);
+      // Currency dropdown (D column) - references extracted codes from Currencies sheet
+      const currencyCell = subsSheet.getCell(`D${i}`);
+      currencyCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['_CurrencyExtract!$A$1:$A$500'],
+        showInputMessage: true,
+        promptTitle: 'Select Currency',
+        prompt: 'Choose a currency code from the currencies defined in the Currencies sheet.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Currency',
+        error: 'Please select a valid currency from the dropdown list.'
+      };
+      
+      // Qty validation - integer >= 1 (E column)
+      const qtyCell = subsSheet.getCell(`E${i}`);
+      qtyCell.dataValidation = {
+        type: 'whole',
+        operator: 'greaterThanOrEqual',
+        allowBlank: false,
+        formulae: [1],
+        showInputMessage: true,
+        promptTitle: 'Quantity',
+        prompt: 'Enter the quantity (must be at least 1).',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Quantity',
+        error: 'Please enter a whole number >= 1.'
+      };
+      
+      // Amount validation - numeric with 2 decimal places (F column)
+      const amountCell = subsSheet.getCell(`F${i}`);
       amountCell.numFmt = '0.00'; // Format as number with 2 decimal places
       amountCell.dataValidation = {
         type: 'decimal',
@@ -715,8 +809,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please enter a valid number. Decimal values are allowed (e.g., 15.99).'
       };
       
-      // Commitment cycle dropdown (D column)
-      const cycleCell = subsSheet.getCell(`D${i}`);
+      // Commitment cycle dropdown (H column)
+      const cycleCell = subsSheet.getCell(`H${i}`);
       cycleCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -730,22 +824,22 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid commitment cycle.'
       };
       
-      // Add Next Renewal formula for all rows (F column)
+      // Add Next Renewal formula for all rows (J column)
       if (i > 2) { // Skip row 2 as we already added it
-        const renewalCell = subsSheet.getCell(`F${i}`);
+        const renewalCell = subsSheet.getCell(`J${i}`);
         renewalCell.value = {
-          formula: `IF(AND(E${i}<>"",D${i}<>""),TEXT(IF(D${i}="Monthly",DATE(YEAR(E${i}),MONTH(E${i})+1,DAY(E${i}))-1,IF(D${i}="Quarterly",DATE(YEAR(E${i}),MONTH(E${i})+3,DAY(E${i}))-1,IF(D${i}="Yearly",DATE(YEAR(E${i})+1,MONTH(E${i}),DAY(E${i}))-1,IF(D${i}="Weekly",E${i}+6,IF(D${i}="Trail",E${i}+30,""))))),"dd/mm/yyyy"),"")`,
+          formula: `IF(AND(I${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(I${i}),MONTH(I${i})+1,DAY(I${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(I${i}),MONTH(I${i})+3,DAY(I${i}))-1,IF(H${i}="Yearly",DATE(YEAR(I${i})+1,MONTH(I${i}),DAY(I${i}))-1,IF(H${i}="Weekly",I${i}+6,IF(H${i}="Trail",I${i}+30,""))))),"dd/mm/yyyy"),"")`,
           result: ''
         };
         renewalCell.numFmt = '@'; // Text format to preserve slashes
       }
       
       // Set date format for Start Date column to text format (preserves slashes)
-      const startDateCell = subsSheet.getCell(`E${i}`);
+      const startDateCell = subsSheet.getCell(`I${i}`);
       startDateCell.numFmt = '@';
       
-      // Status dropdown (G column)
-      const statusCell = subsSheet.getCell(`G${i}`);
+      // Status dropdown (K column)
+      const statusCell = subsSheet.getCell(`K${i}`);
       statusCell.dataValidation = {
         type: 'list',
         allowBlank: false,
@@ -759,23 +853,23 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid status: Active, Inactive, Cancelled, Suspended, or Trial.'
       };
       
-      // Category dropdown (H2:H500) - references Categories sheet
-      const categoryCell = subsSheet.getCell(`H${i}`);
+      // Category dropdown (L2:L500) - references Categories sheet
+      const categoryCell = subsSheet.getCell(`L${i}`);
       categoryCell.dataValidation = {
         type: 'list',
         allowBlank: true,
         formulae: ['Categories!$A$2:$A$500'],
         showInputMessage: true,
         promptTitle: 'Select Category',
-        prompt: 'Choose a category from the Categories sheet.',
+        prompt: 'Choose a category from the dropdown or type your own.',
         showErrorMessage: true,
         errorStyle: 'warning',
         errorTitle: 'Invalid Category',
-        error: 'Please select a valid category.'
+        error: 'Please select a valid category from the dropdown list.'
       };
       
-      // Department dropdown (I2:I500) - references Departments sheet
-      const deptCell = subsSheet.getCell(`I${i}`);
+      // Department dropdown (M2:M500) - references Departments sheet
+      const deptCell = subsSheet.getCell(`M${i}`);
       deptCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -789,8 +883,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid department.'
       };
       
-      // Add Owner (Employee) dropdown for Subscriptions (J2:J500) - references Employees sheet
-      const ownerCell = subsSheet.getCell(`J${i}`);
+      // Add Owner (Employee) dropdown for Subscriptions (M2:M500) - references Employees sheet
+      const ownerCell = subsSheet.getCell(`M${i}`);
       ownerCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -804,32 +898,32 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid employee.'
       };
       
-      // Add Owner Email auto-fill formula for all rows (K column) - VLOOKUP from Employees
+      // Add Owner Email auto-fill formula for all rows (N column) - VLOOKUP from Employees
       if (i > 2) {
-        const ownerEmailCell = subsSheet.getCell(`K${i}`);
+        const ownerEmailCell = subsSheet.getCell(`N${i}`);
         ownerEmailCell.value = {
-          formula: `IF(J${i}<>"",IFERROR(VLOOKUP(J${i},Employees!A:B,2,FALSE),""),"")`,
+          formula: `IF(M${i}<>"",IFERROR(VLOOKUP(M${i},Employees!A:B,2,FALSE),""),"")`,
           result: ''
         };
       }
       
-      // Reminder Policy dropdown (L column)
-      const reminderPolicyCell = subsSheet.getCell(`L${i}`);
+      // Reminder Policy dropdown (O column)
+      const reminderPolicyCell = subsSheet.getCell(`O${i}`);
       reminderPolicyCell.dataValidation = {
         type: 'list',
         allowBlank: true,
         formulae: [`"${reminderPolicies.join(',')}"`],
         showInputMessage: true,
         promptTitle: 'Select Reminder Policy',
-        prompt: 'Choose reminder policy: One time, Recurring, or None.',
+        prompt: 'Choose reminder policy: One time, Two times, or Until Renewal.',
         showErrorMessage: true,
         errorStyle: 'warning',
         errorTitle: 'Invalid Reminder Policy',
         error: 'Please select a valid reminder policy from the dropdown.'
       };
       
-      // Reminder Days validation - integer between 1 and 365 (M column)
-      const reminderDaysCell = subsSheet.getCell(`M${i}`);
+      // Reminder Days validation - integer between 1 and 365 (P column)
+      const reminderDaysCell = subsSheet.getCell(`P${i}`);
       reminderDaysCell.dataValidation = {
         type: 'whole',
         operator: 'between',
@@ -844,6 +938,32 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please enter a whole number between 1 and 365.'
       };
     }
+    
+    // Unlock editable cells in Subscriptions sheet (all except Total Amount, Next Renewal, and Owner Email)
+    for (let i = 2; i <= 500; i++) {
+      // Unlock all columns except G (Total Amount), J (Next Renewal), and O (Owner Email)
+      const editableColumns = ['A', 'B', 'C', 'D', 'E', 'F', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R'];
+      editableColumns.forEach(col => {
+        const cell = subsSheet.getCell(`${col}${i}`);
+        cell.protection = { locked: false };
+      });
+    }
+    
+    // Protect Subscriptions sheet to prevent formula editing
+    subsSheet.protect('', {
+      selectLockedCells: true,
+      selectUnlockedCells: true,
+      formatCells: false,
+      formatColumns: false,
+      formatRows: false,
+      insertRows: false,
+      insertColumns: false,
+      deleteRows: false,
+      deleteColumns: false,
+      sort: false,
+      autoFilter: false,
+      insertHyperlinks: false
+    });
     
     // Style header rows for all sheets
     [currencySheet, catSheet, deptSheet, empSheet, paySheet, subsSheet].forEach(sheet => {
@@ -1547,6 +1667,14 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
               const ownerEmail = row['Owner Email'] || row['OwnerEmail'] || employeesMap[ownerName] || '';
               const serviceName = capitalizeWords(row['Service Name'] || row['ServiceName'] || '');
               const vendor = row['Vendor'] || row['vendor'] || '';
+              const website = row['Website'] || row['website'] || '';
+              const qty = parseInt(row['Qty'] || row['qty']) || 1;
+              
+              // Validate Qty >= 1
+              if (qty < 1) {
+                subError++;
+                continue;
+              }
               
               // Check if subscription already exists (same service name + vendor)
               const isDuplicate = existingSubscriptions.some(
@@ -1564,7 +1692,9 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
               
               const payload: any = {
                 serviceName,
+                website,
                 vendor,
+                qty,
                 amount: parseFloat(row['Amount']) || 0,
                 billingCycle: (row['Commitment cycle'] || row['Billing Cycle'] || row['BillingCycle'] || 'monthly').toLowerCase(),
                 startDate: normalizeDate(row['Start Date'] || row['StartDate']),
