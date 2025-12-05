@@ -425,175 +425,170 @@ export default function Subscriptions() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="max-w-[1400px] mx-auto px-6 py-8">
-        {/* Modern Professional Header */}
-        <div className="mb-8 bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-4">
-              <div className="h-12 w-12 bg-white/30 backdrop-blur-md rounded-xl flex items-center justify-center shadow-lg border border-white/20">
-                <Layers className="h-6 w-6 text-blue-600 drop-shadow-glass" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Subscription Management</h1>
-              </div>
+        {/* Header Section */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center shadow-md border border-gray-200">
+              <Layers className="h-6 w-6 text-blue-600" />
             </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Subscription Management</h1>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-3">
+            {/* Add Subscription button - first */}
+            <Button
+              onClick={handleAddNew}
+              className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Subscription
+            </Button>
             
-            <div className="flex items-center space-x-3">
-              {/* Add Subscription button - first */}
-              <Button
-                onClick={handleAddNew}
-                className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Subscription
-              </Button>
-              
-              {/* History button - second */}
-              <Button
-                variant="outline"
-                onClick={() => window.location.href = '/subscription-history'}
-                className="w-44 bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200 hover:border-indigo-300 font-medium transition-all duration-200"
-              >
-                <Calendar className="h-4 w-4 mr-2" />
-                History
-              </Button>
-              
-              {/* Data Management Dropdown - third */}
-              <Select onValueChange={(value) => {
-                if (value === 'export') {
-                  handleExport();
-                } else if (value === 'import') {
-                  triggerImport();
+            {/* History button - second */}
+            <Button
+              variant="outline"
+              onClick={() => window.location.href = '/subscription-history'}
+              className="w-44 bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200 hover:border-indigo-300 font-medium transition-all duration-200"
+            >
+              <Calendar className="h-4 w-4 mr-2" />
+              History
+            </Button>
+            
+            {/* Data Management Dropdown - third */}
+            <Select onValueChange={(value) => {
+              if (value === 'export') {
+                handleExport();
+              } else if (value === 'import') {
+                triggerImport();
+              }
+            }}>
+              <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                <SelectValue placeholder="Data Management" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="export" className="cursor-pointer">
+                  <div className="flex items-center">
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </div>
+                </SelectItem>
+                <SelectItem value="import" className="cursor-pointer">
+                  <div className="flex items-center">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* Cancelled button - fourth */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (location.pathname.includes('cancelled')) {
+                  navigate('/subscriptions');
+                } else {
+                  navigate('/subscriptions/cancelled');
                 }
-              }}>
-                <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
-                  <SelectValue placeholder="Data Management" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="export" className="cursor-pointer">
-                    <div className="flex items-center">
-                      <Download className="h-4 w-4 mr-2" />
-                      Export
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="import" className="cursor-pointer">
-                    <div className="flex items-center">
-                      <Upload className="h-4 w-4 mr-2" />
-                      Import
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              
-              {/* Cancelled button - fourth */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (location.pathname.includes('cancelled')) {
-                    navigate('/subscriptions');
-                  } else {
-                    navigate('/subscriptions/cancelled');
-                  }
-                }}
-                className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200 text-orange-700 hover:from-orange-100 hover:to-orange-200 hover:border-orange-300 font-medium transition-all duration-200"
-              >
-                <XCircle className="h-4 w-4 mr-2" />
-                {location.pathname.includes('cancelled') ? 'All Subscriptions' : 'Cancelled'}
-              </Button>
+              }}
+              className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200 text-orange-700 hover:from-orange-100 hover:to-orange-200 hover:border-orange-300 font-medium transition-all duration-200"
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              {location.pathname.includes('cancelled') ? 'All Subscriptions' : 'Cancelled'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Key Metrics Cards - 3 boxes in professional layout */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          <div 
+            onClick={() => setMetricsFilter(metricsFilter === "active" ? "all" : "active")}
+            className={`bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-xl p-5 shadow-md cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${metricsFilter === "active" ? "ring-2 ring-emerald-400" : ""}`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-emerald-100">Active Services</p>
+                <p className="text-2xl font-bold text-white mt-1">{active}</p>
+              </div>
+              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <AlertCircle className="h-5 w-5 text-white" />
+              </div>
             </div>
           </div>
 
-          {/* Key Metrics Cards - 3 boxes in professional layout */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-            <div 
-              onClick={() => setMetricsFilter(metricsFilter === "active" ? "all" : "active")}
-              className={`bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-lg p-4 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 ${metricsFilter === "active" ? "ring-4 ring-emerald-300" : ""}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-emerald-100">Active Services</p>
-                  <p className="text-2xl font-bold text-white mt-1">{active}</p>
-                </div>
-                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <AlertCircle className="h-5 w-5 text-white" />
-                </div>
+          <div 
+            onClick={() => setMetricsFilter(metricsFilter === "trail" ? "all" : "trail")}
+            className={`bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-5 shadow-md cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${metricsFilter === "trail" ? "ring-2 ring-purple-400" : ""}`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-purple-100">Trail Subscriptions</p>
+                <p className="text-2xl font-bold text-white mt-1">{trail}</p>
+              </div>
+              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <Search className="h-5 w-5 text-white" />
               </div>
             </div>
-
-            <div 
-              onClick={() => setMetricsFilter(metricsFilter === "trail" ? "all" : "trail")}
-              className={`bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 ${metricsFilter === "trail" ? "ring-4 ring-purple-300" : ""}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-purple-100">Trail Subscriptions</p>
-                  <p className="text-2xl font-bold text-white mt-1">{trail}</p>
-                </div>
-                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <Search className="h-5 w-5 text-white" />
-                </div>
-              </div>
-            </div>
-
-            <div 
-              onClick={() => setMetricsFilter(metricsFilter === "draft" ? "all" : "draft")}
-              className={`bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg p-4 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 ${metricsFilter === "draft" ? "ring-4 ring-orange-300" : ""}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-orange-100">Draft Subscriptions</p>
-                  <p className="text-2xl font-bold text-white mt-1">{draft}</p>
-                </div>
-                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <Edit className="h-5 w-5 text-white" />
-                </div>
-              </div>
-            </div>
-
           </div>
 
-          {/* Search and Filters Row */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  placeholder="Search subscriptions..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm"
-                />
+          <div 
+            onClick={() => setMetricsFilter(metricsFilter === "draft" ? "all" : "draft")}
+            className={`bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl p-5 shadow-md cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${metricsFilter === "draft" ? "ring-2 ring-orange-400" : ""}`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-orange-100">Draft Subscriptions</p>
+                <p className="text-2xl font-bold text-white mt-1">{draft}</p>
               </div>
-              
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {uniqueCategories.filter(category => category && category !== "").map(category => (
-                    <SelectItem key={category} value={category}>{category}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={vendorFilter} onValueChange={setVendorFilter}>
-                <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
-                  <SelectValue placeholder="All Vendors" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Vendors</SelectItem>
-                  {uniqueVendors.filter(vendor => vendor && vendor !== "").map(vendor => (
-                    <SelectItem key={vendor} value={vendor}>{vendor}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <Edit className="h-5 w-5 text-white" />
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Search and Filters Row */}
+        <div className="mb-6 flex items-center space-x-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Search subscriptions..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm rounded-lg"
+            />
+          </div>
+          
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {uniqueCategories.filter(category => category && category !== "").map(category => (
+                <SelectItem key={category} value={category}>{category}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <Select value={vendorFilter} onValueChange={setVendorFilter}>
+            <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
+              <SelectValue placeholder="All Vendors" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Vendors</SelectItem>
+              {uniqueVendors.filter(vendor => vendor && vendor !== "").map(vendor => (
+                <SelectItem key={vendor} value={vendor}>{vendor}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         
         {/* Professional Data Table */}
-        <div className="bg-white/80 backdrop-blur-sm border border-white/30 rounded-2xl shadow-2xl hover:shadow-3xl transition-all duration-300 overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>

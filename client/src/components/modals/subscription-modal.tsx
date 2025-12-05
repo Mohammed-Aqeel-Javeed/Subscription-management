@@ -30,7 +30,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-// Removed unused Popover related imports
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -43,6 +45,8 @@ import type { InsertSubscription, Subscription } from "@shared/schema";
 // Extend Subscription for modal usage to include extra fields
 type SubscriptionModalData = Partial<Subscription> & {
   currency?: string | null;
+  qty?: number | null;
+  totalAmount?: number | null;
   department?: string | null;
   owner?: string | null;
   paymentMethod?: string | null;
@@ -58,6 +62,22 @@ interface Category {
   name: string;
   visible: boolean;
 }
+
+// Default category suggestions
+const DEFAULT_CATEGORY_SUGGESTIONS = [
+  'Productivity & Collaboration',
+  'Accounting & Finance',
+  'CRM & Sales',
+  'Development & Hosting',
+  'Design & Creative Tools',
+  'Marketing & SEO',
+  'Communication Tools',
+  'Security & Compliance',
+  'HR & Admin',
+  'Subscription Infrastructure',
+  'Office Infrastructure'
+];
+
 // Define the Department interface
 interface Department {
   name: string;
@@ -70,9 +90,12 @@ const formSchema = z.object({
   paymentMethod: z.string().min(1, "Payment method is required"),
   // All other fields are optional
   serviceName: z.string().optional(),
+  website: z.string().optional(),
   vendor: z.string().optional(),
   currency: z.string().optional(),
+  qty: z.union([z.string(), z.number()]).optional(),
   amount: z.union([z.string(), z.number()]).optional(),
+  totalAmount: z.union([z.string(), z.number()]).optional(),
   billingCycle: z.string().optional(),
   category: z.string().optional(),
   department: z.string().optional(),
@@ -81,7 +104,7 @@ const formSchema = z.object({
   ownerEmail: z.string().email('Please enter a valid email').optional(),
   status: z.string().optional(),
   paymentFrequency: z.string().optional(),
-  reminderDays: z.number().optional(),
+  reminderDays: z.union([z.string(), z.number()]).optional(),
   reminderPolicy: z.string().optional(),
   notes: z.string().optional(),
   isActive: z.boolean().optional(),
@@ -329,9 +352,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     resolver: zodResolver(formSchema),
     defaultValues: {
       serviceName: subscription?.serviceName || "",
+      website: (subscription as any)?.website || "",
       vendor: subscription?.vendor || "",
       currency: subscription?.currency || "",
+      qty: subscription?.qty !== undefined && subscription?.qty !== null ? Number(subscription.qty) : "",
       amount: subscription?.amount !== undefined && subscription?.amount !== null ? Number(subscription.amount).toFixed(2) : "",
+      totalAmount: subscription?.totalAmount !== undefined && subscription?.totalAmount !== null ? Number(subscription.totalAmount).toFixed(2) : "",
       billingCycle: subscription?.billingCycle && subscription?.billingCycle !== "" ? subscription.billingCycle : "monthly",
       category: subscription?.category || "",
       department: subscription?.department || "",
@@ -342,8 +368,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       startDate: subscription?.startDate ? new Date(subscription.startDate ?? "").toISOString().split('T')[0] : "",
       nextRenewal: subscription?.nextRenewal ? new Date(subscription.nextRenewal ?? "").toISOString().split('T')[0] : "",
   status: subscription?.status && subscription?.status !== "" ? subscription.status : "Draft",
-      reminderDays: subscription?.reminderDays || 7,
-      reminderPolicy: subscription?.reminderPolicy && subscription?.reminderPolicy !== "" ? subscription.reminderPolicy : "One time",
+      reminderDays: subscription?.reminderDays || "",
+      reminderPolicy: subscription?.reminderPolicy && subscription?.reminderPolicy !== "" ? subscription.reminderPolicy : "",
       notes: subscription?.notes || "",
       isActive: subscription?.isActive ?? true,
     },
@@ -379,6 +405,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     }
   }, [existingSubscriptions, open]);
   
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  
   const [startDate, setStartDate] = useState(subscription?.startDate ? toISODateOnly(subscription.startDate) : "");
   const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle || "monthly");
   const [endDate, setEndDate] = useState(subscription?.nextRenewal ? toISODateOnly(subscription.nextRenewal) : "");
@@ -387,6 +416,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Removed unused isPopoverOpen state
   const [isRenewing, setIsRenewing] = useState(false);
   const [lcyAmount, setLcyAmount] = useState<string>('');
+  const [totalAmount, setTotalAmount] = useState<string>('');
   const [errorDialog, setErrorDialog] = useState<{show: boolean, message: string}>({show: false, message: ''});
   const [confirmDialog, setConfirmDialog] = useState<{show: boolean}>({show: false});
   const [departmentModal, setDepartmentModal] = useState<{show: boolean}>({show: false});
@@ -439,6 +469,22 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     "Apple Fitness+", "Calm", "Headspace"
   ];
   
+  // Close category dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setCategoryOpen(false);
+      }
+    };
+
+    if (categoryOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [categoryOpen]);
+  
   // Refetch data when modal opens
   useEffect(() => {
     if (open) {
@@ -459,13 +505,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setAutoRenewal(false);
       setServiceNameError("");
       setLcyAmount('');
+      setTotalAmount('');
       
       // Reset form
       form.reset({
         serviceName: "",
+        website: "",
         vendor: "",
         currency: "",
+        qty: "",
         amount: "",
+        totalAmount: "",
         billingCycle: "monthly",
         category: "",
         department: "",
@@ -476,8 +526,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         startDate: "",
         nextRenewal: "",
         status: "Draft",
-        reminderDays: 7,
-        reminderPolicy: "One time",
+        reminderDays: "",
+        reminderPolicy: "",
         notes: "",
         isActive: true,
       });
@@ -506,7 +556,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         serviceName: subscription.serviceName || "",
         vendor: subscription.vendor || "",
         currency: subscription.currency || "",
+        qty: subscription.qty !== undefined && subscription.qty !== null ? Number(subscription.qty) : 1,
         amount: subscription.amount !== undefined && subscription.amount !== null ? Number(subscription.amount).toFixed(2) : "",
+        totalAmount: subscription.totalAmount !== undefined && subscription.totalAmount !== null ? Number(subscription.totalAmount).toFixed(2) : "",
         billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
         category: subscription.category || "",
         department: subscription.department || "",
@@ -525,21 +577,22 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
       // Force LCY calculation after form reset with a small delay
       setTimeout(() => {
-        const amount = subscription.amount !== undefined && subscription.amount !== null ? Number(subscription.amount).toFixed(2) : "";
+        const totalAmount = subscription.totalAmount !== undefined && subscription.totalAmount !== null ? Number(subscription.totalAmount).toFixed(2) : "";
         const currency = subscription.currency || "";
         const localCurrency = companyInfo?.defaultCurrency;
         
-        if (amount && currency && localCurrency && currency !== localCurrency) {
+        if (totalAmount && currency && localCurrency && currency !== localCurrency) {
           const selectedCurrency = currencies.find((curr: any) => curr.code === currency);
           const exchangeRate = selectedCurrency?.exchangeRate ? parseFloat(selectedCurrency.exchangeRate) : null;
           
           if (exchangeRate && exchangeRate > 0) {
-            const amountNum = parseFloat(amount);
-            const convertedAmount = amountNum * exchangeRate;
+            const totalAmountNum = parseFloat(totalAmount);
+            // Invert the exchange rate: LCY Amount = Total Amount ÷ Exchange Rate
+            const convertedAmount = totalAmountNum / exchangeRate;
             setLcyAmount(convertedAmount.toFixed(2));
           }
-        } else if (currency === localCurrency && amount) {
-          setLcyAmount(amount);
+        } else if (currency === localCurrency && totalAmount) {
+          setLcyAmount(totalAmount);
         }
       }, 100);
     } else {
@@ -557,9 +610,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       form.reset({
         serviceName: "",
+        website: "",
         vendor: "",
         currency: "",
+        qty: "",
         amount: "",
+        totalAmount: "",
         billingCycle: "monthly",
         category: "",
         department: "",
@@ -570,8 +626,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         startDate: "",
         nextRenewal: "",
   status: "Draft",
-        reminderDays: 7,
-        reminderPolicy: "One time",
+        reminderDays: "",
+        reminderPolicy: "",
         notes: "",
         isActive: true,
       });
@@ -589,15 +645,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     }
   }, [startDate, billingCycle, form]);
 
-  // Calculate LCY Amount based on amount, currency, and exchange rate
+  // Calculate LCY Amount based on totalAmount, currency, and exchange rate (inverted)
   useEffect(() => {
     const calculateLcyAmount = () => {
-      const amount = form.watch('amount');
+      const totalAmount = form.watch('totalAmount');
       const currency = form.watch('currency');
       const localCurrency = companyInfo?.defaultCurrency;
       
-      if (!amount || !currency || !localCurrency || currency === localCurrency) {
-        setLcyAmount(currency === localCurrency ? amount?.toString() || '' : '');
+      if (!totalAmount || !currency || !localCurrency || currency === localCurrency) {
+        setLcyAmount(currency === localCurrency ? totalAmount?.toString() || '' : '');
         return;
       }
       
@@ -606,8 +662,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const exchangeRate = selectedCurrency?.exchangeRate ? parseFloat(selectedCurrency.exchangeRate) : null;
       
       if (exchangeRate && exchangeRate > 0) {
-        const amountNum = parseFloat(amount?.toString() || '0');
-        const convertedAmount = amountNum * exchangeRate;
+        const totalAmountNum = parseFloat(totalAmount?.toString() || '0');
+        // Invert the exchange rate: LCY Amount = Total Amount ÷ Exchange Rate
+        const convertedAmount = totalAmountNum / exchangeRate;
         setLcyAmount(convertedAmount.toFixed(2));
       } else {
         setLcyAmount('');
@@ -615,7 +672,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     };
     
     calculateLcyAmount();
-  }, [form.watch('amount'), form.watch('currency'), companyInfo?.defaultCurrency, currencies, subscription]);
+  }, [form.watch('totalAmount'), form.watch('currency'), companyInfo?.defaultCurrency, currencies, subscription]);
 
   // Force recalculation when window regains focus (in case exchange rates were updated in another tab)
   useEffect(() => {
@@ -635,6 +692,40 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, [form]);
+
+  // Watch serviceName and set qty to 1 when service name is entered
+  useEffect(() => {
+    const serviceName = form.watch('serviceName');
+    const currentQty = form.watch('qty');
+    
+    // Only set qty to 1 if serviceName is not empty and qty is currently empty
+    if (serviceName && serviceName.trim() !== '' && (!currentQty || currentQty === '')) {
+      form.setValue('qty', 1);
+    }
+  }, [form.watch('serviceName'), form]);
+
+  // Auto-update dates if Auto Renewal is ON and Next Renewal Date matches today
+  useEffect(() => {
+    if (!autoRenewal || !open) return;
+    
+    const nextRenewalValue = form.watch('nextRenewal');
+    if (!nextRenewalValue) return;
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    const nextRenewalStr = new Date(nextRenewalValue).toISOString().split('T')[0];
+    
+    // If next renewal date matches today, update both dates
+    if (nextRenewalStr === todayStr) {
+      const cycle = form.watch("billingCycle") || billingCycle;
+      const newStartDate = todayStr;
+      const newEndDate = calculateEndDate(newStartDate, cycle);
+      
+      setStartDate(newStartDate);
+      form.setValue("startDate", newStartDate);
+      setEndDate(newEndDate);
+      form.setValue("nextRenewal", newEndDate);
+    }
+  }, [autoRenewal, open, form.watch('nextRenewal'), billingCycle, form]);
   
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -1372,7 +1463,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 variant="outline"
                 className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
                 onClick={handleRenew}
-                disabled={isRenewing || !endDate || !billingCycle}
+                disabled={isRenewing || !endDate || !billingCycle || autoRenewal}
               >
                 {isRenewing ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />
@@ -1459,6 +1550,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 />
                 <FormField
                   control={form.control}
+                  name="website"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Website</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="url"
+                          className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name="vendor"
                   render={({ field }) => (
                     <FormItem className="relative">
@@ -1525,6 +1633,37 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 />
                 <FormField
                   control={form.control}
+                  name="qty"
+                  render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Qty</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            step="1" 
+                            min="1"
+                            placeholder=""
+                            className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
+                            value={field.value || ""}
+                            onChange={e => {
+                              const qtyValue = e.target.value ? parseInt(e.target.value) : "";
+                              field.onChange(qtyValue);
+                              
+                              // Calculate total amount = qty * amount
+                              const qty = typeof qtyValue === 'number' ? qtyValue : 0;
+                              const amount = parseFloat(form.getValues('amount') as string) || 0;
+                              const total = qty * amount;
+                              form.setValue('totalAmount', total > 0 ? total.toFixed(2) : "");
+                              setTotalAmount(total > 0 ? total.toFixed(2) : "");
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name="currency"
                   render={({ field }) => (
                     <FormItem>
@@ -1584,12 +1723,27 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 val = intPart + '.' + decPart.slice(0,2);
                               }
                               field.onChange(val);
+                              
+                              // Calculate total amount = qty * amount
+                              const qtyValue = form.getValues('qty');
+                              const qty = qtyValue ? (typeof qtyValue === 'number' ? qtyValue : parseInt(qtyValue.toString())) : 0;
+                              const amount = parseFloat(val) || 0;
+                              const total = qty * amount;
+                              form.setValue('totalAmount', total > 0 ? total.toFixed(2) : "");
+                              setTotalAmount(total > 0 ? total.toFixed(2) : "");
                             }}
                             onBlur={e => {
                               // Format to 2 decimal places on blur
                               const value = parseFloat(e.target.value);
                               if (!isNaN(value)) {
                                 field.onChange(value.toFixed(2));
+                                
+                                // Recalculate total amount
+                                const qtyValue = form.getValues('qty');
+                                const qty = qtyValue ? (typeof qtyValue === 'number' ? qtyValue : parseInt(qtyValue.toString())) : 0;
+                                const total = qty * value;
+                                form.setValue('totalAmount', total > 0 ? total.toFixed(2) : "");
+                                setTotalAmount(total > 0 ? total.toFixed(2) : "");
                               }
                             }}
                           />
@@ -1598,6 +1752,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     </FormItem>
                   )}
                 />
+                {/* Total Amount Field - Read-only calculated field */}
+                <div className="form-item">
+                  <label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">
+                    Total Amount
+                  </label>
+                  <div className="relative">
+                    <Input 
+                      type="text"
+                      value={totalAmount}
+                      readOnly
+                      className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-gray-50 text-gray-600 shadow-sm"
+                      placeholder=""
+                    />
+                  </div>
+                </div>
                 {/* LCY Amount Field - Read-only calculated field */}
                 <div className="form-item">
                   <label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">
@@ -1646,6 +1815,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             <SelectItem value="quarterly" className={`${billingCycle === 'quarterly' ? 'selected' : ''} dropdown-item`}>Quarterly</SelectItem>
                             <SelectItem value="weekly" className={`${billingCycle === 'weekly' ? 'selected' : ''} dropdown-item`}>Weekly</SelectItem>
                             <SelectItem value="trail" className={`${billingCycle === 'trail' ? 'selected' : ''} dropdown-item`}>Trail</SelectItem>
+                            <SelectItem value="pay-as-you-go" className={`${billingCycle === 'pay-as-you-go' ? 'selected' : ''} dropdown-item`}>Pay-as-you-go</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -1677,46 +1847,76 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <FormField
                   control={form.control}
                   name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Category</FormLabel>
-                      <Select
-                        value={field.value || ""}
-                        onValueChange={(value) => {
-                          if (value === "add-new-category") {
-                            setCategoryModal({ show: true });
-                          } else {
-                            field.onChange(value);
-                          }
-                        }}
-                        disabled={categoriesLoading}
-                      >
-                        <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="dropdown-content">
-                          {Array.isArray(categories) && categories.length > 0 ? (
-                            categories
-                              .filter(cat => cat.visible)
-                              .map(cat => (
-                                <SelectItem key={cat.name} value={cat.name} className={`${field.value === cat.name ? 'selected' : ''} dropdown-item`}>{cat.name}</SelectItem>
-                              ))
-                          ) : null}
-                            {/* Add Category option at the end */}
-                            <SelectItem 
-                              value="add-new-category" 
-                              className="dropdown-item font-medium border-t border-gray-200 mt-1 pt-2 text-black"
+                  render={({ field }) => {
+                    // Merge database categories with default suggestions
+                    const dbCategories = Array.isArray(categories) 
+                      ? categories.filter(cat => cat.visible).map(cat => cat.name)
+                      : [];
+                    
+                    // Combine and deduplicate
+                    const allCategories = [...new Set([...dbCategories, ...DEFAULT_CATEGORY_SUGGESTIONS])];
+                    
+                    // Filter based on current input - only show if user has typed something
+                    const filtered = field.value 
+                      ? allCategories.filter(cat => 
+                          cat.toLowerCase().includes(field.value?.toLowerCase() || '')
+                        )
+                      : [];
+                    
+                    const shouldShowDropdown = categoryOpen && field.value && filtered.length > 0;
+
+                    return (
+                      <FormItem className="relative" ref={categoryDropdownRef}>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Category</FormLabel>
+                        <div className="relative">
+                          <Input
+                            {...field}
+                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-blue-500 focus:ring-blue-500"
+                            disabled={categoriesLoading}
+                            onChange={(e) => {
+                              field.onChange(e.target.value);
+                              setCategoryOpen(e.target.value.length > 0);
+                            }}
+                            onFocus={(e) => {
+                              // Don't show dropdown on focus if field already has a value
+                              if (!field.value) {
+                                setCategoryOpen(false);
+                              }
+                            }}
+                          />
+                        </div>
+                        {shouldShowDropdown && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+                            {filtered.map(catName => (
+                              <div
+                                key={catName}
+                                className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                                onClick={() => {
+                                  field.onChange(catName);
+                                  setCategoryOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={`mr-2 h-4 w-4 text-blue-600 ${field.value === catName ? "opacity-100" : "opacity-0"}`}
+                                />
+                                <span className="font-normal">{catName}</span>
+                              </div>
+                            ))}
+                            <div
+                              className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer font-medium border-t border-slate-200 text-sm text-slate-900 transition-colors"
+                              onClick={() => {
+                                setCategoryModal({ show: true });
+                                setCategoryOpen(false);
+                              }}
                             >
                               + New
-                            </SelectItem>
-                          {Array.isArray(categories) && categories.filter(cat => cat.visible).length === 0 && (
-                            <SelectItem value="no-category" disabled className="dropdown-item disabled">No categories found</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                            </div>
+                          </div>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
                 <FormField
                   control={form.control}
@@ -1926,7 +2126,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       <FormControl>
                         <Input 
                           type="email"
-                          placeholder="owner@example.com"
                           className="w-full border-slate-300 rounded-lg p-2 text-base"
                           {...field}
                         />
@@ -1991,7 +2190,34 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <h2 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">Renewal Information</h2>
                 <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
               </div>
-              <div className="grid gap-4 mb-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+              <div className="grid gap-4 mb-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                {/* Auto Renewal - First */}
+                <div className="flex flex-col justify-start">
+                  <label className="text-sm font-medium text-slate-700 mb-2">Auto Renewal</label>
+                  <div className="flex items-center h-10">
+                    <button
+                      type="button"
+                      className={`relative inline-flex h-6 w-12 items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${
+                        autoRenewal ? 'bg-indigo-600 border-indigo-600' : 'bg-gray-200 border-slate-300'
+                      }`}
+                      onClick={() => {
+                        const newAutoRenewal = !autoRenewal;
+                        setAutoRenewal(newAutoRenewal);
+                        // Always clear reminderDays and reminderPolicy when toggling
+                        form.setValue("reminderDays", "");
+                        form.setValue("reminderPolicy", "");
+                      }}
+                      aria-pressed={autoRenewal}
+                      aria-label="Toggle auto renewal"
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
+                          autoRenewal ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
                 {/* Start Date */}
                 <div className="w-full flex flex-col">
                   <FormField
@@ -2043,20 +2269,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             className="w-full border-slate-300 rounded-lg p-1 text-base" 
                             value={endDate || ''} 
                             onChange={e => {
-                              // removed manual end date flag
                               setEndDate(e.target.value);
                               field.onChange(e);
-                              // If auto renewal is enabled and new value is today, update both start and next renewal
-                              if (autoRenewal) {
-                                const todayStr = new Date().toISOString().split('T')[0];
-                                if (e.target.value === todayStr) {
-                                  setStartDate(todayStr);
-                                  form.setValue("startDate", todayStr);
-                                  const cycle = form.watch("billingCycle") || billingCycle;
-                                  const nextDate = calculateEndDate(todayStr, cycle);
-                                  setEndDate(nextDate);
-                                  form.setValue("nextRenewal", nextDate);
-                                }
+                              // If nextRenewal matches today's date, update both start and next renewal
+                              const todayStr = new Date().toISOString().split('T')[0];
+                              if (e.target.value === todayStr) {
+                                setStartDate(todayStr);
+                                form.setValue("startDate", todayStr);
+                                const cycle = form.watch("billingCycle") || billingCycle;
+                                const nextDate = calculateEndDate(todayStr, cycle);
+                                setEndDate(nextDate);
+                                form.setValue("nextRenewal", nextDate);
                               }
                             }} 
                           />
@@ -2079,6 +2302,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             type="number" 
                             min="1"
                             max="365"
+                            disabled={autoRenewal}
                             className="w-full border-slate-300 rounded-lg p-1 text-base" 
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
@@ -2089,88 +2313,46 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     )}
                   />
                 </div>
-                {/* Reminder Policy + Auto Renewal side by side */}
-                <div className={`${isFullscreen ? 'col-span-2' : 'col-span-1 md:col-span-2'} flex flex-col md:flex-row items-start gap-4`}>
-                  <div className="flex-1 w-full">
-                    <FormField
-                      control={form.control}
-                      name="reminderPolicy"
-                      render={({ field }) => {
-                        const reminderDays = form.watch("reminderDays");
-                        const isOnlyOneTimeAllowed = reminderDays === 1;
-                        return (
-                          <FormItem>
-                            <FormLabel className="block text-sm font-medium text-slate-700">Reminder Policy</FormLabel>
-                            <Select 
-                              onValueChange={(val: string) => {
-                                if (["One time", "Two times", "Until Renewal"].includes(val)) {
-                                  field.onChange(val);
-                                } else {
-                                  field.onChange("One time");
-                                }
-                              }}
-                              value={field.value && ["One time", "Two times", "Until Renewal"].includes(field.value) ? field.value : "One time"}
-                              defaultValue={field.value && ["One time", "Two times", "Until Renewal"].includes(field.value) ? field.value : "One time"}
-                              disabled={isOnlyOneTimeAllowed}
-                            >
-                              <FormControl>
-                                <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                                  <SelectValue />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent className="dropdown-content">
-                                <SelectItem value="One time" className={`${field.value === 'One time' ? 'selected' : ''} dropdown-item`}>One time</SelectItem>
-                                <SelectItem value="Two times" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Two times' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Two times</SelectItem>
-                                <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Until Renewal' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Until Renewal</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
-                              <li>One time: One reminder at {reminderDays} days before renewal</li>
-                              <li>Two times: Reminders at {reminderDays ?? 7} and {Math.floor((reminderDays ?? 7)/2)} days before</li>
-                              <li>Until Renewal: Daily reminders from {reminderDays} days until renewal</li>
-                            </ul>
-                            <FormMessage />
-                          </FormItem>
-                        );
-                      }}
-                    />
-                  </div>
-                  <div className="flex flex-col justify-start md:justify-end md:pt-1 w-full md:w-auto">
-                    <label className="text-sm font-medium text-slate-700 mb-2">Auto Renewal</label>
-                    <button
-                      type="button"
-                      className={`relative inline-flex h-6 w-12 items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${
-                        autoRenewal ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'
-                      }`}
-                      onClick={() => {
-                        const newAutoRenewal = !autoRenewal;
-                        setAutoRenewal(newAutoRenewal);
-                        // Auto-update dates when Auto Renewal is enabled
-                        if (newAutoRenewal) {
-                          const cycle = form.watch("billingCycle") || billingCycle;
-                          const todayStr = new Date().toISOString().split('T')[0];
-                          
-                          // Always set start date to today when enabling Auto Renewal
-                          const newStartDate = todayStr;
-                          const newEndDate = calculateEndDate(newStartDate, cycle);
-                          
-                          // Update form values and state
-                          form.setValue("startDate", newStartDate);
-                          setStartDate(newStartDate);
-                          form.setValue("nextRenewal", newEndDate);
-                          setEndDate(newEndDate);
-                        }
-                      }}
-                      aria-pressed={autoRenewal}
-                      aria-label="Toggle auto renewal"
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
-                          autoRenewal ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
+                {/* Reminder Policy */}
+                <div className="col-span-2">
+                  <FormField
+                    control={form.control}
+                    name="reminderPolicy"
+                    render={({ field }) => {
+                      const reminderDays = form.watch("reminderDays");
+                      const reminderDaysNum = typeof reminderDays === 'number' ? reminderDays : (typeof reminderDays === 'string' && reminderDays !== '' ? parseInt(reminderDays) : 7);
+                      const isOnlyOneTimeAllowed = reminderDaysNum === 1;
+                      return (
+                        <FormItem>
+                          <FormLabel className="block text-sm font-medium text-slate-700">Reminder Policy</FormLabel>
+                          <Select 
+                            onValueChange={(val: string) => {
+                              field.onChange(val);
+                            }}
+                            value={field.value || ""}
+                            disabled={isOnlyOneTimeAllowed || autoRenewal}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
+                                <SelectValue placeholder="Select policy" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="dropdown-content">
+                              <SelectItem value="One time" className={`${field.value === 'One time' ? 'selected' : ''} dropdown-item`}>One time</SelectItem>
+                              <SelectItem value="Two times" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Two times' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Two times</SelectItem>
+                              <SelectItem value="Until Renewal" disabled={isOnlyOneTimeAllowed} className={`${field.value === 'Until Renewal' ? 'selected' : ''} dropdown-item ${isOnlyOneTimeAllowed ? 'disabled' : ''}`}>Until Renewal</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
+                            <li>One time: One reminder at {reminderDaysNum} days before renewal</li>
+                            <li>Two times: Reminders at {reminderDaysNum} and {Math.floor(reminderDaysNum/2)} days before</li>
+                            <li>Until Renewal: Daily reminders from {reminderDaysNum} days until renewal</li>
+                          </ul>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
                 </div>
               </div>
               <div className={`grid gap-4 mb-6 ${isFullscreen ? 'grid-cols-1' : 'grid-cols-1'}`}>
