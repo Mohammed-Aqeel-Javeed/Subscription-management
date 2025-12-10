@@ -48,21 +48,24 @@ interface License {
   endDate: string;
   details: string;
   renewalFee: number;
+  renewalCycleTime?: string;
   responsiblePerson: string;
   department: string;
   backupContact: string;
   status: 'Active' | 'Pending' | 'Expired' | 'Under Renewal' | 'Draft';
   issuingAuthorityEmail: string;
   issuingAuthorityPhone: string;
+  reminderDays?: number | string;
+  reminderPolicy?: string;
   // New submission fields
   renewalStatus?: string;
   renewalSubmittedDate?: string;
+  expectedCompletedDate?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
-// Form schema (all fields optional per request to remove mandatory validation)
-// NOTE: Backend may still enforce required fields; this only relaxes frontend validation.
+// Form schema (all fields optional - no mandatory validation)
 const licenseSchema = z.object({
   licenseName: z.string().optional(),
   issuingAuthorityName: z.string().optional(),
@@ -73,17 +76,21 @@ const licenseSchema = z.object({
     if (val === '' || val === null || val === undefined) return undefined;
     const num = typeof val === 'string' ? parseFloat(val) : val;
     return isNaN(Number(num)) ? undefined : Number(num);
-  }, z.number().min(0).optional()),
+  }, z.number().optional()),
+  renewalCycleTime: z.string().optional(),
   responsiblePerson: z.string().optional(),
   department: z.string().optional(),
   departments: z.array(z.string()).optional(),
   backupContact: z.string().optional(),
   status: z.enum(['Active', 'Pending', 'Expired', 'Under Renewal', 'Draft']).optional(),
   renewalStatus: z.enum(['not_started', 'in_progress', 'submitted', 'approved', 'rejected']).optional(),
-  issuingAuthorityEmail: z.string().email("Invalid email").optional(),
+  issuingAuthorityEmail: z.string().optional(),
   issuingAuthorityPhone: z.string().optional(),
   renewalSubmittedDate: z.string().optional(),
+  expectedCompletedDate: z.string().optional(),
   submissionNotes: z.string().optional(),
+  reminderDays: z.union([z.string(), z.number()]).optional(),
+  reminderPolicy: z.string().optional(),
 });
 
 type LicenseFormData = z.infer<typeof licenseSchema>;
@@ -157,6 +164,17 @@ export default function GovernmentLicense() {
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/api/company/departments`, { credentials: "include" });
       return res.json();
+    }
+  });
+
+  // Query for employees (owners)
+  const { data: employeesRaw = [] } = useQuery({
+    queryKey: ["/api/employees"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/employees`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch employees");
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     }
   });
 
@@ -482,6 +500,7 @@ export default function GovernmentLicense() {
   const handleEdit = (license: License) => {
     setEditingLicense(license);
     const depts = parseDepartments(license.department);
+    const firstDept = depts.length > 0 ? depts[0] : '';
     setSelectedDepartments(depts);
     form.reset({
       licenseName: license.licenseName || "",
@@ -490,13 +509,19 @@ export default function GovernmentLicense() {
       endDate: license.endDate || "",
       details: license.details || "",
       renewalFee: typeof license.renewalFee === 'number' ? license.renewalFee : undefined,
+      renewalCycleTime: license.renewalCycleTime || "",
       responsiblePerson: license.responsiblePerson || "",
-      department: license.department || "",
+      department: firstDept,
       departments: depts,
       backupContact: license.backupContact || "",
       status: (license.status as any) || 'Active',
       issuingAuthorityEmail: license.issuingAuthorityEmail || "",
       issuingAuthorityPhone: license.issuingAuthorityPhone || "",
+      reminderDays: license.reminderDays || "",
+      reminderPolicy: license.reminderPolicy || "",
+      renewalStatus: (license.renewalStatus as "not_started" | "in_progress" | "submitted" | "approved" | "rejected" | undefined) || undefined,
+      renewalSubmittedDate: license.renewalSubmittedDate || "",
+      expectedCompletedDate: license.expectedCompletedDate || "",
     });
     setHeaderStatus('Active');
     setIsModalOpen(true);
@@ -921,35 +946,17 @@ export default function GovernmentLicense() {
                           </FormItem>
                         )}
                       />
-                      {/* Issuing Authority Email */}
+                      {/* Expected Completed Date */}
                       <FormField
                         control={form.control}
-                        name="issuingAuthorityEmail"
+                        name="expectedCompletedDate"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Email</FormLabel>
+                            <FormLabel className="block text-sm font-medium text-slate-700">Expected Completed Date</FormLabel>
                             <FormControl>
                               <Input 
                                 className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40" 
-                                type="email" 
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      {/* Issuing Authority Phone */}
-                      <FormField
-                        control={form.control}
-                        name="issuingAuthorityPhone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="block text-sm font-medium text-slate-700">Issuing Authority Phone</FormLabel>
-                            <FormControl>
-                              <Input 
-                                className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40" 
-                                type="tel" 
+                                type="date" 
                                 {...field}
                               />
                             </FormControl>
@@ -984,258 +991,349 @@ export default function GovernmentLicense() {
                 {/* Show License Details when not viewing Submission Details */}
                 {!showSubmissionDetails && (
                   <>
-                  <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-2 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-2 md:grid-cols-3'}`}>
-                  {/* License Name */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">License Name</label>
-                    <Input 
-                      className={`w-full border-slate-300 rounded-lg p-2 text-base ${licenseNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
-                      value={form.watch('licenseName') || ''}
-                      onChange={(e) => {
-                        // Auto-capitalize each word
-                        const capitalizedValue = e.target.value
-                          .split(' ')
-                          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                          .join(' ');
-                        form.setValue('licenseName', capitalizedValue);
-                        // Validate uniqueness
-                        validateLicenseName(capitalizedValue);
-                      }}
-                    />
-                    {licenseNameError && (
-                      <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {licenseNameError}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Issuing Authority Name (Dropdown with Autocomplete) */}
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700">Issuing Authority Name</label>
-                    <div className="relative issuing-authority-dropdown">
-                      <div className="relative">
+                  {/* General Info Section */}
+                  <div className="bg-white rounded-xl border border-gray-200 mb-6 shadow-md">
+                    <h3 className="text-base font-semibold text-slate-800 px-6 py-4 border-b border-gray-200 bg-gray-50">General Info</h3>
+                    <div className="p-6">
+                    <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-4' : 'grid-cols-2'}`}>
+                      {/* License Name */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Licence Name</label>
                         <Input
-                          className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                          placeholder="Type or select issuing authority"
-                          value={form.watch('issuingAuthorityName') || ''}
+                          className={`w-full border-slate-300 rounded-lg p-2.5 text-base ${licenseNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                          value={form.watch('licenseName') || ''}
                           onChange={(e) => {
-                            form.setValue('issuingAuthorityName', e.target.value);
-                            // Show dropdown when user starts typing
-                            if (e.target.value && !isIssuingAuthorityOpen) {
-                              setIsIssuingAuthorityOpen(true);
-                            }
-                          }}
-                          onFocus={() => {
-                            // Show dropdown on focus if there's text
-                            if (form.watch('issuingAuthorityName')) {
-                              setIsIssuingAuthorityOpen(true);
-                            }
+                            // Auto-capitalize each word
+                            const capitalizedValue = e.target.value
+                              .split(' ')
+                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                              .join(' ');
+                            form.setValue('licenseName', capitalizedValue);
+                            // Validate uniqueness
+                            validateLicenseName(capitalizedValue);
                           }}
                         />
-                        <button
-                          type="button"
-                          className="absolute inset-y-0 right-0 flex items-center pr-3"
-                          onClick={() => setIsIssuingAuthorityOpen(!isIssuingAuthorityOpen)}
-                        >
-                          <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
+                        {licenseNameError && (
+                          <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {licenseNameError}
+                          </p>
+                        )}
                       </div>
-                      {isIssuingAuthorityOpen && (() => {
-                        // Filter authorities based on input text
-                        const filteredAuthorities = ISSUING_AUTHORITIES.filter(authority =>
-                          authority.toLowerCase().includes((form.watch('issuingAuthorityName') || "").toLowerCase())
-                        );
-                        
-                        return (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-[260px] overflow-hidden">
-                            <div className="max-h-[240px] overflow-y-auto p-1">
-                              <div className="text-xs font-semibold tracking-wide text-slate-500 px-2 py-1 uppercase">Portal / System</div>
-                              {filteredAuthorities.length > 0 ? (
-                                filteredAuthorities.map(name => (
-                                  <div
-                                    key={name}
-                                    className="pl-8 pr-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer"
-                                    onClick={() => {
-                                      form.setValue('issuingAuthorityName', name);
-                                      setIsIssuingAuthorityOpen(false);
-                                    }}
+
+                      {/* Responsible Person */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Responsible Person</label>
+                        <Select
+                          value={form.watch('responsiblePerson') || ''}
+                          onValueChange={(value) => form.setValue('responsiblePerson', value)}
+                        >
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
+                            <SelectValue placeholder="Select responsible person" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {employeesRaw.length > 0 ? (
+                              employeesRaw.map((emp: any) => {
+                                // Check if there are duplicate names
+                                const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                                const displayName = duplicateNames.length > 1 
+                                  ? `${emp.name} (${emp.email})` 
+                                  : emp.name;
+                                
+                                return (
+                                  <SelectItem 
+                                    key={emp._id || emp.id || emp.email} 
+                                    value={emp.name}
                                   >
-                                    <span className="border-b border-dotted border-slate-300 pb-0.5 leading-snug inline-block w-full">{name}</span>
-                                  </div>
-                                ))
-                              ) : form.watch('issuingAuthorityName') ? (
-                                <div className="pl-8 pr-3 py-2 text-sm text-slate-500">
-                                  No matching authorities found
-                                </div>
-                              ) : (
-                                ISSUING_AUTHORITIES.map(name => (
-                                  <div
-                                    key={name}
-                                    className="pl-8 pr-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer"
-                                    onClick={() => {
-                                      form.setValue('issuingAuthorityName', name);
-                                      setIsIssuingAuthorityOpen(false);
-                                    }}
+                                    {displayName}
+                                  </SelectItem>
+                                );
+                              })
+                            ) : (
+                              <SelectItem value="no-employee" disabled>No employees found</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Start Date */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Start Date</label>
+                        <Input 
+                          type="date"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          value={form.watch('startDate') || ''}
+                          onChange={(e) => form.setValue('startDate', e.target.value)}
+                        />
+                      </div>
+
+                      {/* End Date */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">End Date</label>
+                        <Input 
+                          type="date"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          value={form.watch('endDate') || ''}
+                          onChange={(e) => form.setValue('endDate', e.target.value)}
+                        />
+                      </div>
+
+                      {/* Secondary Incharge */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Secondary Incharge</label>
+                        <Select
+                          value={form.watch('backupContact') || ''}
+                          onValueChange={(value) => form.setValue('backupContact', value)}
+                        >
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
+                            <SelectValue placeholder="Select secondary incharge" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {employeesRaw.length > 0 ? (
+                              employeesRaw.map((emp: any) => {
+                                // Check if there are duplicate names
+                                const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                                const displayName = duplicateNames.length > 1 
+                                  ? `${emp.name} (${emp.email})` 
+                                  : emp.name;
+                                
+                                return (
+                                  <SelectItem 
+                                    key={emp._id || emp.id || emp.email} 
+                                    value={emp.name}
                                   >
-                                    <span className="border-b border-dotted border-slate-300 pb-0.5 leading-snug inline-block w-full">{name}</span>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()}
+                                    {displayName}
+                                  </SelectItem>
+                                );
+                              })
+                            ) : (
+                              <SelectItem value="no-employee" disabled>No employees found</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Department */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Department</label>
+                        <Select
+                          value={form.watch('department') || ''}
+                          onValueChange={(value) => {
+                            form.setValue('department', value);
+                            setSelectedDepartments([value]);
+                          }}
+                        >
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
+                            <SelectValue placeholder="Select department" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {departments && departments.length > 0 ? (
+                              departments.map((dept) => (
+                                <SelectItem key={dept.name} value={dept.name}>
+                                  {dept.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="no-department" disabled>No departments available</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Renewal Cost */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Renewal Cost</label>
+                        <Input 
+                          type="number"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          value={form.watch('renewalFee') || ''}
+                          onChange={(e) => form.setValue('renewalFee', e.target.value ? parseFloat(e.target.value) : undefined)}
+                        />
+                      </div>
+
+                      {/* Renewal Cycle Time */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Renewal Cycle Time</label>
+                        <Select
+                          value={form.watch('renewalCycleTime') || ''}
+                          onValueChange={(value) => form.setValue('renewalCycleTime', value)}
+                        >
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
+                            <SelectValue placeholder="Select cycle time" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Monthly">Monthly</SelectItem>
+                            <SelectItem value="Quarterly">Quarterly</SelectItem>
+                            <SelectItem value="Semi-Annually">Semi-Annually</SelectItem>
+                            <SelectItem value="Annually">Annually</SelectItem>
+                            <SelectItem value="Bi-Annually">Bi-Annually</SelectItem>
+                            <SelectItem value="One-Time">One-Time</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Remarks */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Remarks</label>
+                        <Input
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          value={form.watch('details') || ''}
+                          onChange={(e) => form.setValue('details', e.target.value)}
+                        />
+                      </div>
+                    </div>
                     </div>
                   </div>
 
-                  {/* Start Date */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">Start Date</label>
-                    <Input 
-                      type="date" 
-                      className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                      value={form.watch('startDate') || ''}
-                      onChange={(e) => form.setValue('startDate', e.target.value)}
-                    />
-                  </div>
-
-                  {/* End Date */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">End Date</label>
-                    <Input 
-                      type="date" 
-                      className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                      value={form.watch('endDate') || ''}
-                      onChange={(e) => form.setValue('endDate', e.target.value)}
-                    />
-                  </div>
-
-                  {/* Renewal Fee */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">Renewal Fee</label>
-                    <Input 
-                      type="number" 
-                      min="0" 
-                      step="0.01"
-                      className="w-full border-slate-300 rounded-lg p-2 text-base text-right focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                      value={form.watch('renewalFee') || ''}
-                      onChange={(e) => form.setValue('renewalFee', parseFloat(e.target.value) || 0)}
-                    />
-                  </div>
-
-                  {/* Status */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">Status</label>
-                    <Select value={form.watch('status') || 'Active'} onValueChange={(value) => form.setValue('status', value as "Active" | "Pending" | "Draft" | "Expired" | "Under Renewal")}> 
-                      <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40">
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border border-slate-200 rounded-md shadow-lg p-0 overflow-hidden">
-                        <div className="py-1">
-                          <SelectItem value="Active" className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">Active</SelectItem>
-                          <SelectItem value="Pending" className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">Pending</SelectItem>
-                          <SelectItem value="Draft" className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">Draft</SelectItem>
-                          <SelectItem value="Expired" className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">Expired</SelectItem>
-                          <SelectItem value="Under Renewal" className="pl-8 pr-3 py-2 text-sm data-[state=checked]:bg-indigo-50 data-[state=checked]:text-indigo-700">Under Renewal</SelectItem>
-                        </div>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Responsible Person */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">Responsible Person</label>
-                    <Input 
-                      className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                      value={form.watch('responsiblePerson') || ''}
-                      onChange={(e) => form.setValue('responsiblePerson', e.target.value)}
-                    />
-                  </div>
-
-                  {/* Department */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">Departments</label>
-                    <Select
-                      value={selectedDepartments.length > 0 ? selectedDepartments.join(',') : ''}
-                      onValueChange={() => {}}
-                      disabled={departmentsLoading}
-                    >
-                      <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40">
-                        <div className="w-full overflow-hidden">
-                          {/* Render selected departments as badges inside the input box */}
-                          {selectedDepartments.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 w-full">
-                              {selectedDepartments.map((dept) => (
-                                <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
-                                  <span className="truncate max-w-[80px]">{dept}</span>
-                                  <button
-                                    type="button"
-                                    onClick={e => { e.stopPropagation(); removeDepartment(dept); }}
-                                    className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
-                                    tabIndex={-1}
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </Badge>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">Select departments</span>
-                          )}
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent className="dropdown-content">
-                        {Array.isArray(departments) && departments.length > 0 ? (
-                          departments
-                            .filter(dept => dept.visible)
-                            .map(dept => (
-                              <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
-                                <Checkbox
-                                  id={`dept-${dept.name}`}
-                                  checked={selectedDepartments.includes(dept.name)}
-                                  onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
-                                  disabled={departmentsLoading}
-                                />
-                                <label
-                                  htmlFor={`dept-${dept.name}`}
-                                  className="text-sm font-medium cursor-pointer flex-1 ml-2"
-                                >
-                                  {dept.name}
-                                </label>
+                  {/* Issuing Authority Section */}
+                  <div className="bg-white rounded-xl border border-gray-200 mb-6 shadow-md">
+                    <h3 className="text-base font-semibold text-slate-800 px-6 py-4 border-b border-gray-200 bg-gray-50">Issuing Authority</h3>
+                    <div className="p-6">
+                    <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-4' : 'grid-cols-2'}`}>
+                      {/* Authority */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Authority</label>
+                        <div className="relative issuing-authority-dropdown">
+                          <Input
+                            className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                            value={form.watch('issuingAuthorityName') || ''}
+                            onChange={(e) => {
+                              form.setValue('issuingAuthorityName', e.target.value);
+                              if (e.target.value && !isIssuingAuthorityOpen) {
+                                setIsIssuingAuthorityOpen(true);
+                              }
+                            }}
+                            onFocus={() => {
+                              if (form.watch('issuingAuthorityName')) {
+                                setIsIssuingAuthorityOpen(true);
+                              }
+                            }}
+                          />
+                          {isIssuingAuthorityOpen && (() => {
+                            const filteredAuthorities = ISSUING_AUTHORITIES.filter(authority =>
+                              authority.toLowerCase().includes((form.watch('issuingAuthorityName') || "").toLowerCase())
+                            );
+                            
+                            return (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-[200px] overflow-y-auto">
+                                {filteredAuthorities.length > 0 ? (
+                                  filteredAuthorities.map(name => (
+                                    <div
+                                      key={name}
+                                      className="px-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer"
+                                      onClick={() => {
+                                        form.setValue('issuingAuthorityName', name);
+                                        setIsIssuingAuthorityOpen(false);
+                                      }}
+                                    >
+                                      {name}
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="px-3 py-2 text-sm text-slate-500">
+                                    No matching authorities found
+                                  </div>
+                                )}
                               </div>
-                            ))
-                        ) : departmentsLoading ? (
-                          <div className="px-2 py-2 text-sm text-gray-500">Loading departments...</div>
-                        ) : (
-                          <div className="px-2 py-2 text-sm text-gray-500">No departments found</div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Contact Number */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Contact Number</label>
+                        <Input
+                          type="text"
+                          pattern="[0-9+\-\s()]*"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          value={form.watch('issuingAuthorityPhone') || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Only allow numbers, +, -, spaces, and parentheses
+                            if (/^[0-9+\-\s()]*$/.test(value)) {
+                              form.setValue('issuingAuthorityPhone', value);
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Email */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Email</label>
+                        <Input 
+                          type="email"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          value={form.watch('issuingAuthorityEmail') || ''}
+                          onChange={(e) => form.setValue('issuingAuthorityEmail', e.target.value)}
+                        />
+                      </div>
+
+                      {/* Website */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Website</label>
+                        <Input 
+                          type="url"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                        />
+                      </div>
+                    </div>
+                    </div>
+                  </div>
+
+                  {/* Reminder Settings Section */}
+                  <div className="bg-white rounded-xl border border-gray-200 mb-6 shadow-md">
+                    <h3 className="text-base font-semibold text-slate-800 px-6 py-4 border-b border-gray-200 bg-gray-50">Reminder Settings</h3>
+                    <div className="p-6">
+                    <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-4' : 'grid-cols-2'}`}>
+                      {/* Reminder Days */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Reminder Days</label>
+                        <Input 
+                          type="number"
+                          min="1"
+                          max="365"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          value={form.watch('reminderDays') || ''}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value) || '';
+                            form.setValue('reminderDays', value);
+                            // If reminderDays is 1, automatically set policy to 'One time'
+                            if (value === 1) {
+                              form.setValue('reminderPolicy', 'One time');
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Reminder Policy */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Reminder Policy</label>
+                        <Select
+                          value={form.watch('reminderPolicy') || ''}
+                          onValueChange={(value) => form.setValue('reminderPolicy', value)}
+                          disabled={form.watch('reminderDays') === 1}
+                        >
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
+                            <SelectValue placeholder="Select policy" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="One time">One time</SelectItem>
+                            <SelectItem value="Two times" disabled={form.watch('reminderDays') === 1}>Two times</SelectItem>
+                            <SelectItem value="Until Renewal" disabled={form.watch('reminderDays') === 1}>Until Renewal</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {form.watch('reminderDays') && (
+                          <ul className="text-xs text-slate-600 mt-2 list-disc pl-4">
+                            <li>One time: One reminder at {form.watch('reminderDays') || 7} days before renewal</li>
+                            <li>Two times: Reminders at {form.watch('reminderDays') || 7} and {Math.floor((form.watch('reminderDays') as number || 7)/2)} days before</li>
+                            <li>Until Renewal: Daily reminders from {form.watch('reminderDays') || 7} days until renewal</li>
+                          </ul>
                         )}
-                      </SelectContent>
-                    </Select>
+                      </div>
+                    </div>
+                    </div>
                   </div>
-
-                  {/* Backup Contact */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">Backup Contact</label>
-                    <Input 
-                      className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                      value={form.watch('backupContact') || ''}
-                      onChange={(e) => form.setValue('backupContact', e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Details */}
-                <div className="mt-4 mb-8">
-                  <label className="block text-sm font-medium text-slate-700 mb-3">Details</label>
-                  <Textarea 
-                    className="w-full border-slate-300 rounded-lg text-base min-h-[120px] md:min-h-[140px] resize-y focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 p-4"
-                    value={form.watch('details') || ''}
-                    onChange={(e) => form.setValue('details', e.target.value)}
-                  />
-                </div>
                   </>
                 )}
 

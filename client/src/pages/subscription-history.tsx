@@ -377,7 +377,10 @@ export default function SubscriptionHistory() {
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">Owner</TableHead>
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">Start Date</TableHead>
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">End Date</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Amount</TableHead>
+                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Amount per unit</TableHead>
+                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Qty</TableHead>
+                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Total Amount</TableHead>
+                        <TableHead className="font-semibold text-slate-800 py-4 px-6">LCY Amount</TableHead>
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">Status</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -413,7 +416,16 @@ export default function SubscriptionHistory() {
                                 {record.nextRenewal ? formatDate(record.nextRenewal) : "-"}
                               </TableCell>
                               <TableCell className="py-4 px-6 text-slate-700">
-                                {record.amount !== undefined ? `$${record.amount}` : "-"}
+                                {record.amount !== undefined ? `$${Number(record.amount).toFixed(2)}` : "-"}
+                              </TableCell>
+                              <TableCell className="py-4 px-6 text-slate-700">
+                                {record.qty !== undefined ? record.qty : "-"}
+                              </TableCell>
+                              <TableCell className="py-4 px-6 text-slate-700">
+                                {record.totalAmount !== undefined ? `$${Number(record.totalAmount).toFixed(2)}` : "-"}
+                              </TableCell>
+                              <TableCell className="py-4 px-6 text-slate-700">
+                                {record.lcyAmount !== undefined && record.lcyAmount !== null ? `$${Number(record.lcyAmount).toFixed(2)}` : "-"}
                               </TableCell>
                               <TableCell className="py-4 px-6">
                                 <Badge className={getStatusColor(record.status || '')}>

@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -56,7 +57,13 @@ type SubscriptionModalData = Partial<Subscription> & {
   name?: string;
 };
 import { z } from "zod";
-import { CreditCard, X, History, RefreshCw, Maximize2, Minimize2, AlertCircle } from "lucide-react";
+import { CreditCard, X, History, RefreshCw, Maximize2, Minimize2, AlertCircle, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 // Define the Category interface
 interface Category {
   name: string;
@@ -157,8 +164,8 @@ function calculateEndDate(startDate: string, billingCycle: string): string {
     case "weekly":
       endDate.setDate(endDate.getDate() + 6);
       break;
-    case "trail":
-      endDate.setDate(endDate.getDate() + 30); // 30 days for trail period
+    case "trial":
+      endDate.setDate(endDate.getDate() + 30); // 30 days for trial period
       break;
   }
   const yyyy = endDate.getFullYear();
@@ -419,6 +426,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [totalAmount, setTotalAmount] = useState<string>('');
   const [errorDialog, setErrorDialog] = useState<{show: boolean, message: string}>({show: false, message: ''});
   const [confirmDialog, setConfirmDialog] = useState<{show: boolean}>({show: false});
+  const [exitConfirmDialog, setExitConfirmDialog] = useState<{show: boolean}>({show: false});
+  const [cancelRenewalConfirmDialog, setCancelRenewalConfirmDialog] = useState<{show: boolean}>({show: false});
+  const [subscriptionCreated, setSubscriptionCreated] = useState<boolean>(false);
   const [departmentModal, setDepartmentModal] = useState<{show: boolean}>({show: false});
   const [newDepartmentName, setNewDepartmentName] = useState<string>('');
   const [newDepartmentHead, setNewDepartmentHead] = useState<string>('');
@@ -445,28 +455,50 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Predefined vendor list
   const VENDOR_LIST = [
-    "Netflix", "Disney+", "Amazon Prime / Prime Video", "Apple TV+", "HBO GO (Asia)", "Viu", "iQIYI", 
-    "meWATCH Prime (Mediacorp)", "Spotify", "Apple Music", "YouTube Premium", "Tidal", "Audible",
-    "PlayStation Plus", "Xbox Game Pass", "Nintendo Switch Online", "Microsoft 365", "Zoom", 
-    "Google Workspace", "Slack", "Notion", "Dropbox", "Box", "iCloud+", "Asana", "Monday.com", 
-    "Trello", "Miro", "DocuSign", "Calendly", "Adobe Acrobat / Sign", "Adobe Creative Cloud", 
-    "Figma", "Canva Pro", "Sketch", "Affinity (V2)", "Procreate (add-ons)", "Shutterstock", 
-    "Envato Elements", "GitHub", "GitLab", "Bitbucket", "JetBrains", "AWS", "Microsoft Azure", 
-    "Google Cloud Platform", "DigitalOcean", "Linode / Akamai", "Cloudflare", "Vercel", "Netlify", 
-    "Heroku", "Datadog", "New Relic", "Sentry", "PagerDuty", "Auth0 (Okta)", "Twilio", "SendGrid", 
-    "Mailgun", "Salesforce", "HubSpot", "Pipedrive", "Zoho", "Mailchimp", "Klaviyo", "Intercom", 
-    "Zendesk", "Freshdesk / Freshworks", "Typeform", "SurveyMonkey", "Buffer", "Hootsuite", 
-    "SEMrush", "Ahrefs", "Xero", "QuickBooks Online", "FreshBooks", "SAP Concur", "Expensify", 
-    "Stripe (Billing)", "Chargebee", "Zuora", "PayPal (subscriptions)", "Osome", "Sleek", 
-    "JustLogin", "Talenox", "Swingvy", "QuickHR", "StaffAny", "Employment Hero", "Deel", "Remote", 
-    "Rippling", "Workday", "SAP SuccessFactors", "1Password", "LastPass", "Dashlane", "Norton 360", 
-    "Bitdefender", "ESET", "Kaspersky", "Malwarebytes", "Backblaze", "CrashPlan", "Acronis", 
-    "NordVPN", "ExpressVPN", "Surfshark", "Proton VPN", "Singtel", "StarHub", "M1", "MyRepublic", 
-    "ViewQwest", "WhizComms", "Simba (TPG)", "The Straits Times", "The Business Times", 
-    "Lianhe Zaobao", "The Edge Singapore", "Tech in Asia+", "Nikkei Asia", "Financial Times", 
-    "The Economist", "Bloomberg", "The Wall Street Journal", "GrabUnlimited (Grab)", "Deliveroo Plus", 
-    "Foodpanda Pro", "Amazon Prime (Fresh benefits)", "ClassPass", "Strava", "Fitbit Premium", 
-    "Apple Fitness+", "Calm", "Headspace"
+    "Microsoft Corporation", "Amazon Web Services, Inc.", "Google LLC", "Salesforce, Inc.", "Adobe Inc.",
+    "Oracle Corporation", "SAP SE", "International Business Machines Corporation (IBM)", "ServiceNow, Inc.",
+    "Atlassian Corporation", "Zoom Video Communications, Inc.", "Slack Technologies, LLC (Salesforce)",
+    "Dropbox, Inc.", "Box, Inc.", "DocuSign, Inc.", "HubSpot, Inc.", "Canva Pty Ltd", "Shopify Inc.",
+    "Snowflake Inc.", "Twilio Inc.", "VMware, Inc. (Broadcom)", "Cisco Systems, Inc.", "Dell Technologies Inc.",
+    "Hewlett Packard Enterprise Company", "Citrix Systems, Inc.", "Palo Alto Networks, Inc.",
+    "CrowdStrike Holdings, Inc.", "Fortinet, Inc.", "Zscaler, Inc.", "Cloudflare, Inc.", "Okta, Inc.",
+    "Tenable Holdings, Inc.", "Rapid7, Inc.", "Splunk Inc.", "Proofpoint, Inc.", "CyberArk Software Ltd.",
+    "Trend Micro Incorporated", "McAfee, LLC", "Sophos Ltd.", "SentinelOne, Inc.",
+    "Check Point Software Technologies Ltd.", "Mandiant (Google)", "Rubrik, Inc.", "Veeam Software",
+    "Commvault Systems, Inc.", "Intuit Inc.", "Stripe, Inc.", "PayPal Holdings, Inc.", "Block, Inc. (Square)",
+    "Xero Limited", "The Sage Group plc", "Fiserv, Inc.", "Fidelity National Information Services, Inc. (FIS)",
+    "Bill.com Holdings, Inc.", "Expensify, Inc.", "Coupa Software Inc.", "Brex Inc.", "Ramp Business Corporation",
+    "Adyen N.V.", "Plaid Inc.", "Automatic Data Processing, Inc. (ADP)", "Workday, Inc.", "Paychex, Inc.",
+    "Paycom Software, Inc.", "Ceridian HCM Holding Inc. (Dayforce)", "UKG Inc. (Ultimate Kronos Group)",
+    "BambooHR LLC", "Rippling People Center Inc.", "Gusto, Inc.", "Deel, Inc.", "Robert Half International Inc.",
+    "Cornerstone OnDemand, Inc.", "Leidos Holdings, Inc.", "Northrop Grumman Corporation",
+    "General Dynamics Corporation", "Raytheon Technologies Corporation (RTX)", "Booz Allen Hamilton Holding Corporation",
+    "Science Applications International Corporation (SAIC)", "CACI International Inc", "Palantir Technologies Inc.",
+    "Tyler Technologies, Inc.", "Carahsoft Technology Corp.", "Crayon Group Holding ASA (Acquirer of Rhipe)",
+    "Ingram Micro Inc.", "Pax8, Inc.", "TD SYNNEX Corporation", "Arrow Electronics, Inc. (Arrow ECS)",
+    "Dicker Data Limited", "Sherweb Inc.", "AppDirect, Inc.", "Insight Enterprises, Inc.", "SoftwareOne AG",
+    "CDW Corporation", "SHI International Corp.", "Zendesk, Inc.", "Freshworks Inc.", "Intercom, Inc.",
+    "Qualtrics, LLC", "SurveyMonkey (Momentive Global Inc.)", "Hootsuite Inc.", "Sprout Social, Inc.",
+    "Semrush Holdings, Inc.", "Ahrefs Pte. Ltd.", "Moz, Inc.", "Braze, Inc.", "Klaviyo, Inc.",
+    "ActiveCampaign, LLC", "Constant Contact, Inc.", "Mailchimp (Intuit Inc.)", "Typeform SL",
+    "Drift.com, Inc.", "Pipedrive Inc.", "Zoho Corporation Pvt. Ltd.", "Yotpo Ltd.", "Trustpilot Group plc",
+    "G2.com, Inc.", "Cision Ltd.", "Meltwater B.V.", "Sprinklr, Inc.", "Datadog, Inc.", "New Relic, Inc.",
+    "Dynatrace, Inc.", "PagerDuty, Inc.", "HashiCorp, Inc.", "JFrog Ltd.", "DigitalOcean Holdings, Inc.",
+    "Akamai Technologies, Inc.", "F5, Inc.", "Juniper Networks, Inc.", "Arista Networks, Inc.", "NetApp, Inc.",
+    "Pure Storage, Inc.", "Red Hat, Inc. (IBM)", "SUSE S.A.", "Canonical Ltd. (Ubuntu)", "Docker, Inc.",
+    "Elastic N.V.", "MongoDB, Inc.", "Redis, Inc.", "Couchbase, Inc.", "GitHub, Inc. (Microsoft)",
+    "GitLab Inc.", "JetBrains s.r.o.", "Postman, Inc.", "OpenAI, L.L.C.", "Anthropic, PBC",
+    "Databricks, Inc.", "Glean Technologies, Inc.", "Harvey AI, Inc.", "Hebbia, Inc.", "Waabi Innovation Inc.",
+    "Weaviate B.V.", "Writer, Inc.", "NVIDIA Corporation", "Siemens AG", "Sift Science, Inc.",
+    "Scale AI, Inc.", "Hugging Face, Inc.", "Jasper AI, Inc.", "Netflix, Inc.", "Disney+",
+    "Amazon Prime Video", "Apple TV+", "Spotify Technology S.A.", "YouTube Premium", "Singtel",
+    "StarHub Ltd", "M1 Limited", "Grab Holdings Ltd", "Sea Limited", "Tableau Software, LLC (Salesforce)",
+    "QlikTech International AB", "MicroStrategy Incorporated", "Asana, Inc.", "Monday.com Ltd",
+    "Smartsheet Inc.", "Notion Labs, Inc.", "Trello (Atlassian)", "Basecamp, LLC", "Figma, Inc.",
+    "Sketch B.V.", "InVisionApp Inc.", "Miro (RealtimeBoard Inc.)", "Lucid Software Inc.", "Shutterstock, Inc.",
+    "Getty Images Holdings, Inc.", "Envato Pty Ltd", "Webflow, Inc.", "Squarespace, Inc.", "Wix.com Ltd.",
+    "GoDaddy Inc.", "Namecheap, Inc.", "Bluehost Inc. (Newfold Digital)", "SiteGround Hosting Ltd.",
+    "WP Engine, Inc.", "1Password", "LastPass", "Dashlane", "NordVPN", "ExpressVPN"
   ];
   
   // Close category dropdown when clicking outside
@@ -554,6 +586,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       form.reset({
         serviceName: subscription.serviceName || "",
+        website: (subscription as any)?.website || "",
         vendor: subscription.vendor || "",
         currency: subscription.currency || "",
         qty: subscription.qty !== undefined && subscription.qty !== null ? Number(subscription.qty) : 1,
@@ -756,6 +789,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // removed currentSubscriptionId usage
       }
       
+      // Mark subscription as created to disable draft button
+      if (!isEditing) {
+        setSubscriptionCreated(true);
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
@@ -767,26 +805,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       onOpenChange(false);
       setTimeout(() => {
         form.reset();
+        setSubscriptionCreated(false);
       }, 300);
     },
     onError: (error: any) => {
-      if (isEditing) {
-        toast({
-          title: "Success",
-          description: "Subscription updated successfully",
-        });
-        onOpenChange(false);
-        setTimeout(() => {
-          form.reset();
-        }, 300);
-        queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-      } else {
-        toast({
-          title: "Error",
-          description: error?.response?.data?.message || error.message || `Failed to create subscription`,
-          variant: "destructive",
-        });
-      }
+      console.error("Mutation error:", error);
+      toast({
+        title: "Error",
+        description: error?.response?.data?.message || error.message || `Failed to ${isEditing ? 'update' : 'create'} subscription`,
+        variant: "destructive",
+      });
     },
   });
 
@@ -895,6 +923,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Always include department as JSON string for backend
       // Ensure amount is a number
       const amountNum = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount ?? 0;
+      const totalAmountNum = typeof data.totalAmount === 'string' ? parseFloat(data.totalAmount) : data.totalAmount ?? 0;
+      const qtyNum = typeof data.qty === 'string' ? parseFloat(data.qty) : data.qty ?? 0;
       // Get tenantId from context, state, or user info
   const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
@@ -902,6 +932,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         status: 'Active', // Always save as active
         autoRenewal: autoRenewal, // Add auto renewal from state
         amount: isNaN(amountNum) ? 0 : amountNum,
+        totalAmount: isNaN(totalAmountNum) ? 0 : totalAmountNum,
+        qty: isNaN(qtyNum) ? 0 : qtyNum,
+        lcyAmount: lcyAmount !== "" ? Number(lcyAmount) : undefined,
         departments: selectedDepartments,
         department: JSON.stringify(selectedDepartments),
         startDate: new Date(data.startDate ?? ""),
@@ -1014,90 +1047,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
   const handleConfirmRenewal = async () => {
     setConfirmDialog({show: false});
-        
-    setIsRenewing(true);
-        
-        try {
-          // Always recalculate dates based on current endDate and billingCycle
-          const { newStartDate, newEndDate } = calculateRenewalDates(endDate, billingCycle);
-          
-          // Update local state
-          setStartDate(newStartDate);
-          setEndDate(newEndDate);
-          // removed manual end date flag
-          
-          // Update form values
-          form.setValue('startDate', newStartDate);
-          form.setValue('nextRenewal', newEndDate);
-          
-          // Prepare payload for API
-          const formValues = form.getValues();
-          // Always get tenantId from context or user info
-          const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
-          const payload = {
-            ...formValues,
-            startDate: newStartDate,
-            nextRenewal: newEndDate,
-            amount:
-              formValues.amount !== undefined && formValues.amount !== ""
-                ? Number(formValues.amount)
-                : undefined,
-            tenantId,
-          };
-          
-          // Save to backend
-          const subId = subscription?.id;
-          if (subId) {
-            // Ensure subId is a valid ObjectId string
-            const validSubscriptionId = typeof subId === 'string' && /^[a-f\d]{24}$/i.test(subId)
-              ? subId
-              : (subId?.toString?.() || "");
-            await apiRequest("PUT", `/api/subscriptions/${validSubscriptionId}`, payload);
-            // Insert into history table
-            await axios.post(`${API_BASE_URL}/api/history`, {
-              subscriptionId: validSubscriptionId,
-              data: payload,
-              action: "renew"
-            }, {
-              withCredentials: true,
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            });
-            
-            // Invalidate queries to refresh data
-            queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/history"] });
-            
-            toast({
-              title: "Subscription Renewed",
-              description: `Subscription renewed from ${formatDate(newStartDate)} to ${formatDate(newEndDate)}`,
-              className: "bg-white border border-green-500 text-green-700 font-semibold shadow-lg",
-            });
-            // Notify parent/card page to update dates
-            if (typeof window !== 'undefined' && window.dispatchEvent) {
-              window.dispatchEvent(new CustomEvent('subscription-renewed', {
-                detail: {
-                  id: subId,
-                  startDate: newStartDate,
-                  nextRenewal: newEndDate
-                }
-              }));
-            }
-            // Close the modal after successful renewal
-            onOpenChange(false);
-          }
-        } catch (error) {
-          console.error("Renewal error:", error);
-          toast({
-            title: "Renewal Failed",
-            description: "Failed to renew subscription. Please try again.",
-            className: "bg-white border border-red-500 text-red-700 font-semibold shadow-lg",
-          });
-        } finally {
-          setIsRenewing(false);
-        }
-    
     setIsRenewing(true);
     
     try {
@@ -1113,7 +1062,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       form.setValue('startDate', newStartDate);
       form.setValue('nextRenewal', newEndDate);
       
-      // Prepare payload for API
+      // Prepare payload for API - include all fields including lcyAmount
       const formValues = form.getValues();
       // Always get tenantId from context or user info
       const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
@@ -1125,10 +1074,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           formValues.amount !== undefined && formValues.amount !== ""
             ? Number(formValues.amount)
             : undefined,
+        totalAmount: formValues.totalAmount !== undefined && formValues.totalAmount !== ""
+            ? Number(formValues.totalAmount)
+            : undefined,
+        qty: formValues.qty !== undefined && formValues.qty !== ""
+            ? Number(formValues.qty)
+            : undefined,
+        lcyAmount: lcyAmount !== "" ? Number(lcyAmount) : undefined,
         tenantId,
       };
       
-      // Save to backend
+      // Save to backend - the backend will create the history record
       const subId = subscription?.id;
       if (subId) {
         // Ensure subId is a valid ObjectId string
@@ -1136,17 +1092,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           ? subId
           : (subId?.toString?.() || "");
         await apiRequest("PUT", `/api/subscriptions/${validSubscriptionId}`, payload);
-        // Insert into history table
-        await axios.post(`${API_BASE_URL}/api/history`, {
-          subscriptionId: validSubscriptionId,
-          data: payload,
-          action: "renew"
-        }, {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
         
         // Invalidate queries to refresh data
         queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
@@ -1432,7 +1377,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </DialogTitle>
                 <span
                   className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold tracking-wide ${
-                    subscription?.billingCycle === 'trail' 
+                    subscription?.billingCycle === 'trial' 
                       ? 'bg-purple-500 text-white' 
                       : status === 'Active' 
                         ? 'bg-emerald-500 text-white' 
@@ -1441,7 +1386,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           : 'bg-orange-500 text-white'
                   }`}
                 >
-                  {subscription?.billingCycle === 'trail' ? 'Trail' : status}
+                  {subscription?.billingCycle === 'trial' ? 'Trial' : status}
                 </span>
               </div>
             </div>
@@ -1458,20 +1403,49 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               >
                 User
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
-                onClick={handleRenew}
-                disabled={isRenewing || !endDate || !billingCycle || autoRenewal}
-              >
-                {isRenewing ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                Renew
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
+                    disabled={isRenewing}
+                  >
+                    {isRenewing ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    )}
+                    Modify
+                    <ChevronDown className="h-3 w-3 ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[160px] bg-white border border-gray-200 shadow-lg rounded-lg">
+                  <DropdownMenuItem
+                    onClick={handleRenew}
+                    disabled={isRenewing || !endDate || !billingCycle || autoRenewal}
+                    className="cursor-pointer flex items-center gap-2 hover:bg-indigo-50 focus:bg-indigo-50 px-3 py-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Renew
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      // Trigger form submission for update
+                      form.handleSubmit(onSubmit)();
+                    }}
+                    disabled={!isEditing}
+                    className="cursor-pointer flex items-center gap-2 hover:bg-indigo-50 focus:bg-indigo-50 px-3 py-2"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Update
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               {/* Updated History Button - Always visible but disabled when adding new subscription */}
               <Button
                 type="button"
@@ -1521,12 +1495,28 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           className={`w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 ${serviceNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                           {...field}
                           onChange={(e) => {
-                            // Auto-capitalize each word
-                            const capitalizedValue = e.target.value
-                              .split(' ')
-                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                              .join(' ');
-                            field.onChange(capitalizedValue);
+                            const inputValue = e.target.value;
+                            
+                            // Check if user is typing in all caps (2+ consecutive uppercase letters)
+                            const isTypingAllCaps = /[A-Z]{2,}/.test(inputValue);
+                            
+                            // If typing all caps, keep it as is. Otherwise, capitalize first letter of each word
+                            let finalValue;
+                            if (isTypingAllCaps) {
+                              // User is intentionally typing in caps, keep it
+                              finalValue = inputValue;
+                            } else {
+                              // Auto-capitalize first letter of each word
+                              finalValue = inputValue
+                                .split(' ')
+                                .map(word => {
+                                  if (word.length === 0) return word;
+                                  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                                })
+                                .join(' ');
+                            }
+                            
+                            field.onChange(finalValue);
                             // Clear any existing error when typing
                             if (serviceNameError) {
                               setServiceNameError("");
@@ -1555,11 +1545,25 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     <FormItem>
                       <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Website</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="url"
-                          className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
-                          {...field}
-                        />
+                          {field.value ? (
+                            <div className="w-full">
+                              <a
+                                href={field.value.startsWith('http') ? field.value : `https://${field.value}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full border border-gray-300 rounded-lg p-2 text-sm font-normal bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 text-indigo-600 hover:text-indigo-800 hover:underline block"
+                                style={{ textAlign: 'left', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                              >
+                                {field.value}
+                              </a>
+                            </div>
+                          ) : (
+                            <Input 
+                              type="url"
+                              className="w-full border-gray-300 rounded-lg p-2 text-sm font-normal bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                              {...field}
+                            />
+                          )}
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1633,37 +1637,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 />
                 <FormField
                   control={form.control}
-                  name="qty"
-                  render={({ field }) => (
-                    <FormItem>
-                        <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Qty</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            step="1" 
-                            min="1"
-                            placeholder=""
-                            className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
-                            value={field.value || ""}
-                            onChange={e => {
-                              const qtyValue = e.target.value ? parseInt(e.target.value) : "";
-                              field.onChange(qtyValue);
-                              
-                              // Calculate total amount = qty * amount
-                              const qty = typeof qtyValue === 'number' ? qtyValue : 0;
-                              const amount = parseFloat(form.getValues('amount') as string) || 0;
-                              const total = qty * amount;
-                              form.setValue('totalAmount', total > 0 ? total.toFixed(2) : "");
-                              setTotalAmount(total > 0 ? total.toFixed(2) : "");
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
                   name="currency"
                   render={({ field }) => (
                     <FormItem>
@@ -1707,7 +1680,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="amount"
                   render={({ field }) => (
                     <FormItem>
-                        <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Amount</FormLabel>
+                          <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Amount per unit</FormLabel>
                         <FormControl>
                           <Input 
                             type="number" 
@@ -1745,6 +1718,37 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 form.setValue('totalAmount', total > 0 ? total.toFixed(2) : "");
                                 setTotalAmount(total > 0 ? total.toFixed(2) : "");
                               }
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="qty"
+                  render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Qty</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            step="1" 
+                            min="1"
+                            placeholder=""
+                            className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
+                            value={field.value || ""}
+                            onChange={e => {
+                              const qtyValue = e.target.value ? parseInt(e.target.value) : "";
+                              field.onChange(qtyValue);
+                              
+                              // Calculate total amount = qty * amount
+                              const qty = typeof qtyValue === 'number' ? qtyValue : 0;
+                              const amount = parseFloat(form.getValues('amount') as string) || 0;
+                              const total = qty * amount;
+                              form.setValue('totalAmount', total > 0 ? total.toFixed(2) : "");
+                              setTotalAmount(total > 0 ? total.toFixed(2) : "");
                             }}
                           />
                         </FormControl>
@@ -1814,7 +1818,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             <SelectItem value="yearly" className={`${billingCycle === 'yearly' ? 'selected' : ''} dropdown-item`}>Yearly</SelectItem>
                             <SelectItem value="quarterly" className={`${billingCycle === 'quarterly' ? 'selected' : ''} dropdown-item`}>Quarterly</SelectItem>
                             <SelectItem value="weekly" className={`${billingCycle === 'weekly' ? 'selected' : ''} dropdown-item`}>Weekly</SelectItem>
-                            <SelectItem value="trail" className={`${billingCycle === 'trail' ? 'selected' : ''} dropdown-item`}>Trail</SelectItem>
+                            <SelectItem value="trial" className={`${billingCycle === 'trial' ? 'selected' : ''} dropdown-item`}>Trial</SelectItem>
                             <SelectItem value="pay-as-you-go" className={`${billingCycle === 'pay-as-you-go' ? 'selected' : ''} dropdown-item`}>Pay-as-you-go</SelectItem>
                           </SelectContent>
                         </Select>
@@ -2231,7 +2235,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full border-slate-300 rounded-lg p-1 text-base" 
+                            className={`w-full border-slate-300 rounded-lg p-1 text-base ${isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                             value={startDate || ''} 
                             onChange={e => { 
                               setStartDate(e.target.value); 
@@ -2246,6 +2250,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 }
                               }
                             }} 
+                            disabled={isEditing}
+                            readOnly={isEditing}
                           />
                         </FormControl>
                         <FormMessage className="text-red-500" />
@@ -2266,7 +2272,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full border-slate-300 rounded-lg p-1 text-base" 
+                            className={`w-full border-slate-300 rounded-lg p-1 text-base ${isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                             value={endDate || ''} 
                             onChange={e => {
                               setEndDate(e.target.value);
@@ -2282,6 +2288,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 form.setValue("nextRenewal", nextDate);
                               }
                             }} 
+                            disabled={isEditing}
+                            readOnly={isEditing}
                           />
                         </FormControl>
                         <FormMessage className="text-red-500" />
@@ -2382,41 +2390,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   variant="destructive" 
                   className="font-semibold px-6 py-3 border-2 border-red-600 text-white bg-red-600 hover:bg-red-700 shadow-lg mr-auto rounded-lg transition-all duration-200 hover:shadow-red-500/25"
                   onClick={() => {
-                    // Close modal immediately for fast UX
-                    setStatus('Cancelled');
-                    onOpenChange(false);
-                    toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
-                    // Update cache immediately for instant table refresh
-                    if (isEditing && subscription?.id) {
-                      queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
-                        if (!oldData) return oldData;
-                        return oldData.map((sub: any) => 
-                          sub.id === subscription.id ? { ...sub, status: 'Cancelled' } : sub
-                        );
-                      });
-                      // Update analytics cache immediately
-                      queryClient.setQueryData(["/api/analytics/dashboard"], (oldData: any) => {
-                        if (!oldData) return oldData;
-                        return {
-                          ...oldData,
-                          activeSubscriptions: Math.max(0, (oldData.activeSubscriptions || 0) - 1)
-                        };
-                      });
-                      // Update backend asynchronously
-                      const validId = getValidObjectId(subscription.id);
-                      if (validId) {
-                        apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' })
-                          .catch((e: any) => {
-                            // Revert cache on error and show error
-                            queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-                            queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-                            toast({ title: 'Update failed', description: e?.message || 'Failed to update subscription status', variant: 'destructive' });
-                          });
-                      }
-                    } else {
-                      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-                      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-                    }
+                    setCancelRenewalConfirmDialog({ show: true });
                   }}
                 >
                   Cancel Renewal
@@ -2425,16 +2399,32 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   type="button" 
                   variant="outline" 
                   className="border-gray-300 text-gray-700 hover:bg-gray-100 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
-                  onClick={() => onOpenChange(false)}
+                  onClick={() => {
+                    // Check if form has any data filled
+                    const formValues = form.getValues();
+                    const hasData = formValues.serviceName || formValues.vendor || formValues.amount || 
+                                   formValues.category || formValues.owner || formValues.notes;
+                    
+                    if (hasData && !subscriptionCreated) {
+                      setExitConfirmDialog({ show: true });
+                    } else {
+                      onOpenChange(false);
+                    }
+                  }}
                 >
                   Exit
                 </Button>
                 <Button 
                   type="button" 
                   variant="outline" 
-                  className="border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
+                  className="border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() => handleSaveDraft()}
-                  disabled={draftMutation.isPending}
+                  disabled={draftMutation.isPending || subscriptionCreated || form.watch('status') === 'Active'}
+                  title={
+                    subscriptionCreated ? "Draft is not available after subscription is created" : 
+                    form.watch('status') === 'Active' ? "Draft is not available for active subscriptions" : 
+                    undefined
+                  }
                 >
                   {draftMutation.isPending ? 'Saving Draft...' : 'Save Draft'}
                 </Button>
@@ -2474,6 +2464,42 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Exit Confirmation Dialog */}
+      <AlertDialog open={exitConfirmDialog.show} onOpenChange={(open) => !open && setExitConfirmDialog({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              Confirm Exit
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              All filled data will be deleted if you exit. Do you want to cancel or exit?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => setExitConfirmDialog({ show: false })}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                setExitConfirmDialog({ show: false });
+                onOpenChange(false);
+                setTimeout(() => {
+                  form.reset();
+                  setSubscriptionCreated(false);
+                }, 300);
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+            >
+              Exit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Confirmation Dialog */}
       <AlertDialog open={confirmDialog.show} onOpenChange={(open) => !open && setConfirmDialog({ show: false })}>
         <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
@@ -2500,6 +2526,72 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Renewal Confirmation Dialog */}
+      <AlertDialog open={cancelRenewalConfirmDialog.show} onOpenChange={(open) => !open && setCancelRenewalConfirmDialog({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              Cancel Renewal Confirmation
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              Are you sure you want to cancel this subscription renewal? This action will mark the subscription as cancelled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => setCancelRenewalConfirmDialog({ show: false })}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              No, Keep It
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                setCancelRenewalConfirmDialog({ show: false });
+                // Close modal immediately for fast UX
+                setStatus('Cancelled');
+                onOpenChange(false);
+                toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
+                // Update cache immediately for instant table refresh
+                if (isEditing && subscription?.id) {
+                  queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
+                    if (!oldData) return oldData;
+                    return oldData.map((sub: any) => 
+                      sub.id === subscription.id ? { ...sub, status: 'Cancelled' } : sub
+                    );
+                  });
+                  // Update analytics cache immediately
+                  queryClient.setQueryData(["/api/analytics/dashboard"], (oldData: any) => {
+                    if (!oldData) return oldData;
+                    return {
+                      ...oldData,
+                      activeSubscriptions: Math.max(0, (oldData.activeSubscriptions || 0) - 1)
+                    };
+                  });
+                  // Update backend asynchronously
+                  const validId = getValidObjectId(subscription.id);
+                  if (validId) {
+                    apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' })
+                      .catch((e: any) => {
+                        // Revert cache on error and show error
+                        queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+                        queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+                        toast({ title: 'Update failed', description: e?.message || 'Failed to update subscription status', variant: 'destructive' });
+                      });
+                  }
+                } else {
+                  queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+            >
+              Yes, Cancel Renewal
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2825,7 +2917,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </svg>
               </div>
               <AlertDialogTitle className="text-xl font-semibold text-white">
-                Add New User
+                Add Employee
               </AlertDialogTitle>
             </div>
           </AlertDialogHeader>

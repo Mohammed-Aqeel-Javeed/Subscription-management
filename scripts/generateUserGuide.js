@@ -722,7 +722,7 @@ function generateUserGuide() {
     ['   □ Categorize subscriptions properly'],
     ['   □ Keep contact information updated'],
     ['   □ Document cancellation procedures'],
-    ['   □ Maintain audit trail'],
+    ['   □ Maintain audit Trial'],
     [''],
     ['Team Collaboration:'],
     ['   □ Share access with department heads'],

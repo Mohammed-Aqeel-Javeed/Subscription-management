@@ -16,6 +16,7 @@ export const subscriptions = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
   tenantId: text("tenant_id").notNull(), // Multi-tenancy
   serviceName: text("service_name").notNull(),
+  website: text("website"), // Website URL
   vendor: text("vendor").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   billingCycle: text("billing_cycle").notNull(), // monthly, yearly, quarterly, weekly

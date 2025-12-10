@@ -47,7 +47,7 @@ export default function Subscriptions() {
   const [vendorFilter, setVendorFilter] = useState("all");
   const initialIsCancelledView = location.pathname.includes('cancelled');
   const [statusFilter, setStatusFilter] = useState(initialIsCancelledView ? "Cancelled" : "all");
-  const [metricsFilter, setMetricsFilter] = useState<"all" | "active" | "trail" | "draft" | "cancelled">("all");
+  const [metricsFilter, setMetricsFilter] = useState<"all" | "active" | "Trial" | "draft" | "cancelled">("all");
   React.useEffect(() => {
     if (location.pathname.includes('cancelled')) {
       setStatusFilter('Cancelled');
@@ -289,9 +289,9 @@ export default function Subscriptions() {
     // Apply metrics filter
     let matchesMetrics = true;
     if (metricsFilter === "active") {
-      matchesMetrics = sub.status === "Active" && sub.billingCycle !== "trail";
-    } else if (metricsFilter === "trail") {
-      matchesMetrics = sub.billingCycle === "trail";
+      matchesMetrics = sub.status === "Active" && sub.billingCycle !== "Trial";
+    } else if (metricsFilter === "Trial") {
+      matchesMetrics = sub.billingCycle === "Trial";
     } else if (metricsFilter === "draft") {
       matchesMetrics = sub.status === "Draft";
     } else if (metricsFilter === "cancelled") {
@@ -357,8 +357,8 @@ export default function Subscriptions() {
   
   // --- Summary Stats Section ---
   const total = Array.isArray(subscriptions) ? subscriptions.length : 0;
-  const active = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active" && sub.billingCycle !== "trail").length : 0;
-  const trail = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.billingCycle === "trail").length : 0;
+  const active = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active" && sub.billingCycle !== "Trial").length : 0;
+  const Trial = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.billingCycle === "Trial").length : 0;
   const draft = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Draft").length : 0;
   const cancelled = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Cancelled").length : 0;
   
@@ -520,13 +520,13 @@ export default function Subscriptions() {
           </div>
 
           <div 
-            onClick={() => setMetricsFilter(metricsFilter === "trail" ? "all" : "trail")}
-            className={`bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-5 shadow-md cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${metricsFilter === "trail" ? "ring-2 ring-purple-400" : ""}`}
+            onClick={() => setMetricsFilter(metricsFilter === "Trial" ? "all" : "Trial")}
+            className={`bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-5 shadow-md cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${metricsFilter === "Trial" ? "ring-2 ring-purple-400" : ""}`}
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-purple-100">Trail Subscriptions</p>
-                <p className="text-2xl font-bold text-white mt-1">{trail}</p>
+                <p className="text-sm font-medium text-purple-100">Trial Subscriptions</p>
+                <p className="text-2xl font-bold text-white mt-1">{Trial}</p>
               </div>
               <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
                 <Search className="h-5 w-5 text-white" />
@@ -668,7 +668,7 @@ export default function Subscriptions() {
                       </TableCell>
                       <TableCell className="px-4 py-3">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          subscription.billingCycle === 'trail'
+                          subscription.billingCycle === 'Trial'
                             ? 'bg-purple-100 text-purple-800 border border-purple-200'
                             : subscription.status === 'Active' 
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
@@ -676,7 +676,7 @@ export default function Subscriptions() {
                               ? 'bg-rose-100 text-rose-800 border border-rose-200'
                               : 'bg-gray-100 text-gray-800 border border-gray-200'
                         }`}>
-                          {subscription.billingCycle === 'trail' ? 'Trail' : subscription.status}
+                          {subscription.billingCycle === 'Trial' ? 'Trial' : subscription.status}
                         </span>
                       </TableCell>
                       <TableCell className="px-4 py-3">
