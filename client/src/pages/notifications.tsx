@@ -47,6 +47,8 @@ export default function Notifications() {
 const [today, setToday] = useState(new Date());
 const [notificationType, setNotificationType] = useState<'subscription' | 'compliance'>('subscription');
 const [statusFilter, setStatusFilter] = useState<string>('all');
+const [expandedNotificationId, setExpandedNotificationId] = useState<string | null>(null);
+
 useEffect(() => {
 const timer = setInterval(() => {
 setToday(new Date());
@@ -86,6 +88,7 @@ useEffect(() => {
 refetch();
 refetchSubscriptions();
 refetchCompliance();
+setExpandedNotificationId(null); // Collapse any expanded notification
 }, [notificationType, refetch, refetchSubscriptions, refetchCompliance]);
 
 // Auto-refresh when coming back to the page
@@ -186,6 +189,7 @@ const getFilteredNotifications = () => {
     });
 };
 const filteredNotifications = getFilteredNotifications();
+
 const handleViewSubscription = async (subscriptionId: string | number) => {
 // Convert to string for backend lookup
 const idStr = String(subscriptionId);
@@ -323,6 +327,7 @@ return (
 </CardContent>
 </Card>
 ) : (
+<>
 <div className="space-y-4">
 {[...filteredNotifications]
 .sort((a, b) => {
@@ -331,15 +336,21 @@ const dateA = isValidDate(a.reminderTriggerDate) ? new Date(a.reminderTriggerDat
 const dateB = isValidDate(b.reminderTriggerDate) ? new Date(b.reminderTriggerDate ?? '').getTime() : 0;
 return dateB - dateA;
 })
-.map((notification) => (
-				<Card key={notification.id} className="hover:shadow-lg hover:border-blue-200 transition-all duration-200 bg-white border border-gray-200">
-	<CardHeader className="pb-3">
+.map((notification) => {
+const isExpanded = expandedNotificationId === notification.id;
+return (
+				<Card 
+					key={notification.id} 
+					className="hover:shadow-md transition-all duration-200 bg-white border border-gray-200 cursor-pointer"
+					onClick={() => setExpandedNotificationId(isExpanded ? null : (notification.id || null))}
+				>
+	<CardHeader className="pb-3 pt-4 px-5">
 		<div className="flex items-center justify-between">
-			<div className="flex items-center gap-3">
+			<div className="flex items-center gap-3 flex-1">
 				<div className="p-2 bg-orange-100 rounded-lg">
-					<Bell className="h-4 w-4 text-orange-600" />
+					<Bell className="h-5 w-5 text-orange-600" />
 				</div>
-				<div>
+				<div className="flex-1">
  									<CardTitle className="text-base font-medium text-gray-900">
 		 								{notification.type === 'compliance'
 		 									? (
@@ -355,14 +366,14 @@ return dateB - dateA;
  									</CardTitle>
 					<div className="flex items-center gap-2 mt-1">
 									{/* Category badge */}
-									<Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 font-medium px-3 py-1 rounded-full hover:bg-gray-100 hover:text-gray-700">
+									<Badge variant="outline" className="text-sm bg-gray-100 text-gray-700 font-medium px-3 py-1 rounded-full hover:bg-gray-100 hover:text-gray-700">
  												{notification.type === 'compliance'
  													? (notification.complianceCategory || notification.category || notification.filingName || notification.complianceName || notification.name || 'Compliance')
  													: (notification.category || 'Subscription')}
 									</Badge>
 									
 									{/* Reminder/Event badge */}
-									<Badge variant="default" className={`text-xs font-medium px-3 py-1 rounded-full ${
+									<Badge variant="default" className={`text-sm font-medium px-3 py-1 rounded-full ${
 										notification.eventType === 'created' ? 'bg-green-600 text-white hover:bg-green-600 hover:text-white' :
 										notification.eventType === 'deleted' ? 'bg-red-600 text-white hover:bg-red-600 hover:text-white' :
 										'bg-blue-600 text-white hover:bg-blue-600 hover:text-white'
@@ -430,22 +441,24 @@ return dateB - dateA;
 			<Button
 				variant="outline"
 				size="sm"
-				onClick={() => {
+				onClick={(e) => {
+					e.stopPropagation();
 					if (notification.type === 'compliance') {
 						handleViewCompliance(notification.complianceId ?? '');
 					} else {
 						handleViewSubscription(notification.subscriptionId ?? '');
 					}
 				}}
-				className="flex items-center gap-2"
+				className="flex items-center gap-2 text-sm px-4 py-2"
 			>
 				<Eye className="h-4 w-4" />
 				View
 			</Button>
 		</div>
 	</CardHeader>
-<CardContent>
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+{isExpanded && (
+<CardContent className="pt-3 pb-4 px-5">
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-4">
 <div className="flex items-center gap-2 text-gray-600">
 <Clock className="h-4 w-4" />
 <span>{notification.eventType ? 'Event Date:' : 'Reminder Triggered:'}</span>
@@ -509,7 +522,7 @@ isValidDate(notification.subscriptionEndDate)
 </div>
 )}
 </div>
-<div className={`mt-4 p-3 border rounded-lg ${
+<div className={`p-2.5 border rounded-lg ${
 	notification.eventType === 'created' ? 'bg-green-50 border-green-200' :
 	notification.eventType === 'deleted' ? 'bg-red-50 border-red-200' :
 	notification.type === 'compliance' ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'
@@ -551,9 +564,11 @@ Please review and take necessary action if needed.</>
 </p>
 </div>
 </CardContent>
+)}
 </Card>
-))}
+);})}
 </div>
+</>
 )}
 {selectedSubscription && (
 <SubscriptionModal

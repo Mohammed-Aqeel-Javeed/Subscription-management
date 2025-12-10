@@ -23,42 +23,163 @@ const currencyList = [
   { code: "AFN", description: "Afghan Afghani", symbol: "؋" },
   { code: "ALL", description: "Albanian Lek", symbol: "L" },
   { code: "AMD", description: "Armenian Dram", symbol: "֏" },
+  { code: "ANG", description: "Netherlands Antillean Guilder", symbol: "ƒ" },
+  { code: "AOA", description: "Angolan Kwanza", symbol: "Kz" },
+  { code: "ARS", description: "Argentine Peso", symbol: "$" },
   { code: "AUD", description: "Australian Dollar", symbol: "A$" },
+  { code: "AWG", description: "Aruban Florin", symbol: "ƒ" },
+  { code: "AZN", description: "Azerbaijani Manat", symbol: "₼" },
+  { code: "BAM", description: "Bosnia-Herzegovina Convertible Mark", symbol: "KM" },
+  { code: "BBD", description: "Barbadian Dollar", symbol: "$" },
   { code: "BDT", description: "Bangladeshi Taka", symbol: "৳" },
   { code: "BGN", description: "Bulgarian Lev", symbol: "лв" },
+  { code: "BHD", description: "Bahraini Dinar", symbol: ".د.ب" },
+  { code: "BIF", description: "Burundian Franc", symbol: "Fr" },
+  { code: "BMD", description: "Bermudan Dollar", symbol: "$" },
+  { code: "BND", description: "Brunei Dollar", symbol: "$" },
+  { code: "BOB", description: "Bolivian Boliviano", symbol: "Bs." },
   { code: "BRL", description: "Brazilian Real", symbol: "R$" },
+  { code: "BSD", description: "Bahamian Dollar", symbol: "$" },
+  { code: "BTN", description: "Bhutanese Ngultrum", symbol: "Nu." },
+  { code: "BWP", description: "Botswanan Pula", symbol: "P" },
+  { code: "BYN", description: "Belarusian Ruble", symbol: "Br" },
+  { code: "BZD", description: "Belize Dollar", symbol: "$" },
   { code: "CAD", description: "Canadian Dollar", symbol: "C$" },
+  { code: "CDF", description: "Congolese Franc", symbol: "Fr" },
   { code: "CHF", description: "Swiss Franc", symbol: "CHF" },
+  { code: "CLP", description: "Chilean Peso", symbol: "$" },
   { code: "CNY", description: "Chinese Yuan", symbol: "¥" },
+  { code: "COP", description: "Colombian Peso", symbol: "$" },
+  { code: "CRC", description: "Costa Rican Colón", symbol: "₡" },
+  { code: "CUP", description: "Cuban Peso", symbol: "$" },
+  { code: "CVE", description: "Cape Verdean Escudo", symbol: "$" },
   { code: "CZK", description: "Czech Koruna", symbol: "Kč" },
+  { code: "DJF", description: "Djiboutian Franc", symbol: "Fr" },
   { code: "DKK", description: "Danish Krone", symbol: "kr" },
+  { code: "DOP", description: "Dominican Peso", symbol: "$" },
+  { code: "DZD", description: "Algerian Dinar", symbol: "د.ج" },
   { code: "EGP", description: "Egyptian Pound", symbol: "£" },
+  { code: "ERN", description: "Eritrean Nakfa", symbol: "Nfk" },
+  { code: "ETB", description: "Ethiopian Birr", symbol: "Br" },
   { code: "EUR", description: "Euro", symbol: "€" },
+  { code: "FJD", description: "Fijian Dollar", symbol: "$" },
+  { code: "FKP", description: "Falkland Islands Pound", symbol: "£" },
+  { code: "FOK", description: "Faroese Króna", symbol: "kr" },
   { code: "GBP", description: "British Pound Sterling", symbol: "£" },
+  { code: "GEL", description: "Georgian Lari", symbol: "₾" },
+  { code: "GGP", description: "Guernsey Pound", symbol: "£" },
+  { code: "GHS", description: "Ghanaian Cedi", symbol: "₵" },
+  { code: "GIP", description: "Gibraltar Pound", symbol: "£" },
+  { code: "GMD", description: "Gambian Dalasi", symbol: "D" },
+  { code: "GNF", description: "Guinean Franc", symbol: "Fr" },
+  { code: "GTQ", description: "Guatemalan Quetzal", symbol: "Q" },
+  { code: "GYD", description: "Guyanaese Dollar", symbol: "$" },
   { code: "HKD", description: "Hong Kong Dollar", symbol: "HK$" },
+  { code: "HNL", description: "Honduran Lempira", symbol: "L" },
+  { code: "HRK", description: "Croatian Kuna", symbol: "kn" },
+  { code: "HTG", description: "Haitian Gourde", symbol: "G" },
   { code: "HUF", description: "Hungarian Forint", symbol: "Ft" },
   { code: "IDR", description: "Indonesian Rupiah", symbol: "Rp" },
   { code: "ILS", description: "Israeli New Shekel", symbol: "₪" },
+  { code: "IMP", description: "Manx Pound", symbol: "£" },
   { code: "INR", description: "Indian Rupee", symbol: "₹" },
+  { code: "IQD", description: "Iraqi Dinar", symbol: "ع.د" },
+  { code: "IRR", description: "Iranian Rial", symbol: "﷼" },
+  { code: "ISK", description: "Icelandic Króna", symbol: "kr" },
+  { code: "JEP", description: "Jersey Pound", symbol: "£" },
+  { code: "JMD", description: "Jamaican Dollar", symbol: "$" },
+  { code: "JOD", description: "Jordanian Dinar", symbol: "د.ا" },
   { code: "JPY", description: "Japanese Yen", symbol: "¥" },
+  { code: "KES", description: "Kenyan Shilling", symbol: "Sh" },
+  { code: "KGS", description: "Kyrgystani Som", symbol: "с" },
+  { code: "KHR", description: "Cambodian Riel", symbol: "៛" },
+  { code: "KID", description: "Kiribati Dollar", symbol: "$" },
+  { code: "KMF", description: "Comorian Franc", symbol: "Fr" },
   { code: "KRW", description: "South Korean Won", symbol: "₩" },
+  { code: "KWD", description: "Kuwaiti Dinar", symbol: "د.ك" },
+  { code: "KYD", description: "Cayman Islands Dollar", symbol: "$" },
+  { code: "KZT", description: "Kazakhstani Tenge", symbol: "₸" },
+  { code: "LAK", description: "Laotian Kip", symbol: "₭" },
+  { code: "LBP", description: "Lebanese Pound", symbol: "ل.ل" },
+  { code: "LKR", description: "Sri Lankan Rupee", symbol: "Rs" },
+  { code: "LRD", description: "Liberian Dollar", symbol: "$" },
+  { code: "LSL", description: "Lesotho Loti", symbol: "L" },
+  { code: "LYD", description: "Libyan Dinar", symbol: "ل.د" },
+  { code: "MAD", description: "Moroccan Dirham", symbol: "د.م." },
+  { code: "MDL", description: "Moldovan Leu", symbol: "L" },
+  { code: "MGA", description: "Malagasy Ariary", symbol: "Ar" },
+  { code: "MKD", description: "Macedonian Denar", symbol: "ден" },
+  { code: "MMK", description: "Myanma Kyat", symbol: "Ks" },
+  { code: "MNT", description: "Mongolian Tugrik", symbol: "₮" },
+  { code: "MOP", description: "Macanese Pataca", symbol: "P" },
+  { code: "MRU", description: "Mauritanian Ouguiya", symbol: "UM" },
+  { code: "MUR", description: "Mauritian Rupee", symbol: "₨" },
+  { code: "MVR", description: "Maldivian Rufiyaa", symbol: "Rf" },
+  { code: "MWK", description: "Malawian Kwacha", symbol: "MK" },
   { code: "MXN", description: "Mexican Peso", symbol: "$" },
   { code: "MYR", description: "Malaysian Ringgit", symbol: "RM" },
+  { code: "MZN", description: "Mozambican Metical", symbol: "MT" },
+  { code: "NAD", description: "Namibian Dollar", symbol: "$" },
+  { code: "NGN", description: "Nigerian Naira", symbol: "₦" },
+  { code: "NIO", description: "Nicaraguan Córdoba", symbol: "C$" },
   { code: "NOK", description: "Norwegian Krone", symbol: "kr" },
+  { code: "NPR", description: "Nepalese Rupee", symbol: "₨" },
   { code: "NZD", description: "New Zealand Dollar", symbol: "NZ$" },
+  { code: "OMR", description: "Omani Rial", symbol: "ر.ع." },
+  { code: "PAB", description: "Panamanian Balboa", symbol: "B/." },
+  { code: "PEN", description: "Peruvian Sol", symbol: "S/." },
+  { code: "PGK", description: "Papua New Guinean Kina", symbol: "K" },
   { code: "PHP", description: "Philippine Peso", symbol: "₱" },
   { code: "PKR", description: "Pakistani Rupee", symbol: "₨" },
   { code: "PLN", description: "Polish Zloty", symbol: "zł" },
+  { code: "PYG", description: "Paraguayan Guarani", symbol: "₲" },
+  { code: "QAR", description: "Qatari Rial", symbol: "ر.ق" },
+  { code: "RON", description: "Romanian Leu", symbol: "lei" },
+  { code: "RSD", description: "Serbian Dinar", symbol: "дин" },
   { code: "RUB", description: "Russian Ruble", symbol: "₽" },
+  { code: "RWF", description: "Rwandan Franc", symbol: "Fr" },
   { code: "SAR", description: "Saudi Riyal", symbol: "﷼" },
+  { code: "SBD", description: "Solomon Islands Dollar", symbol: "$" },
+  { code: "SCR", description: "Seychellois Rupee", symbol: "₨" },
+  { code: "SDG", description: "Sudanese Pound", symbol: "ج.س." },
   { code: "SEK", description: "Swedish Krona", symbol: "kr" },
   { code: "SGD", description: "Singapore Dollar", symbol: "S$" },
+  { code: "SHP", description: "Saint Helena Pound", symbol: "£" },
+  { code: "SLL", description: "Sierra Leonean Leone", symbol: "Le" },
+  { code: "SOS", description: "Somali Shilling", symbol: "Sh" },
+  { code: "SRD", description: "Surinamese Dollar", symbol: "$" },
+  { code: "SSP", description: "South Sudanese Pound", symbol: "£" },
+  { code: "STN", description: "São Tomé and Príncipe Dobra", symbol: "Db" },
+  { code: "SYP", description: "Syrian Pound", symbol: "£" },
+  { code: "SZL", description: "Swazi Lilangeni", symbol: "L" },
   { code: "THB", description: "Thai Baht", symbol: "฿" },
+  { code: "TJS", description: "Tajikistani Somoni", symbol: "ЅМ" },
+  { code: "TMT", description: "Turkmenistani Manat", symbol: "m" },
+  { code: "TND", description: "Tunisian Dinar", symbol: "د.ت" },
+  { code: "TOP", description: "Tongan Paʻanga", symbol: "T$" },
   { code: "TRY", description: "Turkish Lira", symbol: "₺" },
+  { code: "TTD", description: "Trinidad and Tobago Dollar", symbol: "$" },
+  { code: "TVD", description: "Tuvaluan Dollar", symbol: "$" },
   { code: "TWD", description: "New Taiwan Dollar", symbol: "NT$" },
+  { code: "TZS", description: "Tanzanian Shilling", symbol: "Sh" },
+  { code: "UAH", description: "Ukrainian Hryvnia", symbol: "₴" },
+  { code: "UGX", description: "Ugandan Shilling", symbol: "Sh" },
   { code: "USD", description: "United States Dollar", symbol: "$" },
+  { code: "UYU", description: "Uruguayan Peso", symbol: "$" },
+  { code: "UZS", description: "Uzbekistan Som", symbol: "so'm" },
+  { code: "VES", description: "Venezuelan Bolívar", symbol: "Bs." },
   { code: "VND", description: "Vietnamese Dong", symbol: "₫" },
-  { code: "ZAR", description: "South African Rand", symbol: "R" }
+  { code: "VUV", description: "Vanuatu Vatu", symbol: "Vt" },
+  { code: "WST", description: "Samoan Tala", symbol: "T" },
+  { code: "XAF", description: "Central African CFA Franc", symbol: "Fr" },
+  { code: "XCD", description: "East Caribbean Dollar", symbol: "$" },
+  { code: "XDR", description: "Special Drawing Rights", symbol: "SDR" },
+  { code: "XOF", description: "West African CFA Franc", symbol: "Fr" },
+  { code: "XPF", description: "CFP Franc", symbol: "Fr" },
+  { code: "YER", description: "Yemeni Rial", symbol: "﷼" },
+  { code: "ZAR", description: "South African Rand", symbol: "R" },
+  { code: "ZMW", description: "Zambian Kwacha", symbol: "ZK" },
+  { code: "ZWL", description: "Zimbabwean Dollar", symbol: "$" }
 ];
 
 export function UnifiedImportExport({ localCurrency = "LCY" }) {
@@ -224,8 +345,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     subRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF059669' } };
     instructionsSheet.addRow(['   • Service Name: Subscription service name (auto-capitalizes first letter)']);
     instructionsSheet.addRow(['   • Vendor: Select from dropdown (90+ popular vendors available)']);
-    instructionsSheet.addRow(['   • Amount: Subscription cost']);
-    instructionsSheet.addRow(['   • Commitment cycle: Select from dropdown (Monthly, Yearly, Quarterly, Weekly, Trail, Pay-as-you-go)']);
+    instructionsSheet.addRow(['   • Amount per unit: Subscription cost']);
+    instructionsSheet.addRow(['   • Commitment cycle: Select from dropdown (Monthly, Yearly, Quarterly, Weekly, Trial, Pay-as-you-go)']);
     instructionsSheet.addRow(['   • Start Date: Format dd/mm/yyyy (e.g., 01/01/2025)']);
     instructionsSheet.addRow(['   • Next Renewal: Auto-calculates based on Start Date + Commitment cycle']);
     instructionsSheet.addRow(['   • Status: Select from dropdown (Active or Inactive)']);
@@ -310,25 +431,29 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     noteRow.getCell(2).font = { italic: true, color: { argb: 'FF059669' } };
     noteRow.commit();
     
-    // Add sample rows
+    // Add sample rows with left alignment
     const usdRow = currencySheet.getRow(3);
     usdRow.getCell(1).value = '$ United States Dollar (USD)';
+    usdRow.getCell(1).alignment = { horizontal: 'left' };
     usdRow.getCell(2).value = '1.00';
     usdRow.commit();
     
     const eurRow = currencySheet.getRow(4);
     eurRow.getCell(1).value = '€ Euro (EUR)';
+    eurRow.getCell(1).alignment = { horizontal: 'left' };
     eurRow.getCell(2).value = '0.85';
     eurRow.commit();
     
     const inrRow = currencySheet.getRow(5);
     inrRow.getCell(1).value = '₹ Indian Rupee (INR)';
+    inrRow.getCell(1).alignment = { horizontal: 'left' };
     inrRow.getCell(2).value = '83.12';
     inrRow.commit();
     
     // Add dropdown list validation ONLY (duplicate check will happen on import)
     for (let i = 3; i <= 500; i++) {
       const cell = currencySheet.getCell(`A${i}`);
+      cell.alignment = { horizontal: 'left' }; // Align currency text to left
       cell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -396,46 +521,87 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     
     // 2. CATEGORIES SHEET
     const catSheet = workbook.addWorksheet('Categories');
-    catSheet.columns = [{ header: 'Category Name', key: 'name', width: 25 }];
+    // Add a hidden normalization column to ensure manual text matches are detected
+    catSheet.columns = [
+      { header: 'Category Name', key: 'name', width: 25 },
+      { header: 'Normalized', key: 'norm', width: 2 }
+    ];
     
     // Add only one example category (users can add more)
     catSheet.addRow({ name: 'Productivity & Collaboration' });
     
-    // Add category dropdown for Categories sheet (A2:A500) - references hidden CategoryList
+    // Add dropdown for Category Name column (A2:A500) - references CategoryList sheet
     for (let i = 2; i <= 500; i++) {
-      const categoryCell = catSheet.getCell(`A${i}`);
-      categoryCell.dataValidation = {
+      const categoryNameCell = catSheet.getCell(`A${i}`);
+      categoryNameCell.dataValidation = {
         type: 'list',
         allowBlank: true,
         formulae: ['CategoryList!$A$2:$A$12'],
         showInputMessage: true,
         promptTitle: 'Select Category',
-        prompt: 'Choose a category from the dropdown or type your own.',
+        prompt: 'Choose a category from the dropdown list. Duplicates will be highlighted in red.',
         showErrorMessage: true,
         errorStyle: 'warning',
-        errorTitle: 'Invalid Category',
-        error: 'Please select a valid category from the dropdown list.'
+        errorTitle: 'Category Selection',
+        error: 'Please select a category from the dropdown or type your own.'
       };
+      // Normalization formula in hidden column B to catch trimmed/upper-cased duplicates
+      const normCell = catSheet.getCell(`B${i}`);
+      normCell.value = { formula: `IF(A${i}="","",UPPER(TRIM(A${i})))`, result: '' };
     }
+
+    // Hide normalization column visually
+    catSheet.getColumn(2).hidden = true;
+
+    // Add conditional formatting to highlight duplicates in red (using normalized column for robust matching)
+    catSheet.addConditionalFormatting({
+      ref: 'A2:A500',
+      rules: [
+        {
+          type: 'expression',
+          priority: 1,
+          // Only flag duplicates when the cell is non-empty
+          formulae: ['AND(A2<>"",COUNTIF($B$2:$B$500,UPPER(TRIM(A2)))>1)'],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } },
+            font: { color: { argb: 'FFFFFFFF' }, bold: true }
+          }
+        }
+      ]
+    });
     
     // 3. DEPARTMENTS SHEET
     const deptSheet = workbook.addWorksheet('Departments');
     deptSheet.columns = [
       { header: 'Department Name', key: 'name', width: 20 },
       { header: 'Head', key: 'head', width: 20 },
-      { header: 'Email', key: 'email', width: 25 }
+      { header: 'Email', key: 'email', width: 25 },
+      { header: 'NormName', key: 'normName', width: 2 },
+      { header: 'NormHead', key: 'normHead', width: 2 },
+      { header: 'NormEmail', key: 'normEmail', width: 2 }
     ];
     deptSheet.addRow({ name: 'IT', head: 'Jane Smith', email: 'jane@company.com' });
     deptSheet.addRow({ name: 'Marketing', head: 'John Doe', email: 'john@company.com' });
     deptSheet.addRow({ name: 'Finance', head: 'Sarah Lee', email: 'sarah@company.com' });
     
-    // Add duplicate validation for Department Name
+    // Add normalization formulas and validation for Departments sheet
     for (let i = 2; i <= 500; i++) {
-      const cell = deptSheet.getCell(`A${i}`);
-      cell.dataValidation = {
+      // Normalization formulas in hidden columns D, E, F
+      const normNameCell = deptSheet.getCell(`D${i}`);
+      normNameCell.value = { formula: `IF(A${i}="","",UPPER(TRIM(A${i})))`, result: '' };
+      
+      const normHeadCell = deptSheet.getCell(`E${i}`);
+      normHeadCell.value = { formula: `IF(B${i}="","",UPPER(TRIM(B${i})))`, result: '' };
+      
+      const normEmailCell = deptSheet.getCell(`F${i}`);
+      normEmailCell.value = { formula: `IF(C${i}="","",UPPER(TRIM(C${i})))`, result: '' };
+      
+      // Department Name duplicate validation with error alert
+      const deptNameCell = deptSheet.getCell(`A${i}`);
+      deptNameCell.dataValidation = {
         type: 'custom',
         allowBlank: false,
-        formulae: [`COUNTIF($A$2:$A$500,A${i})=1`],
+        formulae: [`COUNTIF($D$2:$D$500,UPPER(TRIM(A${i})))=1`],
         showInputMessage: true,
         promptTitle: 'Department Name Required',
         prompt: 'Enter a unique department name. Duplicates are not allowed.',
@@ -444,7 +610,90 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         errorTitle: 'Duplicate Department',
         error: 'This department name already exists! Please use a unique name.'
       };
+      
+      // Head duplicate validation with error alert
+      const headCell = deptSheet.getCell(`B${i}`);
+      headCell.dataValidation = {
+        type: 'custom',
+        allowBlank: true,
+        formulae: [`OR(B${i}="",COUNTIF($E$2:$E$500,UPPER(TRIM(B${i})))=1)`],
+        showInputMessage: true,
+        promptTitle: 'Department Head',
+        prompt: 'Enter a unique department head name. Duplicates are not allowed.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Duplicate Head',
+        error: 'This department head already exists! Please use a unique name.'
+      };
+      
+      // Email validation - must contain @ and .com AND be unique
+      const emailCell = deptSheet.getCell(`C${i}`);
+      emailCell.dataValidation = {
+        type: 'custom',
+        allowBlank: true,
+        formulae: [`OR(C${i}="",AND(ISNUMBER(FIND("@",C${i})),ISNUMBER(FIND(".com",C${i})),COUNTIF($F$2:$F$500,UPPER(TRIM(C${i})))=1))`],
+        showInputMessage: true,
+        promptTitle: 'Email Format',
+        prompt: 'Email must contain @ and .com and be unique (e.g., user@company.com)',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid or Duplicate Email',
+        error: 'Email must contain both @ and .com, and must be unique!'
+      };
     }
+    
+    // Hide normalization columns
+    deptSheet.getColumn(4).hidden = true;
+    deptSheet.getColumn(5).hidden = true;
+    deptSheet.getColumn(6).hidden = true;
+    
+    // Conditional formatting for duplicate Department Names
+    deptSheet.addConditionalFormatting({
+      ref: 'A2:A500',
+      rules: [
+        {
+          type: 'expression',
+          priority: 1,
+          formulae: ['AND(A2<>"",COUNTIF($D$2:$D$500,UPPER(TRIM(A2)))>1)'],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } },
+            font: { color: { argb: 'FFFFFFFF' }, bold: true }
+          }
+        }
+      ]
+    });
+    
+    // Conditional formatting for duplicate Heads
+    deptSheet.addConditionalFormatting({
+      ref: 'B2:B500',
+      rules: [
+        {
+          type: 'expression',
+          priority: 1,
+          formulae: ['AND(B2<>"",COUNTIF($E$2:$E$500,UPPER(TRIM(B2)))>1)'],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } },
+            font: { color: { argb: 'FFFFFFFF' }, bold: true }
+          }
+        }
+      ]
+    });
+    
+    // Conditional formatting for duplicate Emails
+    deptSheet.addConditionalFormatting({
+      ref: 'C2:C500',
+      rules: [
+        {
+          type: 'expression',
+          priority: 1,
+          formulae: ['AND(C2<>"",COUNTIF($F$2:$F$500,UPPER(TRIM(C2)))>1)'],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } },
+            font: { color: { argb: 'FFFFFFFF' }, bold: true }
+          }
+        }
+      ]
+    });
     
     // 4. EMPLOYEES SHEET
     const empSheet = workbook.addWorksheet('Employees');
@@ -453,7 +702,9 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       { header: 'Email', key: 'email', width: 25 },
       { header: 'Department', key: 'department', width: 15 },
       { header: 'Role', key: 'role', width: 15 },
-      { header: 'Status', key: 'status', width: 12 }
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'NormName', key: 'normName', width: 2 },
+      { header: 'NormEmail', key: 'normEmail', width: 2 }
     ];
     empSheet.addRow({
       name: 'John Doe',
@@ -465,19 +716,41 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     
     // Add Department dropdown for Employees (C2:C500) - references Departments sheet
     for (let i = 2; i <= 500; i++) {
-      // Email validation - required and must be valid email format with duplicate check
-      const emailCell = empSheet.getCell(`B${i}`);
-      emailCell.dataValidation = {
+      // Normalization formulas in hidden columns F, G
+      const normNameCell = empSheet.getCell(`F${i}`);
+      normNameCell.value = { formula: `IF(A${i}="","",UPPER(TRIM(A${i})))`, result: '' };
+      
+      const normEmailCell = empSheet.getCell(`G${i}`);
+      normEmailCell.value = { formula: `IF(B${i}="","",UPPER(TRIM(B${i})))`, result: '' };
+      
+      // Full Name duplicate validation with error alert
+      const empNameCell = empSheet.getCell(`A${i}`);
+      empNameCell.dataValidation = {
         type: 'custom',
         allowBlank: false,
-        formulae: [`AND(NOT(ISERROR(FIND("@",B${i}))),NOT(ISERROR(FIND(".",B${i}))),COUNTIF($B$2:$B$500,B${i})=1)`],
+        formulae: [`COUNTIF($F$2:$F$500,UPPER(TRIM(A${i})))=1`],
         showInputMessage: true,
-        promptTitle: 'Email Required',
-        prompt: 'Enter a valid email address (must contain @ and .). No duplicates allowed.',
+        promptTitle: 'Employee Name Required',
+        prompt: 'Enter a unique employee name. Duplicates are not allowed.',
         showErrorMessage: true,
         errorStyle: 'error',
-        errorTitle: 'Invalid or Duplicate Email',
-        error: 'Please enter a valid, unique email address. Email must contain @ and . symbols and must not be duplicated.'
+        errorTitle: 'Duplicate Employee',
+        error: 'This employee name already exists! Please use a unique name.'
+      };
+      
+      // Email duplicate validation with error alert
+      const empEmailCell = empSheet.getCell(`B${i}`);
+      empEmailCell.dataValidation = {
+        type: 'custom',
+        allowBlank: false,
+        formulae: [`COUNTIF($G$2:$G$500,UPPER(TRIM(B${i})))=1`],
+        showInputMessage: true,
+        promptTitle: 'Employee Email Required',
+        prompt: 'Enter a unique employee email. Duplicates are not allowed.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Duplicate Email',
+        error: 'This email already exists! Please use a unique email.'
       };
       
       // Department dropdown
@@ -511,6 +784,42 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       };
     }
     
+    // Hide normalization columns
+    empSheet.getColumn(6).hidden = true;
+    empSheet.getColumn(7).hidden = true;
+    
+    // Conditional formatting for duplicate Full Names
+    empSheet.addConditionalFormatting({
+      ref: 'A2:A500',
+      rules: [
+        {
+          type: 'expression',
+          priority: 1,
+          formulae: ['AND(A2<>"",COUNTIF($F$2:$F$500,UPPER(TRIM(A2)))>1)'],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } },
+            font: { color: { argb: 'FFFFFFFF' }, bold: true }
+          }
+        }
+      ]
+    });
+    
+    // Conditional formatting for duplicate Emails
+    empSheet.addConditionalFormatting({
+      ref: 'B2:B500',
+      rules: [
+        {
+          type: 'expression',
+          priority: 1,
+          formulae: ['AND(B2<>"",COUNTIF($G$2:$G$500,UPPER(TRIM(B2)))>1)'],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } },
+            font: { color: { argb: 'FFFFFFFF' }, bold: true }
+          }
+        }
+      ]
+    });
+    
     // 5. PAYMENT METHODS SHEET
     const paySheet = workbook.addWorksheet('Payment Methods');
     paySheet.columns = [
@@ -518,7 +827,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       { header: 'Type', key: 'type', width: 20 },
       { header: 'Managed by', key: 'managedBy', width: 25 },
       { header: 'Financial Institution', key: 'financialInstitution', width: 25 },
-      { header: 'Expires at', key: 'expiresAt', width: 15 }
+      { header: 'Expires at', key: 'expiresAt', width: 15 },
+      { header: 'Last 4 Digits', key: 'last4Digits', width: 15 }
     ];
     
     // Add sample row
@@ -527,7 +837,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       type: 'Credit',
       managedBy: 'John Doe',
       financialInstitution: 'HSBC Bank',
-      expiresAt: '12/2027'
+      expiresAt: '12/2027',
+      last4Digits: '1234'
     });
     
     // Set Expires at column (E) to text format to preserve slashes
@@ -597,6 +908,22 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         errorTitle: 'Invalid Expiry Date',
         error: 'Please use MM/YYYY format (e.g., 12/2027). Month must be between 01 and 12.'
       };
+      
+      // Last 4 Digits validation - exactly 4 digits (F column)
+      const last4Cell = paySheet.getCell(`F${i}`);
+      last4Cell.numFmt = '@'; // Text format to preserve leading zeros
+      last4Cell.dataValidation = {
+        type: 'custom',
+        allowBlank: true,
+        formulae: [`AND(LEN(F${i})=4,ISNUMBER(VALUE(F${i})))`],
+        showInputMessage: true,
+        promptTitle: 'Last 4 Digits',
+        prompt: 'Enter exactly 4 digits (e.g., 1234).',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Format',
+        error: 'Please enter exactly 4 numeric digits.'
+      };
     }
     
     // 6. VENDORS SHEET (Hidden)
@@ -604,31 +931,52 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     vendorsSheet.state = 'veryHidden';
     vendorsSheet.columns = [{ header: 'Vendor Name', key: 'name', width: 30 }];
     
-    // Add complete vendor list matching subscription modal VENDOR_LIST exactly
-    const VENDOR_LIST = [
-      "Netflix", "Disney+", "Amazon Prime / Prime Video", "Apple TV+", "HBO GO (Asia)", "Viu", "iQIYI", 
-      "meWATCH Prime (Mediacorp)", "Spotify", "Apple Music", "YouTube Premium", "Tidal", "Audible",
-      "PlayStation Plus", "Xbox Game Pass", "Nintendo Switch Online", "Microsoft 365", "Zoom", 
-      "Google Workspace", "Slack", "Notion", "Dropbox", "Box", "iCloud+", "Asana", "Monday.com", 
-      "Trello", "Miro", "DocuSign", "Calendly", "Adobe Acrobat / Sign", "Adobe Creative Cloud", 
-      "Figma", "Canva Pro", "Sketch", "Affinity (V2)", "Procreate (add-ons)", "Shutterstock", 
-      "Envato Elements", "GitHub", "GitLab", "Bitbucket", "JetBrains", "AWS", "Microsoft Azure", 
-      "Google Cloud Platform", "DigitalOcean", "Linode / Akamai", "Cloudflare", "Vercel", "Netlify", 
-      "Heroku", "Datadog", "New Relic", "Sentry", "PagerDuty", "Auth0 (Okta)", "Twilio", "SendGrid", 
-      "Mailgun", "Salesforce", "HubSpot", "Pipedrive", "Zoho", "Mailchimp", "Klaviyo", "Intercom", 
-      "Zendesk", "Freshdesk / Freshworks", "Typeform", "SurveyMonkey", "Buffer", "Hootsuite", 
-      "SEMrush", "Ahrefs", "Xero", "QuickBooks Online", "FreshBooks", "SAP Concur", "Expensify", 
-      "Stripe (Billing)", "Chargebee", "Zuora", "PayPal (subscriptions)", "Osome", "Sleek", 
-      "JustLogin", "Talenox", "Swingvy", "QuickHR", "StaffAny", "Employment Hero", "Deel", "Remote", 
-      "Rippling", "Workday", "SAP SuccessFactors", "1Password", "LastPass", "Dashlane", "Norton 360", 
-      "Bitdefender", "ESET", "Kaspersky", "Malwarebytes", "Backblaze", "CrashPlan", "Acronis", 
-      "NordVPN", "ExpressVPN", "Surfshark", "Proton VPN", "Singtel", "StarHub", "M1", "MyRepublic", 
-      "ViewQwest", "WhizComms", "Simba (TPG)", "The Straits Times", "The Business Times", 
-      "Lianhe Zaobao", "The Edge Singapore", "Tech in Asia+", "Nikkei Asia", "Financial Times", 
-      "The Economist", "Bloomberg", "The Wall Street Journal", "GrabUnlimited (Grab)", "Deliveroo Plus", 
-      "Foodpanda Pro", "Amazon Prime (Fresh benefits)", "ClassPass", "Strava", "Fitbit Premium", 
-      "Apple Fitness+", "Calm", "Headspace", "LinkedIn",
-    ];
+  const VENDOR_LIST = [
+    "Microsoft Corporation", "Amazon Web Services, Inc.", "Google LLC", "Salesforce, Inc.", "Adobe Inc.",
+    "Oracle Corporation", "SAP SE", "International Business Machines Corporation (IBM)", "ServiceNow, Inc.",
+    "Atlassian Corporation", "Zoom Video Communications, Inc.", "Slack Technologies, LLC (Salesforce)",
+    "Dropbox, Inc.", "Box, Inc.", "DocuSign, Inc.", "HubSpot, Inc.", "Canva Pty Ltd", "Shopify Inc.",
+    "Snowflake Inc.", "Twilio Inc.", "VMware, Inc. (Broadcom)", "Cisco Systems, Inc.", "Dell Technologies Inc.",
+    "Hewlett Packard Enterprise Company", "Citrix Systems, Inc.", "Palo Alto Networks, Inc.",
+    "CrowdStrike Holdings, Inc.", "Fortinet, Inc.", "Zscaler, Inc.", "Cloudflare, Inc.", "Okta, Inc.",
+    "Tenable Holdings, Inc.", "Rapid7, Inc.", "Splunk Inc.", "Proofpoint, Inc.", "CyberArk Software Ltd.",
+    "Trend Micro Incorporated", "McAfee, LLC", "Sophos Ltd.", "SentinelOne, Inc.",
+    "Check Point Software Technologies Ltd.", "Mandiant (Google)", "Rubrik, Inc.", "Veeam Software",
+    "Commvault Systems, Inc.", "Intuit Inc.", "Stripe, Inc.", "PayPal Holdings, Inc.", "Block, Inc. (Square)",
+    "Xero Limited", "The Sage Group plc", "Fiserv, Inc.", "Fidelity National Information Services, Inc. (FIS)",
+    "Bill.com Holdings, Inc.", "Expensify, Inc.", "Coupa Software Inc.", "Brex Inc.", "Ramp Business Corporation",
+    "Adyen N.V.", "Plaid Inc.", "Automatic Data Processing, Inc. (ADP)", "Workday, Inc.", "Paychex, Inc.",
+    "Paycom Software, Inc.", "Ceridian HCM Holding Inc. (Dayforce)", "UKG Inc. (Ultimate Kronos Group)",
+    "BambooHR LLC", "Rippling People Center Inc.", "Gusto, Inc.", "Deel, Inc.", "Robert Half International Inc.",
+    "Cornerstone OnDemand, Inc.", "Leidos Holdings, Inc.", "Northrop Grumman Corporation",
+    "General Dynamics Corporation", "Raytheon Technologies Corporation (RTX)", "Booz Allen Hamilton Holding Corporation",
+    "Science Applications International Corporation (SAIC)", "CACI International Inc", "Palantir Technologies Inc.",
+    "Tyler Technologies, Inc.", "Carahsoft Technology Corp.", "Crayon Group Holding ASA (Acquirer of Rhipe)",
+    "Ingram Micro Inc.", "Pax8, Inc.", "TD SYNNEX Corporation", "Arrow Electronics, Inc. (Arrow ECS)",
+    "Dicker Data Limited", "Sherweb Inc.", "AppDirect, Inc.", "Insight Enterprises, Inc.", "SoftwareOne AG",
+    "CDW Corporation", "SHI International Corp.", "Zendesk, Inc.", "Freshworks Inc.", "Intercom, Inc.",
+    "Qualtrics, LLC", "SurveyMonkey (Momentive Global Inc.)", "Hootsuite Inc.", "Sprout Social, Inc.",
+    "Semrush Holdings, Inc.", "Ahrefs Pte. Ltd.", "Moz, Inc.", "Braze, Inc.", "Klaviyo, Inc.",
+    "ActiveCampaign, LLC", "Constant Contact, Inc.", "Mailchimp (Intuit Inc.)", "Typeform SL",
+    "Drift.com, Inc.", "Pipedrive Inc.", "Zoho Corporation Pvt. Ltd.", "Yotpo Ltd.", "Trustpilot Group plc",
+    "G2.com, Inc.", "Cision Ltd.", "Meltwater B.V.", "Sprinklr, Inc.", "Datadog, Inc.", "New Relic, Inc.",
+    "Dynatrace, Inc.", "PagerDuty, Inc.", "HashiCorp, Inc.", "JFrog Ltd.", "DigitalOcean Holdings, Inc.",
+    "Akamai Technologies, Inc.", "F5, Inc.", "Juniper Networks, Inc.", "Arista Networks, Inc.", "NetApp, Inc.",
+    "Pure Storage, Inc.", "Red Hat, Inc. (IBM)", "SUSE S.A.", "Canonical Ltd. (Ubuntu)", "Docker, Inc.",
+    "Elastic N.V.", "MongoDB, Inc.", "Redis, Inc.", "Couchbase, Inc.", "GitHub, Inc. (Microsoft)",
+    "GitLab Inc.", "JetBrains s.r.o.", "Postman, Inc.", "OpenAI, L.L.C.", "Anthropic, PBC",
+    "Databricks, Inc.", "Glean Technologies, Inc.", "Harvey AI, Inc.", "Hebbia, Inc.", "Waabi Innovation Inc.",
+    "Weaviate B.V.", "Writer, Inc.", "NVIDIA Corporation", "Siemens AG", "Sift Science, Inc.",
+    "Scale AI, Inc.", "Hugging Face, Inc.", "Jasper AI, Inc.", "Netflix, Inc.", "Disney+",
+    "Amazon Prime Video", "Apple TV+", "Spotify Technology S.A.", "YouTube Premium", "Singtel",
+    "StarHub Ltd", "M1 Limited", "Grab Holdings Ltd", "Sea Limited", "Tableau Software, LLC (Salesforce)",
+    "QlikTech International AB", "MicroStrategy Incorporated", "Asana, Inc.", "Monday.com Ltd",
+    "Smartsheet Inc.", "Notion Labs, Inc.", "Trello (Atlassian)", "Basecamp, LLC", "Figma, Inc.",
+    "Sketch B.V.", "InVisionApp Inc.", "Miro (RealtimeBoard Inc.)", "Lucid Software Inc.", "Shutterstock, Inc.",
+    "Getty Images Holdings, Inc.", "Envato Pty Ltd", "Webflow, Inc.", "Squarespace, Inc.", "Wix.com Ltd.",
+    "GoDaddy Inc.", "Namecheap, Inc.", "Bluehost Inc. (Newfold Digital)", "SiteGround Hosting Ltd.",
+    "WP Engine, Inc.", "1Password", "LastPass", "Dashlane", "NordVPN", "ExpressVPN"
+  ];
     
     VENDOR_LIST.forEach(vendor => {
       vendorsSheet.addRow({ name: vendor });
@@ -666,7 +1014,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       { header: 'Vendor', key: 'vendor', width: 20 },
       { header: 'Currency', key: 'currency', width: 12 },
       { header: 'Qty', key: 'qty', width: 10 },
-      { header: 'Amount', key: 'amount', width: 12 },
+      { header: 'Amount per unit', key: 'amount', width: 12 },
       { header: 'Total Amount', key: 'totalAmount', width: 15 },
       { header: 'Commitment cycle', key: 'billingCycle', width: 18 },
       { header: 'Start Date', key: 'startDate', width: 15 },
@@ -689,7 +1037,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     sampleRow.getCell(4).value = 'SGD';
     sampleRow.getCell(5).value = 1;
     sampleRow.getCell(6).value = 15.99;
-    // Total Amount formula (column 7/G) = Qty * Amount
+    // Total Amount formula (column 7/G) = Qty * Amount per unit
     sampleRow.getCell(7).value = {
       formula: 'E2*F2',
       result: 15.99
@@ -699,7 +1047,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     sampleRow.getCell(9).numFmt = '@'; // Text format to preserve slashes
     // Next Renewal formula (column 10/J)
     sampleRow.getCell(10).value = {
-      formula: `IF(AND(I2<>"",H2<>""),TEXT(IF(H2="Monthly",DATE(YEAR(I2),MONTH(I2)+1,DAY(I2))-1,IF(H2="Quarterly",DATE(YEAR(I2),MONTH(I2)+3,DAY(I2))-1,IF(H2="Yearly",DATE(YEAR(I2)+1,MONTH(I2),DAY(I2))-1,IF(H2="Weekly",I2+6,IF(H2="Trail",I2+30,""))))),"dd/mm/yyyy"),"")`,
+      formula: `IF(AND(I2<>"",H2<>""),TEXT(IF(H2="Monthly",DATE(YEAR(I2),MONTH(I2)+1,DAY(I2))-1,IF(H2="Quarterly",DATE(YEAR(I2),MONTH(I2)+3,DAY(I2))-1,IF(H2="Yearly",DATE(YEAR(I2)+1,MONTH(I2),DAY(I2))-1,IF(H2="Weekly",I2+6,IF(H2="Trial",I2+30,""))))),"dd/mm/yyyy"),"")`,
       result: '31/01/2025'
     };
     sampleRow.getCell(10).numFmt = '@'; // Text format to preserve slashes
@@ -709,7 +1057,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     sampleRow.getCell(14).value = 'John Doe';
     // Owner Email formula (column 15/O) - VLOOKUP to get email from Employees sheet
     sampleRow.getCell(15).value = {
-      formula: `IF(N2<>"",IFERROR(VLOOKUP(N2,Employees!A:B,2,FALSE),""),"")`,
+      formula: `IFERROR(VLOOKUP(N2,Employees!$A$2:$B$500,2,0),"")`,
       result: 'john@company.com'
     };
     sampleRow.getCell(16).value = 'One time';
@@ -718,12 +1066,12 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     sampleRow.commit();
     
     // Add Commitment cycle dropdown and other validations for Subscriptions
-    const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trail', 'Pay-as-you-go'];
+    const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trial', 'Pay-as-you-go'];
     const subscriptionStatuses = ['Active', 'Inactive'];
     const reminderPolicies = ['One time', 'Two times', 'Until Renewal'];
     
     for (let i = 2; i <= 500; i++) {
-      // Total Amount formula for all rows (column G/7) = Qty * Amount (only if both exist)
+      // Total Amount formula for all rows (column G/7) = Qty * Amount per unit (only if both exist)
       const totalAmountCell = subsSheet.getCell(`G${i}`);
       totalAmountCell.value = {
         formula: `IF(AND(E${i}<>"",F${i}<>""),E${i}*F${i},"")`
@@ -828,7 +1176,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       if (i > 2) { // Skip row 2 as we already added it
         const renewalCell = subsSheet.getCell(`J${i}`);
         renewalCell.value = {
-          formula: `IF(AND(I${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(I${i}),MONTH(I${i})+1,DAY(I${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(I${i}),MONTH(I${i})+3,DAY(I${i}))-1,IF(H${i}="Yearly",DATE(YEAR(I${i})+1,MONTH(I${i}),DAY(I${i}))-1,IF(H${i}="Weekly",I${i}+6,IF(H${i}="Trail",I${i}+30,""))))),"dd/mm/yyyy"),"")`,
+          formula: `IF(AND(I${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(I${i}),MONTH(I${i})+1,DAY(I${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(I${i}),MONTH(I${i})+3,DAY(I${i}))-1,IF(H${i}="Yearly",DATE(YEAR(I${i})+1,MONTH(I${i}),DAY(I${i}))-1,IF(H${i}="Weekly",I${i}+6,IF(H${i}="Trial",I${i}+30,""))))),"dd/mm/yyyy"),"")`,
           result: ''
         };
         renewalCell.numFmt = '@'; // Text format to preserve slashes
@@ -883,8 +1231,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid department.'
       };
       
-      // Add Owner (Employee) dropdown for Subscriptions (M2:M500) - references Employees sheet
-      const ownerCell = subsSheet.getCell(`M${i}`);
+      // Add Owner (Employee) dropdown for Subscriptions (N2:N500) - references Employees sheet
+      const ownerCell = subsSheet.getCell(`N${i}`);
       ownerCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -898,17 +1246,17 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid employee.'
       };
       
-      // Add Owner Email auto-fill formula for all rows (N column) - VLOOKUP from Employees
+      // Add Owner Email auto-fill formula for all rows (O column) - VLOOKUP from Employees
       if (i > 2) {
-        const ownerEmailCell = subsSheet.getCell(`N${i}`);
+        const ownerEmailCell = subsSheet.getCell(`O${i}`);
         ownerEmailCell.value = {
-          formula: `IF(M${i}<>"",IFERROR(VLOOKUP(M${i},Employees!A:B,2,FALSE),""),"")`,
+          formula: `IFERROR(VLOOKUP(N${i},Employees!$A$2:$B$500,2,0),"")`,
           result: ''
         };
       }
       
-      // Reminder Policy dropdown (O column)
-      const reminderPolicyCell = subsSheet.getCell(`O${i}`);
+      // Reminder Policy dropdown (P column)
+      const reminderPolicyCell = subsSheet.getCell(`P${i}`);
       reminderPolicyCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -922,8 +1270,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid reminder policy from the dropdown.'
       };
       
-      // Reminder Days validation - integer between 1 and 365 (P column)
-      const reminderDaysCell = subsSheet.getCell(`P${i}`);
+      // Reminder Days validation - integer between 1 and 365 (Q column)
+      const reminderDaysCell = subsSheet.getCell(`Q${i}`);
       reminderDaysCell.dataValidation = {
         type: 'whole',
         operator: 'between',

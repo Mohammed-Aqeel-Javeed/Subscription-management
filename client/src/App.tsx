@@ -1,5 +1,5 @@
-import React from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import React, { useEffect } from "react";
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -41,6 +41,33 @@ function App() {
 function AppWithSidebar() {
   const hideSidebarPaths = ["/login", "/signup", "/auth"];
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Check authentication on every route change
+  useEffect(() => {
+    const checkAuth = async () => {
+      // Skip auth check for public pages
+      if (hideSidebarPaths.includes(location.pathname)) {
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/me", { credentials: "include" });
+        if (!res.ok) {
+          // Not authenticated, redirect to login
+          sessionStorage.clear();
+          navigate("/login", { replace: true });
+        }
+      } catch (error) {
+        // Network error or server error, redirect to login
+        sessionStorage.clear();
+        navigate("/login", { replace: true });
+      }
+    };
+
+    checkAuth();
+  }, [location.pathname, navigate]);
+
   return (
     <div className="flex h-screen">
       {hideSidebarPaths.includes(location.pathname) ? null : <Sidebar />}

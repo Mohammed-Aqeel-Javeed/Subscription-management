@@ -372,19 +372,22 @@ router.get("/api/history/list", async (req, res) => {
       .sort({ timestamp: -1, _id: -1 })
       .toArray();
 
-    // Convert all IDs to strings for consistency
+    // Import decryption function
+    const { decryptSubscriptionData } = await import("./encryption.service.js");
+
+    // Decrypt and convert all IDs to strings for consistency
     const processed = items.map(item => ({
       ...item,
       _id: item._id?.toString(),
       subscriptionId: item.subscriptionId?.toString(),
-      data: item.data ? {
+      data: item.data ? decryptSubscriptionData({
         ...item.data,
         _id: item.data._id?.toString()
-      } : undefined,
-      updatedFields: item.updatedFields ? {
+      }) : undefined,
+      updatedFields: item.updatedFields ? decryptSubscriptionData({
         ...item.updatedFields,
         _id: item.updatedFields._id?.toString()
-      } : undefined
+      }) : undefined
     }));
 
     res.status(200).json(processed);
@@ -458,19 +461,22 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
       }
     }
     
-    // Convert IDs to strings for the frontend
+    // Import decryption function
+    const { decryptSubscriptionData } = await import("./encryption.service.js");
+
+    // Decrypt and convert IDs to strings for the frontend
     const processedItems = items.map(item => ({
       ...item,
       _id: item._id.toString(),
       subscriptionId: item.subscriptionId?.toString ? item.subscriptionId.toString() : item.subscriptionId,
-      data: item.data ? {
+      data: item.data ? decryptSubscriptionData({
         ...item.data,
         _id: item.data._id?.toString ? item.data._id.toString() : item.data._id
-      } : undefined,
-      updatedFields: item.updatedFields ? {
+      }) : undefined,
+      updatedFields: item.updatedFields ? decryptSubscriptionData({
         ...item.updatedFields,
         _id: item.updatedFields._id?.toString ? item.updatedFields._id.toString() : item.updatedFields._id
-      } : undefined
+      }) : undefined
     }));
 
     res.status(200).json(processedItems);
@@ -1703,28 +1709,34 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     if (result.matchedCount === 1) {
       // Get the updated document
       const updatedDoc = await collection.findOne({ _id: subscriptionId, tenantId });
-      // Create history record with tenantId
-      const historyRecord = {
-        subscriptionId: subscriptionId,  // Store as ObjectId
-        tenantId, // Always include tenantId for filtering
-        data: {
-          ...oldDoc,
-          _id: subscriptionId
-        },
-        updatedFields: {
-          ...updatedDoc,
-          _id: subscriptionId
-        },
-        action: "update",
-        timestamp: new Date(),
-        serviceName: updatedDoc?.serviceName  // Add serviceName for easier querying
-      };
-      console.log('Attempting to insert history record:', JSON.stringify(historyRecord, null, 2));
-      try {
-        const historyResult = await historyCollection.insertOne(historyRecord);
-        console.log('History insert result:', historyResult);
-      } catch (err) {
-        console.error('Error inserting history record:', err);
+      
+      // Only create history record if there were actual changes
+      if (result.modifiedCount > 0) {
+        // Create history record with tenantId
+        const historyRecord = {
+          subscriptionId: subscriptionId,  // Store as ObjectId
+          tenantId, // Always include tenantId for filtering
+          data: {
+            ...oldDoc,
+            _id: subscriptionId
+          },
+          updatedFields: {
+            ...updatedDoc,
+            _id: subscriptionId
+          },
+          action: "update",
+          timestamp: new Date(),
+          serviceName: updatedDoc?.serviceName  // Add serviceName for easier querying
+        };
+        console.log('Attempting to insert history record:', JSON.stringify(historyRecord, null, 2));
+        try {
+          const historyResult = await historyCollection.insertOne(historyRecord);
+          console.log('History insert result:', historyResult);
+        } catch (err) {
+          console.error('Error inserting history record:', err);
+        }
+      } else {
+        console.log('No changes detected, skipping history record creation');
       }
 
       // Update reminders for the subscription

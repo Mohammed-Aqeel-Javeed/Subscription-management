@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api";
 import { UnifiedImportExport } from "../unified-import-export";
 
@@ -20,6 +20,7 @@ export default function Sidebar() {
   // Get current location for active state
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // Fetch current user data
   const { data: currentUser } = useQuery({
@@ -39,7 +40,19 @@ export default function Sidebar() {
     try {
       await fetch("/api/logout", { method: "POST", credentials: "include" });
     } catch {}
-    navigate("/login");
+    
+    // Clear session storage
+    sessionStorage.removeItem("isAuthenticated");
+    sessionStorage.clear();
+    
+    // Clear all React Query cache
+    queryClient.clear();
+    
+    // Dispatch logout event for other components
+    window.dispatchEvent(new Event('logout'));
+    
+    // Navigate to login and replace history to prevent back navigation
+    navigate("/login", { replace: true });
   };
   return (
     <aside className="w-64 bg-gradient-to-b from-slate-50 to-slate-100 shadow-sm flex flex-col h-screen border-r border-gray-200 relative overflow-hidden">

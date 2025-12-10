@@ -236,6 +236,8 @@ export default function Compliance() {
     amount?: string | number;
     isDraft?: boolean;
     paymentDate?: string;
+    submissionAmount?: string | number;
+    paymentMethod?: string;
   };
   
   const [searchTerm, setSearchTerm] = useState("");
@@ -264,6 +266,8 @@ export default function Compliance() {
     submittedBy: "",
     amount: "",
     paymentDate: "",
+    submissionAmount: "",
+    paymentMethod: "",
   });
   
   // Fetch employees for the submit by dropdown with auto-refresh
@@ -729,7 +733,9 @@ export default function Compliance() {
                     reminderPolicy: "One time",
                     submittedBy: "",
                     amount: "",
-                    paymentDate: ""
+                    paymentDate: "",
+                    submissionAmount: "",
+                    paymentMethod: "",
                   });
                   setModalOpen(true);
                 }}
@@ -955,7 +961,9 @@ export default function Compliance() {
                               reminderPolicy: currentItem.reminderPolicy || "One time",
                               submittedBy: currentItem.submittedBy || "",
                               amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
-                              paymentDate: currentItem.paymentDate || ""
+                              paymentDate: currentItem.paymentDate || "",
+                              submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
+                              paymentMethod: currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null ? String(currentItem.paymentMethod) : "",
                             });
                           }}
                           className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
@@ -993,7 +1001,9 @@ export default function Compliance() {
                                 reminderPolicy: currentItem.reminderPolicy || "One time",
                                 submittedBy: currentItem.submittedBy || "",
                                 amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
-                                paymentDate: currentItem.paymentDate || ""
+                                paymentDate: currentItem.paymentDate || "",
+                                submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
+                                paymentMethod: currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null ? String(currentItem.paymentMethod) : "",
                               });
                             }}
                             className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors p-2"
@@ -1144,6 +1154,39 @@ export default function Compliance() {
                   </div>
                 </div>
 
+                {/* Payment Method and Amount below Submission Date and Submitted By */}
+                <div className="grid gap-6 mb-8 grid-cols-1 md:grid-cols-2">
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-slate-700">Payment Method</label>
+                    <Select
+                      value={form.paymentMethod || ''}
+                      onValueChange={(val: string) => handleFormChange("paymentMethod", val)}
+                    >
+                      <SelectTrigger className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
+                        {/* Add your payment method options here */}
+                        <SelectItem value="Cash" className="text-slate-900 hover:bg-indigo-50">Cash</SelectItem>
+                        <SelectItem value="Bank Transfer" className="text-slate-900 hover:bg-indigo-50">Bank Transfer</SelectItem>
+                        <SelectItem value="Credit Card" className="text-slate-900 hover:bg-indigo-50">Credit Card</SelectItem>
+                        <SelectItem value="Other" className="text-slate-900 hover:bg-indigo-50">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-slate-700">Amount</label>
+                    <Input
+                      className="w-full border-slate-300 rounded-lg p-2 text-base"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.submissionAmount || ""}
+                      onChange={e => handleFormChange("submissionAmount", e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 {/* Remarks under Submission Details for better usability in focused view */}
                 <div className="mt-4 mb-8">
                   <label className="block text-sm font-medium text-slate-700 mb-3">Submission Notes</label>
@@ -1168,8 +1211,25 @@ export default function Compliance() {
                 </label>
                 <Input 
                   className={`w-full border-slate-300 rounded-lg p-2 text-base ${filingNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
-                  value={form.filingName} 
-                  onChange={e => handleFormChange("filingName", e.target.value)} 
+                  value={form.filingName}
+                  onChange={e => {
+                    const inputValue = e.target.value;
+                    // Use same logic as Service Name field
+                    const isTypingAllCaps = /[A-Z]{2,}/.test(inputValue);
+                    let finalValue;
+                    if (isTypingAllCaps) {
+                      finalValue = inputValue;
+                    } else {
+                      finalValue = inputValue
+                        .split(' ')
+                        .map(word => {
+                          if (word.length === 0) return word;
+                          return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                        })
+                        .join(' ');
+                    }
+                    handleFormChange("filingName", finalValue);
+                  }}
                 />
                 {filingNameError && (
                   <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
@@ -1366,21 +1426,6 @@ export default function Compliance() {
                   <li>Until Renewal: Daily reminders from {form.reminderDays} days until renewal</li>
                 </ul>
               </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Payment Date</label>
-                <Input 
-                  className={`w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 ${dateErrors.paymentDate ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
-                  type="date" 
-                  value={form.paymentDate} 
-                  onChange={e => handleFormChange("paymentDate", e.target.value)} 
-                />
-                {dateErrors.paymentDate && (
-                  <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
-                    <AlertCircle className="h-4 w-4" />
-                    {dateErrors.paymentDate}
-                  </p>
-                )}
-              </div>
               {/* Moved Remarks (Additional Notes) into Compliance Details; hidden when Submission view is active */}
               {!showSubmissionDetails && (
               <div className="space-y-2 col-span-full">
@@ -1520,7 +1565,9 @@ export default function Compliance() {
                       reminderPolicy: "One time",
                       submittedBy: "",
                       amount: "",
-                      paymentDate: ""
+                      paymentDate: "",
+                      submissionAmount: "",
+                      paymentMethod: "",
                     });
                     setDynamicFieldValues({});
                   } catch (error) {
@@ -1585,7 +1632,7 @@ export default function Compliance() {
                     status: calculatedStatus.status, // Use calculated status instead of hardcoded "Non-Compliant"
                     lastAudit: newStartDate,
                     issues: 0,
-                    frequency: form.filingFrequency,
+                                       frequency: form.filingFrequency,
                     governingAuthority: form.filingGoverningAuthority,
                     endDate: newEndDate,
                     submissionDeadline: newSubmissionDeadline,
@@ -1615,6 +1662,7 @@ export default function Compliance() {
                         if (frequency === "Monthly") {
                           nextDeadline.setMonth(prevDeadline.getMonth() + 1);
                         } else if (frequency === "Quarterly") {
+
                           nextDeadline.setMonth(prevDeadline.getMonth() + 3);
                         } else if (frequency === "Yearly") {
                           nextDeadline.setFullYear(prevDeadline.getFullYear() + 1);

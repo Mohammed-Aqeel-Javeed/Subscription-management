@@ -10,6 +10,16 @@ export default defineConfig({
       "@shared": path.resolve(__dirname, "../shared"),
     },
   },
+  server: {
+    port: 5173,
+    proxy: {
+      "/api": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
   build: {
     outDir: "../dist/public",
     emptyOutDir: true,

@@ -31,7 +31,8 @@ export default function AuthPage() {
         return;
       }
       sessionStorage.setItem("isAuthenticated", "true");
-      navigate("/dashboard");
+      // Use replace to prevent going back to login page
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setLoginError("Network error");
     }
