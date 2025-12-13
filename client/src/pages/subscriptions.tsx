@@ -14,6 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Subscription } from "@shared/schema";
+import { Can } from "@/components/Can";
 
 // Helper component to display departments
 // Extend Subscription type locally to include department and _id for frontend use
@@ -438,13 +439,15 @@ export default function Subscriptions() {
           
           <div className="flex items-center space-x-3">
             {/* Add Subscription button - first */}
-            <Button
-              onClick={handleAddNew}
-              className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Subscription
-            </Button>
+            <Can I="create" a="Subscription">
+              <Button
+                onClick={handleAddNew}
+                className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Subscription
+              </Button>
+            </Can>
             
             {/* History button - second */}
             <Button
@@ -701,23 +704,27 @@ export default function Subscriptions() {
                       </TableCell>
                       <TableCell className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end space-x-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(subscription)}
-                            className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(subscription._id || subscription.id)}
-                            className="h-8 w-8 p-0 text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
-                            disabled={deleteMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <Can I="update" a="Subscription">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(subscription)}
+                              className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </Can>
+                          <Can I="delete" a="Subscription">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(subscription._id || subscription.id)}
+                              className="h-8 w-8 p-0 text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              disabled={deleteMutation.isPending}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </Can>
                         </div>
                       </TableCell>
                     </TableRow>

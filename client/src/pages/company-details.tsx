@@ -50,7 +50,7 @@ const parseCSV = (text: string): Promise<any[]> => {
 const employeeSchema = z.object({
 name: z.string().min(1, "Name is required"),
 email: z.string().email("Invalid email address"),
-department: z.string().min(1, "Department is required"),
+department: z.string().optional(),
 status: z.enum(["active", "inactive"]),
 role: z.string().min(1, "Role is required"),
 });
@@ -331,6 +331,34 @@ setModalOpen(true);
 };
 
 const onSubmit = (data: EmployeeFormValues) => {
+  // Check for duplicate email
+  const duplicateEmail = employees.find(emp =>
+    emp.email.trim().toLowerCase() === data.email.trim().toLowerCase() &&
+    (!editingEmployee || emp._id !== editingEmployee._id)
+  );
+  if (duplicateEmail) {
+    toast({
+      title: "Error",
+      description: "An employee with the same email already exists.",
+      variant: "destructive",
+      duration: 2000,
+    });
+    return;
+  }
+  // Check for duplicate name
+  const duplicateName = employees.find(emp =>
+    emp.name.trim().toLowerCase() === data.name.trim().toLowerCase() &&
+    (!editingEmployee || emp._id !== editingEmployee._id)
+  );
+  if (duplicateName) {
+    toast({
+      title: "Error",
+      description: "An employee with the same name already exists.",
+      variant: "destructive",
+      duration: 2000,
+    });
+    return;
+  }
   if (editingEmployee) {
     // Update existing employee
     updateEmployeeMutation.mutate({ _id: editingEmployee._id, data });
@@ -509,7 +537,7 @@ render={({ field }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Role</FormLabel>
 <FormControl>
-<Input {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
+<Input {...field} placeholder="e.g., Manager, Developer" className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
 </FormControl>
 <FormMessage />
 </FormItem>
@@ -650,6 +678,7 @@ function UserManagementTab() {
 const [modalOpen, setModalOpen] = useState(false);
 const [editingUser, setEditingUser] = useState<UserType | undefined>();
 const [searchTerm, setSearchTerm] = useState("");
+const [showPassword, setShowPassword] = useState(false);
 const { toast } = useToast();
 const queryClient = useQueryClient();
 
@@ -657,14 +686,16 @@ const { data: users, isLoading } = useQuery<UserType[]>({
 queryKey: ["/api/users"],
 });
 
-const form = useForm<InsertUser>({
+const form = useForm<InsertUser & { password: string; department?: string }>({
 // TODO: Provide a local zod schema for user validation or remove this line if not needed
 // resolver: zodResolver(insertUserSchema),
 defaultValues: {
 name: "",
 email: "",
+password: "",
 role: "viewer",
 status: "active",
+department: "",
 },
 });
 
@@ -758,7 +789,9 @@ name: freshUser.name,
 email: freshUser.email,
 role: freshUser.role,
 status: freshUser.status,
+password: "••••••••",
 });
+setShowPassword(false);
 setModalOpen(true);
 };
 
@@ -773,9 +806,11 @@ setEditingUser(undefined);
 form.reset({
 name: "",
 email: "",
+password: "",
 role: "viewer",
 status: "active",
 });
+setShowPassword(false);
 setModalOpen(true);
 };
 
@@ -799,6 +834,13 @@ createMutation.mutate(data);
 
 const getRoleBadge = (role: string) => {
 switch (role) {
+case "super_admin":
+return (
+<Badge className="bg-gradient-to-r from-red-500 to-orange-500 text-white flex items-center gap-1">
+<Shield className="w-3 h-3" />
+Super Admin
+</Badge>
+);
 case "admin":
 return (
 <Badge className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white flex items-center gap-1">
@@ -806,11 +848,32 @@ return (
 Admin
 </Badge>
 );
-case "editor":
+case "contributor":
+return (
+<Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white flex items-center gap-1">
+<Edit className="w-3 h-3" />
+Contributor
+</Badge>
+);
+case "department_editor":
 return (
 <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white flex items-center gap-1">
 <Edit className="w-3 h-3" />
-Editor
+Department Editor
+</Badge>
+);
+case "department_viewer":
+return (
+<Badge className="bg-gradient-to-r from-teal-500 to-cyan-500 text-white flex items-center gap-1">
+<User className="w-3 h-3" />
+Department Viewer
+</Badge>
+);
+case "viewer":
+return (
+<Badge className="bg-gradient-to-r from-gray-500 to-gray-600 text-white flex items-center gap-1">
+<User className="w-3 h-3" />
+Viewer
 </Badge>
 );
 default:
@@ -881,7 +944,14 @@ onChange={(e) => setSearchTerm(e.target.value)}
 className="pl-10 w-full sm:w-64 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
 />
 </div>
-<Dialog open={modalOpen} onOpenChange={setModalOpen}>
+<Dialog open={modalOpen} onOpenChange={(open) => {
+setModalOpen(open);
+if (!open) {
+setShowPassword(false);
+form.reset();
+setEditingUser(undefined);
+}
+}}>
 <DialogTrigger asChild>
 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
 <Button
@@ -942,20 +1012,54 @@ render={({ field }) => (
 />
 <FormField
 control={form.control}
+name="password"
+render={({ field }) => (
+<FormItem>
+<FormLabel className="text-gray-700 font-medium text-sm">Password</FormLabel>
+<FormControl>
+<div className="relative">
+<Input 
+type={showPassword ? "text" : "password"} 
+placeholder="" 
+{...field} 
+className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10" 
+/>
+<button
+type="button"
+onClick={() => setShowPassword(!showPassword)}
+className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+>
+{showPassword ? (
+<EyeOff className="w-4 h-4" />
+) : (
+<Eye className="w-4 h-4" />
+)}
+</button>
+</div>
+</FormControl>
+<FormMessage />
+</FormItem>
+)}
+/>
+<FormField
+control={form.control}
 name="role"
 render={({ field }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Role</FormLabel>
-<Select onValueChange={field.onChange} defaultValue={field.value}>
+<Select onValueChange={field.onChange} value={field.value}>
 <FormControl>
 <SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
 <SelectValue placeholder="Select role" />
 </SelectTrigger>
 </FormControl>
 <SelectContent>
-<SelectItem value="admin">Administrator</SelectItem>
-<SelectItem value="editor">Editor</SelectItem>
+<SelectItem value="super_admin">Super Admin</SelectItem>
+<SelectItem value="admin">Admin</SelectItem>
 <SelectItem value="viewer">Viewer</SelectItem>
+<SelectItem value="contributor">Contributor</SelectItem>
+<SelectItem value="department_editor">Department Editor</SelectItem>
+<SelectItem value="department_viewer">Department Viewer</SelectItem>
 </SelectContent>
 </Select>
 <FormMessage />
@@ -1043,9 +1147,6 @@ className="hover:bg-gray-50 transition-colors"
 </div>
 <div>
 <div className="font-medium text-gray-900 text-sm">{user.name}</div>
-<div className="text-xs text-gray-500">
-{user.role === 'admin' ? 'Account Owner' : user.role === 'editor' ? 'Content Editor' : 'Team Member'}
-</div>
 </div>
 </div>
 </TableCell>
@@ -1164,7 +1265,7 @@ useEffect(() => {
     setCompanyInfo((prev) => {
       const newInfo = {
         tenantId: companyData.tenantId || prev.tenantId || "",
-        companyName: companyData.companyName || prev.companyName || "",
+        companyName: companyData.companyName || prev.companyName || (userData as any)?.companyName || "",
         address: companyData.address || prev.address || "",
         country: companyData.country || prev.country || "",
         financialYearEnd: companyData.financialYearEnd || prev.financialYearEnd || "",
@@ -1186,7 +1287,7 @@ useEffect(() => {
     setCompanyInfo((prev) => {
       const newInfo = {
         tenantId: prev.tenantId || "",
-        companyName: prev.companyName || "",
+        companyName: prev.companyName || (userData as any).companyName || "",
         address: prev.address || "",
         country: prev.country || "",
         financialYearEnd: prev.financialYearEnd || "",
@@ -2066,9 +2167,9 @@ transition={{ duration: 0.3 }}
         id="companyName"
         name="companyName"
         value={companyInfo.companyName}
-        onChange={handleInputChange}
+        readOnly
         placeholder=""
-        className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+        className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-gray-100 shadow-sm cursor-not-allowed"
       />
     </div>
 

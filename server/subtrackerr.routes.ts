@@ -54,6 +54,7 @@ import { Router } from "express";
 // @ts-ignore
 import { connectToDatabase } from "./mongo.js";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 import type { User } from "./types";
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 
@@ -1847,22 +1848,59 @@ router.delete("/api/employees/:id", async (req, res) => {
 
 // Add a new user
 router.post("/api/users", async (req, res) => {
+  const tenantId = req.user?.tenantId;
+  if (!tenantId) {
+    return res.status(401).json({ message: "Missing tenantId in user context" });
+  }
+  
   try {
+    const { password, name, email, role, status, department } = req.body;
+    
+    console.log("[SUBTRACKERR CREATE USER] Checking for duplicates - name:", name, "email:", email, "tenantId:", tenantId);
+    
     const db = await connectToDatabase();
-    const collection = db.collection("users");
-    // Multi-tenancy: set tenantId
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ message: "Missing tenantId in user context" });
+    
+    // Check if email already exists in login collection for this tenant
+    const existingUser = await db.collection("login").findOne({ email, tenantId });
+    if (existingUser) {
+      console.log("[SUBTRACKERR CREATE USER] Email already exists");
+      return res.status(400).json({ message: "Email already exists" });
     }
-    const user = {
-      ...req.body,
-      tenantId
-    };
-    // Optionally validate other fields here
-    const result = await collection.insertOne(user);
-    res.status(201).json({ insertedId: result.insertedId });
+    
+    // Check if name already exists in login collection for this tenant
+    const existingName = await db.collection("login").findOne({ fullName: name, tenantId });
+    console.log("[SUBTRACKERR CREATE USER] Checking fullName:", name, "Found:", !!existingName);
+    if (existingName) {
+      console.log("[SUBTRACKERR CREATE USER] User name already exists");
+      return res.status(400).json({ message: "User name already exists" });
+    }
+    
+    // Hash the password before storing
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Store in login collection with proper structure
+    const result = await db.collection("login").insertOne({
+      fullName: name,
+      email: email,
+      password: hashedPassword,
+      tenantId: tenantId,
+      role: role || "viewer",
+      status: status || "active",
+      department: department || null,
+      createdAt: new Date()
+    });
+    
+    // Return user without password
+    res.status(201).json({
+      _id: result.insertedId,
+      name: name,
+      email: email,
+      role: role || "viewer",
+      status: status || "active",
+      tenantId: tenantId
+    });
   } catch (error) {
+    console.error("User creation error:", error);
     res.status(500).json({ message: "Failed to add user", error });
   }
 });
@@ -1871,16 +1909,47 @@ router.post("/api/users", async (req, res) => {
 router.put("/api/users/:_id", async (req, res) => {
   try {
     const db = await connectToDatabase();
-    const collection = db.collection("users");
+    const collection = db.collection("login");
     const { _id } = req.params;
-    const user = req.body;
+    const updateData = req.body;
+    const tenantId = req.user?.tenantId;
+    
+    // Check if email is being updated and already exists (excluding current user)
+    if (updateData.email) {
+      const existingEmail = await collection.findOne({ 
+        email: updateData.email, 
+        tenantId,
+        _id: { $ne: new EmployeeObjectId(_id) }
+      });
+      if (existingEmail) {
+        return res.status(400).json({ message: "Email already exists" });
+      }
+    }
+    
+    // Check if name is being updated and already exists (excluding current user)
+    if (updateData.name) {
+      const existingName = await collection.findOne({ 
+        fullName: updateData.name, 
+        tenantId,
+        _id: { $ne: new EmployeeObjectId(_id) }
+      });
+      if (existingName) {
+        return res.status(400).json({ message: "User name already exists" });
+      }
+    }
+    
+    // If password is being updated, hash it
+    if (updateData.password) {
+      updateData.password = await bcrypt.hash(updateData.password, 10);
+    }
+    
     let filter;
     try {
       filter = { _id: new EmployeeObjectId(_id) };
     } catch {
       return res.status(400).json({ message: "Invalid user _id" });
     }
-    const update = { $set: user };
+    const update = { $set: updateData };
     const result = await collection.updateOne(filter, update);
     if (result.matchedCount === 1) {
       res.status(200).json({ message: "User updated" });

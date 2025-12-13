@@ -78,6 +78,7 @@ export class MongoStorage implements IStorage {
     // Always generate a new ObjectId for MongoDB _id
     const { ObjectId } = await import("mongodb");
     const doc = { ...user, tenantId, _id: new ObjectId() };
+    console.log(`✓ Creating user in users collection: ${user.email}, password length: ${user.password?.length}`);
     await db.collection("users").insertOne(doc);
     // Return user with both id and _id for frontend compatibility
         return {

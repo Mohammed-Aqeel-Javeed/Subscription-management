@@ -362,7 +362,13 @@ return (
 		 											return compliance?.filingName || compliance?.policy || 'Compliance Filing';
 		 										})()
 		 									)
-		 									: (notification.subscriptionName || 'Unknown Subscription')}
+		 									: (() => {
+		 										const subscription = subscriptions.find(sub => 
+		 											String(sub.id) === String(notification.subscriptionId) || 
+		 											String((sub as any)._id) === String(notification.subscriptionId)
+		 										);
+		 										return subscription?.serviceName || notification.subscriptionName || 'Unknown Subscription';
+		 									})()}
  									</CardTitle>
 					<div className="flex items-center gap-2 mt-1">
 									{/* Category badge */}
@@ -538,16 +544,28 @@ isValidDate(notification.subscriptionEndDate)
 	 'Action Required:'}
 </strong> 
 {notification.eventType === 'created' ? (
-	notification.type === 'compliance' ? (
+	 notification.type === 'compliance' ? (
 		<>The compliance filing "{notification.filingName || 'Unknown Filing'}" has been successfully created.</>
 	) : (
-		<>The subscription "{notification.subscriptionName || 'Unknown Subscription'}" has been successfully created.</>
+		<>The subscription "{(() => {
+			const subscription = subscriptions.find(sub => 
+				String(sub.id) === String(notification.subscriptionId) || 
+				String((sub as any)._id) === String(notification.subscriptionId)
+			);
+			return subscription?.serviceName || 'Unknown Subscription';
+		})()}" has been successfully created.</>
 	)
 ) : notification.eventType === 'deleted' ? (
 	notification.type === 'compliance' ? (
 		<>The compliance filing "{notification.filingName || 'Unknown Filing'}" has been deleted.</>
 	) : (
-		<>The subscription "{notification.subscriptionName || 'Unknown Subscription'}" has been deleted.</>
+		<>The subscription "{(() => {
+			const subscription = subscriptions.find(sub => 
+				String(sub.id) === String(notification.subscriptionId) || 
+				String((sub as any)._id) === String(notification.subscriptionId)
+			);
+			return subscription?.serviceName || 'Unknown Subscription';
+		})()}" has been deleted.</>
 	)
 ) : notification.type === 'compliance' ? (
 <>Your {notification.filingName || 'compliance filing'} submission deadline is {isValidDate(notification.submissionDeadline)
@@ -555,7 +573,13 @@ isValidDate(notification.subscriptionEndDate)
 : 'approaching'}.
 Please review and submit your compliance filing on time.</>
 ) : (
-<>Your {notification.subscriptionName || 'Unknown Subscription'} subscription
+<>Your {(() => {
+	const subscription = subscriptions.find(sub => 
+		String(sub.id) === String(notification.subscriptionId) || 
+		String((sub as any)._id) === String(notification.subscriptionId)
+	);
+	return subscription?.serviceName || 'Unknown Subscription';
+})()} subscription
 will renew on {isValidDate(notification.subscriptionEndDate)
 ? format(new Date(notification.subscriptionEndDate ?? ''), 'MMMM dd, yyyy')
 : 'N/A'}.

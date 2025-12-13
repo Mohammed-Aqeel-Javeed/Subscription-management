@@ -98,6 +98,12 @@ export type User = {
 	status: string;
 	lastLogin?: string;
 };
+
+export type Company = {
+	tenantId: string;
+	companyName: string;
+	isActive: boolean;
+};
 export type InsertUser = Omit<User, 'id' | 'lastLogin'>;
 export type Reminder = {
 	id: number;

@@ -270,7 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Signup =====
   app.post("/api/signup", async (req, res) => {
     try {
-      const { fullName, email, password, tenantId, defaultCurrency } = req.body;
+      const { fullName, email, password, tenantId, defaultCurrency, companyName } = req.body;
       if (!fullName || !email || !password || !tenantId) {
         return res
           .status(400)
@@ -307,8 +307,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fullName, 
         email, 
         password: hashedPassword, 
-        tenantId, 
+        tenantId,
+        companyName: companyName || fullName + "'s Company",
         defaultCurrency: defaultCurrency || null,
+        role: "super_admin", // First user gets super_admin role
+        status: "active",
         createdAt: new Date() 
       };
       await db.collection("signup").insertOne(doc);
@@ -328,26 +331,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/login", async (req, res) => {
     try {
       const { email, password } = req.body;
+      console.log("[LOGIN] Attempting login for:", email);
       if (!email || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
-  const db = await connectToDatabase();
-  // Use 'login' collection for authentication
-  const user = await db.collection("login").findOne({ email });
+      const db = await connectToDatabase();
+      
+      // First try the 'login' collection (primary auth collection)
+      let user = await db.collection("login").findOne({ email });
+      let isNewUserSystem = false;
+      console.log("[LOGIN] Found in login collection:", !!user);
+      
+      // If not found in login collection, try the 'users' collection (RBAC users with passwords)
       if (!user) {
+        user = await db.collection("users").findOne({ email, password: { $exists: true } });
+        isNewUserSystem = !!user;
+        console.log("[LOGIN] Found in users collection:", !!user);
+      }
+      
+      if (!user) {
+        console.log("[LOGIN] User not found in any collection");
         return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      console.log("[LOGIN] User found. Has password field:", !!user.password, "Collection:", isNewUserSystem ? "users" : "login");
+
+      // Check if user is active (only for new user system)
+      if (isNewUserSystem && user.status !== "active") {
+        return res.status(401).json({ message: "Account is inactive" });
       }
 
-      // Compare the provided password with the hashed password
-      const isPasswordValid = await bcrypt.compare(password, user.password);
+      // All passwords are now hashed with bcrypt
+      let isPasswordValid = false;
+      if (user.password) {
+        isPasswordValid = await bcrypt.compare(password, user.password);
+        console.log("[LOGIN] Password validation result:", isPasswordValid);
+      } else {
+        console.log("[LOGIN] No password field found on user");
+      }
+      
       if (!isPasswordValid) {
+        console.log("[LOGIN] Password validation failed");
         return res.status(401).json({ message: "Invalid email or password" });
       }
-      // Always include tenantId in JWT and response
+      
+      console.log("[LOGIN] Login successful for:", email);
+
+      // Update last login in both collections if applicable
+      await db.collection("login").updateOne(
+        { _id: user._id },
+        { $set: { lastLogin: new Date() } }
+      );
+      if (isNewUserSystem) {
+        await db.collection("users").updateOne(
+          { email: user.email },
+          { $set: { lastLogin: new Date() } }
+        );
+      }
+
+      // Include role and department in JWT and response
       const tokenPayload: any = {
         userId: user._id,
         email: user.email,
-        tenantId: user.tenantId || null
+        tenantId: user.tenantId || null,
+        role: user.role || "viewer",
+        department: user.department || null
       };
       const token = jwt.sign(
         tokenPayload,
@@ -372,8 +420,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user: {
           userId: user._id,
           email: user.email,
+          name: user.name,
           tenantId: user.tenantId || null,
-          fullName: user.fullName || null
+          role: user.role || "viewer",
+          department: user.department || null,
+          status: user.status
         }
       });
     } catch (err) {
@@ -385,23 +436,209 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/me", async (req, res) => {
     try {
       const user = req.user as any;
-      if (!user?.userId) {
+      if (!user?.userId || !user?.tenantId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
       const db = await connectToDatabase();
-      const dbUser = await db.collection("login").findOne({ _id: new ObjectId(user.userId) });
-      if (!dbUser) {
+      
+      // Fetch the user record that matches BOTH the userId (email) AND the current tenantId
+      // First get the email from the userId
+      const userRecord = await db.collection("login").findOne({ _id: new ObjectId(user.userId) });
+      if (!userRecord) {
         return res.status(404).json({ message: "User not found" });
       }
+      
+      // Now fetch the specific company record for this user with the current tenantId
+      const dbUser = await db.collection("login").findOne({ 
+        email: userRecord.email, 
+        tenantId: user.tenantId 
+      });
+      
+      if (!dbUser) {
+        return res.status(404).json({ message: "Company not found for this tenant" });
+      }
+      
+      // Get role and department directly from login collection
+      const role = dbUser.role || "viewer";
+      const department = dbUser.department || undefined;
+      
+      console.log(`[/api/me] User: ${dbUser.email}, Role: ${role}, Department: ${department}`);
+      
       res.status(200).json({
         userId: dbUser._id,
         email: dbUser.email,
         fullName: dbUser.fullName || null,
+        companyName: dbUser.companyName || null,
         tenantId: dbUser.tenantId || null,
-        defaultCurrency: dbUser.defaultCurrency || null
+        defaultCurrency: dbUser.defaultCurrency || null,
+        role: role,
+        department: department
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch user data" });
+    }
+  });
+
+  // ===== Get User's Companies =====
+  app.get("/api/user/companies", async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user?.userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const db = await connectToDatabase();
+      
+      // Get all companies/tenants this user has access to
+      const companies = await db.collection("login")
+        .find({ email: (await db.collection("login").findOne({ _id: new ObjectId(user.userId) }))?.email })
+        .toArray();
+      
+      const companyList = companies.map(c => ({
+        tenantId: c.tenantId,
+        companyName: c.companyName || 'Unnamed Company',
+        isActive: c.tenantId === user.tenantId
+      }));
+      
+      res.status(200).json(companyList);
+    } catch (err) {
+      console.error("Failed to fetch companies:", err);
+      res.status(500).json({ message: "Failed to fetch companies" });
+    }
+  });
+
+  // ===== Switch Company =====
+  app.post("/api/user/switch-company", async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user?.userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { tenantId } = req.body;
+      if (!tenantId) {
+        return res.status(400).json({ message: "tenantId is required" });
+      }
+      
+      const db = await connectToDatabase();
+      const dbUser = await db.collection("login").findOne({ _id: new ObjectId(user.userId) });
+      
+      if (!dbUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Verify user has access to this tenant
+      const hasAccess = await db.collection("login").findOne({ 
+        email: dbUser.email, 
+        tenantId 
+      });
+      
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied to this company" });
+      }
+      
+      // Generate new token with updated tenantId
+      const tokenPayload = {
+        userId: user.userId,
+        email: dbUser.email,
+        tenantId: tenantId
+      };
+      
+      const token = jwt.sign(
+        tokenPayload,
+        process.env.JWT_SECRET || "subs_secret_key",
+        { expiresIn: "7d" }
+      );
+      
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
+      
+      res.status(200).json({ 
+        message: "Company switched successfully",
+        tenantId 
+      });
+    } catch (err) {
+      console.error("Failed to switch company:", err);
+      res.status(500).json({ message: "Failed to switch company" });
+    }
+  });
+
+  // ===== Add Company =====
+  app.post("/api/user/add-company", async (req, res) => {
+    try {
+      const { email, password, companyName, defaultCurrency, setAsDefault } = req.body;
+      
+      if (!email || !password || !companyName) {
+        return res.status(400).json({ message: "Email, password and company name are required" });
+      }
+
+      const db = await connectToDatabase();
+      const dbUser = await db.collection("login").findOne({ email: email });
+      
+      if (!dbUser) {
+        return res.status(404).json({ message: "Invalid email or password" });
+      }
+
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, dbUser.password);
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      // Generate new tenantId
+      const newTenantId = 'tenant-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
+
+      // Create new company record
+      const newCompany = {
+        email: dbUser.email,
+        password: dbUser.password,
+        fullName: dbUser.fullName,
+        tenantId: newTenantId,
+        companyName: companyName,
+        defaultCurrency: defaultCurrency || dbUser.defaultCurrency || 'USD',
+        role: "super_admin", // User gets super_admin role for new company
+        status: "active",
+        createdAt: new Date()
+      };
+
+      await db.collection("login").insertOne(newCompany);
+
+      // If setAsDefault, switch to new company by issuing new token
+      if (setAsDefault) {
+        const tokenPayload = {
+          userId: dbUser._id.toString(),
+          email: dbUser.email,
+          tenantId: newTenantId
+        };
+        
+        const token = jwt.sign(
+          tokenPayload,
+          process.env.JWT_SECRET || "subs_secret_key",
+          { expiresIn: "7d" }
+        );
+        
+        res.cookie("token", token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "none",
+          path: "/",
+          maxAge: 7 * 24 * 60 * 60 * 1000
+        });
+      }
+
+      res.status(201).json({ 
+        message: "Company added successfully",
+        tenantId: newTenantId,
+        companyName: companyName,
+        switchedToNew: setAsDefault
+      });
+    } catch (err) {
+      console.error("Failed to add company:", err);
+      res.status(500).json({ message: "Failed to add company" });
     }
   });
 
@@ -410,9 +647,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
-      const users = await storage.getUsers(tenantId);
-      res.json(users);
-    } catch {
+      const db = await connectToDatabase();
+      const users = await db.collection("login").find({ tenantId }).toArray();
+      
+      // Map to match expected format and remove passwords
+      const formattedUsers = users.map(user => ({
+        id: user._id.toString(),
+        _id: user._id,
+        name: user.fullName || user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        tenantId: user.tenantId
+      }));
+      
+      res.json(formattedUsers);
+    } catch (error) {
+      console.error("Failed to fetch users:", error);
       res.status(500).json({ message: "Failed to fetch users" });
     }
   });
@@ -434,15 +685,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
-      const userData = insertUserSchema.parse({ ...req.body, tenantId });
-      const user = await storage.createUser(userData, tenantId);
-      res.status(201).json(user);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res
-          .status(400)
-          .json({ message: "Invalid user data", errors: error.issues });
+      const { password, name, email, role, status, department } = req.body;
+      
+      console.log("[CREATE USER] Checking for duplicates - name:", name, "email:", email, "tenantId:", tenantId);
+      
+      const db = await connectToDatabase();
+      
+      // Check if email already exists in login collection for this tenant
+      const existingUser = await db.collection("login").findOne({ email, tenantId });
+      if (existingUser) {
+        console.log("[CREATE USER] Email already exists");
+        return res.status(400).json({ message: "Email already exists" });
       }
+      
+      // Check if name already exists in login collection for this tenant
+      const existingName = await db.collection("login").findOne({ fullName: name, tenantId });
+      console.log("[CREATE USER] Checking fullName:", name, "Found:", !!existingName);
+      if (existingName) {
+        console.log("[CREATE USER] User name already exists");
+        return res.status(400).json({ message: "User name already exists" });
+      }
+      
+      // Hash the password before storing
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const result = await db.collection("login").insertOne({
+        fullName: name,
+        email: email,
+        password: hashedPassword,
+        tenantId: tenantId,
+        role: role || "viewer",
+        status: status || "active",
+        department: department || null,
+        createdAt: new Date()
+      });
+      
+      // Return the created user without password
+      res.status(201).json({
+        _id: result.insertedId,
+        name: name,
+        email: email,
+        role: role || "viewer",
+        status: status || "active",
+        tenantId: tenantId
+      });
+    } catch (error) {
+      console.error("User creation error:", error);
       res.status(500).json({ message: "Failed to create user" });
     }
   });
@@ -452,16 +739,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
       const id = req.params.id;
-      const userData = insertUserSchema.partial().parse(req.body);
-      const user = await storage.updateUser(id, userData, tenantId);
-      if (!user) return res.status(404).json({ message: "User not found" });
-      res.json(user);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res
-          .status(400)
-          .json({ message: "Invalid user data", errors: error.issues });
+      const { name, email, role, status, password } = req.body;
+      const db = await connectToDatabase();
+      
+      // Check if email is being updated and already exists (excluding current user)
+      if (email) {
+        const existingEmail = await db.collection("login").findOne({ 
+          email, 
+          tenantId,
+          _id: { $ne: new ObjectId(id) }
+        });
+        if (existingEmail) {
+          return res.status(400).json({ message: "Email already exists" });
+        }
       }
+      
+      // Check if name is being updated and already exists (excluding current user)
+      if (name) {
+        const existingName = await db.collection("login").findOne({ 
+          fullName: name, 
+          tenantId,
+          _id: { $ne: new ObjectId(id) }
+        });
+        if (existingName) {
+          return res.status(400).json({ message: "User name already exists" });
+        }
+      }
+      
+      // Build update object
+      const updateData: any = {};
+      if (name) updateData.fullName = name;
+      if (email) updateData.email = email;
+      if (role) updateData.role = role;
+      if (status) updateData.status = status;
+      if (password) updateData.password = await bcrypt.hash(password, 10);
+      
+      // Update in login collection
+      const result = await db.collection("login").findOneAndUpdate(
+        { _id: new ObjectId(id), tenantId },
+        { $set: updateData },
+        { returnDocument: "after" }
+      );
+      
+      if (!result) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json({
+        id: result._id.toString(),
+        name: result.fullName,
+        email: result.email,
+        role: result.role,
+        status: result.status,
+        tenantId: result.tenantId
+      });
+    } catch (error) {
+      console.error("Failed to update user:", error);
       res.status(500).json({ message: "Failed to update user" });
     }
   });
@@ -471,10 +804,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
       const id = req.params.id;
-      const deleted = await storage.deleteUser(id, tenantId);
-      if (!deleted) return res.status(404).json({ message: "User not found" });
+      const db = await connectToDatabase();
+      
+      // Delete from login collection
+      const result = await db.collection("login").deleteOne({
+        _id: new ObjectId(id),
+        tenantId: tenantId
+      });
+      
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
       res.status(204).send();
-    } catch {
+    } catch (error) {
+      console.error("Failed to delete user:", error);
       res.status(500).json({ message: "Failed to delete user" });
     }
   });
@@ -751,6 +1095,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res
         .status(500)
         .json({ success: false, message: "Error deleting notification" });
+    }
+  });
+
+  // Fix companies without names
+  app.post("/api/fix-company-names", async (req, res) => {
+    try {
+      const db = await connectToDatabase();
+      const companies = await db.collection("login").find({ companyName: { $exists: false } }).toArray();
+      
+      let fixed = 0;
+      for (const company of companies) {
+        await db.collection("login").updateOne(
+          { _id: company._id },
+          { $set: { companyName: company.fullName + "'s Company" } }
+        );
+        fixed++;
+      }
+      
+      res.status(200).json({ message: `Fixed ${fixed} companies without names` });
+    } catch (err) {
+      console.error("Fix company names error:", err);
+      res.status(500).json({ message: "Failed to fix company names" });
     }
   });
 
