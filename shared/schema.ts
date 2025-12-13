@@ -7,7 +7,9 @@ export const users = pgTable("users", {
   tenantId: text("tenant_id").notNull(), // Multi-tenancy
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  role: text("role").notNull().default("viewer"), // admin, viewer
+  password: text("password").notNull(),
+  role: text("role").notNull().default("viewer"), // super_admin, admin, viewer, contributor, department_editor, department_viewer
+  department: text("department"), // For department-based roles
   status: text("status").notNull().default("active"), // active, inactive
   lastLogin: timestamp("last_login"),
 });

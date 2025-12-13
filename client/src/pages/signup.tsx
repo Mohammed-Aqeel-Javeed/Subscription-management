@@ -1,13 +1,15 @@
 import React, { useState } from "react";
-import { CheckCircle2, XCircle, Eye, EyeOff } from "lucide-react";
+import { CheckCircle2, XCircle, Eye, EyeOff, Building2 } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../lib/config";
+import AddCompanyModal from "../components/modals/add-company-modal";
 
 export default function SignupPage() {
-  const [step, setStep] = useState<"details" | "otp">("details");
+  const [step, setStep] = useState<"details" | "otp" | "success">("details");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -18,6 +20,7 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const navigate = useNavigate();
   
   // Complete currency list
@@ -279,7 +282,7 @@ export default function SignupPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ fullName, email, password, tenantId, defaultCurrency: companyCurrency })
+        body: JSON.stringify({ fullName, email, password, tenantId, defaultCurrency: companyCurrency, companyName })
       });
 
       const signupData = await signupRes.json();
@@ -290,11 +293,9 @@ export default function SignupPage() {
       }
 
       setSuccess("Signup successful! Redirecting to login...");
-      
-      // Redirect to login after 2 seconds
       setTimeout(() => {
         navigate("/login");
-      }, 2000);
+      }, 1500);
     } catch (err) {
       setError("Network error - please try again");
     } finally {
@@ -442,6 +443,27 @@ export default function SignupPage() {
                     type="text"
                     value={fullName}
                     onChange={e => setFullName(e.target.value)}
+                    required
+                    style={{
+                      width: "100%",
+                      padding: "8px 11px",
+                      marginTop: 4,
+                      borderRadius: 999,
+                      border: "1px solid #e5e7eb",
+                      fontSize: 15,
+                      background: "#f9fafb",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
+                    Company Name
+                  </label>
+                  <input
+                    type="text"
+                    value={companyName}
+                    onChange={e => setCompanyName(e.target.value)}
                     required
                     style={{
                       width: "100%",
@@ -690,6 +712,31 @@ export default function SignupPage() {
                 >
                   {loading ? "Sending OTP..." : "Send OTP"}
                 </button>
+                
+                <button
+                  type="button"
+                  onClick={() => setShowAddCompanyModal(true)}
+                  style={{
+                    width: "100%",
+                    padding: 10,
+                    border: "2px solid #4f46e5",
+                    background: "white",
+                    color: "#4f46e5",
+                    borderRadius: 999,
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: "pointer",
+                    marginTop: 8,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Building2 size={16} />
+                  Add Company (2nd, 3rd, etc.)
+                </button>
+                
                 {/* Social sign-in UI (visual only) */}
                 <div
                   style={{
@@ -887,7 +934,7 @@ export default function SignupPage() {
               </form>
             )}
           </div>
-
+          
           <div style={{ textAlign: "center", marginTop: 10, fontSize: 12 }}>
             <span style={{ color: "#6b7280" }}>Already have an account? </span>
             <button
@@ -906,6 +953,15 @@ export default function SignupPage() {
           </div>
         </div>
       </div>
+
+      {/* Add Company Modal */}
+      <AddCompanyModal 
+        open={showAddCompanyModal} 
+        onOpenChange={setShowAddCompanyModal}
+        onSuccess={() => {
+          // Optional: you can add additional logic here
+        }}
+      />
     </div>
   );
 }

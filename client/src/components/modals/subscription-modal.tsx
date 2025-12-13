@@ -448,6 +448,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [newOwnerRole, setNewOwnerRole] = useState<string>('');
   const [newOwnerStatus, setNewOwnerStatus] = useState<string>('Active');
   const [newOwnerDepartment, setNewOwnerDepartment] = useState<string>('');
+  const [documents, setDocuments] = useState<Array<{name: string, url: string}>>([]);
+  const [showDocumentDialog, setShowDocumentDialog] = useState<boolean>(false);
   
   // Vendor autocomplete state
   const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
@@ -538,6 +540,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setServiceNameError("");
       setLcyAmount('');
       setTotalAmount('');
+      setDocuments([]);
       
       // Reset form
       form.reset({
@@ -583,6 +586,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       // Set auto renewal state from subscription data
       setAutoRenewal(subscription.autoRenewal ?? true);
+      
+      // Check if subscription has documents
+      if ((subscription as any)?.documents && Array.isArray((subscription as any).documents)) {
+        setDocuments((subscription as any).documents);
+      } else if ((subscription as any)?.document) {
+        // Legacy support for single document
+        setDocuments([{name: 'Document 1', url: (subscription as any).document}]);
+      } else {
+        setDocuments([]);
+      }
       
       form.reset({
         serviceName: subscription.serviceName || "",
@@ -940,6 +953,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         startDate: new Date(data.startDate ?? ""),
         nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
         tenantId,
+        documents: documents.length > 0 ? documents : undefined, // Include documents if uploaded
       };
       if (isEditing) {
         // Update existing subscription
@@ -1418,7 +1432,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     )}
-                    Modify
+                    Action
                     <ChevronDown className="h-3 w-3 ml-1" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -1444,6 +1458,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     </svg>
                     Update
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setShowDocumentDialog(true)}
+                    className="cursor-pointer flex items-center gap-2 hover:bg-indigo-50 focus:bg-indigo-50 px-3 py-2"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    {documents.length > 0 ? `Manage Documents (${documents.length})` : 'Upload Document'}
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               {/* Updated History Button - Always visible but disabled when adding new subscription */}
@@ -1461,7 +1484,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 title={!isEditing ? "History is available only for existing subscriptions" : undefined}
               >
                 <History className="h-4 w-4" />
-                View
+                Audit Log
               </Button>
               <Button
                 type="button"
@@ -2076,34 +2099,32 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             }
                           }
                         }}
-                        disabled={employeesRaw.length === 0}
                       >
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
-                          {employeesRaw.length > 0 ? (
-                            employeesRaw.map((emp: any) => {
-                              // Check if there are duplicate names
-                              const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
-                              const displayName = duplicateNames.length > 1 
-                                ? `${emp.name} (${emp.email})` 
-                                : emp.name;
-                              const uniqueValue = duplicateNames.length > 1
-                                ? `${emp.name}|${emp.email}`
-                                : emp.name;
-                              
-                              return (
-                                <SelectItem 
-                                  key={emp._id || emp.id || emp.email} 
-                                  value={uniqueValue} 
-                                  className="dropdown-item"
-                                >
-                                  {displayName}
-                                </SelectItem>
-                              );
-                            })
-                          ) : null}
+                          {employeesRaw.length > 0
+                            ? employeesRaw.map((emp: any) => {
+                                // Check if there are duplicate names
+                                const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                                const displayName = duplicateNames.length > 1 
+                                  ? `${emp.name} (${emp.email})` 
+                                  : emp.name;
+                                const uniqueValue = duplicateNames.length > 1
+                                  ? `${emp.name}|${emp.email}`
+                                  : emp.name;
+                                return (
+                                  <SelectItem 
+                                    key={emp._id || emp.id || emp.email} 
+                                    value={uniqueValue} 
+                                    className="dropdown-item"
+                                  >
+                                    {displayName}
+                                  </SelectItem>
+                                );
+                              })
+                            : <SelectItem value="no-owner" disabled className="dropdown-item disabled">No owners found</SelectItem>}
                           {/* Add Owner option at the end */}
                           <SelectItem 
                             value="add-new-owner" 
@@ -2111,9 +2132,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           >
                             + New
                           </SelectItem>
-                          {employeesRaw.length === 0 && (
-                            <SelectItem value="no-owner" disabled className="dropdown-item disabled">No owners found</SelectItem>
-                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -2130,8 +2148,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       <FormControl>
                         <Input 
                           type="email"
-                          className="w-full border-slate-300 rounded-lg p-2 text-base"
+                          className="w-full border-slate-300 rounded-lg p-2 text-base bg-gray-100 cursor-not-allowed"
                           {...field}
+                          readOnly
                         />
                       </FormControl>
                       <FormMessage />
@@ -2384,6 +2403,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   )}
                 />
               </div>
+              
               <div className="flex justify-end gap-4 mt-10 pt-6 border-t border-gray-200 bg-gray-50/50 -mx-8 px-8 -mb-8 pb-8 rounded-b-2xl">
                 <Button 
                   type="button" 
@@ -3026,6 +3046,161 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Document Management Dialog */}
+      <Dialog open={showDocumentDialog} onOpenChange={setShowDocumentDialog}>
+        <DialogContent className="max-w-2xl bg-white shadow-2xl border-2 border-gray-200">
+          <DialogHeader className="border-b border-gray-200 pb-3">
+            <DialogTitle className="text-lg font-semibold text-gray-900">Manage Documents</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-4 bg-white">
+            {/* Document List */}
+            {documents.length > 0 && (
+              <div className="space-y-2 max-h-[240px] overflow-y-auto pr-2">
+                {documents.map((doc, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all duration-200">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900">{doc.name}</p>
+                        <p className="text-xs text-gray-600 truncate">
+                          {doc.url.startsWith('data:application/pdf') ? 'PDF Document' : 
+                           doc.url.startsWith('data:image') ? 'Image File' : 'Document'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            const newWindow = window.open('', '_blank');
+                            if (newWindow) {
+                              if (doc.url.startsWith('data:application/pdf')) {
+                                newWindow.document.write(`
+                                  <html>
+                                    <head><title>${doc.name}</title></head>
+                                    <body style="margin:0">
+                                      <iframe src="${doc.url}" style="width:100%;height:100vh;border:none;"></iframe>
+                                    </body>
+                                  </html>
+                                `);
+                              } else if (doc.url.startsWith('data:image')) {
+                                newWindow.document.write(`
+                                  <html>
+                                    <head><title>${doc.name}</title></head>
+                                    <body style="margin:0;display:flex;justify-content:center;align-items:center;background:#000;">
+                                      <img src="${doc.url}" style="max-width:100%;max-height:100vh;"/>
+                                    </body>
+                                  </html>
+                                `);
+                              }
+                            }
+                          } catch (error) {
+                            toast({
+                              title: "Error",
+                              description: "Failed to view document",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                      >
+                        View
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDocuments(documents.filter((_, i) => i !== index));
+                          toast({
+                            title: "Document Removed",
+                            description: `${doc.name} has been removed`,
+                            duration: 2000,
+                          });
+                        }}
+                        className="p-1.5 text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+                input.onchange = async (e: any) => {
+                  const file = e.target?.files?.[0];
+                  if (file) {
+                    try {
+                      const reader = new FileReader();
+                      reader.onloadend = async () => {
+                        const base64String = reader.result as string;
+                        const newDocName = `File ${documents.length + 1}`;
+                        setDocuments([...documents, {name: newDocName, url: base64String}]);
+                        toast({
+                          title: "Success",
+                          description: `${newDocName} uploaded successfully`,
+                          duration: 2000,
+                        });
+                      };
+                      reader.readAsDataURL(file);
+                    } catch (error) {
+                      toast({
+                        title: "Error",
+                        description: "Failed to process document",
+                        variant: "destructive",
+                      });
+                    }
+                  }
+                };
+                input.click();
+              }}
+              className="w-full py-6 border-2 border-dashed border-blue-400 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg hover:border-blue-600 hover:bg-gradient-to-br hover:from-blue-100 hover:to-indigo-100 transition-all duration-200 flex flex-col items-center justify-center gap-2 text-blue-700 hover:text-blue-900"
+            >
+              <div className="h-12 w-12 bg-blue-600 rounded-full flex items-center justify-center">
+                <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <span className="text-sm font-semibold">Click to Upload Document</span>
+              <span className="text-xs text-gray-600">PDF, DOC, DOCX, JPG, JPEG, PNG (up to 50MB)</span>
+            </button>
+          </div>
+          <div className="flex justify-between items-center gap-3 pt-3 border-t border-gray-200 bg-gray-50 -mx-6 px-6 -mb-6 pb-4 rounded-b-lg">
+            <span className="text-xs text-gray-600">
+              {documents.length} document{documents.length !== 1 ? 's' : ''} uploaded
+            </span>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowDocumentDialog(false)}
+                className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 text-sm px-4 py-1.5"
+              >
+                Close
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setShowDocumentDialog(false)}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5"
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

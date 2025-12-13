@@ -59,3 +59,30 @@ export const optionalAuth = (req: AuthenticatedRequest, res: Response, next: Nex
   
   next();
 };
+
+// Role-based authorization middleware
+export const requireRole = (...allowedRoles: string[]) => {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const user = req.user as any;
+    
+    if (!user || !user.role) {
+      return res.status(403).json({ message: "Access denied: No role assigned" });
+    }
+    
+    // Super admin has access to everything
+    if (user.role === 'super_admin') {
+      return next();
+    }
+    
+    // Check if user's role is in the allowed roles
+    if (allowedRoles.includes(user.role)) {
+      return next();
+    }
+    
+    return res.status(403).json({ 
+      message: "Access denied: Insufficient permissions",
+      requiredRoles: allowedRoles,
+      userRole: user.role
+    });
+  };
+};
