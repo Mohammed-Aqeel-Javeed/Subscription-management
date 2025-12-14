@@ -12,7 +12,10 @@ interface CanProps {
 export function Can({ I, a, field, children, fallback = null }: CanProps) {
   const ability = useAbility();
   
-  if (ability.can(I, a as Subject, field)) {
+  const canPerform = ability.can(I, a as Subject, field);
+  console.log(`[Can] Checking: ${I} ${a}${field ? ` (${field})` : ''} = ${canPerform}`);
+  
+  if (canPerform) {
     return <>{children}</>;
   }
   

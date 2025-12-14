@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
+import { Can } from "@/components/Can";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -589,13 +590,15 @@ export default function GovernmentLicense() {
             </div>
             
             <div className="flex items-center space-x-3">
-              <Button
-                onClick={handleAddNew}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add License
-              </Button>
+              <Can I="create" a="License">
+                <Button
+                  onClick={handleAddNew}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add License
+                </Button>
+              </Can>
             </div>
           </div>
           {/* Key Metrics Cards */}
@@ -723,15 +726,7 @@ export default function GovernmentLicense() {
                       : "Get started by adding your first government license"
                     }
                   </p>
-                  {!searchTerm && statusFilter === "all" && (
-                    <Button 
-                      onClick={handleAddNew}
-                      className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add First License
-                    </Button>
-                  )}
+                  {/* Add First License button removed as requested */}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
