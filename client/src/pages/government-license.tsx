@@ -820,22 +820,26 @@ export default function GovernmentLicense() {
                             </TableCell>
                             <TableCell className="px-4 py-3 text-right">
                               <div className="flex gap-2 justify-end">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleEdit(license)}
-                                  className="hover:bg-indigo-50 hover:border-indigo-300"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDelete(license.id)}
-                                  className="hover:bg-red-50 hover:border-red-300 text-red-600"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <Can I="update" a="License">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEdit(license)}
+                                    className="hover:bg-indigo-50 hover:border-indigo-300"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </Can>
+                                <Can I="delete" a="License">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDelete(license.id)}
+                                    className="hover:bg-red-50 hover:border-red-300 text-red-600"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </Can>
                               </div>
                             </TableCell>
                           </motion.tr>
@@ -1112,21 +1116,50 @@ export default function GovernmentLicense() {
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-slate-700">Department</label>
                         <Select
-                          value={form.watch('department') || ''}
-                          onValueChange={(value) => {
-                            form.setValue('department', value);
-                            setSelectedDepartments([value]);
-                          }}
+                          value={selectedDepartments.length > 0 ? selectedDepartments.join(',') : ''}
+                          onValueChange={() => {}}
+                          disabled={departmentsLoading}
                         >
-                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
-                            <SelectValue placeholder="Select department" />
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base min-h-[44px] flex items-start justify-start overflow-hidden">
+                            <div className="w-full overflow-hidden">
+                              {selectedDepartments.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 w-full">
+                                  {selectedDepartments.map((dept) => (
+                                    <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
+                                      <span className="truncate max-w-[80px]">{dept}</span>
+                                      <button
+                                        type="button"
+                                        onClick={e => { e.stopPropagation(); removeDepartment(dept); }}
+                                        className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
+                                        tabIndex={-1}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">Select departments</span>
+                              )}
+                            </div>
                           </SelectTrigger>
                           <SelectContent>
                             {departments && departments.length > 0 ? (
-                              departments.map((dept) => (
-                                <SelectItem key={dept.name} value={dept.name}>
-                                  {dept.name}
-                                </SelectItem>
+                              departments.map(dept => (
+                                <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                                  <Checkbox
+                                    id={`dept-${dept.name}`}
+                                    checked={selectedDepartments.includes(dept.name)}
+                                    onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
+                                    disabled={departmentsLoading}
+                                  />
+                                  <label
+                                    htmlFor={`dept-${dept.name}`}
+                                    className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                                  >
+                                    {dept.name}
+                                  </label>
+                                </div>
                               ))
                             ) : (
                               <SelectItem value="no-department" disabled>No departments available</SelectItem>

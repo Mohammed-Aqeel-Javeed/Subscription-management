@@ -8,10 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Download, Upload } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Download, Upload, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import Papa from 'papaparse';
+import { API_BASE_URL } from "@/lib/config";
 
 // Predefined Governing Authorities
 const GOVERNING_AUTHORITIES = [
@@ -21,6 +23,12 @@ const GOVERNING_AUTHORITIES = [
   "AGD",
   "MOM"
 ];
+
+// Define the Department interface
+interface Department {
+  name: string;
+  visible: boolean;
+}
 
 // Helper functions remain the same
 const mapStatus = (status: string): string => {
@@ -239,6 +247,8 @@ export default function Compliance() {
     paymentDate?: string;
     submissionAmount?: string | number;
     paymentMethod?: string;
+    department?: string;
+    departments?: string[];
   };
   
   const [searchTerm, setSearchTerm] = useState("");
@@ -269,7 +279,12 @@ export default function Compliance() {
     paymentDate: "",
     submissionAmount: "",
     paymentMethod: "",
+    department: "",
+    departments: [] as string[],
   });
+  
+  // Department management state
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   
   // Fetch employees for the submit by dropdown with auto-refresh
   const { data: employees = [], isLoading: isLoadingEmployees } = useQuery({
@@ -287,6 +302,51 @@ export default function Compliance() {
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Query for departments
+  const { data: departments, isLoading: departmentsLoading } = useQuery<Department[]>({
+    queryKey: ["/api/company/departments"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/company/departments`, { credentials: "include" });
+      return res.json();
+    }
+  });
+  
+  // Parse departments from compliance if it exists
+  const parseDepartments = (deptString?: string) => {
+    if (!deptString) return [];
+    try {
+      return JSON.parse(deptString);
+    } catch {
+      // If parsing fails, treat as a single department
+      return [deptString];
+    }
+  };
+  
+  // Handle department selection
+  const handleDepartmentChange = (departmentName: string, checked: boolean) => {
+    const newSelectedDepartments = checked
+      ? [...selectedDepartments, departmentName]
+      : selectedDepartments.filter(dept => dept !== departmentName);
+    
+    setSelectedDepartments(newSelectedDepartments);
+    setForm(prev => ({
+      ...prev,
+      departments: newSelectedDepartments,
+      department: JSON.stringify(newSelectedDepartments)
+    }));
+  };
+  
+  // Remove department
+  const removeDepartment = (departmentName: string) => {
+    const newSelectedDepartments = selectedDepartments.filter(dept => dept !== departmentName);
+    setSelectedDepartments(newSelectedDepartments);
+    setForm(prev => ({
+      ...prev,
+      departments: newSelectedDepartments,
+      department: JSON.stringify(newSelectedDepartments)
+    }));
+  };
   
   // State for filing name validation
   const [filingNameError, setFilingNameError] = useState<string>("");
@@ -718,6 +778,7 @@ export default function Compliance() {
                   onClick={() => {
                     setEditIndex(null);
                     setShowSubmissionDetails(false);
+                    setSelectedDepartments([]);
                     setForm({
                       filingName: "",
                       filingFrequency: "Monthly",
@@ -738,6 +799,8 @@ export default function Compliance() {
                       paymentDate: "",
                       submissionAmount: "",
                       paymentMethod: "",
+                      department: "",
+                      departments: [],
                     });
                     setModalOpen(true);
                   }}
@@ -947,6 +1010,8 @@ export default function Compliance() {
                             setShowSubmissionDetails(true);
                             setModalOpen(true);
                             const currentItem = complianceItems[index] as ComplianceItem;
+                            const depts = parseDepartments(currentItem.department);
+                            setSelectedDepartments(depts);
                             setForm({
                               filingName: currentItem.policy,
                               filingFrequency: currentItem.frequency || "Monthly",
@@ -967,6 +1032,8 @@ export default function Compliance() {
                               paymentDate: currentItem.paymentDate || "",
                               submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
                               paymentMethod: currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null ? String(currentItem.paymentMethod) : "",
+                              department: currentItem.department || "",
+                              departments: depts,
                             });
                           }}
                           className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
@@ -976,6 +1043,7 @@ export default function Compliance() {
                       </TableCell>
                       <TableCell className="px-4 py-4 text-right">
                         <div className="flex items-center justify-end space-x-2">
+                        <Can I="update" a="Compliance">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -987,6 +1055,8 @@ export default function Compliance() {
                               setShowSubmissionDetails(false);
                               setModalOpen(true);
                               const currentItem = complianceItems[index] as ComplianceItem;
+                              const depts = parseDepartments(currentItem.department);
+                              setSelectedDepartments(depts);
                               setForm({
                                 filingName: currentItem.policy,
                                 filingFrequency: currentItem.frequency || "Monthly",
@@ -1007,12 +1077,16 @@ export default function Compliance() {
                                 paymentDate: currentItem.paymentDate || "",
                                 submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
                                 paymentMethod: currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null ? String(currentItem.paymentMethod) : "",
+                                department: currentItem.department || "",
+                                departments: depts,
                               });
                             }}
                             className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors p-2"
                           >
                             <Edit size={16} />
                           </Button>
+                        </Can>
+                        <Can I="delete" a="Compliance">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1025,6 +1099,7 @@ export default function Compliance() {
                           >
                             <Trash2 size={16} />
                           </Button>
+                        </Can>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1351,6 +1426,63 @@ export default function Compliance() {
                   })()}
                 </div>
               </div>
+              
+              {/* Department field with dropdown */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Department</label>
+                <Select
+                  value={selectedDepartments.length > 0 ? selectedDepartments.join(',') : ''}
+                  onValueChange={() => {}}
+                  disabled={departmentsLoading}
+                >
+                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden">
+                    <div className="w-full overflow-hidden">
+                      {selectedDepartments.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 w-full">
+                          {selectedDepartments.map((dept) => (
+                            <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
+                              <span className="truncate max-w-[80px]">{dept}</span>
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); removeDepartment(dept); }}
+                                className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
+                                tabIndex={-1}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">Select departments</span>
+                      )}
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments && departments.length > 0 ? (
+                      departments.map(dept => (
+                        <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                          <Checkbox
+                            id={`dept-${dept.name}`}
+                            checked={selectedDepartments.includes(dept.name)}
+                            onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
+                            disabled={departmentsLoading}
+                          />
+                          <label
+                            htmlFor={`dept-${dept.name}`}
+                            className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                          >
+                            {dept.name}
+                          </label>
+                        </div>
+                      ))
+                    ) : (
+                      <SelectItem value="no-department" disabled>No departments available</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              
               {/* Added date range & deadline fields moved from previous Submission Details section */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">
@@ -1532,6 +1664,8 @@ export default function Compliance() {
                     submittedBy: form.submittedBy,
                     amount: form.amount,
                     paymentDate: form.paymentDate,
+                    department: form.department,
+                    departments: selectedDepartments,
                     complianceFieldValues: dynamicFieldValues,
                     isDraft: true // Mark as draft
                   };
@@ -1551,6 +1685,7 @@ export default function Compliance() {
                     setModalOpen(false);
                     setEditIndex(null);
                     setShowSubmissionDetails(false);
+                    setSelectedDepartments([]);
                     setForm({
                       filingName: "",
                       filingFrequency: "Monthly",
@@ -1571,6 +1706,8 @@ export default function Compliance() {
                       paymentDate: "",
                       submissionAmount: "",
                       paymentMethod: "",
+                      department: "",
+                      departments: [],
                     });
                     setDynamicFieldValues({});
                   } catch (error) {
@@ -1645,6 +1782,8 @@ export default function Compliance() {
                     reminderDays: form.reminderDays,
                     reminderPolicy: form.reminderPolicy,
                     submittedBy: form.submittedBy,
+                    department: form.department,
+                    departments: selectedDepartments,
                     complianceFieldValues: dynamicFieldValues // <--- store dynamic field values
                   };
                   // Get complianceId for ledger entry if editing
