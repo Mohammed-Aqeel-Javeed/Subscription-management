@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Can } from "@/components/Can";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -712,38 +713,40 @@ export default function Compliance() {
                 Compliance Ledger
               </Button>
               
-              <Button
-                onClick={() => {
-                  setEditIndex(null);
-                  setShowSubmissionDetails(false);
-                  setForm({
-                    filingName: "",
-                    filingFrequency: "Monthly",
-                    filingComplianceCategory: "",
-                    filingGoverningAuthority: "",
-                    filingStartDate: "",
-                    filingEndDate: "",
-                    filingSubmissionDeadline: "",
-                    filingSubmissionStatus: "Pending",
-                    filingRecurringFrequency: "",
-                    filingRemarks: "",
-                    submissionNotes: "",
-                    filingSubmissionDate: "",
-                    reminderDays: "7",
-                    reminderPolicy: "One time",
-                    submittedBy: "",
-                    amount: "",
-                    paymentDate: "",
-                    submissionAmount: "",
-                    paymentMethod: "",
-                  });
-                  setModalOpen(true);
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Compliance
-              </Button>
+              <Can I="create" a="Compliance">
+                <Button
+                  onClick={() => {
+                    setEditIndex(null);
+                    setShowSubmissionDetails(false);
+                    setForm({
+                      filingName: "",
+                      filingFrequency: "Monthly",
+                      filingComplianceCategory: "",
+                      filingGoverningAuthority: "",
+                      filingStartDate: "",
+                      filingEndDate: "",
+                      filingSubmissionDeadline: "",
+                      filingSubmissionStatus: "Pending",
+                      filingRecurringFrequency: "",
+                      filingRemarks: "",
+                      submissionNotes: "",
+                      filingSubmissionDate: "",
+                      reminderDays: "7",
+                      reminderPolicy: "One time",
+                      submittedBy: "",
+                      amount: "",
+                      paymentDate: "",
+                      submissionAmount: "",
+                      paymentMethod: "",
+                    });
+                    setModalOpen(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Compliance
+                </Button>
+              </Can>
             </div>
           </div>
 

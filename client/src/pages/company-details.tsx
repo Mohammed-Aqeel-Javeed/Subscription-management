@@ -20,6 +20,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Can } from "@/components/Can";
 // ...existing code...
 import type { User as UserType, InsertUser, CompanyInfo, InsertCompanyInfo } from "@shared/types";
 import { z } from "zod";
@@ -2084,6 +2085,7 @@ text-gray-600 hover:text-gray-900 hover:bg-gray-100"
 </TabsTrigger>
 </motion.div>
 
+<Can I="read" a="User" fallback={null}>
 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
 <TabsTrigger
 value="users"
@@ -2095,6 +2097,7 @@ text-gray-600 hover:text-gray-900 hover:bg-gray-100"
 <span>User Management</span>
 </TabsTrigger>
 </motion.div>
+</Can>
 </TabsList>
 
 <AnimatePresence mode="wait">

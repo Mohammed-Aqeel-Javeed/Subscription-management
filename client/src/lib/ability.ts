@@ -22,54 +22,58 @@ export function defineAbilityFor(user: User) {
       break;
 
     case 'admin':
-      // Admin: Full access to all modules except user management and system settings
+      // Admin: Full access to all modules except user management
+      can('manage', ['Subscription', 'Compliance', 'License', 'Notification', 'Department', 'Settings']);
       can('read', 'all');
-      can('create', ['Subscription', 'Compliance', 'License', 'Notification']);
-      can('update', ['Subscription', 'Compliance', 'License', 'Notification']);
-      can('delete', ['Subscription', 'Compliance', 'License', 'Notification']);
-      cannot('manage', 'User');
-      cannot('manage', 'Settings');
+      cannot('create', 'User');
+      cannot('update', 'User');
+      cannot('delete', 'User');
+      cannot('read', 'User');
       break;
 
     case 'viewer':
-      // Viewer: Read-only access to everything
-      can('read', 'all');
+      // Viewer: Read-only access to everything except user management
+      can('read', ['Subscription', 'Compliance', 'License', 'Notification', 'Department', 'Settings']);
       cannot('create', 'all');
       cannot('update', 'all');
       cannot('delete', 'all');
+      cannot('read', 'User');
+      cannot('manage', 'all');
       break;
 
     case 'contributor':
       // Contributor: Can create and manage only their own items
       // Note: Actual ownerId filtering will be done on the backend
-      can('create', ['Subscription', 'Compliance', 'License']);
-      can('read', ['Subscription', 'Compliance', 'License']);
-      can('update', ['Subscription', 'Compliance', 'License']);
+      can('create', ['Subscription', 'Compliance', 'License', 'Notification']);
+      can('read', ['Subscription', 'Compliance', 'License', 'Notification', 'Department']);
+      can('update', ['Subscription', 'Compliance', 'License', 'Notification']);
       can('delete', ['Subscription', 'Compliance', 'License']);
-      cannot('read', 'User');
-      cannot('read', 'Settings');
+      can('read', 'Settings');
+      cannot('manage', 'User');
+      cannot('manage', 'Department');
       break;
 
     case 'department_editor':
       // Department Editor: Can view and edit items within their department
       // Note: Actual department filtering will be done on the backend
-      can('read', ['Subscription', 'Compliance', 'License']);
-      can('create', ['Subscription', 'Compliance', 'License']);
-      can('update', ['Subscription', 'Compliance', 'License']);
+      can('read', ['Subscription', 'Compliance', 'License', 'Notification', 'Department']);
+      can('create', ['Subscription', 'Compliance', 'License', 'Notification']);
+      can('update', ['Subscription', 'Compliance', 'License', 'Notification']);
       can('delete', ['Subscription', 'Compliance', 'License']);
-      cannot('read', 'User');
-      cannot('read', 'Settings');
+      can('read', 'Settings');
+      cannot('manage', 'User');
+      cannot('manage', 'Department');
       break;
 
     case 'department_viewer':
       // Department Viewer: Read-only access to their department
       // Note: Actual department filtering will be done on the backend
-      can('read', ['Subscription', 'Compliance', 'License']);
+      can('read', ['Subscription', 'Compliance', 'License', 'Notification', 'Department', 'Settings']);
       cannot('create', 'all');
       cannot('update', 'all');
       cannot('delete', 'all');
-      cannot('read', 'User');
-      cannot('read', 'Settings');
+      cannot('manage', 'User');
+      cannot('manage', 'Department');
       break;
 
     default:

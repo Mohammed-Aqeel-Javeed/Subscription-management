@@ -42,13 +42,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (user) {
-      setAbility(
-        defineAbilityFor({
-          role: user.role || "viewer",
-          userId: user.userId,
-          department: user.department,
-        })
-      );
+      console.log("[UserContext] Creating ability for user:", {
+        role: user.role,
+        userId: user.userId,
+        department: user.department
+      });
+      const newAbility = defineAbilityFor({
+        role: user.role || "viewer",
+        userId: user.userId,
+        department: user.department,
+      });
+      console.log("[UserContext] Ability rules:", newAbility.rules);
+      setAbility(newAbility);
     }
   }, [user]);
 
