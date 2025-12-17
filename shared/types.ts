@@ -97,6 +97,7 @@ export type User = {
 	role: string;
 	status: string;
 	lastLogin?: string;
+	department?: string;
 };
 
 export type Company = {

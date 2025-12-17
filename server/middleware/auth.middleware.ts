@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
+import { connectToDatabase } from '../mongo';
 
 const JWT_SECRET = process.env.JWT_SECRET || "subs_secret_key";
 
@@ -13,7 +14,7 @@ export interface AuthenticatedRequest extends Request {
   user?: AuthUser;
 }
 
-export const authenticateToken = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   let token;
   
   // Support both Authorization header and cookie
@@ -29,8 +30,28 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-  req.user = decoded;
-  console.log('Decoded JWT:', decoded); // Debug log
+    req.user = decoded;
+    
+    // For department_editor and department_viewer, find their department by matching email with department head
+    if (decoded.role === 'department_editor' || decoded.role === 'department_viewer') {
+      try {
+        const db = await connectToDatabase();
+        const departmentsCollection = db.collection('departments');
+        const department = await departmentsCollection.findOne({
+          tenantId: decoded.tenantId,
+          email: decoded.email
+        });
+        
+        if (department) {
+          req.user.department = department.name;
+          console.log(`Set department for ${decoded.email}: ${department.name}`);
+        }
+      } catch (dbErr) {
+        console.error('Error fetching department for user:', dbErr);
+      }
+    }
+    
+    console.log('Decoded JWT:', req.user); // Debug log
     next();
   } catch (err) {
     return res.status(403).json({ message: "Invalid or expired token" });
@@ -38,7 +59,7 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
 };
 
 // Optional authentication - sets user if token exists but doesn't fail if missing
-export const optionalAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const optionalAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   let token;
   
   if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
@@ -50,8 +71,28 @@ export const optionalAuth = (req: AuthenticatedRequest, res: Response, next: Nex
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
-    req.user = decoded;
-    console.log('Decoded user in middleware:', decoded); // Debug log
+      req.user = decoded;
+      
+      // For department_editor and department_viewer, find their department by matching email with department head
+      if (decoded.role === 'department_editor' || decoded.role === 'department_viewer') {
+        try {
+          const db = await connectToDatabase();
+          const departmentsCollection = db.collection('departments');
+          const department = await departmentsCollection.findOne({
+            tenantId: decoded.tenantId,
+            email: decoded.email
+          });
+          
+          if (department) {
+            req.user.department = department.name;
+            console.log(`Set department for ${decoded.email}: ${department.name}`);
+          }
+        } catch (dbErr) {
+          console.error('Error fetching department for user:', dbErr);
+        }
+      }
+      
+      console.log('Decoded user in middleware:', req.user); // Debug log
     } catch (err) {
       req.user = undefined;
     }

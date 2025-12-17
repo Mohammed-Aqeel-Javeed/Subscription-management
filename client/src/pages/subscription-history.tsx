@@ -45,6 +45,10 @@ function formatDate(date: string | Date) {
   return format(new Date(date), "MMM dd, yyyy");
 }
 
+function formatDateTime(date: string | Date) {
+  return format(new Date(date), "MMM dd, yyyy HH:mm:ss");
+}
+
 
 export default function SubscriptionHistory() {
   // Get serviceName from query params if present
@@ -59,6 +63,9 @@ export default function SubscriptionHistory() {
   }
   const serviceNameParam = null; // Not used
   const [searchTerm, setSearchTerm] = useState("");
+  const [quantityFilter, setQuantityFilter] = useState<string>("");
+  const [lcyMin, setLcyMin] = useState<string>("");
+  const [lcyMax, setLcyMax] = useState<string>("");
   const [filteredHistory, setFilteredHistory] = useState<HistoryRecord[]>([]);
   const queryClient = useQueryClient();
 
@@ -89,22 +96,14 @@ export default function SubscriptionHistory() {
       const url = `${API_BASE_URL}${endpoint}`;
 
       console.log(`Fetching history data from: ${url}`);
-      console.log(`API_BASE_URL: "${API_BASE_URL}"`);
-      console.log(`endpoint: "${endpoint}"`);
-      console.log(`idParam: ${idParam}`);
-      console.log(`Current window.location:`, window.location.href);
 
       const res = await fetch(url, {
         method: "GET",
         credentials: "include",
         headers: {
-          "Cache-Control": "no-cache",
           "Content-Type": "application/json"
         }
       });
-
-      console.log(`Response status: ${res.status}`);
-      console.log(`Response headers:`, Object.fromEntries(res.headers.entries()));
 
       if (!res.ok) {
         console.error(`API returned status: ${res.status}`);
@@ -114,7 +113,6 @@ export default function SubscriptionHistory() {
         // Handle 401 specifically for better user experience
         if (res.status === 401) {
           console.log('Authentication required, redirecting to login');
-          // Don't redirect immediately, show error instead
           throw new Error('Authentication required');
         }
         
@@ -122,9 +120,6 @@ export default function SubscriptionHistory() {
       }
 
       const result = await res.json();
-      console.log(`Raw API response:`, result);
-      console.log(`Response type:`, typeof result);
-      console.log(`Is array:`, Array.isArray(result));
       
       if (!Array.isArray(result)) {
         console.error('Unexpected API response format:', result);
@@ -132,55 +127,24 @@ export default function SubscriptionHistory() {
       }
 
       console.log(`Received ${result.length} history records from API`);
-      console.log(`First few records:`, result.slice(0, 3));
       return result;
     },
-    retry: (failureCount, error) => {
-      console.log(`Query retry attempt ${failureCount}, error:`, error);
-      return failureCount < 2; // Retry up to 2 times
-    },
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    retry: 1, // Reduce retries
+    refetchOnMount: false, // Don't refetch on mount if we have data
+    refetchOnWindowFocus: false, // Don't refetch on window focus
     refetchOnReconnect: true,
-    staleTime: 0
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    gcTime: 10 * 60 * 1000 // Keep in cache for 10 minutes
   });
 
   const history: HistoryRecord[] = Array.isArray(data) ? data : [];
 
-  // Debug logging for query state
-  React.useEffect(() => {
-    console.log('Query state changed:');
-    console.log('  isLoading:', isLoading);
-    console.log('  error:', error);
-    console.log('  data length:', data?.length || 0);
-    console.log('  history length:', history.length);
-  }, [isLoading, error, data, history.length]);
-
   // Filter based on search term only - the API already filters by subscriptionId
+
   useEffect(() => {
     if (!history) return;
 
-    console.log(`Starting filter with ${history.length} history records`);
-
-    // Log all returned subscription IDs for debugging
-    if (history && history.length > 0) {
-      console.log('Returned history records:');
-      history.forEach((item, idx) => {
-        const itemSubId = item.subscriptionId?.toString();
-        const dataId = item.data?._id?.toString();
-        const updatedFieldsId = item.updatedFields?._id?.toString();
-        console.log(`Record #${idx}: subscriptionId=${itemSubId}, data._id=${dataId}, updatedFields._id=${updatedFieldsId}`);
-      });
-      console.log(`Selected subscription ID: ${idParam}`);
-    }
-
-    // Create a copy of the array and ensure it's properly typed
     let filtered = [...history];
-
-    // Log the initial history length
-    console.log(`Initial history records: ${filtered.length}`);
-
-    // We don't need to filter by subscription ID here since the API already does that
 
     // Apply search term filter
     if (searchTerm) {
@@ -196,19 +160,41 @@ export default function SubscriptionHistory() {
       });
     }
 
-    // Sort by timestamp descending (newest first)
+
+    // Apply quantity filter (only if not empty and is a valid number)
+    if (quantityFilter !== "" && !isNaN(Number(quantityFilter))) {
+      filtered = filtered.filter(item => {
+        const record = item.data || item.updatedFields || {};
+        // Use strict equality with numbers
+        return Number(record.qty) === Number(quantityFilter);
+      });
+    }
+
+    // Apply LCY amount range filter
+    if ((lcyMin !== "" && !isNaN(Number(lcyMin))) || (lcyMax !== "" && !isNaN(Number(lcyMax)))) {
+      filtered = filtered.filter(item => {
+        const record = item.data || item.updatedFields || {};
+        const lcy = Number(record.lcyAmount);
+        if (isNaN(lcy)) return false;
+        if (lcyMin !== "" && !isNaN(Number(lcyMin)) && lcy < Number(lcyMin)) return false;
+        if (lcyMax !== "" && !isNaN(Number(lcyMax)) && lcy > Number(lcyMax)) return false;
+        return true;
+      });
+    }
+
+    // Sort by timestamp descending (newest first) - backend already sorts, but ensure it
     filtered = filtered.sort((a, b) => {
-      const timeA = new Date(b.timestamp || '').getTime();
-      const timeB = new Date(a.timestamp || '').getTime();
-      if (timeA === timeB) {
-        // If timestamps are equal, use _id for consistent ordering
+      const timeB = new Date(b.timestamp || '').getTime();
+      const timeA = new Date(a.timestamp || '').getTime();
+      if (timeB === timeA) {
+        // If timestamps are equal, use _id for consistent ordering (newer IDs first)
         return (b._id || '').localeCompare(a._id || '');
       }
-      return timeA - timeB;
+      return timeB - timeA; // Newest first
     });
 
     setFilteredHistory(filtered);
-  }, [history, searchTerm, idParam]); // Include idParam in dependencies
+  }, [history, searchTerm, quantityFilter, lcyMin, lcyMax, idParam]);
   
   const exportData = () => {
     // Implementation for exporting data
@@ -276,6 +262,33 @@ export default function SubscriptionHistory() {
                 placeholder="Search subscriptions..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 items-center">
+              <Input
+                type="number"
+                min="1"
+                className="w-24 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 placeholder-slate-400 shadow-sm"
+                placeholder="Qty"
+                value={quantityFilter}
+                onChange={e => setQuantityFilter(e.target.value)}
+              />
+              <Input
+                type="number"
+                min="0"
+                className="w-32 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 placeholder-slate-400 shadow-sm"
+                placeholder="LCY Min"
+                value={lcyMin}
+                onChange={e => setLcyMin(e.target.value)}
+              />
+              <span className="text-slate-500">-</span>
+              <Input
+                type="number"
+                min="0"
+                className="w-32 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 placeholder-slate-400 shadow-sm"
+                placeholder="LCY Max"
+                value={lcyMax}
+                onChange={e => setLcyMax(e.target.value)}
               />
             </div>
           </div>
@@ -381,6 +394,7 @@ export default function SubscriptionHistory() {
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">Qty</TableHead>
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">Total Amount</TableHead>
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">LCY Amount</TableHead>
+                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Timestamp</TableHead>
                         <TableHead className="font-semibold text-slate-800 py-4 px-6">Status</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -426,6 +440,9 @@ export default function SubscriptionHistory() {
                               </TableCell>
                               <TableCell className="py-4 px-6 text-slate-700">
                                 {record.lcyAmount !== undefined && record.lcyAmount !== null ? `$${Number(record.lcyAmount).toFixed(2)}` : "-"}
+                              </TableCell>
+                              <TableCell className="py-4 px-6 text-slate-600">
+                                {item.timestamp ? formatDateTime(item.timestamp) : "-"}
                               </TableCell>
                               <TableCell className="py-4 px-6">
                                 <Badge className={getStatusColor(record.status || '')}>

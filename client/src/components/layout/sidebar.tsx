@@ -169,7 +169,8 @@ export default function Sidebar() {
       return res.json();
     },
     retry: false, // Don't retry on auth failure
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    staleTime: 0, // Always refetch to get current company info
+    refetchOnWindowFocus: true,
   });
 
   const handleLogout = async () => {
@@ -322,8 +323,8 @@ export default function Sidebar() {
             <p className="text-sm font-medium text-gray-900 truncate">
               {currentUser?.fullName || currentUser?.email || "User"}
             </p>
-            <p className="text-xs text-gray-500 truncate">
-              Administrator
+            <p className="text-xs text-gray-500 truncate capitalize">
+              {currentUser?.role?.replace('_', ' ') || "User"}
             </p>
           </div>
         </div>

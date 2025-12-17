@@ -205,6 +205,121 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Get tenant ID for API calls
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
   
+  // Get current user name from User Management based on login email
+  const [currentUserName, setCurrentUserName] = useState<string>('');
+  
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        // Get logged-in user information from window.user
+        const loggedInUser = (window as any).user;
+        console.log('🔍 Logged in user from window:', loggedInUser);
+        
+        // First try to get name directly from window.user (works for all roles: admin, super admin, etc.)
+        if (loggedInUser?.name) {
+          setCurrentUserName(loggedInUser.name);
+          console.log('✅ Using user name from window.user:', loggedInUser.name);
+          return;
+        }
+        
+        // Try to fetch from /api/me or current user endpoint
+        try {
+          const meResponse = await fetch('/api/me', {
+            method: 'GET',
+            credentials: 'include',
+          });
+          if (meResponse.ok) {
+            const meData = await meResponse.json();
+            console.log('📋 User data from /api/me:', meData);
+            // Check for fullName (login collection) or name
+            if (meData.fullName) {
+              setCurrentUserName(meData.fullName);
+              console.log('✅ Using fullName from /api/me:', meData.fullName);
+              return;
+            } else if (meData.name) {
+              setCurrentUserName(meData.name);
+              console.log('✅ Using name from /api/me:', meData.name);
+              return;
+            }
+          }
+        } catch (meError) {
+          console.log('ℹ️ /api/me not available:', meError);
+        }
+        
+        // If name not in window.user, fetch from employees/users API using email
+        const userEmail = loggedInUser?.email;
+        if (userEmail) {
+          console.log('🔍 Fetching user by email from employees API:', userEmail);
+          const response = await fetch('/api/employees', {
+            method: 'GET',
+            credentials: 'include',
+          });
+          if (response.ok) {
+            const users = await response.json();
+            console.log('📋 All users from employees API:', users.length, 'users');
+            const currentUser = users.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
+            if (currentUser && currentUser.name) {
+              setCurrentUserName(currentUser.name);
+              console.log('✅ Found user name from employees API:', currentUser.name);
+              return;
+            }
+          }
+          
+          // Try users endpoint for login collection
+          try {
+            const usersResponse = await fetch('/api/users', {
+              method: 'GET',
+              credentials: 'include',
+            });
+            if (usersResponse.ok) {
+              const allUsers = await usersResponse.json();
+              console.log('📋 All users from login/users API:', allUsers.length, 'users');
+              const loginUser = allUsers.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
+              if (loginUser && loginUser.name) {
+                setCurrentUserName(loginUser.name);
+                console.log('✅ Found user name from login collection:', loginUser.name);
+                return;
+              }
+            }
+          } catch (usersError) {
+            console.log('ℹ️ /api/users not available:', usersError);
+          }
+          
+          // Fallback to email username if name not found
+          const fallbackName = userEmail.split('@')[0];
+          // Capitalize first letter
+          const capitalizedName = fallbackName.charAt(0).toUpperCase() + fallbackName.slice(1);
+          setCurrentUserName(capitalizedName);
+          console.log('⚠️ Using fallback name from email:', capitalizedName);
+        } else {
+          console.warn('❌ No email found for current user');
+          // Try one more fallback - get from window.user.email if available
+          const lastResortEmail = loggedInUser?.email;
+          if (lastResortEmail) {
+            const lastResortName = lastResortEmail.split('@')[0];
+            const capitalizedLastResort = lastResortName.charAt(0).toUpperCase() + lastResortName.slice(1);
+            setCurrentUserName(capitalizedLastResort);
+            console.log('⚠️ Last resort - using email from window.user:', capitalizedLastResort);
+          } else {
+            setCurrentUserName('User');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to fetch current user:', error);
+        // Use email as fallback
+        const userEmail = (window as any).user?.email;
+        if (userEmail) {
+          setCurrentUserName(userEmail.split('@')[0]);
+        } else {
+          setCurrentUserName('Unknown User');
+        }
+      }
+    };
+    if (open) {
+      fetchCurrentUser();
+    }
+  }, [open]);
+  
   // Fullscreen toggle state
   const [isFullscreen, setIsFullscreen] = useState(false);
   
@@ -213,6 +328,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Auto Renewal toggle state
   const [autoRenewal, setAutoRenewal] = useState<boolean>(false);
+  
+  // Initial Date state
+  const [initialDate, setInitialDate] = useState<string>('');
   
   // Track the current subscription ObjectId for History button
   // removed currentSubscriptionId (unused)
@@ -366,6 +484,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       amount: subscription?.amount !== undefined && subscription?.amount !== null ? Number(subscription.amount).toFixed(2) : "",
       totalAmount: subscription?.totalAmount !== undefined && subscription?.totalAmount !== null ? Number(subscription.totalAmount).toFixed(2) : "",
       billingCycle: subscription?.billingCycle && subscription?.billingCycle !== "" ? subscription.billingCycle : "monthly",
+      paymentFrequency: (subscription as any)?.paymentFrequency || "monthly",
       category: subscription?.category || "",
       department: subscription?.department || "",
       departments: parseDepartments(subscription?.department),
@@ -420,10 +539,55 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [endDate, setEndDate] = useState(subscription?.nextRenewal ? toISODateOnly(subscription.nextRenewal) : "");
   // Removed unused endDateManuallySet state
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(parseDepartments(subscription?.department));
+  
+  // Store the subscription ID to track when we're working with a different subscription
+  const lastSubscriptionIdRef = useRef<string>('');
+  // Store the saved initial date value to prevent it from changing
+  const savedInitialDateRef = useRef<string>('');
+  
+  // Initialize initialDate from subscription startDate when modal first opens only
+  useEffect(() => {
+    const currentSubId = subscription?.id || subscription?._id || '';
+    
+    if (open) {
+      // If this is a new subscription (different ID) or first time opening
+      if (currentSubId !== lastSubscriptionIdRef.current) {
+        // Prefer initialDate if it exists, otherwise use startDate
+        const initialDateValue = (subscription as any)?.initialDate || subscription?.startDate;
+        if (initialDateValue) {
+          const dateValue = toISODateOnly(initialDateValue);
+          setInitialDate(dateValue);
+          savedInitialDateRef.current = dateValue;
+          console.log('📅 SET savedInitialDateRef on modal open:', dateValue, 'from field:', (subscription as any)?.initialDate ? 'initialDate' : 'startDate');
+        } else {
+          setInitialDate('');
+          savedInitialDateRef.current = '';
+        }
+        lastSubscriptionIdRef.current = currentSubId;
+      }
+      // Don't restore from savedInitialDateRef here - it causes issues
+      // The ref is only used to persist user's manual input
+    } else {
+      // Reset when modal closes
+      lastSubscriptionIdRef.current = '';
+      savedInitialDateRef.current = '';
+    }
+  }, [open, subscription?.id, subscription?._id]);
+  
+  // Initialize original total amount when editing
+  useEffect(() => {
+    if (isEditing && subscription?.totalAmount) {
+      setOriginalTotalAmount(Number(subscription.totalAmount));
+    }
+  }, [subscription?.totalAmount, isEditing, open]);
   // Removed unused isPopoverOpen state
   const [isRenewing, setIsRenewing] = useState(false);
   const [lcyAmount, setLcyAmount] = useState<string>('');
   const [totalAmount, setTotalAmount] = useState<string>('');
+  const [originalTotalAmount, setOriginalTotalAmount] = useState<number>(0);
+  const [effectiveDate, setEffectiveDate] = useState<string>('');
+  const [effectiveDateDialog, setEffectiveDateDialog] = useState<{show: boolean}>({show: false});
+  const [renewalConfirmDialog, setRenewalConfirmDialog] = useState<{show: boolean}>({show: false});
   const [errorDialog, setErrorDialog] = useState<{show: boolean, message: string}>({show: false, message: ''});
   const [confirmDialog, setConfirmDialog] = useState<{show: boolean}>({show: false});
   const [exitConfirmDialog, setExitConfirmDialog] = useState<{show: boolean}>({show: false});
@@ -597,6 +761,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         setDocuments([]);
       }
       
+      // Set totalAmount state for display
+      const totalAmtValue = subscription.totalAmount !== undefined && subscription.totalAmount !== null ? Number(subscription.totalAmount).toFixed(2) : "";
+      setTotalAmount(totalAmtValue);
+      
       form.reset({
         serviceName: subscription.serviceName || "",
         website: (subscription as any)?.website || "",
@@ -604,8 +772,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         currency: subscription.currency || "",
         qty: subscription.qty !== undefined && subscription.qty !== null ? Number(subscription.qty) : 1,
         amount: subscription.amount !== undefined && subscription.amount !== null ? Number(subscription.amount).toFixed(2) : "",
-        totalAmount: subscription.totalAmount !== undefined && subscription.totalAmount !== null ? Number(subscription.totalAmount).toFixed(2) : "",
+        totalAmount: totalAmtValue,
         billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
+        paymentFrequency: (subscription as any)?.paymentFrequency || "monthly",
         category: subscription.category || "",
         department: subscription.department || "",
         departments: depts,
@@ -663,6 +832,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         amount: "",
         totalAmount: "",
         billingCycle: "monthly",
+        paymentFrequency: "monthly",
         category: "",
         department: "",
         departments: [],
@@ -819,6 +989,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setTimeout(() => {
         form.reset();
         setSubscriptionCreated(false);
+        setEffectiveDate(''); // Reset effective date
+        setOriginalTotalAmount(0); // Reset original amount
       }, 300);
     },
     onError: (error: any) => {
@@ -898,6 +1070,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         status: 'Draft', // Always save as draft
         autoRenewal: autoRenewal, // Add auto renewal from state
         amount: amountNum,
+        initialDate: new Date(currentValues.startDate ?? ""), // Set initialDate to startDate
         tenantId,
         departments: currentValues.departments || [],
         startDate: currentValues.startDate || new Date().toISOString().split('T')[0],
@@ -951,6 +1124,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         departments: selectedDepartments,
         department: JSON.stringify(selectedDepartments),
         startDate: new Date(data.startDate ?? ""),
+        initialDate: new Date(data.startDate ?? ""), // Set initialDate to startDate for new subscriptions
         nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
         tenantId,
         documents: documents.length > 0 ? documents : undefined, // Include documents if uploaded
@@ -966,6 +1140,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           });
           return;
         }
+        
+        // Check if total amount has changed
+        const currentTotalAmount = Number(data.totalAmount || 0);
+        if (originalTotalAmount !== currentTotalAmount && originalTotalAmount > 0) {
+          // Show effective date dialog
+          setEffectiveDateDialog({show: true});
+          return;
+        }
+        
         mutation.mutate({
           ...payload,
           startDate: payload.startDate instanceof Date ? payload.startDate.toISOString() : String(payload.startDate),
@@ -1009,8 +1192,72 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     }
   };
   
+  // Handle update with effective date
+  const handleUpdateWithEffectiveDate = async () => {
+    if (!effectiveDate) {
+      toast({
+        title: "Required",
+        description: "Please enter an effective date",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setEffectiveDateDialog({show: false});
+    
+    const data = form.getValues();
+    const amountNum = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount ?? 0;
+    const totalAmountNum = typeof data.totalAmount === 'string' ? parseFloat(data.totalAmount) : data.totalAmount ?? 0;
+    const qtyNum = typeof data.qty === 'string' ? parseFloat(data.qty) : data.qty ?? 0;
+    const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
+    
+    const payload = {
+      ...data,
+      status: 'Active',
+      autoRenewal: autoRenewal,
+      amount: isNaN(amountNum) ? 0 : amountNum,
+      totalAmount: isNaN(totalAmountNum) ? 0 : totalAmountNum,
+      qty: isNaN(qtyNum) ? 0 : qtyNum,
+      lcyAmount: lcyAmount !== "" ? Number(lcyAmount) : undefined,
+      departments: selectedDepartments,
+      department: JSON.stringify(selectedDepartments),
+      startDate: new Date(data.startDate ?? ""),
+      initialDate: savedInitialDateRef.current || initialDate || new Date(data.startDate ?? ""), // Preserve initialDate
+      nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
+      tenantId,
+      documents: documents.length > 0 ? documents : undefined,
+    };
+    
+    mutation.mutate({
+      ...payload,
+      startDate: payload.startDate instanceof Date ? payload.startDate.toISOString() : String(payload.startDate),
+      nextRenewal: payload.nextRenewal instanceof Date ? payload.nextRenewal.toISOString() : String(payload.nextRenewal),
+      effectiveDate: effectiveDate, // Add effective date as ISO string
+    } as any);
+  };
+  
   // Handle department selection
   const handleDepartmentChange = (departmentName: string, checked: boolean) => {
+    // If Company Level is selected, select all departments
+    if (departmentName === 'Company Level' && checked) {
+      const allDepts = ['Company Level', ...(departments?.filter(d => d.visible).map(d => d.name) || [])];
+      setSelectedDepartments(allDepts);
+      form.setValue("departments", allDepts);
+      return;
+    }
+    
+    // If unchecking Company Level, uncheck all
+    if (departmentName === 'Company Level' && !checked) {
+      setSelectedDepartments([]);
+      form.setValue("departments", []);
+      return;
+    }
+    
+    // Cannot uncheck individual departments when Company Level is selected
+    if (selectedDepartments.includes('Company Level') && !checked) {
+      return;
+    }
+    
     const newSelectedDepartments = checked
       ? [...selectedDepartments, departmentName]
       : selectedDepartments.filter(dept => dept !== departmentName);
@@ -1021,6 +1268,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Remove a department from the selected list
   const removeDepartment = (departmentName: string) => {
+    // If removing Company Level, remove all
+    if (departmentName === 'Company Level') {
+      setSelectedDepartments([]);
+      form.setValue("departments", []);
+      return;
+    }
+    
+    // Cannot remove individual departments when Company Level is selected
+    if (selectedDepartments.includes('Company Level')) {
+      return;
+    }
+    
     const newSelectedDepartments = selectedDepartments.filter(dept => dept !== departmentName);
     setSelectedDepartments(newSelectedDepartments);
     form.setValue("departments", newSelectedDepartments);
@@ -1055,12 +1314,39 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       return;
     }
 
-    // Show confirmation dialog
-    setConfirmDialog({show: true});
+    // Check if total amount has changed
+    const currentTotalAmount = Number(form.getValues('totalAmount') || 0);
+    const hasAmountChanged = currentTotalAmount !== originalTotalAmount;
+
+    // Always show confirmation dialog, but skip effective date if amount hasn't changed
+    setIsRenewing(true);
+    if (hasAmountChanged) {
+      // Reset effective date
+      setEffectiveDate('');
+      // Show effective date dialog
+      setEffectiveDateDialog({show: true});
+    } else {
+      // Show simple confirmation dialog for renewals without amount change
+      setRenewalConfirmDialog({show: true});
+    }
   };
 
   const handleConfirmRenewal = async () => {
-    setConfirmDialog({show: false});
+    // Check if total amount changed
+    const currentTotalAmount = Number(form.getValues('totalAmount') || 0);
+    const hasAmountChanged = currentTotalAmount !== originalTotalAmount;
+    
+    // Only require effective date if amount changed
+    if (hasAmountChanged && !effectiveDate) {
+      toast({
+        title: "Effective Date Required",
+        description: "Please enter an effective date for the renewal",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setEffectiveDateDialog({show: false});
     setIsRenewing(true);
     
     try {
@@ -1070,20 +1356,26 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Update local state
       setStartDate(newStartDate);
       setEndDate(newEndDate);
-  // removed manual end date flag
+      // IMPORTANT: Do NOT update initialDate - it should remain as the original start date
+      // initialDate represents when the subscription was first created, not when it was renewed
       
       // Update form values
       form.setValue('startDate', newStartDate);
       form.setValue('nextRenewal', newEndDate);
       
-      // Prepare payload for API - include all fields including lcyAmount
+      // Prepare payload for API - include all fields including lcyAmount and effectiveDate
       const formValues = form.getValues();
+      // Preserve original initial date (never update on renew)
+      const originalInitialDate = savedInitialDateRef.current || initialDate;
+      console.log('🔄 RENEWAL: Preserving initialDate:', originalInitialDate, 'savedInitialDateRef:', savedInitialDateRef.current, 'initialDate state:', initialDate);
       // Always get tenantId from context or user info
       const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
         ...formValues,
+        initialDate: originalInitialDate,
         startDate: newStartDate,
         nextRenewal: newEndDate,
+        effectiveDate: effectiveDate, // Add effective date for renewal
         amount:
           formValues.amount !== undefined && formValues.amount !== ""
             ? Number(formValues.amount)
@@ -1126,8 +1418,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             }
           }));
         }
-        // Close the modal after successful renewal
-        onOpenChange(false);
+        // Keep modal open - stay on card page after renewal
       }
     } catch (error) {
       console.error("Renewal error:", error);
@@ -1417,58 +1708,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               >
                 User
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
-                    disabled={isRenewing}
-                  >
-                    {isRenewing ? (
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    )}
-                    Action
-                    <ChevronDown className="h-3 w-3 ml-1" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[160px] bg-white border border-gray-200 shadow-lg rounded-lg">
-                  <DropdownMenuItem
-                    onClick={handleRenew}
-                    disabled={isRenewing || !endDate || !billingCycle || autoRenewal}
-                    className="cursor-pointer flex items-center gap-2 hover:bg-indigo-50 focus:bg-indigo-50 px-3 py-2"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    Renew
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      // Trigger form submission for update
-                      form.handleSubmit(onSubmit)();
-                    }}
-                    disabled={!isEditing}
-                    className="cursor-pointer flex items-center gap-2 hover:bg-indigo-50 focus:bg-indigo-50 px-3 py-2"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Update
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setShowDocumentDialog(true)}
-                    className="cursor-pointer flex items-center gap-2 hover:bg-indigo-50 focus:bg-indigo-50 px-3 py-2"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    {documents.length > 0 ? `Manage Documents (${documents.length})` : 'Upload Document'}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                type="button"
+                variant="outline"
+                className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
+                onClick={() => setShowDocumentDialog(true)}
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                Upload
+              </Button>
               {/* Updated History Button - Always visible but disabled when adding new subscription */}
               <Button
                 type="button"
@@ -1981,6 +2231,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           </div>
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
+                          {/* Company Level option - always first */}
+                          <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
+                            <Checkbox
+                              id="dept-company-level"
+                              checked={selectedDepartments.includes('Company Level')}
+                              onCheckedChange={(checked: boolean) => handleDepartmentChange('Company Level', checked)}
+                              disabled={departmentsLoading}
+                            />
+                            <label
+                              htmlFor="dept-company-level"
+                              className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
+                            >
+                              Company Level
+                            </label>
+                          </div>
                           {Array.isArray(departments) && departments.length > 0 ? (
                             departments
                               .filter(dept => dept.visible)
@@ -1990,7 +2255,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                     id={`dept-${dept.name}`}
                                     checked={selectedDepartments.includes(dept.name)}
                                     onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
-                                    disabled={departmentsLoading}
+                                    disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
                                   />
                                   <label
                                     htmlFor={`dept-${dept.name}`}
@@ -2210,7 +2475,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               </div>
               {/* Professional Renewal Section Header */}
               <div className="mt-10 mb-8">
-                <h2 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">Renewal Information</h2>
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-lg font-semibold text-gray-900 tracking-tight">Renewal Information</h2>
+                  <button
+                    type="button"
+                    onClick={handleRenew}
+                    disabled={isRenewing || !endDate || !billingCycle || autoRenewal}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 text-sm font-medium"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isRenewing ? 'animate-spin' : ''}`} />
+                    Renew
+                  </button>
+                </div>
                 <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
               </div>
               <div className="grid gap-4 mb-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
@@ -2241,6 +2517,36 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     </button>
                   </div>
                 </div>
+                {/* Initial Date */}
+                <div className="w-full flex flex-col">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Initial Date
+                  </label>
+                  <Input 
+                    type="date" 
+                    className="w-full border-slate-300 rounded-lg p-1 text-base"
+                    value={initialDate}
+                    onChange={e => { 
+                      const newInitialDate = e.target.value;
+                      setInitialDate(newInitialDate);
+                      savedInitialDateRef.current = newInitialDate; // Save to ref to persist across renewals
+                      // When Initial Date is entered, auto-populate Start Date
+                      if (newInitialDate) {
+                        setStartDate(newInitialDate); 
+                        form.setValue("startDate", newInitialDate);
+                        // Also update next renewal if auto-renewal is on
+                        if (autoRenewal) {
+                          const cycle = form.watch("billingCycle") || billingCycle;
+                          if (cycle) {
+                            const nextDate = calculateEndDate(newInitialDate, cycle);
+                            form.setValue("nextRenewal", nextDate);
+                            setEndDate(nextDate);
+                          }
+                        }
+                      }
+                    }} 
+                  />
+                </div>
                 {/* Start Date */}
                 <div className="w-full flex flex-col">
                   <FormField
@@ -2254,7 +2560,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormControl>
                           <Input 
                             type="date" 
-                            className={`w-full border-slate-300 rounded-lg p-1 text-base ${isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            className="w-full border-slate-300 rounded-lg p-1 text-base"
                             value={startDate || ''} 
                             onChange={e => { 
                               setStartDate(e.target.value); 
@@ -2269,8 +2575,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 }
                               }
                             }} 
-                            disabled={isEditing}
-                            readOnly={isEditing}
                           />
                         </FormControl>
                         <FormMessage className="text-red-500" />
@@ -2291,7 +2595,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormControl>
                           <Input 
                             type="date" 
-                            className={`w-full border-slate-300 rounded-lg p-1 text-base ${isEditing ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            className="w-full border-slate-300 rounded-lg p-1 text-base"
                             value={endDate || ''} 
                             onChange={e => {
                               setEndDate(e.target.value);
@@ -2307,8 +2611,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 form.setValue("nextRenewal", nextDate);
                               }
                             }} 
-                            disabled={isEditing}
-                            readOnly={isEditing}
                           />
                         </FormControl>
                         <FormMessage className="text-red-500" />
@@ -2412,6 +2714,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   onClick={() => {
                     setCancelRenewalConfirmDialog({ show: true });
                   }}
+                  disabled={!subscription?.id}
                 >
                   Cancel Renewal
                 </Button>
@@ -2551,6 +2854,49 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Effective Date Dialog */}
+      <AlertDialog open={effectiveDateDialog.show} onOpenChange={(open) => !open && setEffectiveDateDialog({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-orange-600" />
+              {isRenewing ? "Confirm Renewal" : "Confirm Update"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              {isRenewing ? "Please enter effective date for renewal" : "Please enter effective date and update subscription"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-6 py-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Effective Date <span className="text-red-500">*</span>
+            </label>
+            <Input
+              type="date"
+              value={effectiveDate}
+              onChange={(e) => setEffectiveDate(e.target.value)}
+              className="w-full border-gray-300 rounded-lg"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => {
+                setEffectiveDateDialog({ show: false });
+                setIsRenewing(false);
+              }}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={isRenewing ? handleConfirmRenewal : handleUpdateWithEffectiveDate}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isRenewing ? "Renew Subscription" : "Update Subscription"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Cancel Renewal Confirmation Dialog */}
       <AlertDialog open={cancelRenewalConfirmDialog.show} onOpenChange={(open) => !open && setCancelRenewalConfirmDialog({ show: false })}>
         <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
@@ -2612,6 +2958,41 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
             >
               Yes, Cancel Renewal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Renewal Confirmation Dialog (for renewals without amount change) */}
+      <AlertDialog open={renewalConfirmDialog.show} onOpenChange={(open) => !open && setRenewalConfirmDialog({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <RefreshCw className="h-5 w-5 text-indigo-600" />
+              Confirm Renewal
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              Are you sure you want to renew this subscription? The renewal will extend the subscription period based on the current billing cycle.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => {
+                setRenewalConfirmDialog({ show: false });
+                setIsRenewing(false);
+              }}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                setRenewalConfirmDialog({ show: false });
+                handleConfirmRenewal();
+              }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md px-6 py-2"
+            >
+              Confirm Renewal
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -3049,36 +3430,132 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
       {/* Document Management Dialog */}
       <Dialog open={showDocumentDialog} onOpenChange={setShowDocumentDialog}>
-        <DialogContent className="max-w-2xl bg-white shadow-2xl border-2 border-gray-200">
-          <DialogHeader className="border-b border-gray-200 pb-3">
-            <DialogTitle className="text-lg font-semibold text-gray-900">Manage Documents</DialogTitle>
+        <DialogContent className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
+          <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
+            <div className="flex items-start justify-between">
+              <div>
+                <DialogTitle className="text-lg font-semibold text-gray-900">Documents</DialogTitle>
+                <p className="text-sm text-gray-600 mt-1">Company-wide and employee documents</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Refresh logic if needed
+                    toast({
+                      title: "Refreshed",
+                      description: "Documents refreshed",
+                      duration: 2000,
+                    });
+                  }}
+                  className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 border-gray-300"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+                    input.onchange = async (e: any) => {
+                      const file = e.target?.files?.[0];
+                      if (file) {
+                        try {
+                          const reader = new FileReader();
+                          reader.onloadend = async () => {
+                            const base64String = reader.result as string;
+                            const newDocName = `File ${documents.length + 1}`;
+                            setDocuments([...documents, {name: newDocName, url: base64String}]);
+                            toast({
+                              title: "Success",
+                              description: `${newDocName} uploaded successfully`,
+                              duration: 2000,
+                            });
+                          };
+                          reader.readAsDataURL(file);
+                        } catch (error) {
+                          toast({
+                            title: "Error",
+                            description: "Failed to process document",
+                            variant: "destructive",
+                          });
+                        }
+                      }
+                    };
+                    input.click();
+                  }}
+                  className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Upload
+                </Button>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="space-y-3 py-4 bg-white">
+          <div className="flex-1 overflow-y-auto py-4 bg-white">
             {/* Document List */}
-            {documents.length > 0 && (
-              <div className="space-y-2 max-h-[240px] overflow-y-auto pr-2">
+            {documents.length > 0 ? (
+              <div className="space-y-2 pr-2">
                 {documents.map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all duration-200">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  <div key={index} className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all duration-200">
+                    {/* Table-like layout with columns */}
+                    <div className="grid grid-cols-12 gap-4 items-center">
+                      {/* Column 1: File Icon and Name */}
+                      <div className="col-span-4 flex items-center gap-2">
+                        <div className="h-9 w-9 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
+                          <p className="text-[10px] text-gray-600">
+                            {doc.url.startsWith('data:application/pdf') ? 'PDF Document' : 
+                             doc.url.startsWith('data:image') ? 'Image File' : 'Document'}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Column 2: Uploaded by */}
+                      <div className="col-span-3 flex items-center gap-1.5">
+                        <div className="h-5 w-5 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <svg className="h-3 w-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] text-gray-500">Uploaded by</p>
+                          <p className="text-xs font-medium text-gray-900 truncate">{currentUserName}</p>
+                        </div>
+                      </div>
+                      
+                      {/* Column 3: Uploaded date */}
+                      <div className="col-span-3 flex items-center gap-1.5">
+                        <svg className="h-4 w-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] text-gray-500">Uploaded date</p>
+                          <p className="text-xs font-medium text-gray-900 truncate">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900">{doc.name}</p>
-                        <p className="text-xs text-gray-600 truncate">
-                          {doc.url.startsWith('data:application/pdf') ? 'PDF Document' : 
-                           doc.url.startsWith('data:image') ? 'Image File' : 'Document'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          try {
-                            const newWindow = window.open('', '_blank');
+                      
+                      {/* Column 4: Actions */}
+                      <div className="col-span-2 flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            try {
+                              const newWindow = window.open('', '_blank');
                             if (newWindow) {
                               if (doc.url.startsWith('data:application/pdf')) {
                                 newWindow.document.write(`
@@ -3099,83 +3576,67 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                   </html>
                                 `);
                               }
+                              }
+                            } catch (error) {
+                              toast({
+                                title: "Error",
+                                description: "Failed to view document",
+                                variant: "destructive",
+                              });
                             }
-                          } catch (error) {
-                            toast({
-                              title: "Error",
-                              description: "Failed to view document",
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                        className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
-                      >
-                        View
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDocuments(documents.filter((_, i) => i !== index));
-                          toast({
-                            title: "Document Removed",
-                            description: `${doc.name} has been removed`,
-                            duration: 2000,
-                          });
-                        }}
-                        className="p-1.5 text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors flex items-center gap-1"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          View
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            try {
+                              const link = document.createElement('a');
+                              link.href = doc.url;
+                              link.download = doc.name;
+                              link.click();
+                              toast({
+                                title: "Download Started",
+                                description: `Downloading ${doc.name}`,
+                                duration: 2000,
+                              });
+                            } catch (error) {
+                              toast({
+                                title: "Error",
+                                description: "Failed to download document",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors flex items-center gap-1"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          Download
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-
-            {/* Upload Button */}
-            <button
-              type="button"
-              onClick={() => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
-                input.onchange = async (e: any) => {
-                  const file = e.target?.files?.[0];
-                  if (file) {
-                    try {
-                      const reader = new FileReader();
-                      reader.onloadend = async () => {
-                        const base64String = reader.result as string;
-                        const newDocName = `File ${documents.length + 1}`;
-                        setDocuments([...documents, {name: newDocName, url: base64String}]);
-                        toast({
-                          title: "Success",
-                          description: `${newDocName} uploaded successfully`,
-                          duration: 2000,
-                        });
-                      };
-                      reader.readAsDataURL(file);
-                    } catch (error) {
-                      toast({
-                        title: "Error",
-                        description: "Failed to process document",
-                        variant: "destructive",
-                      });
-                    }
-                  }
-                };
-                input.click();
-              }}
-              className="w-full py-6 border-2 border-dashed border-blue-400 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg hover:border-blue-600 hover:bg-gradient-to-br hover:from-blue-100 hover:to-indigo-100 transition-all duration-200 flex flex-col items-center justify-center gap-2 text-blue-700 hover:text-blue-900"
-            >
-              <div className="h-12 w-12 bg-blue-600 rounded-full flex items-center justify-center">
-                <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                </div>
+                <p className="text-gray-500 text-sm">No documents uploaded yet</p>
+                <p className="text-gray-400 text-xs mt-1">Click the Upload button above to add documents</p>
               </div>
-              <span className="text-sm font-semibold">Click to Upload Document</span>
-              <span className="text-xs text-gray-600">PDF, DOC, DOCX, JPG, JPEG, PNG (up to 50MB)</span>
-            </button>
+            )}
           </div>
           <div className="flex justify-between items-center gap-3 pt-3 border-t border-gray-200 bg-gray-50 -mx-6 px-6 -mb-6 pb-4 rounded-b-lg">
             <span className="text-xs text-gray-600">
