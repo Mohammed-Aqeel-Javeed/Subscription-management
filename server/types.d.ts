@@ -5,6 +5,8 @@ export interface AuthenticatedUser {
   userId: string;
   email: string;
   tenantId: string;
+  role?: string;
+  department?: string;
   // ...other user properties
 }
 
@@ -22,5 +24,6 @@ export interface User {
   email?: string;
   name?: string;
   role?: string;
+  department?: string;
   // Add any other properties needed for your app
 }

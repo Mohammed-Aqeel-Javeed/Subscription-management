@@ -389,13 +389,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
+      // For department_editor and department_viewer, find their department by matching email
+      let userDepartment = user.department || null;
+      if ((user.role === 'department_editor' || user.role === 'department_viewer') && user.tenantId) {
+        const department = await db.collection("departments").findOne({
+          tenantId: user.tenantId,
+          email: user.email
+        });
+        if (department) {
+          userDepartment = department.name;
+          console.log(`[LOGIN] Found department for ${user.email}: ${department.name}`);
+        } else {
+          console.log(`[LOGIN] No department found for ${user.email}`);
+        }
+      }
+
       // Include role and department in JWT and response
       const tokenPayload: any = {
         userId: user._id,
         email: user.email,
         tenantId: user.tenantId || null,
         role: user.role || "viewer",
-        department: user.department || null
+        department: userDepartment
       };
       const token = jwt.sign(
         tokenPayload,
@@ -423,7 +438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: user.name,
           tenantId: user.tenantId || null,
           role: user.role || "viewer",
-          department: user.department || null,
+          department: userDepartment,
           status: user.status
         }
       });
@@ -458,9 +473,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Company not found for this tenant" });
       }
       
-      // Get role and department directly from login collection
-      const role = dbUser.role || "viewer";
-      const department = dbUser.department || undefined;
+      // Get role and department from JWT token (already set during login)
+      const role = user.role || dbUser.role || "viewer";
+      const department = user.department || dbUser.department || undefined;
       
       console.log(`[/api/me] User: ${dbUser.email}, Role: ${role}, Department: ${department}`);
       
@@ -825,10 +840,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ===== Subscriptions =====
   app.get("/api/subscriptions", async (req, res) => {
+    // Disable caching for role-based filtering
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const tenantId = req.user?.tenantId;
+    const userRole = req.user?.role;
+    const userId = req.user?.userId;
+    const userDepartment = req.user?.department;
+    
+    console.log('[SUBSCRIPTION FILTER] User:', { userRole, userId, userDepartment });
+    
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
-      const subscriptions = await storage.getSubscriptions(tenantId);
+      let subscriptions = await storage.getSubscriptions(tenantId);
+      console.log('[SUBSCRIPTION FILTER] Total subscriptions:', subscriptions.length);
+      
+      // Apply role-based filtering
+      if (userRole === 'contributor') {
+        // Contributors can only see items where they are the owner (match by email)
+        const userEmail = req.user?.email;
+        subscriptions = subscriptions.filter(sub => {
+          const isOwner = sub.ownerEmail === userEmail || sub.owner === userId;
+          console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Owner:', sub.owner, 'OwnerEmail:', sub.ownerEmail, 'User email:', userEmail, 'Is owner:', isOwner);
+          return isOwner;
+        });
+        console.log('[SUBSCRIPTION FILTER] After contributor filter:', subscriptions.length);
+      } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
+        // Department roles can only see items in their department
+        if (userDepartment) {
+          subscriptions = subscriptions.filter(sub => {
+            if (!sub.department) {
+              console.log('[SUBSCRIPTION FILTER] No department on subscription:', sub.serviceName);
+              return false;
+            }
+            try {
+              const depts = JSON.parse(sub.department);
+              const hasAccess = Array.isArray(depts) && depts.includes(userDepartment);
+              console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Departments:', depts, 'User dept:', userDepartment, 'Has access:', hasAccess);
+              return hasAccess;
+            } catch {
+              const hasAccess = sub.department === userDepartment;
+              console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Department (string):', sub.department, 'User dept:', userDepartment, 'Has access:', hasAccess);
+              return hasAccess;
+            }
+          });
+          console.log('[SUBSCRIPTION FILTER] After department filter:', subscriptions.length);
+        }
+      }
+      
       // Convert all IDs to strings to ensure consistent type
       const formattedSubscriptions = subscriptions.map(sub => ({
         ...sub,

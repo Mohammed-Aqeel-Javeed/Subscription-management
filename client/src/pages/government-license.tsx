@@ -18,6 +18,16 @@ import { useToast } from "../hooks/use-toast";
 import { z } from "zod";
 import { API_BASE_URL } from "@/lib/config";
 import { Checkbox } from "../components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import Papa from 'papaparse';
 import { apiRequest } from "@/lib/queryClient";
 
@@ -115,6 +125,11 @@ export default function GovernmentLicense() {
   
   // Department management state
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [departmentModal, setDepartmentModal] = useState<{show: boolean}>({show: false});
+  const [departmentSelectOpen, setDepartmentSelectOpen] = useState(false);
+  const [newDepartmentName, setNewDepartmentName] = useState<string>('');
+  const [newDepartmentHead, setNewDepartmentHead] = useState<string>('');
+  const [newDepartmentEmail, setNewDepartmentEmail] = useState<string>('');
   
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -221,6 +236,28 @@ export default function GovernmentLicense() {
 
   // Handle department selection
   const handleDepartmentChange = (departmentName: string, checked: boolean) => {
+    // If Company Level is selected, select all departments
+    if (departmentName === 'Company Level' && checked) {
+      const allDepts = ['Company Level', ...(departments?.filter(d => d.visible).map(d => d.name) || [])];
+      setSelectedDepartments(allDepts);
+      form.setValue("departments", allDepts);
+      form.setValue("department", JSON.stringify(allDepts));
+      return;
+    }
+    
+    // If unchecking Company Level, uncheck all
+    if (departmentName === 'Company Level' && !checked) {
+      setSelectedDepartments([]);
+      form.setValue("departments", []);
+      form.setValue("department", JSON.stringify([]));
+      return;
+    }
+    
+    // Cannot uncheck individual departments when Company Level is selected
+    if (selectedDepartments.includes('Company Level') && !checked) {
+      return;
+    }
+    
     const newSelectedDepartments = checked
       ? [...selectedDepartments, departmentName]
       : selectedDepartments.filter(dept => dept !== departmentName);
@@ -232,10 +269,53 @@ export default function GovernmentLicense() {
 
   // Remove department
   const removeDepartment = (departmentName: string) => {
+    // If removing Company Level, remove all
+    if (departmentName === 'Company Level') {
+      setSelectedDepartments([]);
+      form.setValue("departments", []);
+      form.setValue("department", JSON.stringify([]));
+      return;
+    }
+    
+    // Cannot remove individual departments when Company Level is selected
+    if (selectedDepartments.includes('Company Level')) {
+      return;
+    }
+    
     const newSelectedDepartments = selectedDepartments.filter(dept => dept !== departmentName);
     setSelectedDepartments(newSelectedDepartments);
     form.setValue("departments", newSelectedDepartments);
     form.setValue("department", JSON.stringify(newSelectedDepartments));
+  };
+  
+  // Handle adding new department
+  const handleAddDepartment = async () => {
+    if (!newDepartmentName.trim()) return;
+    
+    try {
+      await apiRequest(
+        "POST",
+        "/api/company/departments",
+        { 
+          name: newDepartmentName.trim(),
+          departmentHead: newDepartmentHead.trim(),
+          email: newDepartmentEmail.trim()
+        }
+      );
+      await queryClient.invalidateQueries({ queryKey: ["/api/company/departments"] });
+      const updatedDepartments = [...selectedDepartments, newDepartmentName.trim()];
+      setSelectedDepartments(updatedDepartments);
+      form.setValue('departments', updatedDepartments);
+      form.setValue('department', JSON.stringify(updatedDepartments));
+      setNewDepartmentName('');
+      setNewDepartmentHead('');
+      setNewDepartmentEmail('');
+      setDepartmentModal({ show: false });
+      toast({ title: "Department added successfully" });
+    } catch (error) {
+      console.error('Error adding department:', error);
+      toast({ title: "Failed to add department", variant: "destructive" });
+    }
   };
 
   // Create/Update license mutation
@@ -1116,6 +1196,8 @@ export default function GovernmentLicense() {
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-slate-700">Department</label>
                         <Select
+                          open={departmentSelectOpen}
+                          onOpenChange={setDepartmentSelectOpen}
                           value={selectedDepartments.length > 0 ? selectedDepartments.join(',') : ''}
                           onValueChange={() => {}}
                           disabled={departmentsLoading}
@@ -1144,6 +1226,21 @@ export default function GovernmentLicense() {
                             </div>
                           </SelectTrigger>
                           <SelectContent>
+                            {/* Company Level option - always first */}
+                            <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
+                              <Checkbox
+                                id="dept-company-level"
+                                checked={selectedDepartments.includes('Company Level')}
+                                onCheckedChange={(checked: boolean) => handleDepartmentChange('Company Level', checked)}
+                                disabled={departmentsLoading}
+                              />
+                              <label
+                                htmlFor="dept-company-level"
+                                className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
+                              >
+                                Company Level
+                              </label>
+                            </div>
                             {departments && departments.length > 0 ? (
                               departments.map(dept => (
                                 <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
@@ -1151,7 +1248,7 @@ export default function GovernmentLicense() {
                                     id={`dept-${dept.name}`}
                                     checked={selectedDepartments.includes(dept.name)}
                                     onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
-                                    disabled={departmentsLoading}
+                                    disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
                                   />
                                   <label
                                     htmlFor={`dept-${dept.name}`}
@@ -1161,7 +1258,18 @@ export default function GovernmentLicense() {
                                   </label>
                                 </div>
                               ))
-                            ) : (
+                            ) : null}
+                            {/* Add Department option */}
+                            <div
+                              className="font-medium border-t border-gray-200 mt-1 pt-2 text-black cursor-pointer px-2 py-2 hover:bg-slate-100 rounded-md"
+                              onClick={() => {
+                                setDepartmentSelectOpen(false);
+                                setDepartmentModal({ show: true });
+                              }}
+                            >
+                              + New
+                            </div>
+                            {departments && departments.length === 0 && (
                               <SelectItem value="no-department" disabled>No departments available</SelectItem>
                             )}
                           </SelectContent>
@@ -1423,6 +1531,90 @@ export default function GovernmentLicense() {
           onChange={handleImport}
           className="hidden"
         />
+        
+        {/* Department Creation Modal */}
+        <AlertDialog open={departmentModal.show} onOpenChange={(open) => !open && setDepartmentModal({ show: false })}>
+          <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+            <AlertDialogHeader className="bg-indigo-600 text-white p-6 rounded-t-lg -m-6 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 p-2 rounded-lg">
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm2 6a2 2 0 104 0 2 2 0 00-4 0zm6 0a2 2 0 104 0 2 2 0 00-4 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <AlertDialogTitle className="text-xl font-semibold text-white">
+                  Add New Department
+                </AlertDialogTitle>
+              </div>
+            </AlertDialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Department Name</label>
+                <Input
+                  placeholder=""
+                  value={newDepartmentName}
+                  onChange={(e) => setNewDepartmentName(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddDepartment();
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Department Head</label>
+                <Input
+                  placeholder=""
+                  value={newDepartmentHead}
+                  onChange={(e) => setNewDepartmentHead(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddDepartment();
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                <Input
+                  type="email"
+                  placeholder=""
+                  value={newDepartmentEmail}
+                  onChange={(e) => setNewDepartmentEmail(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddDepartment();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <AlertDialogFooter className="flex gap-2 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDepartmentModal({ show: false });
+                  setNewDepartmentName('');
+                  setNewDepartmentHead('');
+                  setNewDepartmentEmail('');
+                }}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleAddDepartment}
+                disabled={!newDepartmentName.trim()}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
+              >
+                Add Department
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );

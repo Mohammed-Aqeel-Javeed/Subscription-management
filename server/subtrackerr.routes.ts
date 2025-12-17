@@ -15,7 +15,12 @@
 declare global {
   namespace Express {
     interface User {
-      tenantId: string;
+      userId?: string;
+      id?: string;
+      email?: string;
+      tenantId?: string;
+      role?: string;
+      department?: string;
       // add other properties if needed
     }
   }
@@ -634,10 +639,35 @@ router.get("/api/compliance/list", async (req, res) => {
     const collection = db.collection("compliance");
     // Multi-tenancy: filter by tenantId
     const tenantId = req.user?.tenantId;
+    const userRole = req.user?.role;
+    const userId = req.user?.userId;
+    const userDepartment = req.user?.department;
+    
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    const items = await collection.find({ tenantId }).toArray();
+    
+    let items = await collection.find({ tenantId }).toArray();
+    
+    // Apply role-based filtering
+    if (userRole === 'contributor') {
+      // Contributors can only see their own items
+      items = items.filter(item => item.owner === userId);
+    } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
+      // Department roles can only see items in their department
+      if (userDepartment) {
+        items = items.filter(item => {
+          if (!item.department) return false;
+          try {
+            const depts = JSON.parse(item.department);
+            return Array.isArray(depts) && depts.includes(userDepartment);
+          } catch {
+            return item.department === userDepartment;
+          }
+        });
+      }
+    }
+    
     res.status(200).json(items);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch compliance data", error });
@@ -848,10 +878,21 @@ router.put("/api/compliance/:id", async (req, res) => {
 // Get all subscriptions
 router.get("/api/subscriptions", async (req, res) => {
   try {
+    // Disable caching for role-based filtering
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
     // Multi-tenancy: filter by tenantId
     const tenantId = req.user?.tenantId;
+    const userRole = req.user?.role;
+    const userId = req.user?.userId || req.user?.id;
+    const userDepartment = req.user?.department;
+    
+    console.log('[SUBSCRIPTION FILTER] User:', { userRole, userId, userDepartment });
+    
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
@@ -859,7 +900,41 @@ router.get("/api/subscriptions", async (req, res) => {
     // Import decryption function
     const { decryptSubscriptionData } = await import("./encryption.service.js");
     
-    const subscriptions = await collection.find({ tenantId }).toArray();
+    let subscriptions = await collection.find({ tenantId }).toArray();
+    console.log('[SUBSCRIPTION FILTER] Total subscriptions:', subscriptions.length);
+    
+    // Apply role-based filtering
+    if (userRole === 'contributor') {
+      // Contributors can only see items where they are the owner (match by email)
+      const userEmail = req.user?.email;
+      subscriptions = subscriptions.filter(sub => {
+        const isOwner = sub.ownerEmail === userEmail || sub.owner === userId;
+        console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Owner:', sub.owner, 'OwnerEmail:', sub.ownerEmail, 'User email:', userEmail, 'Is owner:', isOwner);
+        return isOwner;
+      });
+      console.log('[SUBSCRIPTION FILTER] After contributor filter:', subscriptions.length);
+    } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
+      // Department roles can only see items in their department
+      if (userDepartment) {
+        subscriptions = subscriptions.filter(sub => {
+          if (!sub.department) {
+            console.log('[SUBSCRIPTION FILTER] No department on subscription:', sub.serviceName);
+            return false;
+          }
+          try {
+            const depts = JSON.parse(sub.department);
+            const hasAccess = Array.isArray(depts) && depts.includes(userDepartment);
+            console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Departments:', depts, 'User dept:', userDepartment, 'Has access:', hasAccess);
+            return hasAccess;
+          } catch {
+            const hasAccess = sub.department === userDepartment;
+            console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Department (string):', sub.department, 'User dept:', userDepartment, 'Has access:', hasAccess);
+            return hasAccess;
+          }
+        });
+        console.log('[SUBSCRIPTION FILTER] After department filter:', subscriptions.length);
+      }
+    }
     
     // Transform MongoDB documents to have consistent id field AND decrypt sensitive data
     const transformedSubscriptions = subscriptions.map(sub => {
@@ -1452,6 +1527,7 @@ router.post("/api/subscriptions", async (req, res) => {
     const subscription = {
       ...req.body,
       tenantId,
+      initialDate: req.body.initialDate || req.body.startDate, // Set initialDate to startDate if not provided
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -1698,10 +1774,14 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     // ENCRYPT sensitive fields in the update payload
     const encryptedPayload = encryptSubscriptionData(req.body);
     
+    const preservedInitialDate = req.body.initialDate || oldDoc.initialDate;
+    console.log('📅 UPDATE: Preserving initialDate:', preservedInitialDate, 'from:', req.body.initialDate ? 'request body' : 'old document');
+    
     const update = { 
       $set: { 
         ...encryptedPayload,
         status: req.body.status || oldDoc.status, // Preserve status if not provided
+        initialDate: preservedInitialDate, // IMPORTANT: Preserve original initialDate
         updatedAt: new Date(),  // Add updatedAt timestamp
         tenantId // Always set tenantId from user/session, not from payload (last)
       } 
@@ -1713,6 +1793,9 @@ router.put("/api/subscriptions/:id", async (req, res) => {
       
       // Only create history record if there were actual changes
       if (result.modifiedCount > 0) {
+        // Use effectiveDate if provided, otherwise use current date
+        const effectiveDate = req.body.effectiveDate ? new Date(req.body.effectiveDate) : new Date();
+        
         // Create history record with tenantId
         const historyRecord = {
           subscriptionId: subscriptionId,  // Store as ObjectId
@@ -1723,10 +1806,12 @@ router.put("/api/subscriptions/:id", async (req, res) => {
           },
           updatedFields: {
             ...updatedDoc,
-            _id: subscriptionId
+            _id: subscriptionId,
+            // Override startDate with effectiveDate if provided
+            startDate: req.body.effectiveDate ? effectiveDate : (updatedDoc?.startDate || new Date())
           },
           action: "update",
-          timestamp: new Date(),
+          timestamp: effectiveDate, // Use effective date instead of new Date()
           serviceName: updatedDoc?.serviceName  // Add serviceName for easier querying
         };
         console.log('Attempting to insert history record:', JSON.stringify(historyRecord, null, 2));
@@ -2183,12 +2268,34 @@ router.get("/api/licenses", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("licenses");
     const tenantId = req.user?.tenantId;
+    const userRole = req.user?.role;
+    const userId = req.user?.userId;
+    const userDepartment = req.user?.department;
     
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
 
-    const licenses = await collection.find({ tenantId }).sort({ createdAt: -1 }).toArray();
+    let licenses = await collection.find({ tenantId }).sort({ createdAt: -1 }).toArray();
+    
+    // Apply role-based filtering
+    if (userRole === 'contributor') {
+      // Contributors can only see their own items
+      licenses = licenses.filter(license => license.owner === userId);
+    } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
+      // Department roles can only see items in their department
+      if (userDepartment) {
+        licenses = licenses.filter(license => {
+          if (!license.department) return false;
+          try {
+            const depts = JSON.parse(license.department);
+            return Array.isArray(depts) && depts.includes(userDepartment);
+          } catch {
+            return license.department === userDepartment;
+          }
+        });
+      }
+    }
     
     // Convert ObjectIds to strings for frontend
     const processedLicenses = licenses.map(license => ({
