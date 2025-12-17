@@ -67,14 +67,6 @@ queryKey: [notificationType === 'subscription' ? '/api/notifications' : '/api/no
 refetchInterval: 5000, // Refresh every 5 seconds for automatic updates
 });
 
-// Debug logging
-console.log('Notifications query status:', { 
-  isLoading, 
-  error, 
-  notifications: notifications?.length || 0,
-  notificationsData: notifications,
-  notificationType
-});
 const { data: subscriptions = [], refetch: refetchSubscriptions } = useQuery<Subscription[]>({
 queryKey: ['/api/subscriptions'],
 });
@@ -652,5 +644,4 @@ return null;
 </div>
 );
 }
-
 

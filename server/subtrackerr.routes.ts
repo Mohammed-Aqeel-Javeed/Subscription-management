@@ -10,7 +10,6 @@
 
 // Compliance Notifications route
 
-
 // ...rest of your routes and logic...
 declare global {
   namespace Express {
@@ -40,7 +39,6 @@ export interface HistoryRecord {
 // --- History API ---
 // List all history records
 
-
 // --- Payment Methods API ---
 import { ObjectId as PaymentObjectId } from "mongodb";
 
@@ -53,7 +51,6 @@ import { ObjectId as LedgerObjectId } from "mongodb";
 
 // --- Subscription API ---
 import { ObjectId } from "mongodb";
-
 
 import { Router } from "express";
 // @ts-ignore
@@ -88,14 +85,6 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
   const complianceId = compliance._id ? compliance._id.toString() : (typeof compliance.id === 'string' ? compliance.id : undefined);
   if (!complianceId) return;
 
-  console.log('[COMPLIANCE REMINDER DEBUG] Generating reminders for compliance:', {
-    complianceId,
-    filingName: compliance.policy || compliance.filingName || compliance.complianceName || compliance.name || 'Compliance Filing',
-    submissionDeadline: compliance.submissionDeadline,
-    reminderDays: compliance.reminderDays,
-    reminderPolicy: compliance.reminderPolicy
-  });
-
   // Remove all old reminders for this compliance (legacy collection + new storage in compliance_notifications)
   try {
     await db.collection("reminders").deleteMany({ complianceId });
@@ -104,7 +93,7 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
     // Delete only reminder-type notifications (those without eventType or eventType === null)
     await db.collection("compliance_notifications").deleteMany({ complianceId, $or: [ { eventType: { $exists: false } }, { eventType: null } ] });
   } catch (err) {
-    console.warn('[COMPLIANCE REMINDER DEBUG] Failed to prune existing reminder notifications', err);
+    // Failed to prune existing notifications - continue
   }
 
   // Use submissionDeadline as the target date for reminders
@@ -112,7 +101,6 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
   const rawDeadline = compliance.submissionDeadline;
   const deadlineDate = normalizeDateString(rawDeadline);
   if (!deadlineDate) {
-    console.log('[COMPLIANCE REMINDER DEBUG] No submissionDeadline found, skipping reminder generation');
     return;
   }
 
@@ -125,7 +113,6 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
   if (reminderPolicy === "One time") {
     const reminderDate = new Date(deadlineDate);
     if (isNaN(reminderDate.getTime())) {
-      console.warn('[COMPLIANCE REMINDER DEBUG] Invalid submissionDeadline for one-time policy, raw value:', rawDeadline);
       return;
     }
     reminderDate.setDate(reminderDate.getDate() - reminderDays);
@@ -136,7 +123,6 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
   } else if (reminderPolicy === "Two times") {
     const firstDate = new Date(deadlineDate);
     if (isNaN(firstDate.getTime())) {
-      console.warn('[COMPLIANCE REMINDER DEBUG] Invalid submissionDeadline for two-times policy, raw value:', rawDeadline);
       return;
     }
     firstDate.setDate(firstDate.getDate() - reminderDays);
@@ -157,7 +143,6 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
     // Daily reminders from (deadlineDate - reminderDays) to deadlineDate
     const startDate = new Date(deadlineDate);
     if (isNaN(startDate.getTime())) {
-      console.warn('[COMPLIANCE REMINDER DEBUG] Invalid submissionDeadline for until-renewal policy, raw value:', rawDeadline);
       return;
     }
     startDate.setDate(startDate.getDate() - reminderDays);
@@ -171,8 +156,6 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
       current.setDate(current.getDate() + 1);
     }
   }
-
-  console.log('[COMPLIANCE REMINDER DEBUG] Reminders to insert:', remindersToInsert);
 
   // Insert all reminders as notifications in compliance_notifications
   for (const reminder of remindersToInsert) {
@@ -191,24 +174,13 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
       complianceCategory: compliance.category || compliance.complianceCategory || undefined,
       submissionDeadline: deadlineDate // Add submission deadline for frontend display
     };
-    console.log('[COMPLIANCE REMINDER DEBUG] Inserting reminder as notification:', notificationDoc);
     await db.collection("compliance_notifications").insertOne(notificationDoc);
   }
-
-  console.log('[COMPLIANCE REMINDER DEBUG] Successfully generated', remindersToInsert.length, 'reminders for compliance', complianceId);
 }
 
 async function generateRemindersForSubscription(subscription: any, tenantId: string, db: any) {
   const subscriptionId = subscription._id ? subscription._id.toString() : (typeof subscription.id === 'string' ? subscription.id : undefined);
   if (!subscriptionId) return;
-
-  console.log('[REMINDER DEBUG] Generating reminders for subscription:', {
-    subscriptionId,
-    serviceName: subscription.serviceName,
-    nextRenewal: subscription.nextRenewal,
-    reminderDays: subscription.reminderDays,
-    reminderPolicy: subscription.reminderPolicy
-  });
 
   // Remove all old reminders for this subscription
   await db.collection("reminders").deleteMany({ subscriptionId });
@@ -216,7 +188,6 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
   // Use nextRenewal as the target date for reminders
   const renewalDate = subscription.nextRenewal;
   if (!renewalDate) {
-    console.log('[REMINDER DEBUG] No nextRenewal date found, skipping reminder generation');
     return;
   }
 
@@ -264,8 +235,6 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
     }
   }
 
-  console.log('[REMINDER DEBUG] Reminders to insert:', remindersToInsert);
-
   // Insert all reminders
   for (const reminder of remindersToInsert) {
     const reminderDoc = {
@@ -280,11 +249,8 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
   subscriptionName: subscription.serviceName || subscription.name || undefined,
   category: subscription.category || undefined
     };
-    console.log('[REMINDER DEBUG] Inserting reminder:', reminderDoc);
     await db.collection("reminders").insertOne(reminderDoc);
   }
-
-  console.log('[REMINDER DEBUG] Successfully generated', remindersToInsert.length, 'reminders');
 }
 
 // JWT middleware to set req.user and req.user.tenantId
@@ -314,23 +280,17 @@ router.use((req, res, next) => {
 // Add a new history record
 router.post("/api/history", async (req, res) => {
   try {
-    console.log('POST /api/history called');
-    console.log('Request body:', req.body);
     const db = await connectToDatabase();
     const historyCollection = db.collection("history");
     const { subscriptionId, action, data, updatedFields } = req.body;
     if (!subscriptionId) {
-      console.log('No subscriptionId provided');
       return res.status(400).json({ message: "subscriptionId is required" });
     }
-    console.log(`Creating history record for subscriptionId: ${subscriptionId}`);
     // Always store subscriptionId as ObjectId for consistency (like complianceId in ledger)
     let subscriptionObjId;
     try {
       subscriptionObjId = new ObjectId(subscriptionId);
-      console.log(`Converted to ObjectId successfully: ${subscriptionObjId}`);
     } catch (err) {
-      console.log('Invalid subscriptionId format:', subscriptionId);
       // If not a valid ObjectId, do not create history record
       return res.status(400).json({ message: "Invalid subscriptionId format" });
     }
@@ -368,7 +328,6 @@ router.get("/api/history/list", async (req, res) => {
     
     // Multi-tenancy: filter by tenantId
   const tenantId = req.user?.tenantId;
-  console.log('TenantId in update route:', tenantId, 'User:', req.user); // Debug log
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
@@ -411,15 +370,11 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
     const collection = db.collection("history");
     const { subscriptionId } = req.params;
 
-    console.log(`GET /api/history/${subscriptionId} - Fetching history for subscription`);
-
     // Try to convert to ObjectId, but don't fail if it's not a valid ObjectId
     let subObjId;
     try {
       subObjId = new ObjectId(subscriptionId);
-      console.log(`Successfully converted to ObjectId: ${subObjId}`);
     } catch (err) {
-      console.log(`Not a valid ObjectId, will use string comparison fallback`);
       // Continue with string comparison
     }
 
@@ -433,39 +388,11 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
       { subscriptionId: subObjId, tenantId } :
       { subscriptionId: subscriptionId, tenantId };
 
-    console.log(`History API Debug: Requested subscriptionId: ${subscriptionId}`);
-    console.log(`History API Debug: Filter used:`, filter);
-
     // Sort by timestamp descending (newest first)
     const items = await collection
       .find(filter)
       .sort({ timestamp: -1 })
       .toArray();
-
-    console.log(`History API Debug: Returned ${items.length} records.`);
-    items.forEach((item, idx) => {
-      console.log(`Record #${idx}: _id=${item._id}, subscriptionId=${item.subscriptionId}`);
-    });
-    
-    // If no records found with $or query, try individual queries to debug
-    if (items.length === 0) {
-      console.log(`No records found with combined filter, trying individual lookups for debugging:`);
-      
-      if (subObjId) {
-        const objIdItems = await collection.find({ subscriptionId: subObjId }).toArray();
-        console.log(`- Direct subscriptionId as ObjectId: ${objIdItems.length} records`);
-      }
-      
-      const strItems = await collection.find({ subscriptionId: subscriptionId }).toArray();
-      console.log(`- Direct subscriptionId as string: ${strItems.length} records`);
-      
-      const allItems = await collection.find({}).toArray();
-      console.log(`- Total records in collection: ${allItems.length}`);
-      
-      if (allItems.length > 0) {
-        console.log(`- Sample record structure: ${JSON.stringify(allItems[0])}`);
-      }
-    }
     
     // Import decryption function
     const { decryptSubscriptionData } = await import("./encryption.service.js");
@@ -492,7 +419,6 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch history records", error: errorMessage });
   }
 });
-
 
 router.get("/api/payment", async (req, res) => {
   try {
@@ -579,7 +505,6 @@ router.delete("/api/payment/:id", async (req, res) => {
   }
 });
 
-
 // List all ledger records
 router.get("/api/ledger/list", async (req, res) => {
   try {
@@ -601,7 +526,7 @@ router.get("/api/ledger/list", async (req, res) => {
 router.post("/api/ledger/insert", async (req, res) => {
   try {
     const db = await connectToDatabase();
-    console.log("Connected to DB:", db.databaseName); // Add this line
+// Add this line
     const collection = db.collection("ledger");
     // Multi-tenancy: set tenantId
     const tenantId = req.user?.tenantId;
@@ -609,7 +534,7 @@ router.post("/api/ledger/insert", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     const result = await collection.insertOne({ ...req.body, tenantId });
-    console.log("Insert result:", result); // Add this line
+// Add this line
     res.status(201).json({ insertedId: result.insertedId });
   } catch (error) {
     console.error("Ledger insert error:", error); // Add this line
@@ -689,9 +614,7 @@ router.delete("/api/compliance/:id", async (req, res) => {
       if (complianceToDelete) {
         try {
           const filingName = complianceToDelete.policy || complianceToDelete.filingName || complianceToDelete.complianceName || complianceToDelete.name || 'Compliance Filing';
-          console.log(`🔄 [COMPLIANCE] Creating deletion notification event for compliance filing: ${filingName}`);
-          
-          const notificationEvent = {
+const notificationEvent = {
             _id: new ObjectId(),
             tenantId: req.user?.tenantId,
             type: 'compliance',
@@ -706,11 +629,8 @@ router.delete("/api/compliance/:id", async (req, res) => {
             createdAt: new Date().toISOString(),
             reminderTriggerDate: new Date().toISOString().slice(0, 10)
           };
-          
-          console.log(`🔄 [COMPLIANCE] Attempting to insert deletion notification event:`, notificationEvent);
-          const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
-          console.log(`✅ [COMPLIANCE] Deletion notification event created successfully with ID: ${notificationResult.insertedId}`);
-        } catch (notificationError) {
+const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
+} catch (notificationError) {
           console.error(`❌ [COMPLIANCE] Failed to create deletion notification event for compliance filing:`, notificationError);
           // Don't throw - let deletion succeed even if notification fails
         }
@@ -756,19 +676,15 @@ router.post("/api/compliance/insert", async (req, res) => {
     
     // Generate reminders for compliance
     try {
-      console.log(`🔄 [COMPLIANCE] Generating reminders for compliance filing: ${complianceData.filingName || complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
-      await generateRemindersForCompliance(createdCompliance, tenantId, db);
-      console.log(`✅ [COMPLIANCE] Reminders generated successfully for compliance ${result.insertedId}`);
-    } catch (reminderError) {
+await generateRemindersForCompliance(createdCompliance, tenantId, db);
+} catch (reminderError) {
       console.error(`❌ [COMPLIANCE] Failed to generate reminders:`, reminderError);
       // Don't throw - let compliance creation succeed even if reminder generation fails
     }
     
     // Create notification event for compliance creation
     try {
-      console.log(`🔄 [COMPLIANCE] Creating notification event for compliance filing: ${complianceData.complianceName || complianceData.name || 'Unnamed Filing'}`);
-      
-      const filingName = complianceData.policy || complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing';
+const filingName = complianceData.policy || complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing';
       const notificationEvent = {
         _id: new ObjectId(),
         tenantId,
@@ -784,11 +700,8 @@ router.post("/api/compliance/insert", async (req, res) => {
         createdAt: new Date().toISOString(),
         reminderTriggerDate: new Date().toISOString().slice(0, 10)
       };
-      
-      console.log(`🔄 [COMPLIANCE] Attempting to insert notification event:`, notificationEvent);
-      const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
-      console.log(`✅ [COMPLIANCE] Notification event created successfully with ID: ${notificationResult.insertedId}`);
-    } catch (notificationError) {
+const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
+} catch (notificationError) {
       console.error(`❌ [COMPLIANCE] Failed to create notification event:`, notificationError);
       // Don't throw - let compliance creation succeed even if notification fails
     }
@@ -824,10 +737,8 @@ router.put("/api/compliance/:id", async (req, res) => {
         const tenantId = req.user?.tenantId;
         if (tenantId) {
           const complianceName = updatedDoc?.filingName || updatedDoc?.complianceName || updatedDoc?.name || 'Unnamed Filing';
-          console.log(`🔄 [COMPLIANCE] Regenerating reminders for updated compliance filing: ${complianceName}`);
-          await generateRemindersForCompliance(updatedDoc, tenantId, db);
-          console.log(`✅ [COMPLIANCE] Reminders regenerated successfully for compliance ${id}`);
-        }
+await generateRemindersForCompliance(updatedDoc, tenantId, db);
+}
       } catch (reminderError) {
         console.error(`❌ [COMPLIANCE] Failed to regenerate reminders:`, reminderError);
         // Don't throw - let compliance update succeed even if reminder generation fails
@@ -839,8 +750,7 @@ router.put("/api/compliance/:id", async (req, res) => {
         const changedImportant = importantFields.some(f => String(oldDoc?.[f] ?? '') !== String(updateData?.[f] ?? ''));
         if (changedImportant) {
           const complianceName = updateData.policy || updateData.filingName || updateData.complianceName || updateData.name || oldDoc?.policy || oldDoc?.filingName || oldDoc?.complianceName || oldDoc?.name || 'Compliance Filing';
-          console.log(`🔄 [COMPLIANCE] Creating update notification event for compliance filing (significant changes): ${complianceName}`);
-          const notificationEvent = {
+const notificationEvent = {
             _id: new ObjectId(),
             tenantId: req.user?.tenantId,
             type: 'compliance',
@@ -856,10 +766,8 @@ router.put("/api/compliance/:id", async (req, res) => {
             reminderTriggerDate: new Date().toISOString().slice(0, 10)
           };
           const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
-          console.log(`✅ [COMPLIANCE] Update notification event created (significant) with ID: ${notificationResult.insertedId}`);
-        } else {
-          console.log('[COMPLIANCE] Skipping update notification event (no significant field changes)');
-        }
+} else {
+}
       } catch (notificationError) {
         console.error(`❌ [COMPLIANCE] Failed to create conditional update notification event:`, notificationError);
       }
@@ -890,10 +798,7 @@ router.get("/api/subscriptions", async (req, res) => {
     const userRole = req.user?.role;
     const userId = req.user?.userId || req.user?.id;
     const userDepartment = req.user?.department;
-    
-    console.log('[SUBSCRIPTION FILTER] User:', { userRole, userId, userDepartment });
-    
-    if (!tenantId) {
+if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     
@@ -901,39 +806,31 @@ router.get("/api/subscriptions", async (req, res) => {
     const { decryptSubscriptionData } = await import("./encryption.service.js");
     
     let subscriptions = await collection.find({ tenantId }).toArray();
-    console.log('[SUBSCRIPTION FILTER] Total subscriptions:', subscriptions.length);
-    
-    // Apply role-based filtering
+// Apply role-based filtering
     if (userRole === 'contributor') {
       // Contributors can only see items where they are the owner (match by email)
       const userEmail = req.user?.email;
       subscriptions = subscriptions.filter(sub => {
         const isOwner = sub.ownerEmail === userEmail || sub.owner === userId;
-        console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Owner:', sub.owner, 'OwnerEmail:', sub.ownerEmail, 'User email:', userEmail, 'Is owner:', isOwner);
-        return isOwner;
+return isOwner;
       });
-      console.log('[SUBSCRIPTION FILTER] After contributor filter:', subscriptions.length);
-    } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
+} else if (userRole === 'department_editor' || userRole === 'department_viewer') {
       // Department roles can only see items in their department
       if (userDepartment) {
         subscriptions = subscriptions.filter(sub => {
           if (!sub.department) {
-            console.log('[SUBSCRIPTION FILTER] No department on subscription:', sub.serviceName);
-            return false;
+return false;
           }
           try {
             const depts = JSON.parse(sub.department);
             const hasAccess = Array.isArray(depts) && depts.includes(userDepartment);
-            console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Departments:', depts, 'User dept:', userDepartment, 'Has access:', hasAccess);
-            return hasAccess;
+return hasAccess;
           } catch {
             const hasAccess = sub.department === userDepartment;
-            console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Department (string):', sub.department, 'User dept:', userDepartment, 'Has access:', hasAccess);
-            return hasAccess;
+return hasAccess;
           }
         });
-        console.log('[SUBSCRIPTION FILTER] After department filter:', subscriptions.length);
-      }
+}
     }
     
     // Transform MongoDB documents to have consistent id field AND decrypt sensitive data
@@ -993,9 +890,7 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
       // Create notification event for subscription deletion
       if (decryptedSubscription) {
         try {
-          console.log(`🔄 [SUBTRACKERR] Creating deletion notification event for subscription: ${decryptedSubscription.serviceName}`);
-          
-          const notificationEvent = {
+const notificationEvent = {
             _id: new ObjectId(),
             tenantId,
             type: 'subscription',
@@ -1009,11 +904,8 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
             createdAt: new Date().toISOString(),
             reminderTriggerDate: new Date().toISOString().slice(0, 10)
           };
-          
-          console.log(`🔄 [SUBTRACKERR] Attempting to insert deletion notification event:`, notificationEvent);
-          const notificationResult = await db.collection("notification_events").insertOne(notificationEvent);
-          console.log(`✅ [SUBTRACKERR] Deletion notification event created successfully with ID: ${notificationResult.insertedId}`);
-        } catch (notificationError) {
+const notificationResult = await db.collection("notification_events").insertOne(notificationEvent);
+} catch (notificationError) {
           console.error(`❌ [SUBTRACKERR] Failed to create deletion notification event for ${decryptedSubscription?.serviceName}:`, notificationError);
           // Don't throw - let deletion succeed even if notification fails
         }
@@ -1552,13 +1444,11 @@ router.post("/api/subscriptions", async (req, res) => {
       timestamp: new Date(),
       serviceName: subscription.serviceName  // Add serviceName for easier querying
     };
-    console.log('[HISTORY DEBUG] Inserting history record:', JSON.stringify(historyRecord, null, 2));
-    await historyCollection.insertOne(historyRecord);
+await historyCollection.insertOne(historyRecord);
 
     // Create notification event for subscription creation
     try {
-      console.log(`🔄 [SUBTRACKERR] Creating notification event for subscription: ${subscription.serviceName}`);
-      const { ObjectId } = await import("mongodb");
+const { ObjectId } = await import("mongodb");
       
       const notificationEvent = {
         _id: new ObjectId(),
@@ -1574,11 +1464,8 @@ router.post("/api/subscriptions", async (req, res) => {
         createdAt: new Date().toISOString(),
         reminderTriggerDate: new Date().toISOString().slice(0, 10)
       };
-      
-      console.log(`🔄 [SUBTRACKERR] Attempting to insert notification event:`, notificationEvent);
-      const notificationResult = await db.collection("notification_events").insertOne(notificationEvent);
-      console.log(`✅ [SUBTRACKERR] Notification event created successfully with ID: ${notificationResult.insertedId}`);
-    } catch (notificationError) {
+const notificationResult = await db.collection("notification_events").insertOne(notificationEvent);
+} catch (notificationError) {
       console.error(`❌ [SUBTRACKERR] Failed to create notification event for ${subscription.serviceName}:`, notificationError);
       // Don't throw - let subscription creation succeed even if notification fails
     }
@@ -1735,7 +1622,6 @@ router.get("/api/subscriptions/drafts", async (req, res) => {
   }
 });
 
-
 // Update an existing subscription
 router.put("/api/subscriptions/:id", async (req, res) => {
   try {
@@ -1745,7 +1631,7 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     const { id } = req.params;
     // Multi-tenancy: only allow update for current tenant
     const tenantId = req.user?.tenantId;
-    console.log('Update route tenantId:', tenantId, 'User:', req.user); // Debug log
+// Debug log
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
@@ -1775,9 +1661,7 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     const encryptedPayload = encryptSubscriptionData(req.body);
     
     const preservedInitialDate = req.body.initialDate || oldDoc.initialDate;
-    console.log('📅 UPDATE: Preserving initialDate:', preservedInitialDate, 'from:', req.body.initialDate ? 'request body' : 'old document');
-    
-    const update = { 
+const update = { 
       $set: { 
         ...encryptedPayload,
         status: req.body.status || oldDoc.status, // Preserve status if not provided
@@ -1814,16 +1698,13 @@ router.put("/api/subscriptions/:id", async (req, res) => {
           timestamp: effectiveDate, // Use effective date instead of new Date()
           serviceName: updatedDoc?.serviceName  // Add serviceName for easier querying
         };
-        console.log('Attempting to insert history record:', JSON.stringify(historyRecord, null, 2));
-        try {
+try {
           const historyResult = await historyCollection.insertOne(historyRecord);
-          console.log('History insert result:', historyResult);
-        } catch (err) {
+} catch (err) {
           console.error('Error inserting history record:', err);
         }
       } else {
-        console.log('No changes detected, skipping history record creation');
-      }
+}
 
       // Update reminders for the subscription
       await generateRemindersForSubscription(updatedDoc, tenantId, db);
@@ -1841,7 +1722,6 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     res.status(500).json({ message: "Failed to update subscription", error: errorMessage });
   }
 });
-
 
 // List all employees
 router.get("/api/employees", async (req, res) => {
@@ -1940,24 +1820,18 @@ router.post("/api/users", async (req, res) => {
   
   try {
     const { password, name, email, role, status, department } = req.body;
-    
-    console.log("[SUBTRACKERR CREATE USER] Checking for duplicates - name:", name, "email:", email, "tenantId:", tenantId);
-    
-    const db = await connectToDatabase();
+const db = await connectToDatabase();
     
     // Check if email already exists in login collection for this tenant
     const existingUser = await db.collection("login").findOne({ email, tenantId });
     if (existingUser) {
-      console.log("[SUBTRACKERR CREATE USER] Email already exists");
-      return res.status(400).json({ message: "Email already exists" });
+return res.status(400).json({ message: "Email already exists" });
     }
     
     // Check if name already exists in login collection for this tenant
     const existingName = await db.collection("login").findOne({ fullName: name, tenantId });
-    console.log("[SUBTRACKERR CREATE USER] Checking fullName:", name, "Found:", !!existingName);
-    if (existingName) {
-      console.log("[SUBTRACKERR CREATE USER] User name already exists");
-      return res.status(400).json({ message: "User name already exists" });
+if (existingName) {
+return res.status(400).json({ message: "User name already exists" });
     }
     
     // Hash the password before storing
@@ -2253,8 +2127,7 @@ router.get("/api/notifications/compliance", async (req, res) => {
   const filteredReminders = reminderNotifications.filter(n => n.filingName && n.filingName !== 'Compliance Filing');
   const allNotifications = [...filteredEvents, ...filteredReminders];
   allNotifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  console.log(`[COMPLIANCE NOTIFICATIONS] Returning ${filteredEvents.length} events + ${filteredReminders.length} reminders = ${allNotifications.length} total (filtered). Skipped ${updateEventsSkipped} update events.`);
-  res.status(200).json(allNotifications);
+res.status(200).json(allNotifications);
   } catch (error) {
     console.error('[COMPLIANCE NOTIFICATIONS] Error:', error);
     res.status(500).json({ message: "Failed to fetch compliance notifications", error });

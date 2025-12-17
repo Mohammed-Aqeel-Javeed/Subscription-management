@@ -36,12 +36,6 @@ class EmailService {
       }
     };
 
-    console.log('🔧 Email service configuration:');
-    console.log(`   Host: ${config.host}`);
-    console.log(`   Port: ${config.port}`);
-    console.log(`   User: ${config.auth.user}`);
-    console.log(`   Pass: ${config.auth.pass ? '***HIDDEN***' : 'NOT_SET'}`);
-
     if (config.auth.user && config.auth.pass) {
       try {
           // Nodemailer exposes `createTransport`, not `createTransporter`
@@ -50,22 +44,17 @@ class EmailService {
             tls: { rejectUnauthorized: false }
           });
         this.isConfigured = true;
-        console.log('✅ Email service configured successfully');
       } catch (error) {
-        console.error('❌ Error setting up email transporter:', error);
+        console.error('Error setting up email transporter:', error);
         this.isConfigured = false;
       }
     } else {
-      console.warn('❌ Email service not configured. SMTP_USER or SMTP_PASS missing.');
-      console.log(`   SMTP_USER: ${process.env.SMTP_USER || 'NOT_SET'}`);
-      console.log(`   SMTP_PASS: ${process.env.SMTP_PASS ? 'SET' : 'NOT_SET'}`);
+      console.warn('Email service not configured. SMTP_USER or SMTP_PASS missing.');
     }
   }
 
   async sendEmail(emailData: EmailData): Promise<boolean> {
     if (!this.isConfigured || !this.transporter) {
-      console.log('📧 EMAIL SERVICE NOT CONFIGURED - Would send email to:', emailData.to);
-      console.log('Subject:', emailData.subject);
       return false;
     }
 
@@ -78,7 +67,6 @@ class EmailService {
       };
 
       const info = await this.transporter.sendMail(mailOptions);
-      console.log('Email sent successfully:', info.messageId);
       return true;
     } catch (error) {
       console.error('Error sending email:', error);

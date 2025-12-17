@@ -213,12 +213,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       try {
         // Get logged-in user information from window.user
         const loggedInUser = (window as any).user;
-        console.log('🔍 Logged in user from window:', loggedInUser);
         
         // First try to get name directly from window.user (works for all roles: admin, super admin, etc.)
         if (loggedInUser?.name) {
           setCurrentUserName(loggedInUser.name);
-          console.log('✅ Using user name from window.user:', loggedInUser.name);
           return;
         }
         
@@ -230,37 +228,31 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           });
           if (meResponse.ok) {
             const meData = await meResponse.json();
-            console.log('📋 User data from /api/me:', meData);
             // Check for fullName (login collection) or name
             if (meData.fullName) {
               setCurrentUserName(meData.fullName);
-              console.log('✅ Using fullName from /api/me:', meData.fullName);
               return;
             } else if (meData.name) {
               setCurrentUserName(meData.name);
-              console.log('✅ Using name from /api/me:', meData.name);
               return;
             }
           }
         } catch (meError) {
-          console.log('ℹ️ /api/me not available:', meError);
+          // /api/me not available
         }
         
         // If name not in window.user, fetch from employees/users API using email
         const userEmail = loggedInUser?.email;
         if (userEmail) {
-          console.log('🔍 Fetching user by email from employees API:', userEmail);
           const response = await fetch('/api/employees', {
             method: 'GET',
             credentials: 'include',
           });
           if (response.ok) {
             const users = await response.json();
-            console.log('📋 All users from employees API:', users.length, 'users');
             const currentUser = users.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
             if (currentUser && currentUser.name) {
               setCurrentUserName(currentUser.name);
-              console.log('✅ Found user name from employees API:', currentUser.name);
               return;
             }
           }
@@ -273,16 +265,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             });
             if (usersResponse.ok) {
               const allUsers = await usersResponse.json();
-              console.log('📋 All users from login/users API:', allUsers.length, 'users');
               const loginUser = allUsers.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
               if (loginUser && loginUser.name) {
                 setCurrentUserName(loginUser.name);
-                console.log('✅ Found user name from login collection:', loginUser.name);
                 return;
               }
             }
           } catch (usersError) {
-            console.log('ℹ️ /api/users not available:', usersError);
+            // /api/users not available
           }
           
           // Fallback to email username if name not found
@@ -290,22 +280,19 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           // Capitalize first letter
           const capitalizedName = fallbackName.charAt(0).toUpperCase() + fallbackName.slice(1);
           setCurrentUserName(capitalizedName);
-          console.log('⚠️ Using fallback name from email:', capitalizedName);
         } else {
-          console.warn('❌ No email found for current user');
           // Try one more fallback - get from window.user.email if available
           const lastResortEmail = loggedInUser?.email;
           if (lastResortEmail) {
             const lastResortName = lastResortEmail.split('@')[0];
             const capitalizedLastResort = lastResortName.charAt(0).toUpperCase() + lastResortName.slice(1);
             setCurrentUserName(capitalizedLastResort);
-            console.log('⚠️ Last resort - using email from window.user:', capitalizedLastResort);
           } else {
             setCurrentUserName('User');
           }
         }
       } catch (error) {
-        console.error('❌ Failed to fetch current user:', error);
+        console.error('Failed to fetch current user:', error);
         // Use email as fallback
         const userEmail = (window as any).user?.email;
         if (userEmail) {
@@ -558,7 +545,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           const dateValue = toISODateOnly(initialDateValue);
           setInitialDate(dateValue);
           savedInitialDateRef.current = dateValue;
-          console.log('📅 SET savedInitialDateRef on modal open:', dateValue, 'from field:', (subscription as any)?.initialDate ? 'initialDate' : 'startDate');
         } else {
           setInitialDate('');
           savedInitialDateRef.current = '';
@@ -1367,7 +1353,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const formValues = form.getValues();
       // Preserve original initial date (never update on renew)
       const originalInitialDate = savedInitialDateRef.current || initialDate;
-      console.log('🔄 RENEWAL: Preserving initialDate:', originalInitialDate, 'savedInitialDateRef:', savedInitialDateRef.current, 'initialDate state:', initialDate);
       // Always get tenantId from context or user info
       const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
@@ -1670,7 +1655,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     <>
       <style>{animationStyles}</style>
       <Dialog open={open} onOpenChange={(v) => { if (!v) setIsFullscreen(false); onOpenChange(v); }}>
-        <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}> 
+        <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter`}> 
           <DialogHeader className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white p-6 rounded-t-2xl flex flex-row items-center shadow-sm">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <div className="h-10 w-10 bg-white/15 rounded-xl flex items-center justify-center">
@@ -1748,11 +1733,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             </div>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="p-8 bg-gradient-to-br from-gray-50 to-white">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="p-8 bg-white/60 backdrop-blur-sm">
               {/* Professional Section Header */}
               <div className="mb-8">
-                <h2 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">Subscription Details</h2>
-                <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
+                <h2 className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent tracking-tight mb-2">Subscription Details</h2>
+                <div className="h-px bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500 mt-4"></div>
               </div>
               
               <div className={`grid gap-6 mb-8 ${isFullscreen ? 'grid-cols-1 md:grid-cols-5 lg:grid-cols-7' : 'grid-cols-1 md:grid-cols-4'}`}>
@@ -2476,7 +2461,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               {/* Professional Renewal Section Header */}
               <div className="mt-10 mb-8">
                 <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-lg font-semibold text-gray-900 tracking-tight">Renewal Information</h2>
+                  <h2 className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent tracking-tight">Renewal Information</h2>
                   <button
                     type="button"
                     onClick={handleRenew}

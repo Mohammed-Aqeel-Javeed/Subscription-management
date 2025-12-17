@@ -78,7 +78,6 @@ export class MongoStorage implements IStorage {
     // Always generate a new ObjectId for MongoDB _id
     const { ObjectId } = await import("mongodb");
     const doc = { ...user, tenantId, _id: new ObjectId() };
-    console.log(`✓ Creating user in users collection: ${user.email}, password length: ${user.password?.length}`);
     await db.collection("users").insertOne(doc);
     // Return user with both id and _id for frontend compatibility
         return {
@@ -200,34 +199,13 @@ export class MongoStorage implements IStorage {
   }
 
   async createSubscription(subscription: InsertSubscription, tenantId: string): Promise<Subscription> {
-    console.log(`🚀 CREATESUBSCRIPTION CALLED - Enhanced logging version active!`);
-    console.log(`🚀 Creating subscription: ${subscription.serviceName} for tenant: ${tenantId}`);
-    console.log(`📝 BEFORE encryption:`, {
-      serviceName: subscription.serviceName,
-      amount: subscription.amount,
-      vendor: subscription.vendor,
-      paymentMethod: subscription.paymentMethod
-    });
-    
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
     // Encrypt sensitive data before storing
     const encrypted = encryptSubscriptionData(subscription);
-    console.log(`🔐 AFTER encryption:`, {
-      serviceName: encrypted.serviceName?.substring(0, 50) + '...',
-      amount: encrypted.amount?.substring(0, 50) + '...',
-      vendor: encrypted.vendor?.substring(0, 50) + '...',
-      paymentMethod: encrypted.paymentMethod?.substring(0, 50) + '...'
-    });
     
     // Don't destructure updatedAt, just spread subscription
     const doc = { ...encrypted, tenantId, _id: new ObjectId(), createdAt: new Date(), updatedAt: new Date(), updatedBy: null };
-    console.log(`💾 BEFORE DB insert - doc fields:`, {
-      serviceName: doc.serviceName?.substring(0, 50) + '...',
-      amount: doc.amount?.substring(0, 50) + '...',
-      vendor: doc.vendor?.substring(0, 50) + '...',
-      paymentMethod: doc.paymentMethod?.substring(0, 50) + '...'
-    });
     
     await db.collection("subscriptions").insertOne(doc);
     // Generate reminders for this subscription
@@ -235,7 +213,6 @@ export class MongoStorage implements IStorage {
     
     // Create notification event for subscription creation
     try {
-      console.log(`🔄 About to create notification event for subscription: ${subscription.serviceName}`);
       await this.createNotificationEvent(
         tenantId,
         'created',
@@ -243,9 +220,8 @@ export class MongoStorage implements IStorage {
         subscription.serviceName,
         doc.category
       );
-      console.log(`✅ Notification event creation completed for subscription: ${subscription.serviceName}`);
     } catch (notificationError) {
-      console.error(`❌ Failed to create notification event for ${doc.serviceName}:`, notificationError);
+      console.error(`Failed to create notification event for ${doc.serviceName}:`, notificationError);
       // Don't throw - let subscription creation succeed even if notification fails
     }
       const decrypted = decryptSubscriptionData(doc);
@@ -404,7 +380,6 @@ export class MongoStorage implements IStorage {
       // Create notification event for subscription deletion
       if (subscription) {
         try {
-          console.log(`🔄 About to create deletion notification event for subscription: ${subscription.serviceName}`);
           await this.createNotificationEvent(
             tenantId,
             'deleted',
@@ -412,9 +387,8 @@ export class MongoStorage implements IStorage {
             subscription.serviceName,
             subscription.category
           );
-          console.log(`✅ Deletion notification event created for subscription: ${subscription.serviceName}`);
         } catch (notificationError) {
-          console.error(`❌ Failed to create deletion notification event for ${subscription.serviceName}:`, notificationError);
+          console.error(`Failed to create deletion notification event for ${subscription.serviceName}:`, notificationError);
           // Don't throw - let deletion succeed even if notification fails
         }
       }
@@ -885,10 +859,7 @@ export class MongoStorage implements IStorage {
       complianceId: { $exists: true },
       status: "Active"
     }).toArray();
-
-    console.log(`[DEBUG] Found ${complianceReminders.length} compliance reminders in database`);
-
-    for (const reminder of complianceReminders) {
+for (const reminder of complianceReminders) {
       const reminderDate = new Date(reminder.reminderDate);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -896,9 +867,7 @@ export class MongoStorage implements IStorage {
 
       // Show reminders that are due (today or earlier)
       if (reminderDate <= today) {
-        console.log(`[DEBUG] Processing compliance reminder for ${reminder.complianceId}, reminderDate: ${reminder.reminderDate}`);
-
-        const displayName = (
+const displayName = (
           reminder.filingName ||
           'Compliance Filing'
         );
@@ -931,9 +900,7 @@ export class MongoStorage implements IStorage {
     category: string
   ): Promise<void> {
     try {
-      console.log(`🔧 Getting database connection for notification event...`);
       const db = await this.getDb();
-      console.log(`🔧 Database connection successful, getting ObjectId...`);
       const { ObjectId } = await import("mongodb");
       
       const notification = {
@@ -951,11 +918,9 @@ export class MongoStorage implements IStorage {
         reminderTriggerDate: new Date().toISOString().slice(0, 10)
       };
       
-      console.log(`🔄 Attempting to create notification event:`, notification);
       const result = await db.collection("notification_events").insertOne(notification);
-      console.log(`✅ Notification event created successfully with ID: ${result.insertedId}`);
     } catch (error) {
-      console.error(`❌ Error creating notification event:`, error);
+      console.error(`Error creating notification event:`, error);
       throw error;
     }
   }
@@ -994,8 +959,6 @@ export class MongoStorage implements IStorage {
       .find({ tenantId })
       .sort({ createdAt: -1 })
       .toArray();
-    
-    console.log(`📋 Found ${events.length} notification events for tenant ${tenantId}`);
     
     return events.map(event => ({
       id: event._id.toString(),

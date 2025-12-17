@@ -83,18 +83,6 @@ const getComplianceStatus = (endDate: string, submissionDeadline: string): { sta
   twoDaysBeforeEnd.setDate(end.getDate() - 2);
   twoDaysBeforeEnd.setHours(0, 0, 0, 0);
   
-  console.log('Status Debug:', {
-    today: today.toDateString(),
-    endDate: end.toDateString(),
-    submissionDeadline: submissionDeadline || 'Not set',
-    twoDaysBeforeEnd: twoDaysBeforeEnd.toDateString(),
-    todayTime: today.getTime(),
-    twoDaysBeforeTime: twoDaysBeforeEnd.getTime(),
-    endTime: end.getTime(),
-    isGoingToBeDue: today.getTime() === twoDaysBeforeEnd.getTime(),
-    isDue: today.getTime() >= end.getTime()
-  });
-  
   // Check for "Going to be Due" first (2 days before end date)
   if (today.getTime() === twoDaysBeforeEnd.getTime()) {
     return { status: "Going to be Due", color: "text-amber-800", bgColor: "bg-amber-100" };

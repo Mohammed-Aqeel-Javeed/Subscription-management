@@ -46,14 +46,12 @@ export const authenticateToken = async (req: AuthenticatedRequest, res: Response
         
         if (department && req.user) {
           req.user.department = department.name;
-          console.log(`Set department for ${decoded.email}: ${department.name}`);
         }
       } catch (dbErr) {
         console.error('Error fetching department for user:', dbErr);
       }
     }
     
-    console.log('Decoded JWT:', req.user); // Debug log
     next();
   } catch (err) {
     return res.status(403).json({ message: "Invalid or expired token" });
@@ -87,14 +85,12 @@ export const optionalAuth = async (req: AuthenticatedRequest, res: Response, nex
           
           if (department && req.user) {
             req.user.department = department.name;
-            console.log(`Set department for ${decoded.email}: ${department.name}`);
           }
         } catch (dbErr) {
           console.error('Error fetching department for user:', dbErr);
         }
       }
       
-      console.log('Decoded user in middleware:', req.user); // Debug log
     } catch (err) {
       req.user = undefined;
     }
