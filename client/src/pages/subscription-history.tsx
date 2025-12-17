@@ -49,7 +49,6 @@ function formatDateTime(date: string | Date) {
   return format(new Date(date), "MMM dd, yyyy HH:mm:ss");
 }
 
-
 export default function SubscriptionHistory() {
   // Get serviceName from query params if present
   const location = useLocation();
@@ -67,6 +66,7 @@ export default function SubscriptionHistory() {
   const [lcyMin, setLcyMin] = useState<string>("");
   const [lcyMax, setLcyMax] = useState<string>("");
   const [filteredHistory, setFilteredHistory] = useState<HistoryRecord[]>([]);
+  const [displayLimit, setDisplayLimit] = useState(50); // Show 50 records initially
   const queryClient = useQueryClient();
 
   // Listen for subscription changes and refresh history
@@ -95,8 +95,6 @@ export default function SubscriptionHistory() {
       const endpoint = idParam ? `/api/history/${idParam}` : `/api/history/list`;
       const url = `${API_BASE_URL}${endpoint}`;
 
-      console.log(`Fetching history data from: ${url}`);
-
       const res = await fetch(url, {
         method: "GET",
         credentials: "include",
@@ -106,13 +104,10 @@ export default function SubscriptionHistory() {
       });
 
       if (!res.ok) {
-        console.error(`API returned status: ${res.status}`);
         const errorText = await res.text();
-        console.error(`Error details: ${errorText}`);
         
         // Handle 401 specifically for better user experience
         if (res.status === 401) {
-          console.log('Authentication required, redirecting to login');
           throw new Error('Authentication required');
         }
         
@@ -122,11 +117,9 @@ export default function SubscriptionHistory() {
       const result = await res.json();
       
       if (!Array.isArray(result)) {
-        console.error('Unexpected API response format:', result);
         return [];
       }
 
-      console.log(`Received ${result.length} history records from API`);
       return result;
     },
     retry: 1, // Reduce retries
@@ -159,7 +152,6 @@ export default function SubscriptionHistory() {
         );
       });
     }
-
 
     // Apply quantity filter (only if not empty and is a valid number)
     if (quantityFilter !== "" && !isNaN(Number(quantityFilter))) {
@@ -194,12 +186,15 @@ export default function SubscriptionHistory() {
     });
 
     setFilteredHistory(filtered);
+    // Reset display limit when filters change
+    if (searchTerm || quantityFilter || lcyMin || lcyMax) {
+      setDisplayLimit(50);
+    }
   }, [history, searchTerm, quantityFilter, lcyMin, lcyMax, idParam]);
   
   const exportData = () => {
     // Implementation for exporting data
-    console.log("Exporting data...");
-  };
+};
   
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -400,7 +395,7 @@ export default function SubscriptionHistory() {
                     </TableHeader>
                     <TableBody className="divide-y divide-slate-100">
                       <AnimatePresence>
-                        {filteredHistory.map((item, index) => {
+                        {filteredHistory.slice(0, displayLimit).map((item, index) => {
                           // For update actions, prioritize updatedFields (new values) over data (old values)
                           // For create actions, use data as it contains the complete record
                           const record = item.action === "update" ? (item.updatedFields || item.data || {}) : (item.data || item.updatedFields || {});
@@ -411,7 +406,7 @@ export default function SubscriptionHistory() {
                               initial={{ opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0 }}
-                              transition={{ delay: 0.05 * index }}
+                              transition={{ delay: Math.min(0.05 * index, 1) }}
                               whileHover={{ scale: 1.01, backgroundColor: "#f8fafc" }}
                             >
                               <TableCell className="py-4 px-6 font-medium text-slate-800">
@@ -459,6 +454,43 @@ export default function SubscriptionHistory() {
               )}
             </CardContent>
           </Card>
+          
+          {/* Load More Button */}
+          {filteredHistory.length > displayLimit && (
+            <motion.div 
+              className="mt-6 flex flex-col items-center gap-3"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <p className="text-slate-600 text-sm">
+                Showing {displayLimit} of {filteredHistory.length} records
+              </p>
+              <Button
+                onClick={() => setDisplayLimit(prev => prev + 50)}
+                variant="outline"
+                className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-sm"
+              >
+                <Clock className="h-4 w-4 mr-2" />
+                Load More (50)
+              </Button>
+            </motion.div>
+          )}
+          
+          {/* Record count at bottom */}
+          {filteredHistory.length > 0 && filteredHistory.length <= displayLimit && (
+            <motion.div 
+              className="mt-6 flex justify-center"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+            >
+              <Badge variant="secondary" className="text-slate-600">
+                <CheckCircle className="h-3 w-3 mr-1 inline" />
+                All {filteredHistory.length} records displayed
+              </Badge>
+            </motion.div>
+          )}
         </motion.div>
       </div>
     </motion.div>

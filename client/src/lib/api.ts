@@ -7,13 +7,6 @@ export const apiFetch = (endpoint: string, options?: RequestInit) => {
     credentials: 'include',
     ...options,
   }).then(async response => {
-    // Debug: log response headers after login
-    if (endpoint === '/api/login') {
-      // Convert headers to object for easier viewing
-      const headersObj: Record<string, string> = {};
-      response.headers.forEach((value, key) => { headersObj[key] = value; });
-      console.log('[apiFetch] Login response headers:', headersObj);
-    }
     return response;
   });
 };

@@ -331,7 +331,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      console.log("[LOGIN] Attempting login for:", email);
       if (!email || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -340,21 +339,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // First try the 'login' collection (primary auth collection)
       let user = await db.collection("login").findOne({ email });
       let isNewUserSystem = false;
-      console.log("[LOGIN] Found in login collection:", !!user);
       
       // If not found in login collection, try the 'users' collection (RBAC users with passwords)
       if (!user) {
         user = await db.collection("users").findOne({ email, password: { $exists: true } });
         isNewUserSystem = !!user;
-        console.log("[LOGIN] Found in users collection:", !!user);
       }
       
       if (!user) {
-        console.log("[LOGIN] User not found in any collection");
         return res.status(401).json({ message: "Invalid email or password" });
       }
-      
-      console.log("[LOGIN] User found. Has password field:", !!user.password, "Collection:", isNewUserSystem ? "users" : "login");
 
       // Check if user is active (only for new user system)
       if (isNewUserSystem && user.status !== "active") {
@@ -365,17 +359,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let isPasswordValid = false;
       if (user.password) {
         isPasswordValid = await bcrypt.compare(password, user.password);
-        console.log("[LOGIN] Password validation result:", isPasswordValid);
-      } else {
-        console.log("[LOGIN] No password field found on user");
       }
       
       if (!isPasswordValid) {
-        console.log("[LOGIN] Password validation failed");
         return res.status(401).json({ message: "Invalid email or password" });
       }
-      
-      console.log("[LOGIN] Login successful for:", email);
 
       // Update last login in both collections if applicable
       await db.collection("login").updateOne(
@@ -398,9 +386,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         if (department) {
           userDepartment = department.name;
-          console.log(`[LOGIN] Found department for ${user.email}: ${department.name}`);
-        } else {
-          console.log(`[LOGIN] No department found for ${user.email}`);
         }
       }
 
@@ -423,12 +408,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sameSite: "none",
         path: "/",
         maxAge: 7 * 24 * 60 * 60 * 1000
-      });
-      // Debug log: verify cookie setting
-      console.log("[LOGIN] Set-Cookie header:", res.getHeader('Set-Cookie'));
-      res.on('finish', () => {
-        console.log("[LOGIN] Request headers:", req.headers);
-        console.log("[LOGIN] Response headers:", res.getHeaders());
       });
       res.status(200).json({
         message: "Login successful",
@@ -476,8 +455,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get role and department from JWT token (already set during login)
       const role = user.role || dbUser.role || "viewer";
       const department = user.department || dbUser.department || undefined;
-      
-      console.log(`[/api/me] User: ${dbUser.email}, Role: ${role}, Department: ${department}`);
       
       res.status(200).json({
         userId: dbUser._id,
@@ -702,22 +679,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { password, name, email, role, status, department } = req.body;
       
-      console.log("[CREATE USER] Checking for duplicates - name:", name, "email:", email, "tenantId:", tenantId);
-      
       const db = await connectToDatabase();
       
       // Check if email already exists in login collection for this tenant
       const existingUser = await db.collection("login").findOne({ email, tenantId });
       if (existingUser) {
-        console.log("[CREATE USER] Email already exists");
         return res.status(400).json({ message: "Email already exists" });
       }
       
       // Check if name already exists in login collection for this tenant
       const existingName = await db.collection("login").findOne({ fullName: name, tenantId });
-      console.log("[CREATE USER] Checking fullName:", name, "Found:", !!existingName);
       if (existingName) {
-        console.log("[CREATE USER] User name already exists");
         return res.status(400).json({ message: "User name already exists" });
       }
       
@@ -850,12 +822,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userId = req.user?.userId;
     const userDepartment = req.user?.department;
     
-    console.log('[SUBSCRIPTION FILTER] User:', { userRole, userId, userDepartment });
-    
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
       let subscriptions = await storage.getSubscriptions(tenantId);
-      console.log('[SUBSCRIPTION FILTER] Total subscriptions:', subscriptions.length);
       
       // Apply role-based filtering
       if (userRole === 'contributor') {
@@ -863,30 +832,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const userEmail = req.user?.email;
         subscriptions = subscriptions.filter(sub => {
           const isOwner = sub.ownerEmail === userEmail || sub.owner === userId;
-          console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Owner:', sub.owner, 'OwnerEmail:', sub.ownerEmail, 'User email:', userEmail, 'Is owner:', isOwner);
           return isOwner;
         });
-        console.log('[SUBSCRIPTION FILTER] After contributor filter:', subscriptions.length);
       } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
         // Department roles can only see items in their department
         if (userDepartment) {
           subscriptions = subscriptions.filter(sub => {
             if (!sub.department) {
-              console.log('[SUBSCRIPTION FILTER] No department on subscription:', sub.serviceName);
               return false;
             }
             try {
               const depts = JSON.parse(sub.department);
               const hasAccess = Array.isArray(depts) && depts.includes(userDepartment);
-              console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Departments:', depts, 'User dept:', userDepartment, 'Has access:', hasAccess);
               return hasAccess;
             } catch {
               const hasAccess = sub.department === userDepartment;
-              console.log('[SUBSCRIPTION FILTER] Subscription:', sub.serviceName, 'Department (string):', sub.department, 'User dept:', userDepartment, 'Has access:', hasAccess);
               return hasAccess;
             }
           });
-          console.log('[SUBSCRIPTION FILTER] After department filter:', subscriptions.length);
         }
       }
       
@@ -1079,10 +1042,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get both reminder-based notifications and event-based notifications
       const reminderNotifications = await storage.getNotifications(tenantId);
       const eventNotifications = await storage.getNotificationEvents(tenantId);
-      
-      console.log(`📈 Reminder notifications: ${reminderNotifications.length}, Event notifications: ${eventNotifications.length}`);
-      
-      // Combine and sort by timestamp
+// Combine and sort by timestamp
       const allNotifications = [...reminderNotifications, ...eventNotifications]
         .sort((a, b) => new Date(b.timestamp || b.createdAt || '').getTime() - new Date(a.timestamp || a.createdAt || '').getTime());
       
@@ -1108,9 +1068,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/notifications/test-create", async (req, res) => {
     try {
       const tenantId = req.user?.tenantId || "default";
-      console.log(`🧪 TEST: Creating notification event for tenant: ${tenantId}`);
-      
-      // Try to call createNotificationEvent directly
+// Try to call createNotificationEvent directly
       await storage.createNotificationEvent(
         tenantId,
         'created',
@@ -1119,10 +1077,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'Test Category'
       );
       
-      console.log(`🧪 TEST: Notification event created successfully`);
       res.json({ message: "Test notification event created successfully" });
     } catch (error) {
-      console.error(`🧪 TEST: Error creating notification event:`, error);
+      console.error("TEST: Error creating notification event:", error);
       res.status(500).json({ 
         message: "Failed to create test notification event", 
         error: error instanceof Error ? error.message : String(error) 

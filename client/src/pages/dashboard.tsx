@@ -14,7 +14,6 @@ import CategoryChart from "@/components/charts/category-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, Subscription } from "@shared/types";
 
-
 // Error boundary wrapper
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
@@ -32,7 +31,6 @@ export default function Dashboard() {
   const location = window.location.pathname;
   const navigate = useNavigate();
   const [authError, setAuthError] = useState<string | null>(null);
-  console.log("[Dashboard] Component mounted");
   const [activeSubscriptionsModalOpen, setActiveSubscriptionsModalOpen] = useState(false);
   const [upcomingRenewalsModalOpen, setUpcomingRenewalsModalOpen] = useState(false);
   
@@ -45,9 +43,6 @@ export default function Dashboard() {
     queryKey: ["/api/analytics/dashboard"],
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/dashboard");
-      const headersObj: Record<string, string> = {};
-      res.headers.forEach((value, key) => { headersObj[key] = value; });
-      console.log('[Dashboard] /api/analytics/dashboard response headers:', headersObj);
       if (res.status === 401) throw new Error("Unauthorized");
       return res.json();
     }
@@ -56,9 +51,6 @@ export default function Dashboard() {
     queryKey: ["/api/analytics/trends"],
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/trends");
-      const headersObj: Record<string, string> = {};
-      res.headers.forEach((value, key) => { headersObj[key] = value; });
-      console.log('[Dashboard] /api/analytics/trends response headers:', headersObj);
       return res.json();
     }
   });
@@ -66,9 +58,6 @@ export default function Dashboard() {
     queryKey: ["/api/analytics/categories"],
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/categories");
-      const headersObj: Record<string, string> = {};
-      res.headers.forEach((value, key) => { headersObj[key] = value; });
-      console.log('[Dashboard] /api/analytics/categories response headers:', headersObj);
       return res.json();
     }
   });
@@ -77,9 +66,6 @@ export default function Dashboard() {
     queryKey: ["/api/subscriptions"],
     queryFn: async () => {
       const res = await apiFetch("/api/subscriptions");
-      const headersObj: Record<string, string> = {};
-      res.headers.forEach((value, key) => { headersObj[key] = value; });
-      console.log('[Dashboard] /api/subscriptions response headers:', headersObj);
       return res.json();
     }
   });

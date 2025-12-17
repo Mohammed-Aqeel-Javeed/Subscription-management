@@ -12,7 +12,7 @@ const ENCRYPTED_POSITION = TAG_POSITION + TAG_LENGTH;
 function getEncryptionKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY;
   if (!key) {
-    console.warn('⚠️  ENCRYPTION_KEY not set in environment. Using default (NOT SECURE FOR PRODUCTION)');
+    console.warn('ENCRYPTION_KEY not set in environment. Using default (NOT SECURE FOR PRODUCTION)');
     // In production, this should throw an error
     return crypto.scryptSync('default-key-change-this', 'salt', 32);
   }
@@ -89,7 +89,7 @@ export function decrypt(encryptedData: string | number): string {
     return result;
   } catch (error) {
     // If decryption fails, return original (likely plain text)
-    console.error('❌ Decryption error:', {
+    console.error('Decryption error:', {
       error: error instanceof Error ? error.message : String(error),
       dataLength: dataStr.length,
       dataPreview: dataStr.substring(0, 50) + '...',
@@ -114,23 +114,14 @@ function isLikelyEncrypted(str: string): boolean {
  * @returns Subscription with encrypted sensitive fields
  */
 export function encryptSubscriptionData(subscription: any): any {
-  console.log('🔐🔐🔐 encryptSubscriptionData CALLED with:', {
-    serviceName: subscription?.serviceName,
-    amount: subscription?.amount,
-    vendor: subscription?.vendor,
-    paymentMethod: subscription?.paymentMethod
-  });
-  
   if (!subscription) return subscription;
   
   const encrypted = { ...subscription };
   
   // Encrypt sensitive fields
   if (encrypted.serviceName !== undefined && encrypted.serviceName !== null) {
-    console.log('🔒 Encrypting serviceName:', encrypted.serviceName);
-    encrypted.serviceName = encrypt(encrypted.serviceName);
-    console.log('✅ Encrypted serviceName:', encrypted.serviceName?.substring(0, 50) + '...');
-  }
+encrypted.serviceName = encrypt(encrypted.serviceName);
+}
   if (encrypted.amount !== undefined && encrypted.amount !== null) {
     encrypted.amount = encrypt(String(encrypted.amount));
   }
@@ -222,8 +213,5 @@ export function generateJWTSecret(): string {
 
 // Export utility for generating keys (run once to generate secrets)
 if (require.main === module) {
-  console.log('\n🔐 Security Keys Generated:\n');
-  console.log('ENCRYPTION_KEY=' + generateEncryptionKey());
-  console.log('JWT_SECRET=' + generateJWTSecret());
-  console.log('\n⚠️  Add these to your .env file and keep them secret!\n');
+console.log('ENCRYPTION_KEY=' + generateEncryptionKey());
 }

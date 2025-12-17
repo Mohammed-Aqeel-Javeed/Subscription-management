@@ -176,7 +176,6 @@ employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
 employee.department.toLowerCase().includes(searchTerm.toLowerCase())
 );
 
-
 const handleEdit = (employee: Employee) => {
   setEditingEmployee(employee);
   form.reset({
@@ -817,7 +816,6 @@ setModalOpen(true);
 
 const onSubmit = (data: InsertUser) => {
 if (editingUser) {
-console.log("Updating user with id:", editingUser.id, editingUser);
 if (!editingUser.id || typeof editingUser.id !== "string" || editingUser.id.length < 10) {
 toast({
 title: "Error",
@@ -1259,9 +1257,6 @@ const { data: userData } = useQuery<{ defaultCurrency?: string } | null>({
 
 // Update company info state when data is fetched
 useEffect(() => {
-  console.log('Company Details - userData:', userData);
-  console.log('Company Details - companyData:', companyData);
-  
   if (companyData) {
     setCompanyInfo((prev) => {
       const newInfo = {
@@ -1278,13 +1273,11 @@ useEffect(() => {
           userData?.defaultCurrency ||
           "",
       };
-      console.log('Set companyInfo with companyData, defaultCurrency:', newInfo.defaultCurrency);
       return newInfo;
     });
     setIsInitialized(true);
   } else if (userData && !isInitialized) {
     // If no company data exists yet, populate from user's signup data
-    console.log('Setting defaultCurrency from userData:', userData.defaultCurrency);
     setCompanyInfo((prev) => {
       const newInfo = {
         tenantId: prev.tenantId || "",
@@ -1296,7 +1289,6 @@ useEffect(() => {
         // Only set from userData if we don't already have a value
         defaultCurrency: prev.defaultCurrency || userData.defaultCurrency || "",
       };
-      console.log('Updated companyInfo from userData:', newInfo);
       return newInfo;
     });
     setIsInitialized(true);
@@ -2252,7 +2244,6 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
       <Select
         value={selectedCurrency}
         onValueChange={(val) => {
-          console.log('Currency selected:', val);
           setCompanyInfo(prev => ({ ...prev, defaultCurrency: val }));
         }}
       >
@@ -2268,7 +2259,6 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
           )}
           {currencies && currencies.length > 0 ? (
             currencies.map((curr: any) => {
-              console.log('Currency option:', curr.code, 'matches:', curr.code === selectedCurrency);
               return (
                 <SelectItem key={curr.code} value={curr.code} className="dropdown-item">
                   {curr.code}

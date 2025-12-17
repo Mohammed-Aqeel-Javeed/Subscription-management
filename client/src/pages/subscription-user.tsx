@@ -146,11 +146,7 @@ export default function SubscriptionUserPage() {
           department: user.department
         }))
       };
-
-      console.log("Saving to subscription ID:", subscriptionId);
-      console.log("Payload:", payload);
-
-      const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
+const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -158,20 +154,14 @@ export default function SubscriptionUserPage() {
         credentials: "include",
         body: JSON.stringify(payload),
       });
-
-      console.log("Response status:", response.status);
-      console.log("Response headers:", response.headers);
-
-      if (!response.ok) {
+if (!response.ok) {
         const errorText = await response.text();
         console.error("Error response:", errorText);
         throw new Error(`Failed to save: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const result = await response.json();
-      console.log("Users saved successfully:", result);
-      
-      toast({
+toast({
         title: "Success",
         description: "Subscription users updated successfully.",
       });

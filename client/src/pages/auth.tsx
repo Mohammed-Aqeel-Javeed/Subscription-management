@@ -317,8 +317,7 @@ export default function AuthPage() {
                       }}
                       onClick={() => {
                         // TODO: Implement forgot password functionality
-                        console.log("Forgot password clicked");
-                      }}
+}}
                     >
                       Forgot Password?
                     </button>
