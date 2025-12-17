@@ -470,8 +470,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       qty: subscription?.qty !== undefined && subscription?.qty !== null ? Number(subscription.qty) : "",
       amount: subscription?.amount !== undefined && subscription?.amount !== null ? Number(subscription.amount).toFixed(2) : "",
       totalAmount: subscription?.totalAmount !== undefined && subscription?.totalAmount !== null ? Number(subscription.totalAmount).toFixed(2) : "",
-      billingCycle: subscription?.billingCycle && subscription?.billingCycle !== "" ? subscription.billingCycle : "monthly",
-      paymentFrequency: (subscription as any)?.paymentFrequency || "monthly",
+      billingCycle: subscription?.billingCycle && subscription?.billingCycle !== "" ? subscription.billingCycle : "",
+      paymentFrequency: (subscription as any)?.paymentFrequency || "",
       category: subscription?.category || "",
       department: subscription?.department || "",
       departments: parseDepartments(subscription?.department),
@@ -522,7 +522,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   
   const [startDate, setStartDate] = useState(subscription?.startDate ? toISODateOnly(subscription.startDate) : "");
-  const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle || "monthly");
+  const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle || "");
   const [endDate, setEndDate] = useState(subscription?.nextRenewal ? toISODateOnly(subscription.nextRenewal) : "");
   // Removed unused endDateManuallySet state
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(parseDepartments(subscription?.department));
@@ -605,6 +605,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
   const [vendorSuggestions, setVendorSuggestions] = useState<string[]>([]);
   
+  // Logo state
+  const [companyLogo, setCompanyLogo] = useState<string>('');
+  const [logoLoading, setLogoLoading] = useState<boolean>(false);
+  
+  // Website editing state
+  const [isEditingWebsite, setIsEditingWebsite] = useState<boolean>(false);
+  
   // Predefined vendor list
   const VENDOR_LIST = [
     "Microsoft Corporation", "Amazon Web Services, Inc.", "Google LLC", "Salesforce, Inc.", "Adobe Inc.",
@@ -682,7 +689,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (open && !subscription) {
       // Reset all state variables
       setStartDate("");
-      setBillingCycle("monthly");
+      setBillingCycle("");
       setEndDate("");
       setSelectedDepartments([]);
       setStatus('Draft');
@@ -691,6 +698,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setLcyAmount('');
       setTotalAmount('');
       setDocuments([]);
+      setIsEditingWebsite(false);
       
       // Reset form
       form.reset({
@@ -701,7 +709,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         qty: "",
         amount: "",
         totalAmount: "",
-        billingCycle: "monthly",
+        billingCycle: "",
         category: "",
         department: "",
         departments: [],
@@ -759,8 +767,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         qty: subscription.qty !== undefined && subscription.qty !== null ? Number(subscription.qty) : 1,
         amount: subscription.amount !== undefined && subscription.amount !== null ? Number(subscription.amount).toFixed(2) : "",
         totalAmount: totalAmtValue,
-        billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
-        paymentFrequency: (subscription as any)?.paymentFrequency || "monthly",
+        billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "",
+        paymentFrequency: (subscription as any)?.paymentFrequency || "",
         category: subscription.category || "",
         department: subscription.department || "",
         departments: depts,
@@ -798,7 +806,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       }, 100);
     } else {
       setStartDate("");
-      setBillingCycle("monthly");
+      setBillingCycle("");
       setEndDate("");
   // removed manual end date flag
       setSelectedDepartments([]);
@@ -817,8 +825,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         qty: "",
         amount: "",
         totalAmount: "",
-        billingCycle: "monthly",
-        paymentFrequency: "monthly",
+        billingCycle: "",
+        paymentFrequency: "",
         category: "",
         department: "",
         departments: [],
@@ -908,7 +916,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
   // Auto-update dates if Auto Renewal is ON and Next Renewal Date matches today
   useEffect(() => {
-    if (!autoRenewal || !open) return;
+    if (!autoRenewal || !open || !isEditing) return;
     
     const nextRenewalValue = form.watch('nextRenewal');
     if (!nextRenewalValue) return;
@@ -916,18 +924,105 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     const todayStr = new Date().toISOString().split('T')[0];
     const nextRenewalStr = new Date(nextRenewalValue).toISOString().split('T')[0];
     
-    // If next renewal date matches today, update both dates
+    // If next renewal date matches today, update both dates and create history
     if (nextRenewalStr === todayStr) {
       const cycle = form.watch("billingCycle") || billingCycle;
       const newStartDate = todayStr;
       const newEndDate = calculateEndDate(newStartDate, cycle);
       
+      // Create history record for auto-renewal
+      const createAutoRenewalHistory = async () => {
+        try {
+          const subscriptionId = subscription?.id || subscription?._id;
+          if (!subscriptionId) return;
+          
+          const historyData = {
+            subscriptionId: subscriptionId,
+            action: 'Auto Renewal',
+            oldStartDate: startDate,
+            oldEndDate: endDate,
+            newStartDate: newStartDate,
+            newEndDate: newEndDate,
+            changedBy: currentUserName || 'System',
+            timestamp: new Date().toISOString(),
+            notes: `Auto-renewal triggered on ${todayStr}`,
+          };
+          
+          await apiRequest("POST", "/api/history", historyData);
+          
+          toast({
+            title: "Auto Renewal",
+            description: `Subscription automatically renewed from ${newStartDate} to ${newEndDate}`,
+            className: "bg-white border border-green-500 text-green-700 font-semibold shadow-lg",
+          });
+        } catch (error) {
+          console.error('Failed to create auto-renewal history:', error);
+        }
+      };
+      
       setStartDate(newStartDate);
       form.setValue("startDate", newStartDate);
       setEndDate(newEndDate);
       form.setValue("nextRenewal", newEndDate);
+      
+      // Create history record
+      createAutoRenewalHistory();
     }
-  }, [autoRenewal, open, form.watch('nextRenewal'), billingCycle, form]);
+  }, [autoRenewal, open, isEditing, form.watch('nextRenewal'), billingCycle, form, subscription, startDate, endDate, currentUserName, toast]);
+
+  // Fetch company logo when website URL changes
+  useEffect(() => {
+    const website = form.watch('website');
+    
+    if (!website || !open) {
+      setCompanyLogo('');
+      return;
+    }
+    
+    const fetchLogo = async () => {
+      try {
+        setLogoLoading(true);
+        
+        // Extract domain from URL
+        let domain = website;
+        try {
+          const url = new URL(website.startsWith('http') ? website : `https://${website}`);
+          domain = url.hostname.replace('www.', '');
+        } catch {
+          // If URL parsing fails, try to clean the domain
+          domain = website.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+        }
+        
+        // Try multiple logo services in order of preference
+        const logoSources = [
+          `https://logo.clearbit.com/${domain}`, // Clearbit - high quality
+          `https://www.google.com/s2/favicons?domain=${domain}&sz=128`, // Google favicon - reliable fallback
+        ];
+        
+        // Test first source
+        const img = new Image();
+        img.onload = () => {
+          setCompanyLogo(logoSources[0]);
+          setLogoLoading(false);
+        };
+        img.onerror = () => {
+          // Fallback to Google favicon
+          setCompanyLogo(logoSources[1]);
+          setLogoLoading(false);
+        };
+        img.src = logoSources[0];
+        
+      } catch (error) {
+        console.error('Error fetching logo:', error);
+        setCompanyLogo('');
+        setLogoLoading(false);
+      }
+    };
+    
+    // Debounce the logo fetch
+    const timeoutId = setTimeout(fetchLogo, 500);
+    return () => clearTimeout(timeoutId);
+  }, [form.watch('website'), open]);
   
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -1658,9 +1753,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter`}> 
           <DialogHeader className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white p-6 rounded-t-2xl flex flex-row items-center shadow-sm">
             <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="h-10 w-10 bg-white/15 rounded-xl flex items-center justify-center">
-                <CreditCard className="h-5 w-5 text-white" />
-              </div>
+              {companyLogo && (
+                <img 
+                  src={companyLogo} 
+                  alt="Company logo" 
+                  className="w-12 h-12 object-contain rounded-lg"
+                  onError={(e) => {
+                    // Hide if logo fails to load
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
               <div className="flex items-center gap-4 flex-wrap">
                 <DialogTitle className="text-xl font-bold tracking-tight text-white">
                   {isEditing ? (subscription?.serviceName || 'Edit Subscription') : 'Subscription'}
@@ -1792,37 +1895,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           {serviceNameError}
                         </p>
                       )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="website"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Website</FormLabel>
-                      <FormControl>
-                          {field.value ? (
-                            <div className="w-full">
-                              <a
-                                href={field.value.startsWith('http') ? field.value : `https://${field.value}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full border border-gray-300 rounded-lg p-2 text-sm font-normal bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 text-indigo-600 hover:text-indigo-800 hover:underline block"
-                                style={{ textAlign: 'left', minHeight: '40px', display: 'flex', alignItems: 'center' }}
-                              >
-                                {field.value}
-                              </a>
-                            </div>
-                          ) : (
-                            <Input 
-                              type="url"
-                              className="w-full border-gray-300 rounded-lg p-2 text-sm font-normal bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
-                              {...field}
-                            />
-                          )}
-                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1988,7 +2060,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="qty"
                   render={({ field }) => (
                     <FormItem>
-                        <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Qty</FormLabel>
+                        <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Quantity</FormLabel>
                         <FormControl>
                           <Input 
                             type="number" 
@@ -2069,7 +2141,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           }
                         }}>
                           <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                            <SelectValue />
+                            <SelectValue placeholder="Select" />
                           </SelectTrigger>
                           <SelectContent className="dropdown-content">
                             <SelectItem value="monthly" className={`${billingCycle === 'monthly' ? 'selected' : ''} dropdown-item`}>Monthly</SelectItem>
@@ -2090,10 +2162,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="paymentFrequency"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Payment frequency</FormLabel>
-                      <Select value={field.value || "monthly"} onValueChange={field.onChange}>
+                      <FormLabel className="block text-sm font-medium text-slate-700">Payment Frequency</FormLabel>
+                      <Select value={field.value || ""} onValueChange={field.onChange}>
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue />
+                          <SelectValue placeholder="Select" />
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
                           <SelectItem value="monthly" className="dropdown-item">Monthly</SelectItem>
@@ -2288,7 +2360,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         disabled={paymentMethodsLoading}
                       >
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue />
+                          <SelectValue placeholder="Select" />
                         </SelectTrigger>
                         <SelectContent className="dropdown-content">
                           {Array.isArray(paymentMethods) && paymentMethods.length > 0 ? (
@@ -2407,6 +2479,64 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     </FormItem>
                   )}
                 />
+                {/* Website field - moved beside Owner Email - expands based on URL length */}
+                <FormField
+                  control={form.control}
+                  name="website"
+                  render={({ field }) => {
+                    // Calculate column span based on URL length
+                    const urlLength = field.value?.length || 0;
+                    const colSpan = urlLength > 40 ? 'md:col-span-2' : '';
+                    
+                    return (
+                      <FormItem className={colSpan}>
+                        <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Website</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            {field.value && !isEditingWebsite ? (
+                              <>
+                                <a
+                                  href={field.value.startsWith('http') ? field.value : `https://${field.value}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-full border border-gray-300 rounded-lg p-2 pr-10 text-sm font-normal bg-white shadow-sm hover:bg-gray-50 transition-all duration-200 text-indigo-600 hover:text-indigo-800 hover:underline block truncate"
+                                  style={{ textAlign: 'left', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                                  title={field.value}
+                                >
+                                  {field.value}
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsEditingWebsite(true)}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-indigo-600 p-1 rounded hover:bg-indigo-50"
+                                  title="Edit website"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                                    <path d="m15 5 4 4"></path>
+                                  </svg>
+                                </button>
+                              </>
+                            ) : (
+                              <Input 
+                                type="url"
+                                className="w-full border-gray-300 rounded-lg p-2 text-sm font-normal bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                                {...field}
+                                onBlur={() => {
+                                  if (field.value) {
+                                    setIsEditingWebsite(false);
+                                  }
+                                }}
+                                autoFocus={isEditingWebsite}
+                              />
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
                 
                 {/* Dynamic Fields from Configuration - now rendered after all static fields */}
                 {dynamicFields.length > 0 && (
@@ -2474,11 +2604,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </div>
                 <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
               </div>
-              <div className="grid gap-4 mb-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+              <div className="grid gap-4 mb-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 items-end">
                 {/* Auto Renewal - First */}
-                <div className="flex flex-col justify-start">
-                  <label className="text-sm font-medium text-slate-700 mb-2">Auto Renewal</label>
-                  <div className="flex items-center h-10">
+                <div className="w-full flex flex-col">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Auto Renewal</label>
+                  <div className="flex items-center h-10 border border-transparent">
                     <button
                       type="button"
                       className={`relative inline-flex h-6 w-12 items-center rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${
@@ -2505,7 +2635,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 {/* Initial Date */}
                 <div className="w-full flex flex-col">
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Initial Date
+                    First Purchase Date
                   </label>
                   <Input 
                     type="date" 
@@ -2540,7 +2670,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="block text-sm font-medium text-slate-700">
-                          Start Date <span className="text-red-500">*</span>
+                          Current Cycle Start <span className="text-red-500">*</span>
                         </FormLabel>
                         <FormControl>
                           <Input 
@@ -2575,7 +2705,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="block text-sm font-medium text-slate-700">
-                          Next Renewal Date <span className="text-red-500">*</span>
+                          Next Payment Date <span className="text-red-500">*</span>
                         </FormLabel>
                         <FormControl>
                           <Input 
@@ -2610,7 +2740,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     name="reminderDays"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Reminder Days</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Remind Before (Days)</FormLabel>
                         <FormControl>
                           <Input 
                             type="number" 
