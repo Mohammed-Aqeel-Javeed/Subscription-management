@@ -8,6 +8,8 @@ export interface AuthUser {
   userId: string;
   email: string;
   tenantId: string;
+  role?: string;
+  department?: string;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -42,7 +44,7 @@ export const authenticateToken = async (req: AuthenticatedRequest, res: Response
           email: decoded.email
         });
         
-        if (department) {
+        if (department && req.user) {
           req.user.department = department.name;
           console.log(`Set department for ${decoded.email}: ${department.name}`);
         }
@@ -83,7 +85,7 @@ export const optionalAuth = async (req: AuthenticatedRequest, res: Response, nex
             email: decoded.email
           });
           
-          if (department) {
+          if (department && req.user) {
             req.user.department = department.name;
             console.log(`Set department for ${decoded.email}: ${department.name}`);
           }
