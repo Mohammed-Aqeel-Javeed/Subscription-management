@@ -153,6 +153,27 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   setInterval(checkYearlyReminders, 24 * 60 * 60 * 1000);
   log("Yearly reminder scheduler initialized - will check daily", "reminders");
 
+  // Schedule automatic auto-renewal checks
+  const { AutoRenewalService } = await import("./auto-renewal.service.js");
+  const autoRenewalService = new AutoRenewalService(storage);
+  
+  const checkAutoRenewals = async () => {
+    try {
+      log("Running scheduled auto-renewal check...", "auto-renewal");
+      await autoRenewalService.processAutoRenewals();
+    } catch (error) {
+      log(`Failed to process auto-renewals: ${error}`, "auto-renewal");
+    }
+  };
+
+  // Run auto-renewal check immediately on startup
+  checkAutoRenewals();
+  
+  // Schedule auto-renewal check to run every 24 hours
+  // This will automatically renew subscriptions when Next Payment Date = Today
+  setInterval(checkAutoRenewals, 24 * 60 * 60 * 1000);
+  log("Auto-renewal scheduler initialized - will check daily", "auto-renewal");
+
   // Send department head notification emails on startup
   const sendDepartmentHeadNotifications = async () => {
     try {
