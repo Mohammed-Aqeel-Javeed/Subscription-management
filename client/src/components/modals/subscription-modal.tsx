@@ -914,61 +914,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     }
   }, [form.watch('serviceName'), form]);
 
-  // Auto-update dates if Auto Renewal is ON and Next Renewal Date matches today
-  useEffect(() => {
-    if (!autoRenewal || !open || !isEditing) return;
-    
-    const nextRenewalValue = form.watch('nextRenewal');
-    if (!nextRenewalValue) return;
-    
-    const todayStr = new Date().toISOString().split('T')[0];
-    const nextRenewalStr = new Date(nextRenewalValue).toISOString().split('T')[0];
-    
-    // If next renewal date matches today, update both dates and create history
-    if (nextRenewalStr === todayStr) {
-      const cycle = form.watch("billingCycle") || billingCycle;
-      const newStartDate = todayStr;
-      const newEndDate = calculateEndDate(newStartDate, cycle);
-      
-      // Create history record for auto-renewal
-      const createAutoRenewalHistory = async () => {
-        try {
-          const subscriptionId = subscription?.id || subscription?._id;
-          if (!subscriptionId) return;
-          
-          const historyData = {
-            subscriptionId: subscriptionId,
-            action: 'Auto Renewal',
-            oldStartDate: startDate,
-            oldEndDate: endDate,
-            newStartDate: newStartDate,
-            newEndDate: newEndDate,
-            changedBy: currentUserName || 'System',
-            timestamp: new Date().toISOString(),
-            notes: `Auto-renewal triggered on ${todayStr}`,
-          };
-          
-          await apiRequest("POST", "/api/history", historyData);
-          
-          toast({
-            title: "Auto Renewal",
-            description: `Subscription automatically renewed from ${newStartDate} to ${newEndDate}`,
-            className: "bg-white border border-green-500 text-green-700 font-semibold shadow-lg",
-          });
-        } catch (error) {
-          console.error('Failed to create auto-renewal history:', error);
-        }
-      };
-      
-      setStartDate(newStartDate);
-      form.setValue("startDate", newStartDate);
-      setEndDate(newEndDate);
-      form.setValue("nextRenewal", newEndDate);
-      
-      // Create history record
-      createAutoRenewalHistory();
-    }
-  }, [autoRenewal, open, isEditing, form.watch('nextRenewal'), billingCycle, form, subscription, startDate, endDate, currentUserName, toast]);
+  // Note: Auto-renewal is now handled by the server-side scheduled job
+  // The server checks daily for subscriptions where Next Payment Date = Today and auto-renewal is enabled
+  // This ensures renewals happen automatically even when the modal is not open
 
   // Fetch company logo when website URL changes
   useEffect(() => {
