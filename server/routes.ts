@@ -377,15 +377,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
-      // For department_editor and department_viewer, find their department by matching email
+      // For department_editor and department_viewer, find their department from employees collection
       let userDepartment = user.department || null;
       if ((user.role === 'department_editor' || user.role === 'department_viewer') && user.tenantId) {
-        const department = await db.collection("departments").findOne({
+        // Try to find department from employees collection by matching email
+        const employee = await db.collection("employees").findOne({
           tenantId: user.tenantId,
           email: user.email
         });
-        if (department) {
-          userDepartment = department.name;
+        if (employee && employee.department) {
+          userDepartment = employee.department;
+          console.log(`[Login] Found department "${userDepartment}" for ${user.email} from employees collection`);
+        } else {
+          console.log(`[Login] No department found for ${user.email} in employees collection`);
         }
       }
 

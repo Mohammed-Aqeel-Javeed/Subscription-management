@@ -18,6 +18,7 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
   const [searchQuery, setSearchQuery] = useState("");
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const { data: companies = [], isLoading } = useQuery<Company[]>({
     queryKey: ["/api/user/companies"],
@@ -131,6 +132,44 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
             )}
+          </div>
+          
+          {/* Add Company Button */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <button
+              onClick={async () => {
+                try {
+                  // Logout first
+                  await fetch("/api/logout", { method: "POST", credentials: "include" });
+                  
+                  // Clear session storage
+                  sessionStorage.removeItem("isAuthenticated");
+                  sessionStorage.clear();
+                  
+                  // Clear all React Query cache
+                  queryClient.clear();
+                  
+                  // Dispatch logout event
+                  window.dispatchEvent(new Event('logout'));
+                  
+                  // Close dialog
+                  onClose();
+                  
+                  // Navigate to signup with a flag to open the add company modal
+                  navigate('/signup?addCompany=true', { replace: true });
+                } catch (error) {
+                  toast({
+                    title: "Error",
+                    description: "Failed to logout. Please try again.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium rounded-lg transition-all shadow-sm"
+            >
+              <Building2 className="h-4 w-4" />
+              <span>Add Company</span>
+            </button>
           </div>
         </div>
       </div>

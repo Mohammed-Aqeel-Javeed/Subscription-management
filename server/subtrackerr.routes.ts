@@ -815,22 +815,44 @@ if (!tenantId) {
 return isOwner;
       });
 } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
-      // Department roles can only see items in their department
+      // Department roles can only see items in their department OR Company Level items
+      console.log(`[Department Filter] User: ${req.user?.email}, Role: ${userRole}, Department: ${userDepartment}`);
+      console.log(`[Department Filter] Total subscriptions before filter: ${subscriptions.length}`);
+      
       if (userDepartment) {
         subscriptions = subscriptions.filter(sub => {
-          if (!sub.department) {
-return false;
+          if (!sub.department && !sub.departments) {
+            console.log(`[Department Filter] ${sub.serviceName}: No department field - EXCLUDED`);
+            return false;
           }
+          
           try {
-            const depts = JSON.parse(sub.department);
-            const hasAccess = Array.isArray(depts) && depts.includes(userDepartment);
-return hasAccess;
+            // Try parsing department field (JSON string)
+            let depts = [];
+            if (sub.department) {
+              depts = JSON.parse(sub.department);
+            } else if (sub.departments) {
+              depts = Array.isArray(sub.departments) ? sub.departments : [sub.departments];
+            }
+            
+            // Allow access if:
+            // 1. Subscription has "Company Level" in departments
+            // 2. User's department is in the subscription's departments
+            const hasCompanyLevel = Array.isArray(depts) && depts.includes('Company Level');
+            const hasUserDepartment = Array.isArray(depts) && depts.includes(userDepartment);
+            
+            console.log(`[Department Filter] ${sub.serviceName}: depts=${JSON.stringify(depts)}, hasCompanyLevel=${hasCompanyLevel}, hasUserDept=${hasUserDepartment}, result=${hasCompanyLevel || hasUserDepartment}`);
+            
+            return hasCompanyLevel || hasUserDepartment;
           } catch {
-            const hasAccess = sub.department === userDepartment;
-return hasAccess;
+            // Fallback for non-JSON department field
+            const hasAccess = sub.department === userDepartment || sub.department === 'Company Level';
+            return hasAccess;
           }
         });
-}
+        
+        console.log(`[Department Filter] Subscriptions after filter: ${subscriptions.length}`);
+      }
     }
     
     // Transform MongoDB documents to have consistent id field AND decrypt sensitive data
@@ -843,6 +865,7 @@ return hasAccess;
       };
     });
     
+    console.log(`[Department Filter] Final response: ${transformedSubscriptions.length} subscriptions`);
     res.status(200).json(transformedSubscriptions);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch subscriptions", error });
@@ -875,45 +898,46 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
       filter = { id: id, tenantId };
     }
     
-    // Get subscription data before deleting for notification event
-    const subscriptionToDelete = await collection.findOne(filter);
-    
-    // Decrypt subscription data for notification
-    let decryptedSubscription = subscriptionToDelete;
-    if (subscriptionToDelete) {
-      const { decryptSubscriptionData } = await import("./encryption.service.js");
-      decryptedSubscription = decryptSubscriptionData(subscriptionToDelete);
-    }
-    
+    // Delete subscription first (main operation)
     const result = await collection.deleteOne(filter);
+    
     if (result.deletedCount === 1) {
-      // Create notification event for subscription deletion
-      if (decryptedSubscription) {
-        try {
-const notificationEvent = {
-            _id: new ObjectId(),
-            tenantId,
-            type: 'subscription',
-            eventType: 'deleted',
-            subscriptionId: id,
-            subscriptionName: decryptedSubscription.serviceName,
-            category: decryptedSubscription.category || 'Software',
-            message: `Subscription ${decryptedSubscription.serviceName} deleted`,
-            read: false,
-            timestamp: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            reminderTriggerDate: new Date().toISOString().slice(0, 10)
-          };
-const notificationResult = await db.collection("notification_events").insertOne(notificationEvent);
-} catch (notificationError) {
-          console.error(`❌ [SUBTRACKERR] Failed to create deletion notification event for ${decryptedSubscription?.serviceName}:`, notificationError);
-          // Don't throw - let deletion succeed even if notification fails
-        }
-      }
+      // Send success response immediately
+      res.status(200).json({ message: "Subscription deleted successfully" });
       
-      // Cascade delete reminders for this subscription
-      await db.collection("reminders").deleteMany({ $or: [ { subscriptionId: id }, { subscriptionId: new ObjectId(id) } ] });
-      res.status(200).json({ message: "Subscription and related reminders deleted" });
+      // Perform cleanup operations asynchronously (don't wait for them)
+      setImmediate(async () => {
+        try {
+          // Cascade delete reminders
+          await db.collection("reminders").deleteMany({ 
+            $or: [ { subscriptionId: id }, { subscriptionId: new ObjectId(id) } ] 
+          });
+          
+          // Create notification event (optional, don't block on this)
+          const subscriptionData = await collection.findOne(filter);
+          if (subscriptionData) {
+            const { decryptSubscriptionData } = await import("./encryption.service.js");
+            const decrypted = decryptSubscriptionData(subscriptionData);
+            
+            await db.collection("notification_events").insertOne({
+              _id: new ObjectId(),
+              tenantId,
+              type: 'subscription',
+              eventType: 'deleted',
+              subscriptionId: id,
+              subscriptionName: decrypted.serviceName,
+              category: decrypted.category || 'Software',
+              message: `Subscription ${decrypted.serviceName} deleted`,
+              read: false,
+              timestamp: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              reminderTriggerDate: new Date().toISOString().slice(0, 10)
+            });
+          }
+        } catch (cleanupError) {
+          console.error(`❌ [SUBTRACKERR] Cleanup error after deletion:`, cleanupError);
+        }
+      });
     } else {
       res.status(404).json({ message: "Subscription not found or access denied" });
     }
@@ -1767,6 +1791,7 @@ router.put("/api/employees/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("employees");
+    const loginCollection = db.collection("login");
     const { id } = req.params;
     let filter;
     try {
@@ -1776,7 +1801,17 @@ router.put("/api/employees/:id", async (req, res) => {
     }
     const update = { $set: req.body };
     const result = await collection.updateOne(filter, update);
+    
     if (result.matchedCount === 1) {
+      // Sync department to login collection if email matches
+      if (req.body.email && req.body.department) {
+        await loginCollection.updateOne(
+          { email: req.body.email },
+          { $set: { department: req.body.department } }
+        );
+        console.log(`[Employee Update] Synced department "${req.body.department}" to login for ${req.body.email}`);
+      }
+      
       res.status(200).json({ message: "Employee updated" });
     } else {
       res.status(404).json({ message: "Employee not found" });
