@@ -588,9 +588,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       { header: 'NormHead', key: 'normHead', width: 2 },
       { header: 'NormEmail', key: 'normEmail', width: 2 }
     ];
-    deptSheet.addRow({ name: 'IT', head: 'Jane Smith', email: 'jane@company.com' });
-    deptSheet.addRow({ name: 'Marketing', head: 'John Doe', email: 'john@company.com' });
-    deptSheet.addRow({ name: 'Finance', head: 'Sarah Lee', email: 'sarah@company.com' });
+    deptSheet.addRow({ name: 'IT', head: 'John Doe', email: 'john@company.com' });
     
     // Add normalization formulas and validation for Departments sheet
     for (let i = 2; i <= 500; i++) {
@@ -619,35 +617,51 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'This department name already exists! Please use a unique name.'
       };
       
-      // Head duplicate validation with error alert
+      // Head field - dropdown from Employees sheet
       const headCell = deptSheet.getCell(`B${i}`);
       headCell.dataValidation = {
-        type: 'custom',
+        type: 'list',
         allowBlank: true,
-        formulae: [`OR(B${i}="",COUNTIF($E$2:$E$500,UPPER(TRIM(B${i})))=1)`],
+        formulae: ['Employees!$A$2:$A$500'],
         showInputMessage: true,
         promptTitle: 'Department Head',
-        prompt: 'Enter a unique department head name. Duplicates are not allowed.',
+        prompt: 'Select an employee from the Employees sheet. Email will auto-populate.',
         showErrorMessage: true,
-        errorStyle: 'error',
-        errorTitle: 'Duplicate Head',
-        error: 'This department head already exists! Please use a unique name.'
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Employee',
+        error: 'Please select a valid employee from the list.'
       };
       
-      // Email validation - must contain @ and .com AND be unique
+      // Email - auto-populate from Employees sheet using VLOOKUP
       const emailCell = deptSheet.getCell(`C${i}`);
-      emailCell.dataValidation = {
-        type: 'custom',
-        allowBlank: true,
-        formulae: [`OR(C${i}="",AND(ISNUMBER(FIND("@",C${i})),ISNUMBER(FIND(".com",C${i})),COUNTIF($F$2:$F$500,UPPER(TRIM(C${i})))=1))`],
-        showInputMessage: true,
-        promptTitle: 'Email Format',
-        prompt: 'Email must contain @ and .com and be unique (e.g., user@company.com)',
-        showErrorMessage: true,
-        errorStyle: 'error',
-        errorTitle: 'Invalid or Duplicate Email',
-        error: 'Email must contain both @ and .com, and must be unique!'
+      emailCell.value = { 
+        formula: `IF(B${i}="","",IFERROR(VLOOKUP(B${i},Employees!$A$2:$B$500,2,FALSE),""))`, 
+        result: '' 
       };
+      emailCell.protection = { locked: true }; // Lock the cell since it's auto-populated
+    }
+    
+    // Protect the sheet but allow editing of Department Name and Head columns
+    await deptSheet.protect('', {
+      selectLockedCells: true,
+      selectUnlockedCells: true,
+      formatCells: false,
+      formatColumns: false,
+      formatRows: false,
+      insertColumns: false,
+      insertRows: false,
+      insertHyperlinks: false,
+      deleteColumns: false,
+      deleteRows: false,
+      sort: false,
+      autoFilter: false,
+      pivotTables: false
+    });
+    
+    // Unlock Department Name and Head columns so they can be edited
+    for (let i = 2; i <= 500; i++) {
+      deptSheet.getCell(`A${i}`).protection = { locked: false };
+      deptSheet.getCell(`B${i}`).protection = { locked: false };
     }
     
     // Hide normalization columns
@@ -655,7 +669,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     deptSheet.getColumn(5).hidden = true;
     deptSheet.getColumn(6).hidden = true;
     
-    // Conditional formatting for duplicate Department Names
+    // Conditional formatting for duplicate Department Names only
     deptSheet.addConditionalFormatting({
       ref: 'A2:A500',
       rules: [
@@ -663,38 +677,6 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
           type: 'expression',
           priority: 1,
           formulae: ['AND(A2<>"",COUNTIF($D$2:$D$500,UPPER(TRIM(A2)))>1)'],
-          style: {
-            fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } },
-            font: { color: { argb: 'FFFFFFFF' }, bold: true }
-          }
-        }
-      ]
-    });
-    
-    // Conditional formatting for duplicate Heads
-    deptSheet.addConditionalFormatting({
-      ref: 'B2:B500',
-      rules: [
-        {
-          type: 'expression',
-          priority: 1,
-          formulae: ['AND(B2<>"",COUNTIF($E$2:$E$500,UPPER(TRIM(B2)))>1)'],
-          style: {
-            fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } },
-            font: { color: { argb: 'FFFFFFFF' }, bold: true }
-          }
-        }
-      ]
-    });
-    
-    // Conditional formatting for duplicate Emails
-    deptSheet.addConditionalFormatting({
-      ref: 'C2:C500',
-      rules: [
-        {
-          type: 'expression',
-          priority: 1,
-          formulae: ['AND(C2<>"",COUNTIF($F$2:$F$500,UPPER(TRIM(C2)))>1)'],
           style: {
             fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFF0000' } },
             font: { color: { argb: 'FFFFFFFF' }, bold: true }

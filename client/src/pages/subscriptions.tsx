@@ -701,13 +701,22 @@ export default function Subscriptions() {
                       </TableCell>
                       <TableCell className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
-                          {(subscription.departments || []).map((dept, idx) => (
-                            <span key={dept + idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              {dept}
+                          {/* If Company Level is selected, only show Company Level badge */}
+                          {(subscription.departments || []).includes('Company Level') ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap">
+                              Company Level
                             </span>
-                          ))}
-                          {(!subscription.departments || subscription.departments.length === 0) && (
-                            <span className="text-xs text-gray-400">-</span>
+                          ) : (
+                            <>
+                              {(subscription.departments || []).map((dept, idx) => (
+                                <span key={dept + idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  {dept}
+                                </span>
+                              ))}
+                              {(!subscription.departments || subscription.departments.length === 0) && (
+                                <span className="text-xs text-gray-400">-</span>
+                              )}
+                            </>
                           )}
                         </div>
                       </TableCell>

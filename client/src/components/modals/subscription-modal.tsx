@@ -90,6 +90,101 @@ interface Department {
   name: string;
   visible: boolean;
 }
+
+// Comprehensive Email Validation Function
+const validateEmail = (email: string): { valid: boolean; error?: string } => {
+  // Rule 1: Required - Not empty
+  if (!email || email.trim() === '') {
+    return { valid: false, error: 'Email is required' };
+  }
+
+  const trimmedEmail = email.trim();
+
+  // Rule 2: Max length ≤ 254 characters
+  if (trimmedEmail.length > 254) {
+    return { valid: false, error: 'Email must be 254 characters or less' };
+  }
+
+  // Rule 3: No spaces
+  if (/\s/.test(trimmedEmail)) {
+    return { valid: false, error: 'Email cannot contain spaces' };
+  }
+
+  // Rule 4: One @ only
+  const atCount = (trimmedEmail.match(/@/g) || []).length;
+  if (atCount !== 1) {
+    return { valid: false, error: 'Email must contain exactly one @ symbol' };
+  }
+
+  const [localPart, domain] = trimmedEmail.split('@');
+
+  // Rule 5: Local part limit - Before @ ≤ 64 chars
+  if (localPart.length > 64) {
+    return { valid: false, error: 'Email username must be 64 characters or less' };
+  }
+
+  // Rule 6: Domain exists - After @ not empty
+  if (!domain || domain.length === 0) {
+    return { valid: false, error: 'Email domain is required' };
+  }
+
+  // Rule 7: No consecutive dots
+  if (/\.\./.test(trimmedEmail)) {
+    return { valid: false, error: 'Email cannot contain consecutive dots' };
+  }
+
+  // Rule 8: No leading/trailing dots in local part
+  if (localPart.startsWith('.') || localPart.endsWith('.')) {
+    return { valid: false, error: 'Email username cannot start or end with a dot' };
+  }
+
+  // Rule 9: Domain has dot - At least one . in domain
+  if (!domain.includes('.')) {
+    return { valid: false, error: 'Email domain must contain a dot' };
+  }
+
+  // Rule 10: Valid TLD - ≥ 2 characters and only letters
+  const domainParts = domain.split('.');
+  const tld = domainParts[domainParts.length - 1];
+  if (tld.length < 2) {
+    return { valid: false, error: 'Email domain extension must be at least 2 characters' };
+  }
+  // TLD should only contain letters
+  if (!/^[a-zA-Z]+$/.test(tld)) {
+    return { valid: false, error: 'Email domain extension must contain only letters' };
+  }
+
+  // Rule 11: Valid characters - Only allowed chars
+  const validLocalRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+  if (!validLocalRegex.test(localPart)) {
+    return { valid: false, error: 'Email username contains invalid characters' };
+  }
+
+  // Domain parts (except TLD) can contain letters, numbers, and hyphens
+  for (let i = 0; i < domainParts.length - 1; i++) {
+    if (!/^[a-zA-Z0-9-]+$/.test(domainParts[i])) {
+      return { valid: false, error: 'Email domain contains invalid characters' };
+    }
+  }
+
+  // Rule 12: Domain format - No - or . at edges
+  if (domain.startsWith('-') || domain.startsWith('.') || domain.endsWith('-') || domain.endsWith('.')) {
+    return { valid: false, error: 'Email domain cannot start or end with a hyphen or dot' };
+  }
+
+  // Check each domain part doesn't start/end with hyphen
+  for (const part of domainParts) {
+    if (part.startsWith('-') || part.endsWith('-')) {
+      return { valid: false, error: 'Email domain parts cannot start or end with a hyphen' };
+    }
+    if (part.length === 0) {
+      return { valid: false, error: 'Email domain cannot have empty parts' };
+    }
+  }
+
+  return { valid: true };
+};
+
 // Update the form schema to handle multiple departments and make required fields
 const formSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
@@ -108,7 +203,15 @@ const formSchema = z.object({
   department: z.string().optional(),
   departments: z.array(z.string()).optional(),
   owner: z.string().optional(),
-  ownerEmail: z.string().email('Please enter a valid email').optional(),
+  ownerEmail: z.string().optional().refine((email) => {
+    if (!email || email.trim() === '') return true; // Optional field
+    const result = validateEmail(email);
+    return result.valid;
+  }, (email) => {
+    if (!email || email.trim() === '') return { message: '' };
+    const result = validateEmail(email || '');
+    return { message: result.error || "Invalid email address" };
+  }),
   status: z.string().optional(),
   paymentFrequency: z.string().optional(),
   reminderDays: z.union([z.string(), z.number()]).optional(),
@@ -1992,6 +2095,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             min="0"
                             className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
                             value={field.value}
+                            onKeyDown={(e) => {
+                              // Prevent 'e', 'E', '+', '-' keys
+                              if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') {
+                                e.preventDefault();
+                              }
+                            }}
                             onChange={e => {
                               // Limit to 2 decimal places
                               let val = e.target.value;
@@ -2043,6 +2152,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             placeholder=""
                             className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
                             value={field.value || ""}
+                            onKeyDown={(e) => {
+                              // Prevent 'e', 'E', '+', '-', '.' keys (quantity should be whole numbers only)
+                              if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-' || e.key === '.') {
+                                e.preventDefault();
+                              }
+                            }}
                             onChange={e => {
                               const qtyValue = e.target.value ? parseInt(e.target.value) : "";
                               field.onChange(qtyValue);
@@ -2164,14 +2279,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     // Combine and deduplicate
                     const allCategories = [...new Set([...dbCategories, ...DEFAULT_CATEGORY_SUGGESTIONS])];
                     
-                    // Filter based on current input - only show if user has typed something
+                    // Filter based on current input - show all if no input, filter if user has typed
                     const filtered = field.value 
                       ? allCategories.filter(cat => 
                           cat.toLowerCase().includes(field.value?.toLowerCase() || '')
                         )
-                      : [];
+                      : allCategories;
                     
-                    const shouldShowDropdown = categoryOpen && field.value && filtered.length > 0;
+                    const shouldShowDropdown = categoryOpen && filtered.length > 0;
 
                     return (
                       <FormItem className="relative" ref={categoryDropdownRef}>
@@ -2179,18 +2294,22 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <div className="relative">
                           <Input
                             {...field}
-                            className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-blue-500 focus:ring-blue-500"
+                            className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
                             disabled={categoriesLoading}
                             onChange={(e) => {
                               field.onChange(e.target.value);
-                              setCategoryOpen(e.target.value.length > 0);
+                              setCategoryOpen(true);
                             }}
-                            onFocus={(e) => {
-                              // Don't show dropdown on focus if field already has a value
-                              if (!field.value) {
-                                setCategoryOpen(false);
-                              }
+                            onFocus={() => {
+                              setCategoryOpen(true);
                             }}
+                            onClick={() => {
+                              setCategoryOpen(true);
+                            }}
+                          />
+                          <ChevronDown 
+                            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer" 
+                            onClick={() => setCategoryOpen(!categoryOpen)}
                           />
                         </div>
                         {shouldShowDropdown && (
@@ -3704,19 +3823,57 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   onClick={() => {
                     const input = document.createElement('input');
                     input.type = 'file';
-                    input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+                    // Allowed file types: PDF (preferred), Word, Excel, and images
+                    input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png';
                     input.onchange = async (e: any) => {
                       const file = e.target?.files?.[0];
                       if (file) {
+                        // Get file extension
+                        const fileName = file.name.toLowerCase();
+                        const fileExt = fileName.substring(fileName.lastIndexOf('.'));
+                        
+                        // Blocked file types (security risk)
+                        const blockedExtensions = [
+                          '.exe', '.msi', '.bat', '.cmd', '.sh', '.apk', // Executables & scripts
+                          '.js', '.php', '.html', '.py', '.xml', // Web & code files
+                          '.zip', '.rar', '.7z', '.tar', // Archives
+                          '.env', '.sql', '.db', '.ini', '.csv' // Config / DB files
+                        ];
+                        
+                        // Allowed file types
+                        const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'];
+                        
+                        // Check if file type is blocked
+                        if (blockedExtensions.includes(fileExt)) {
+                          toast({
+                            title: "File Type Not Allowed",
+                            description: `${fileExt} files are not permitted for security reasons`,
+                            variant: "destructive",
+                            duration: 3000,
+                          });
+                          return;
+                        }
+                        
+                        // Check if file type is allowed
+                        if (!allowedExtensions.includes(fileExt)) {
+                          toast({
+                            title: "Invalid File Type",
+                            description: "Only PDF, Word, Excel, and image files are allowed",
+                            variant: "destructive",
+                            duration: 3000,
+                          });
+                          return;
+                        }
+                        
                         try {
                           const reader = new FileReader();
                           reader.onloadend = async () => {
                             const base64String = reader.result as string;
-                            const newDocName = `File ${documents.length + 1}`;
-                            setDocuments([...documents, {name: newDocName, url: base64String}]);
+                            // Use the actual file name instead of generic "File 1", "File 2"
+                            setDocuments([...documents, {name: file.name, url: base64String}]);
                             toast({
                               title: "Success",
-                              description: `${newDocName} uploaded successfully`,
+                              description: `${file.name} uploaded successfully`,
                               duration: 2000,
                             });
                           };
@@ -3759,10 +3916,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
-                          <p className="text-[10px] text-gray-600">
-                            {doc.url.startsWith('data:application/pdf') ? 'PDF Document' : 
-                             doc.url.startsWith('data:image') ? 'Image File' : 'Document'}
-                          </p>
                         </div>
                       </div>
                       
@@ -3861,6 +4014,24 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                           </svg>
                           Download
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updatedDocs = documents.filter((_, i) => i !== index);
+                            setDocuments(updatedDocs);
+                            toast({
+                              title: "Document Removed",
+                              description: `${doc.name} has been removed`,
+                              duration: 2000,
+                            });
+                          }}
+                          className="px-2 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-600 hover:bg-red-50 rounded-md transition-colors flex items-center gap-1"
+                          title="Remove document"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
                         </button>
                       </div>
                     </div>

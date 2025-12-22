@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { CheckCircle2, XCircle, Eye, EyeOff, Building2 } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "../lib/config";
 import AddCompanyModal from "../components/modals/add-company-modal";
 
@@ -22,6 +22,14 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
+  // Auto-open Add Company modal if addCompany parameter is present
+  useEffect(() => {
+    if (searchParams.get('addCompany') === 'true') {
+      setShowAddCompanyModal(true);
+    }
+  }, [searchParams]);
   
   // Complete currency list
   const currencyList = [

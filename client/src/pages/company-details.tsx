@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, FileSpreadsheet } from "lucide-react";
+import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, FileSpreadsheet, BarChart3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -47,10 +47,110 @@ const parseCSV = (text: string): Promise<any[]> => {
   });
 };
 
-// Employee schema with free-text role
+// Comprehensive Email Validation Function
+const validateEmail = (email: string): { valid: boolean; error?: string } => {
+  // Rule 1: Required - Not empty
+  if (!email || email.trim() === '') {
+    return { valid: false, error: 'Email is required' };
+  }
+
+  const trimmedEmail = email.trim();
+
+  // Rule 2: Max length ≤ 254 characters
+  if (trimmedEmail.length > 254) {
+    return { valid: false, error: 'Email must be 254 characters or less' };
+  }
+
+  // Rule 3: No spaces
+  if (/\s/.test(trimmedEmail)) {
+    return { valid: false, error: 'Email cannot contain spaces' };
+  }
+
+  // Rule 4: One @ only
+  const atCount = (trimmedEmail.match(/@/g) || []).length;
+  if (atCount !== 1) {
+    return { valid: false, error: 'Email must contain exactly one @ symbol' };
+  }
+
+  const [localPart, domain] = trimmedEmail.split('@');
+
+  // Rule 5: Local part limit - Before @ ≤ 64 chars
+  if (localPart.length > 64) {
+    return { valid: false, error: 'Email username must be 64 characters or less' };
+  }
+
+  // Rule 6: Domain exists - After @ not empty
+  if (!domain || domain.length === 0) {
+    return { valid: false, error: 'Email domain is required' };
+  }
+
+  // Rule 7: No consecutive dots
+  if (/\.\./.test(trimmedEmail)) {
+    return { valid: false, error: 'Email cannot contain consecutive dots' };
+  }
+
+  // Rule 8: No leading/trailing dots in local part
+  if (localPart.startsWith('.') || localPart.endsWith('.')) {
+    return { valid: false, error: 'Email username cannot start or end with a dot' };
+  }
+
+  // Rule 9: Domain has dot - At least one . in domain
+  if (!domain.includes('.')) {
+    return { valid: false, error: 'Email domain must contain a dot' };
+  }
+
+  // Rule 10: Valid TLD - ≥ 2 characters and only letters
+  const domainParts = domain.split('.');
+  const tld = domainParts[domainParts.length - 1];
+  if (tld.length < 2) {
+    return { valid: false, error: 'Email domain extension must be at least 2 characters' };
+  }
+  // TLD should only contain letters
+  if (!/^[a-zA-Z]+$/.test(tld)) {
+    return { valid: false, error: 'Email domain extension must contain only letters' };
+  }
+
+  // Rule 11: Valid characters - Only allowed chars
+  const validLocalRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+  if (!validLocalRegex.test(localPart)) {
+    return { valid: false, error: 'Email username contains invalid characters' };
+  }
+
+  // Domain parts (except TLD) can contain letters, numbers, and hyphens
+  for (let i = 0; i < domainParts.length - 1; i++) {
+    if (!/^[a-zA-Z0-9-]+$/.test(domainParts[i])) {
+      return { valid: false, error: 'Email domain contains invalid characters' };
+    }
+  }
+
+  // Rule 12: Domain format - No - or . at edges
+  if (domain.startsWith('-') || domain.startsWith('.') || domain.endsWith('-') || domain.endsWith('.')) {
+    return { valid: false, error: 'Email domain cannot start or end with a hyphen or dot' };
+  }
+
+  // Check each domain part doesn't start/end with hyphen
+  for (const part of domainParts) {
+    if (part.startsWith('-') || part.endsWith('-')) {
+      return { valid: false, error: 'Email domain parts cannot start or end with a hyphen' };
+    }
+    if (part.length === 0) {
+      return { valid: false, error: 'Email domain cannot have empty parts' };
+    }
+  }
+
+  return { valid: true };
+};
+
+// Employee schema with comprehensive email validation
 const employeeSchema = z.object({
 name: z.string().min(1, "Name is required"),
-email: z.string().email("Invalid email address"),
+email: z.string().min(1, "Email is required").refine((email) => {
+  const result = validateEmail(email);
+  return result.valid;
+}, (email) => {
+  const result = validateEmail(email);
+  return { message: result.error || "Invalid email address" };
+}),
 department: z.string().optional(),
 status: z.enum(["active", "inactive"]),
 role: z.string().min(1, "Role is required"),
@@ -498,13 +598,20 @@ render={({ field }) => (
 <FormField
 control={form.control}
 name="email"
-render={({ field }) => (
+render={({ field, fieldState }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Email Address</FormLabel>
 <FormControl>
-<Input type="email" {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
+<Input 
+  type="email" 
+  {...field} 
+  onBlur={() => form.trigger('email')}
+  className={`border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+    fieldState.error ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
+  }`}
+/>
 </FormControl>
-<FormMessage />
+<FormMessage className="text-red-600 text-sm font-medium mt-1" />
 </FormItem>
 )}
 />
@@ -999,13 +1106,21 @@ render={({ field }) => (
 <FormField
 control={form.control}
 name="email"
-render={({ field }) => (
+render={({ field, fieldState }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Email Address</FormLabel>
 <FormControl>
-<Input type="email" placeholder="" {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
+<Input 
+  type="email" 
+  placeholder="" 
+  {...field} 
+  onBlur={() => form.trigger('email')}
+  className={`border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+    fieldState.error ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
+  }`}
+/>
 </FormControl>
-<FormMessage />
+<FormMessage className="text-red-600 text-sm font-medium mt-1" />
 </FormItem>
 )}
 />
@@ -1377,7 +1492,13 @@ type Department = {
 const departmentSchema = z.object({
   name: z.string().min(1, "Department name is required"),
   departmentHead: z.string().min(1, "Department head is required"),
-  email: z.string().email("Invalid email address"),
+  email: z.string().min(1, "Email is required").refine((email) => {
+    const result = validateEmail(email);
+    return result.valid;
+  }, (email) => {
+    const result = validateEmail(email);
+    return { message: result.error || "Invalid email address" };
+  }),
 });
 
 type DepartmentFormValues = z.infer<typeof departmentSchema>;
@@ -2446,12 +2567,17 @@ transition={{ duration: 0.3 }}
                   <Input
                     {...field}
                     type="email"
+                    placeholder="example@company.com"
+                    onBlur={() => {
+                      // Trigger validation when field loses focus
+                      departmentForm.trigger('email');
+                    }}
                     className={`border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
-                      fieldState.error ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+                      fieldState.error ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
                     }`}
                   />
                 </FormControl>
-                <FormMessage className="text-red-600" />
+                <FormMessage className="text-red-600 text-sm font-medium mt-1" />
               </FormItem>
             )}
           />
@@ -2564,6 +2690,14 @@ return (
         <Users className="w-4 h-4 text-indigo-600" />
         <span className="text-sm font-semibold text-indigo-600">{empCount}</span>
       </motion.button>
+      
+      <motion.div
+        whileHover={{ scale: 1.05 }}
+        className="flex items-center space-x-1 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-blue-200"
+      >
+        <BarChart3 className="w-4 h-4 text-blue-600" />
+        <span className="text-sm font-semibold text-blue-600">{subCount}</span>
+      </motion.div>
     </div>
   </motion.div>
 );
