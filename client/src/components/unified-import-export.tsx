@@ -345,10 +345,16 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     subRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF059669' } };
     instructionsSheet.addRow(['   • Service Name: Subscription service name (auto-capitalizes first letter)']);
     instructionsSheet.addRow(['   • Vendor: Select from dropdown (90+ popular vendors available)']);
-    instructionsSheet.addRow(['   • Amount per unit: Subscription cost']);
+    instructionsSheet.addRow(['   • Currency: Select from dropdown (references Currencies sheet)']);
+    instructionsSheet.addRow(['   • Quantity: Number of units/licenses (must be at least 1)']);
+    instructionsSheet.addRow(['   • Amount per unit: Cost per unit/license']);
+    instructionsSheet.addRow(['   • Total Amount: Auto-calculates (Quantity × Amount per unit)']);
     instructionsSheet.addRow(['   • Commitment cycle: Select from dropdown (Monthly, Yearly, Quarterly, Weekly, Trial, Pay-as-you-go)']);
+    instructionsSheet.addRow(['   • Payment Frequency: Select from dropdown (how often payments are made)']);
+    instructionsSheet.addRow(['   • Payment Method: Select from dropdown (references Payment Methods sheet)']);
     instructionsSheet.addRow(['   • Start Date: Format dd/mm/yyyy (e.g., 01/01/2025)']);
     instructionsSheet.addRow(['   • Next Renewal: Auto-calculates based on Start Date + Commitment cycle']);
+    instructionsSheet.addRow(['   • Auto Renewal: Select Yes or No (enables automatic renewal)']);
     instructionsSheet.addRow(['   • Status: Select from dropdown (Active or Inactive)']);
     instructionsSheet.addRow(['   • Category: Select from dropdown (references Categories sheet)']);
     instructionsSheet.addRow(['   • Departments: Enter department names separated by | (e.g., IT|Marketing)']);
@@ -392,7 +398,9 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     instructionsSheet.addRow(['   🎯 Service names auto-capitalize ("netflix" becomes "Netflix")']);
     instructionsSheet.addRow(['   🎯 Currency descriptions auto-fill when you select the code']);
     instructionsSheet.addRow(['   🎯 Owner Email auto-fills when you select an owner']);
-    instructionsSheet.addRow(['   🎯 Next Renewal auto-calculates - no manual entry needed']);
+    instructionsSheet.addRow(['   🎯 Total Amount auto-calculates (Quantity × Amount per unit)']);
+    instructionsSheet.addRow(['   🎯 Next Renewal auto-calculates based on Start Date + Commitment cycle']);
+    instructionsSheet.addRow(['   🎯 LCY Amount auto-calculates during import using exchange rates']);
     instructionsSheet.addRow(['   🎯 You can add your own vendors if not in the dropdown']);
     instructionsSheet.addRow([]);
     
@@ -515,7 +523,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     for (let i = 1; i <= 500; i++) {
       const extractCell = currencyExtractSheet.getCell(`A${i}`);
       extractCell.value = {
-        formula: `IF(Currencies!A${i+2}<>"",TRIM(RIGHT(SUBSTITUTE(Currencies!A${i+2},"(",REPT(" ",100)),100)),"")`
+        formula: `IF(Currencies!A${i+2}<>"",MID(Currencies!A${i+2},FIND("(",Currencies!A${i+2})+1,FIND(")",Currencies!A${i+2})-FIND("(",Currencies!A${i+2})-1),"")`
       };
     }
     
@@ -825,6 +833,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     paySheet.columns = [
       { header: 'Name', key: 'name', width: 20 },
       { header: 'Type', key: 'type', width: 20 },
+      { header: 'Owner', key: 'owner', width: 25 },
       { header: 'Managed by', key: 'managedBy', width: 25 },
       { header: 'Financial Institution', key: 'financialInstitution', width: 25 },
       { header: 'Expires at', key: 'expiresAt', width: 15 },
@@ -835,15 +844,16 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     paySheet.addRow({
       name: 'Corporate Visa',
       type: 'Credit',
-      managedBy: 'John Doe',
+      owner: 'John Doe',
+      managedBy: 'Jane Smith',
       financialInstitution: 'HSBC Bank',
       expiresAt: '12/2027',
       last4Digits: '1234'
     });
     
-    // Set Expires at column (E) to text format to preserve slashes
+    // Set Expires at column (F) to text format to preserve slashes
     const samplePayRow = paySheet.getRow(2);
-    samplePayRow.getCell(5).numFmt = '@'; // Text format for Expires at column
+    samplePayRow.getCell(6).numFmt = '@'; // Text format for Expires at column
     
     // Add Type dropdown validation for rows 2-500
     const paymentTypes = ['Credit', 'Debit', 'Cash', 'Bank Transfer', 'Digital Wallet', 'Other'];
@@ -878,14 +888,14 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid payment type from the dropdown list.'
       };
       
-      // Add Managed by (Employee) dropdown for Payment Methods (C column) - references Employees sheet
-      const managedByCell = paySheet.getCell(`C${i}`);
-      managedByCell.dataValidation = {
+      // Add Owner (Employee) dropdown for Payment Methods (C column) - references Employees sheet
+      const ownerCell = paySheet.getCell(`C${i}`);
+      ownerCell.dataValidation = {
         type: 'list',
         allowBlank: true,
         formulae: ['Employees!$A$2:$A$500'],
         showInputMessage: true,
-        promptTitle: 'Select Employee',
+        promptTitle: 'Select Owner',
         prompt: 'Choose an employee from the Employees sheet.',
         showErrorMessage: true,
         errorStyle: 'warning',
@@ -893,13 +903,28 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid employee.'
       };
       
-      // Expires at validation - MM/YYYY format only (E column)
-      const expiresAtCell = paySheet.getCell(`E${i}`);
+      // Add Managed by (Employee) dropdown for Payment Methods (D column) - references Employees sheet
+      const managedByCell = paySheet.getCell(`D${i}`);
+      managedByCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['Employees!$A$2:$A$500'],
+        showInputMessage: true,
+        promptTitle: 'Select Manager',
+        prompt: 'Choose an employee from the Employees sheet.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Employee',
+        error: 'Please select a valid employee.'
+      };
+      
+      // Expires at validation - MM/YYYY format only (F column)
+      const expiresAtCell = paySheet.getCell(`F${i}`);
       expiresAtCell.numFmt = '@'; // Text format to preserve slashes
       expiresAtCell.dataValidation = {
         type: 'custom',
         allowBlank: true,
-        formulae: [`AND(LEN(E${i})=7,ISNUMBER(VALUE(LEFT(E${i},2))),MID(E${i},3,1)="/",ISNUMBER(VALUE(RIGHT(E${i},4))),VALUE(LEFT(E${i},2))>=1,VALUE(LEFT(E${i},2))<=12,VALUE(RIGHT(E${i},4))>=2020)`],
+        formulae: [`AND(LEN(F${i})=7,ISNUMBER(VALUE(LEFT(F${i},2))),MID(F${i},3,1)="/",ISNUMBER(VALUE(RIGHT(F${i},4))),VALUE(LEFT(F${i},2))>=1,VALUE(LEFT(F${i},2))<=12,VALUE(RIGHT(F${i},4))>=2020)`],
         showInputMessage: true,
         promptTitle: 'Expiry Date Format',
         prompt: 'Enter expiry date in MM/YYYY format (e.g., 12/2027). Month must be 01-12.',
@@ -909,13 +934,13 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please use MM/YYYY format (e.g., 12/2027). Month must be between 01 and 12.'
       };
       
-      // Last 4 Digits validation - exactly 4 digits (F column)
-      const last4Cell = paySheet.getCell(`F${i}`);
+      // Last 4 Digits validation - exactly 4 digits (G column)
+      const last4Cell = paySheet.getCell(`G${i}`);
       last4Cell.numFmt = '@'; // Text format to preserve leading zeros
       last4Cell.dataValidation = {
         type: 'custom',
         allowBlank: true,
-        formulae: [`AND(LEN(F${i})=4,ISNUMBER(VALUE(F${i})))`],
+        formulae: [`AND(LEN(G${i})=4,ISNUMBER(VALUE(G${i})))`],
         showInputMessage: true,
         promptTitle: 'Last 4 Digits',
         prompt: 'Enter exactly 4 digits (e.g., 1234).',
@@ -1014,20 +1039,51 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       { header: 'Vendor', key: 'vendor', width: 20 },
       { header: 'Currency', key: 'currency', width: 12 },
       { header: 'Qty', key: 'qty', width: 10 },
-      { header: 'Amount per unit', key: 'amount', width: 12 },
+      { header: 'Amount per unit', key: 'amount', width: 15 },
       { header: 'Total Amount', key: 'totalAmount', width: 15 },
       { header: 'Commitment cycle', key: 'billingCycle', width: 18 },
+      { header: 'Payment Frequency', key: 'paymentFrequency', width: 18 },
+      { header: 'Payment Method', key: 'paymentMethod', width: 20 },
       { header: 'Start Date', key: 'startDate', width: 15 },
       { header: 'Next Renewal', key: 'nextRenewal', width: 15 },
+      { header: 'Auto Renewal', key: 'autoRenewal', width: 13 },
       { header: 'Status', key: 'status', width: 12 },
-      { header: 'Category', key: 'category', width: 15 },
+      { header: 'Category', key: 'category', width: 20 },
       { header: 'Departments', key: 'departments', width: 20 },
       { header: 'Owner', key: 'owner', width: 20 },
       { header: 'Owner Email', key: 'ownerEmail', width: 25 },
-      { header: 'Reminder Policy', key: 'reminderPolicy', width: 15 },
+      { header: 'Reminder Policy', key: 'reminderPolicy', width: 18 },
       { header: 'Reminder Days', key: 'reminderDays', width: 15 },
-      { header: 'Notes', key: 'notes', width: 30 }
+      { header: 'Notes', key: 'notes', width: 35 }
     ];
+    
+    // Style the header row to make columns distinct
+    const headerRow = subsSheet.getRow(1);
+    headerRow.height = 20;
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' }
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    headerRow.border = {
+      top: { style: 'thin', color: { argb: 'FF000000' } },
+      left: { style: 'thin', color: { argb: 'FF000000' } },
+      bottom: { style: 'thin', color: { argb: 'FF000000' } },
+      right: { style: 'thin', color: { argb: 'FF000000' } }
+    };
+    
+    // Apply borders to each header cell individually to prevent merging
+    for (let col = 1; col <= 21; col++) {
+      const cell = headerRow.getCell(col);
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } }
+      };
+    }
     
     // Add sample row with formula for Next Renewal
     const sampleRow = subsSheet.getRow(2);
@@ -1042,27 +1098,30 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       formula: 'E2*F2',
       result: 15.99
     };
-    sampleRow.getCell(8).value = 'Monthly';
-    sampleRow.getCell(9).value = '01/01/2025';
-    sampleRow.getCell(9).numFmt = '@'; // Text format to preserve slashes
-    // Next Renewal formula (column 10/J)
-    sampleRow.getCell(10).value = {
-      formula: `IF(AND(I2<>"",H2<>""),TEXT(IF(H2="Monthly",DATE(YEAR(I2),MONTH(I2)+1,DAY(I2))-1,IF(H2="Quarterly",DATE(YEAR(I2),MONTH(I2)+3,DAY(I2))-1,IF(H2="Yearly",DATE(YEAR(I2)+1,MONTH(I2),DAY(I2))-1,IF(H2="Weekly",I2+6,IF(H2="Trial",I2+30,""))))),"dd/mm/yyyy"),"")`,
+    sampleRow.getCell(8).value = 'Monthly'; // Commitment cycle
+    sampleRow.getCell(9).value = 'Monthly'; // Payment Frequency
+    sampleRow.getCell(10).value = 'Corporate Visa'; // Payment Method
+    sampleRow.getCell(11).value = '01/01/2025'; // Start Date
+    sampleRow.getCell(11).numFmt = '@'; // Text format to preserve slashes
+    // Next Renewal formula (column 12/L) - updated for new column positions
+    sampleRow.getCell(12).value = {
+      formula: `IF(AND(K2<>"",H2<>""),TEXT(IF(H2="Monthly",DATE(YEAR(K2),MONTH(K2)+1,DAY(K2))-1,IF(H2="Quarterly",DATE(YEAR(K2),MONTH(K2)+3,DAY(K2))-1,IF(H2="Yearly",DATE(YEAR(K2)+1,MONTH(K2),DAY(K2))-1,IF(H2="Weekly",K2+6,IF(H2="Trial",K2+30,""))))),"dd/mm/yyyy"),"")`,
       result: '31/01/2025'
     };
-    sampleRow.getCell(10).numFmt = '@'; // Text format to preserve slashes
-    sampleRow.getCell(11).value = 'Active';
-    sampleRow.getCell(12).value = 'Entertainment';
-    sampleRow.getCell(13).value = 'Marketing';
-    sampleRow.getCell(14).value = 'John Doe';
-    // Owner Email formula (column 15/O) - VLOOKUP to get email from Employees sheet
-    sampleRow.getCell(15).value = {
-      formula: `IFERROR(VLOOKUP(N2,Employees!$A$2:$B$500,2,0),"")`,
+    sampleRow.getCell(12).numFmt = '@'; // Text format to preserve slashes
+    sampleRow.getCell(13).value = 'Yes'; // Auto Renewal
+    sampleRow.getCell(14).value = 'Active'; // Status
+    sampleRow.getCell(15).value = 'Entertainment'; // Category
+    sampleRow.getCell(16).value = 'Marketing'; // Departments
+    sampleRow.getCell(17).value = 'John Doe'; // Owner
+    // Owner Email formula (column 18/R) - VLOOKUP to get email from Employees sheet
+    sampleRow.getCell(18).value = {
+      formula: `IFERROR(VLOOKUP(Q2,Employees!$A$2:$B$500,2,0),"")`,
       result: 'john@company.com'
     };
-    sampleRow.getCell(16).value = 'One time';
-    sampleRow.getCell(17).value = 7;
-    sampleRow.getCell(18).value = 'Team streaming subscription';
+    sampleRow.getCell(19).value = 'One time'; // Reminder Policy
+    sampleRow.getCell(20).value = 7; // Reminder Days
+    sampleRow.getCell(21).value = 'Team streaming subscription'; // Notes
     sampleRow.commit();
     
     // Add Commitment cycle dropdown and other validations for Subscriptions
@@ -1172,22 +1231,67 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid commitment cycle.'
       };
       
-      // Add Next Renewal formula for all rows (J column)
+      // Payment Frequency dropdown (I column)
+      const paymentFreqCell = subsSheet.getCell(`I${i}`);
+      paymentFreqCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${commitmentCycles.join(',')}"`],
+        showInputMessage: true,
+        promptTitle: 'Select Payment Frequency',
+        prompt: 'Choose how often payments are made.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Frequency',
+        error: 'Please select a valid payment frequency.'
+      };
+      
+      // Payment Method dropdown (J column) - references Payment Methods sheet
+      const paymentMethodCell = subsSheet.getCell(`J${i}`);
+      paymentMethodCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`'Payment Methods'!$A$2:$A$500`],
+        showInputMessage: true,
+        promptTitle: 'Select Payment Method',
+        prompt: 'Choose a payment method from the Payment Methods sheet.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Payment Method',
+        error: 'Please select a valid payment method.'
+      };
+      
+      // Set date format for Start Date column to text format (preserves slashes) (K column)
+      const startDateCell = subsSheet.getCell(`K${i}`);
+      startDateCell.numFmt = '@';
+      
+      // Add Next Renewal formula for all rows (L column)
       if (i > 2) { // Skip row 2 as we already added it
-        const renewalCell = subsSheet.getCell(`J${i}`);
+        const renewalCell = subsSheet.getCell(`L${i}`);
         renewalCell.value = {
-          formula: `IF(AND(I${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(I${i}),MONTH(I${i})+1,DAY(I${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(I${i}),MONTH(I${i})+3,DAY(I${i}))-1,IF(H${i}="Yearly",DATE(YEAR(I${i})+1,MONTH(I${i}),DAY(I${i}))-1,IF(H${i}="Weekly",I${i}+6,IF(H${i}="Trial",I${i}+30,""))))),"dd/mm/yyyy"),"")`,
+          formula: `IF(AND(K${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(K${i}),MONTH(K${i})+3,DAY(K${i}))-1,IF(H${i}="Yearly",DATE(YEAR(K${i})+1,MONTH(K${i}),DAY(K${i}))-1,IF(H${i}="Weekly",K${i}+6,IF(H${i}="Trial",K${i}+30,""))))),"dd/mm/yyyy"),"")`,
           result: ''
         };
         renewalCell.numFmt = '@'; // Text format to preserve slashes
       }
       
-      // Set date format for Start Date column to text format (preserves slashes)
-      const startDateCell = subsSheet.getCell(`I${i}`);
-      startDateCell.numFmt = '@';
+      // Auto Renewal dropdown (M column) - Yes/No
+      const autoRenewalCell = subsSheet.getCell(`M${i}`);
+      autoRenewalCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"Yes,No"'],
+        showInputMessage: true,
+        promptTitle: 'Auto Renewal',
+        prompt: 'Select Yes to enable automatic renewal, No to disable.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Value',
+        error: 'Please select Yes or No.'
+      };
       
-      // Status dropdown (K column)
-      const statusCell = subsSheet.getCell(`K${i}`);
+      // Status dropdown (N column)
+      const statusCell = subsSheet.getCell(`N${i}`);
       statusCell.dataValidation = {
         type: 'list',
         allowBlank: false,
@@ -1201,8 +1305,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid status: Active, Inactive, Cancelled, Suspended, or Trial.'
       };
       
-      // Category dropdown (L2:L500) - references Categories sheet
-      const categoryCell = subsSheet.getCell(`L${i}`);
+      // Category dropdown (O column) - references Categories sheet
+      const categoryCell = subsSheet.getCell(`O${i}`);
       categoryCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -1216,8 +1320,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid category from the dropdown list.'
       };
       
-      // Department dropdown (M2:M500) - references Departments sheet
-      const deptCell = subsSheet.getCell(`M${i}`);
+      // Department dropdown (P column) - references Departments sheet
+      const deptCell = subsSheet.getCell(`P${i}`);
       deptCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -1231,8 +1335,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid department.'
       };
       
-      // Add Owner (Employee) dropdown for Subscriptions (N2:N500) - references Employees sheet
-      const ownerCell = subsSheet.getCell(`N${i}`);
+      // Add Owner (Employee) dropdown for Subscriptions (Q column) - references Employees sheet
+      const ownerCell = subsSheet.getCell(`Q${i}`);
       ownerCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -1246,17 +1350,17 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid employee.'
       };
       
-      // Add Owner Email auto-fill formula for all rows (O column) - VLOOKUP from Employees
+      // Add Owner Email auto-fill formula for all rows (R column) - VLOOKUP from Employees
       if (i > 2) {
-        const ownerEmailCell = subsSheet.getCell(`O${i}`);
+        const ownerEmailCell = subsSheet.getCell(`R${i}`);
         ownerEmailCell.value = {
-          formula: `IFERROR(VLOOKUP(N${i},Employees!$A$2:$B$500,2,0),"")`,
+          formula: `IFERROR(VLOOKUP(Q${i},Employees!$A$2:$B$500,2,0),"")`,
           result: ''
         };
       }
       
-      // Reminder Policy dropdown (P column)
-      const reminderPolicyCell = subsSheet.getCell(`P${i}`);
+      // Reminder Policy dropdown (S column)
+      const reminderPolicyCell = subsSheet.getCell(`S${i}`);
       reminderPolicyCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -1270,8 +1374,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid reminder policy from the dropdown.'
       };
       
-      // Reminder Days validation - integer between 1 and 365 (Q column)
-      const reminderDaysCell = subsSheet.getCell(`Q${i}`);
+      // Reminder Days validation - integer between 1 and 365 (T column)
+      const reminderDaysCell = subsSheet.getCell(`T${i}`);
       reminderDaysCell.dataValidation = {
         type: 'whole',
         operator: 'between',
@@ -1289,8 +1393,12 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     
     // Unlock editable cells in Subscriptions sheet (all except Total Amount, Next Renewal, and Owner Email)
     for (let i = 2; i <= 500; i++) {
-      // Unlock all columns except G (Total Amount), J (Next Renewal), and O (Owner Email)
-      const editableColumns = ['A', 'B', 'C', 'D', 'E', 'F', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R'];
+      // Unlock all columns except G (Total Amount), L (Next Renewal), and R (Owner Email)
+      // A=Service Name, B=Website, C=Vendor, D=Currency, E=Qty, F=Amount per unit, G=Total Amount (locked)
+      // H=Commitment cycle, I=Payment Frequency, J=Payment Method, K=Start Date, L=Next Renewal (locked)
+      // M=Auto Renewal, N=Status, O=Category, P=Departments, Q=Owner, R=Owner Email (locked)
+      // S=Reminder Policy, T=Reminder Days, U=Notes
+      const editableColumns = ['A', 'B', 'C', 'D', 'E', 'F', 'H', 'I', 'J', 'K', 'M', 'N', 'O', 'P', 'Q', 'S', 'T', 'U'];
       editableColumns.forEach(col => {
         const cell = subsSheet.getCell(`${col}${i}`);
         cell.protection = { locked: false };
@@ -1440,6 +1548,13 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Show loading toast
+    const loadingToast = toast({
+      title: "Importing...",
+      description: "Please wait while we import your data. This may take a moment.",
+      duration: Infinity, // Keep showing until import completes
+    });
+
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
@@ -1452,6 +1567,21 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         
         // Track duplicates by sheet type
         const allDuplicates: {sheet: string; items: string[]}[] = [];
+        
+        // Fetch current user information for notes
+        let currentUserName = 'Import';
+        try {
+          const userRes = await fetch(`${API_BASE_URL}/api/me`, { credentials: "include" });
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            currentUserName = userData.fullName || userData.name || userData.username || userData.email || 'Import';
+            console.log('Import user:', currentUserName, userData);
+          } else {
+            console.error('Failed to fetch user info:', userRes.status);
+          }
+        } catch (err) {
+          console.error('Error fetching user info:', err);
+        }
 
         // Import Categories first (referenced by subscriptions)
         if (workbook.SheetNames.includes('Categories')) {
@@ -1490,19 +1620,15 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
           if (duplicatesInImport.length > 0) {
             allDuplicates.push({sheet: 'Categories', items: duplicatesInImport});
           }
-          if (duplicatesWithExisting.length > 0 && duplicatesInImport.length === 0) {
+          if (duplicatesWithExisting.length > 0) {
             allDuplicates.push({sheet: 'Categories', items: duplicatesWithExisting});
           }
           
-          if (duplicatesInImport.length > 0) {
-            toast({
-              title: "Import Failed - Duplicate Categories",
-              description: `Duplicate categories in Excel: ${duplicatesInImport.join(', ')}`,
-              variant: "destructive",
-              duration: 5000,
-            });
-            return;
-          }
+          // If duplicates found, skip importing this sheet
+          if (duplicatesInImport.length > 0 || duplicatesWithExisting.length > 0) {
+            // Skip the import loop for this sheet
+            results.push(`Categories: 0 success, ${categories.length} failed (duplicates)`);
+          } else {
           
           for (const row of categories) {
             try {
@@ -1528,9 +1654,10 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
               }
             } catch { catError++; }
           }
-          results.push(`Categories: ${catSuccess} success, ${catError} failed`);
-          totalSuccess += catSuccess;
-          totalError += catError;
+            results.push(`Categories: ${catSuccess} success, ${catError} failed`);
+            totalSuccess += catSuccess;
+            totalError += catError;
+          }
         }
 
         // Import Departments
@@ -1570,19 +1697,15 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
           if (duplicatesInImport.length > 0) {
             allDuplicates.push({sheet: 'Departments', items: duplicatesInImport});
           }
-          if (duplicatesWithExisting.length > 0 && duplicatesInImport.length === 0) {
+          if (duplicatesWithExisting.length > 0) {
             allDuplicates.push({sheet: 'Departments', items: duplicatesWithExisting});
           }
           
-          if (duplicatesInImport.length > 0) {
-            toast({
-              title: "Import Failed - Duplicate Departments",
-              description: `Duplicate departments in Excel: ${duplicatesInImport.join(', ')}`,
-              variant: "destructive",
-              duration: 5000,
-            });
-            return;
-          }
+          // If duplicates found, skip importing this sheet
+          if (duplicatesInImport.length > 0 || duplicatesWithExisting.length > 0) {
+            // Skip the import loop for this sheet
+            results.push(`Departments: 0 success, ${departments.length} failed (duplicates)`);
+          } else {
           
           for (const row of departments) {
             try {
@@ -1612,9 +1735,10 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
               }
             } catch { deptError++; }
           }
-          results.push(`Departments: ${deptSuccess} success, ${deptError} failed`);
-          totalSuccess += deptSuccess;
-          totalError += deptError;
+            results.push(`Departments: ${deptSuccess} success, ${deptError} failed`);
+            totalSuccess += deptSuccess;
+            totalError += deptError;
+          }
         }
 
         // Import Employees
@@ -1895,6 +2019,19 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
                 continue;
               }
               
+              const expiresAtRaw = row['Expires at'] || '';
+              let expiresAt = '';
+              // Convert MM/YYYY to YYYY-MM format for month input
+              if (expiresAtRaw && typeof expiresAtRaw === 'string') {
+                const match = expiresAtRaw.match(/^(\d{2})\/(\d{4})$/);
+                if (match) {
+                  const [, month, year] = match;
+                  expiresAt = `${year}-${month}`;
+                } else {
+                  expiresAt = expiresAtRaw; // Use as-is if already in correct format
+                }
+              }
+              
               const res = await fetch(`${API_BASE_URL}/api/payment`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -1902,9 +2039,11 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
                 body: JSON.stringify({
                   name,
                   type: row['Type'],
+                  owner: row['Owner'] || '',
                   manager: row['Managed by'] || '',
                   financialInstitution: row['Financial Institution'] || '',
-                  expiresAt: row['Expires at'] || ''
+                  lastFourDigits: row['Last 4 Digits'] || '',
+                  expiresAt
                 }),
               });
               if (res.ok) {
@@ -1936,6 +2075,22 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
               vendor: sub.vendor?.toLowerCase()
             })).filter((s: any) => s.serviceName);
           } catch {}
+          
+          // Fetch currencies once for all subscriptions (performance optimization)
+          let currenciesMap: Record<string, number> = {};
+          try {
+            const currRes = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
+            if (currRes.ok) {
+              const currencies = await currRes.json();
+              currencies.forEach((c: any) => {
+                if (c.code && c.exchangeRate) {
+                  currenciesMap[c.code] = parseFloat(c.exchangeRate);
+                }
+              });
+            }
+          } catch (err) {
+            console.error('Error fetching exchange rates:', err);
+          }
           
           // Check for duplicates within import data (same service name + vendor combination)
           const importSubscriptions = new Set<string>();
@@ -2016,7 +2171,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
               const serviceName = capitalizeWords(row['Service Name'] || row['ServiceName'] || '');
               const vendor = row['Vendor'] || row['vendor'] || '';
               const website = row['Website'] || row['website'] || '';
-              const qty = parseInt(row['Qty'] || row['qty']) || 1;
+              const qty = parseInt(row['Quantity'] || row['Qty'] || row['qty']) || 1;
               
               // Validate Qty >= 1
               if (qty < 1) {
@@ -2038,24 +2193,82 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
                 continue;
               }
               
+              // Parse currency - clean up any brackets or extra characters
+              let currencyValue = (row['Currency'] || row['currency'] || '').toString().trim();
+              // Remove closing bracket if present (e.g., "USD)" -> "USD")
+              currencyValue = currencyValue.replace(/\)$/, '');
+              // If it's still in format like "(USD", extract just the code
+              if (currencyValue.includes('(')) {
+                const match = currencyValue.match(/\(([A-Z]{3})\)?/);
+                currencyValue = match ? match[1] : currencyValue;
+              }
+              
+              // Parse departments - handle both string and array formats
+              let departmentsArray: string[] = [];
+              const deptValue = row['Departments'] || row['departments'] || '';
+              if (typeof deptValue === 'string') {
+                departmentsArray = deptValue.split('|').map((d: string) => d.trim()).filter((d: string) => d);
+              } else if (Array.isArray(deptValue)) {
+                departmentsArray = deptValue;
+              }
+              
+              // Parse auto renewal - convert Yes/No to boolean
+              const autoRenewalValue = (row['Auto Renewal'] || row['autoRenewal'] || '').toString().trim().toLowerCase();
+              const autoRenewal = autoRenewalValue === 'yes' || autoRenewalValue === 'true' || autoRenewalValue === '1';
+              
+              // Calculate total amount if not provided
+              const amountPerUnit = parseFloat(row['Amount per unit'] || row['amount per unit'] || row['Amount'] || row['amount']) || 0;
+              let totalAmount = parseFloat(row['Total Amount'] || row['total amount'] || row['TotalAmount']) || 0;
+              if (!totalAmount && amountPerUnit && qty) {
+                totalAmount = amountPerUnit * qty;
+              }
+              
+              // Calculate LCY amount if not provided (using pre-fetched currencies map)
+              let lcyAmount = parseFloat(row['LCY Amount (SGD)'] || row['LCY Amount'] || row['lcyAmount']) || 0;
+              if (!lcyAmount && totalAmount && currencyValue && currenciesMap[currencyValue]) {
+                const exchangeRate = currenciesMap[currencyValue];
+                if (exchangeRate > 0) {
+                  // LCY Amount = Total Amount ÷ Exchange Rate
+                  lcyAmount = totalAmount / exchangeRate;
+                }
+              }
+              
+              // Parse notes - convert simple string to array format for card-based UI
+              const notesValue = (row['Notes'] || row['notes'] || '').toString().trim();
+              let notesArray: Array<{id: string, text: string, createdAt: string, createdBy: string}> = [];
+              if (notesValue) {
+                notesArray = [{
+                  id: Date.now().toString(),
+                  text: notesValue,
+                  createdAt: new Date().toISOString(),
+                  createdBy: currentUserName
+                }];
+              }
+              
               const payload: any = {
                 serviceName,
                 website,
                 vendor,
                 qty,
-                amount: parseFloat(row['Amount']) || 0,
-                billingCycle: (row['Commitment cycle'] || row['Billing Cycle'] || row['BillingCycle'] || 'monthly').toLowerCase(),
+                amount: amountPerUnit,
+                totalAmount: totalAmount,
+                currency: currencyValue,
+                lcyAmount: lcyAmount,
+                billingCycle: (row['Commitment cycle'] || row['Commitment Cycle'] || row['Billing Cycle'] || row['BillingCycle'] || 'monthly').toLowerCase(),
+                paymentFrequency: (row['Payment Frequency'] || row['payment frequency'] || row['PaymentFrequency'] || '').toString().toLowerCase(),
+                paymentMethod: row['Payment Method'] || row['payment method'] || row['PaymentMethod'] || '',
                 startDate: normalizeDate(row['Start Date'] || row['StartDate']),
                 nextRenewal: normalizeDate(row['Next Renewal'] || row['NextRenewal']),
+                autoRenewal: autoRenewal,
                 status: row['Status'] || row['status'] || 'Draft',
                 category: row['Category'] || row['category'] || '',
-                department: '',
-                departments: (row['Departments'] || '').split('|').filter((d: string) => d),
+                department: JSON.stringify(departmentsArray),
+                departments: departmentsArray,
                 owner: ownerName,
                 ownerEmail: ownerEmail,
                 reminderPolicy: row['Reminder Policy'] || row['ReminderPolicy'] || 'One time',
                 reminderDays: parseInt(row['Reminder Days'] || row['ReminderDays']) || 7,
-                notes: row['Notes'] || row['notes'] || ''
+                notes: notesArray.length > 0 ? JSON.stringify(notesArray) : undefined
               };
               
               // Basic validation
@@ -2092,6 +2305,9 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
           }
         }
 
+        // Dismiss loading toast
+        loadingToast.dismiss();
+        
         // Show specific error for all duplicates
         if (allDuplicates.length > 0) {
           // Track if any items were successfully imported
@@ -2125,6 +2341,9 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         // Refresh the page to show new data
         window.location.reload();
       } catch (error) {
+        // Dismiss loading toast on error
+        loadingToast.dismiss();
+        
         toast({
           title: "Import Failed",
           description: "Failed to parse Excel file. Please check the format.",
@@ -2148,19 +2367,39 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     hasSuccessfulImportsRef.current = false;
   };
 
+  // Auto-focus the duplicate alert dialog when it appears
+  const duplicateDialogRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (duplicateAlert.show && duplicateDialogRef.current) {
+      // Focus the dialog container to make it interactive immediately
+      duplicateDialogRef.current.focus();
+      // Also ensure the body doesn't scroll
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [duplicateAlert.show]);
+
   return (
     <>
       {/* Custom Centered Alert for Duplicate Items */}
       {duplicateAlert.show && (
         <div 
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          ref={duplicateDialogRef}
+          tabIndex={-1}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           onClick={handleCloseDuplicateDialog}
           style={{ overflow: 'auto', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif" }}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full my-4 animate-in zoom-in-95 duration-200"
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full my-4 animate-in zoom-in-95 duration-200 relative z-[10000]"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxHeight: 'calc(100vh - 2rem)' }}
+            style={{ maxHeight: 'calc(100vh - 2rem)', pointerEvents: 'auto' }}
           >
             {/* Header */}
             <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-5 flex items-center justify-between">
@@ -2259,6 +2498,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
                 className="w-full justify-start gap-2 border-green-300 text-green-700 hover:bg-green-50 bg-white"
               >
                 <Upload className="w-4 h-4" />
+                
                 Import Data
               </Button>
               

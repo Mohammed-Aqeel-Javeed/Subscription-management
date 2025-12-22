@@ -400,14 +400,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const token = jwt.sign(
         tokenPayload,
         process.env.JWT_SECRET || "subs_secret_key",
-        { expiresIn: "7d" }
+        { expiresIn: "24h" } // Token expires in 24 hours
       );
       res.cookie("token", token, {
         httpOnly: true,
         secure: true,
         sameSite: "none",
-        path: "/",
-        maxAge: 7 * 24 * 60 * 60 * 1000
+        path: "/"
+        // No maxAge - cookie expires when browser/tab closes (session cookie)
       });
       res.status(200).json({
         message: "Login successful",
@@ -538,15 +538,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const token = jwt.sign(
         tokenPayload,
         process.env.JWT_SECRET || "subs_secret_key",
-        { expiresIn: "7d" }
+        { expiresIn: "24h" }
       );
       
       res.cookie("token", token, {
         httpOnly: true,
         secure: true,
         sameSite: "none",
-        path: "/",
-        maxAge: 7 * 24 * 60 * 60 * 1000
+        path: "/"
+        // No maxAge - session cookie expires when browser closes
       });
       
       res.status(200).json({ 
@@ -610,15 +610,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const token = jwt.sign(
           tokenPayload,
           process.env.JWT_SECRET || "subs_secret_key",
-          { expiresIn: "7d" }
+          { expiresIn: "24h" }
         );
         
         res.cookie("token", token, {
           httpOnly: true,
           secure: true,
           sameSite: "none",
-          path: "/",
-          maxAge: 7 * 24 * 60 * 60 * 1000
+          path: "/"
+          // No maxAge - session cookie expires when browser closes
         });
       }
 

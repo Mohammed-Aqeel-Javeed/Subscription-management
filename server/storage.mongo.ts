@@ -145,13 +145,20 @@ export class MongoStorage implements IStorage {
         website: s.website || null,
         vendor: decrypted.vendor || "",
         amount: String(decrypted.amount || "0"),
+        qty: s.qty !== undefined && s.qty !== null ? Number(s.qty) : 1,
+        totalAmount: s.totalAmount !== undefined && s.totalAmount !== null ? Number(s.totalAmount) : 0,
+        lcyAmount: s.lcyAmount !== undefined && s.lcyAmount !== null ? Number(s.lcyAmount) : 0,
+        currency: s.currency || null,
         billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
         commitmentCycle: s.commitmentCycle || null,
         paymentFrequency: s.paymentFrequency || null,
+        paymentMethod: s.paymentMethod || null,
         category: s.category && s.category !== "" ? s.category : "Software",
         departments: s.departments || [],
+        department: s.department || null,
         startDate: s.startDate ? new Date(s.startDate) : new Date(),
         nextRenewal: s.nextRenewal ? new Date(s.nextRenewal) : new Date(),
+        initialDate: s.initialDate ? new Date(s.initialDate) : null,
         status: s.status && s.status !== "" ? s.status : "Active",
         reminderDays: s.reminderDays || 7,
         reminderPolicy: s.reminderPolicy && s.reminderPolicy !== "" ? s.reminderPolicy : "One time",
@@ -159,8 +166,9 @@ export class MongoStorage implements IStorage {
         isActive: typeof s.isActive === 'boolean' ? s.isActive : true,
         createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
         updatedBy: s.updatedBy || null,
-        owner: decrypted.owner || null,  // Add the owner field
-        ownerEmail: decrypted.ownerEmail || null
+        owner: decrypted.owner || null,
+        ownerEmail: decrypted.ownerEmail || null,
+        autoRenewal: typeof s.autoRenewal === 'boolean' ? s.autoRenewal : false
       } as any);
       });
   }
@@ -179,13 +187,20 @@ export class MongoStorage implements IStorage {
         website: subscription.website || null,
         vendor: decrypted.vendor || "",
         amount: String(decrypted.amount || "0"),
+        qty: subscription.qty !== undefined && subscription.qty !== null ? Number(subscription.qty) : 1,
+        totalAmount: subscription.totalAmount !== undefined && subscription.totalAmount !== null ? Number(subscription.totalAmount) : 0,
+        lcyAmount: subscription.lcyAmount !== undefined && subscription.lcyAmount !== null ? Number(subscription.lcyAmount) : 0,
+        currency: subscription.currency || null,
         billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
         commitmentCycle: subscription.commitmentCycle || null,
         paymentFrequency: subscription.paymentFrequency || null,
+        paymentMethod: subscription.paymentMethod || null,
         category: subscription.category && subscription.category !== "" ? subscription.category : "Software",
         departments: subscription.departments || [],
+        department: subscription.department || null,
         startDate: subscription.startDate ? new Date(subscription.startDate) : new Date(),
         nextRenewal: subscription.nextRenewal ? new Date(subscription.nextRenewal) : new Date(),
+        initialDate: subscription.initialDate ? new Date(subscription.initialDate) : null,
         status: subscription.status && subscription.status !== "" ? subscription.status : "Active",
         reminderDays: subscription.reminderDays || 7,
         reminderPolicy: subscription.reminderPolicy && subscription.reminderPolicy !== "" ? subscription.reminderPolicy : "One time",
@@ -193,8 +208,9 @@ export class MongoStorage implements IStorage {
         isActive: typeof subscription.isActive === 'boolean' ? subscription.isActive : true,
         createdAt: subscription.createdAt ? new Date(subscription.createdAt) : new Date(),
         updatedBy: subscription.updatedBy || null,
-        owner: subscription.owner || null,  // Add the owner field
-        ownerEmail: subscription.ownerEmail || null
+        owner: subscription.owner || null,
+        ownerEmail: subscription.ownerEmail || null,
+        autoRenewal: typeof subscription.autoRenewal === 'boolean' ? subscription.autoRenewal : false
       } as any;
   }
 

@@ -612,6 +612,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Website editing state
   const [isEditingWebsite, setIsEditingWebsite] = useState<boolean>(false);
   
+  // Notes management state
+  const [notes, setNotes] = useState<Array<{id: string, text: string, createdAt: string, createdBy: string}>>([]);
+  const [showAddNoteDialog, setShowAddNoteDialog] = useState(false);
+  const [showViewNoteDialog, setShowViewNoteDialog] = useState(false);
+  const [selectedNote, setSelectedNote] = useState<{id: string, text: string, createdAt: string, createdBy: string} | null>(null);
+  const [newNoteText, setNewNoteText] = useState('');
+  
   // Predefined vendor list
   const VENDOR_LIST = [
     "Microsoft Corporation", "Amazon Web Services, Inc.", "Google LLC", "Salesforce, Inc.", "Adobe Inc.",
@@ -699,6 +706,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setTotalAmount('');
       setDocuments([]);
       setIsEditingWebsite(false);
+      setNotes([]);
       
       // Reset form
       form.reset({
@@ -753,6 +761,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         setDocuments([{name: 'Document 1', url: (subscription as any).document}]);
       } else {
         setDocuments([]);
+      }
+      
+      // Load notes from subscription
+      if ((subscription as any)?.notes) {
+        try {
+          const parsedNotes = typeof (subscription as any).notes === 'string' 
+            ? JSON.parse((subscription as any).notes) 
+            : (subscription as any).notes;
+          setNotes(Array.isArray(parsedNotes) ? parsedNotes : []);
+        } catch {
+          setNotes([]);
+        }
+      } else {
+        setNotes([]);
       }
       
       // Set totalAmount state for display
@@ -1014,13 +1036,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         title: "Success",
         description: `Subscription ${isEditing ? 'updated' : 'created'} successfully`,
       });
-      onOpenChange(false);
-      setTimeout(() => {
-        form.reset();
-        setSubscriptionCreated(false);
-        setEffectiveDate(''); // Reset effective date
-        setOriginalTotalAmount(0); // Reset original amount
-      }, 300);
+      // Keep modal open - don't close
+      // onOpenChange(false);
+      // Refresh the subscription data to show updated values
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
     },
     onError: (error: any) => {
       console.error("Mutation error:", error);
@@ -1157,6 +1176,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
         tenantId,
         documents: documents.length > 0 ? documents : undefined, // Include documents if uploaded
+        notes: notes.length > 0 ? JSON.stringify(notes) : undefined, // Include notes as JSON string
       };
       if (isEditing) {
         // Update existing subscription
@@ -1255,6 +1275,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
       tenantId,
       documents: documents.length > 0 ? documents : undefined,
+      notes: notes.length > 0 ? JSON.stringify(notes) : undefined,
     };
     
     mutation.mutate({
@@ -1334,48 +1355,53 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     const nextRenewalDate = new Date(endDate);
     nextRenewalDate.setHours(0, 0, 0, 0);
     
-    // If next renewal date is greater than today, show error
-    if (nextRenewalDate > today) {
+    // Calculate days until renewal
+    const daysUntilRenewal = Math.ceil((nextRenewalDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Get commitment cycle to determine early renewal window
+    const commitmentCycle = (billingCycle || '').toLowerCase();
+    let maxDaysBeforeRenewal = 0;
+    let cycleLabel = '';
+    
+    if (commitmentCycle === 'yearly') {
+      maxDaysBeforeRenewal = 90; // 3 months for yearly
+      cycleLabel = '3 months (90 days)';
+    } else if (commitmentCycle === 'monthly') {
+      maxDaysBeforeRenewal = 10; // 10 days for monthly
+      cycleLabel = '10 days';
+    } else if (commitmentCycle === 'quarterly') {
+      maxDaysBeforeRenewal = 30; // 1 month for quarterly
+      cycleLabel = '30 days';
+    } else if (commitmentCycle === 'weekly') {
+      maxDaysBeforeRenewal = 2; // 2 days for weekly
+      cycleLabel = '2 days';
+    } else {
+      maxDaysBeforeRenewal = 30; // Default 30 days for other cycles
+      cycleLabel = '30 days';
+    }
+    
+    // If next renewal date is in the future and beyond the allowed early renewal window
+    if (daysUntilRenewal > maxDaysBeforeRenewal) {
+      const earliestRenewalDate = new Date(nextRenewalDate);
+      earliestRenewalDate.setDate(earliestRenewalDate.getDate() - maxDaysBeforeRenewal);
+      
       setErrorDialog({
         show: true,
-        message: `Subscription can only be renewed on or after ${formatDate(endDate)}. Current renewal date is in the future.`
+        message: `Subscription can only be renewed within ${cycleLabel} before the renewal date. Next renewal is on ${formatDate(endDate)}. You can renew starting from ${formatDate(earliestRenewalDate.toISOString().split('T')[0])}.`
       });
       return;
     }
+    
+    // If we reach here, we're within the allowed early renewal window, so allow the renewal
+    // (No need to check if nextRenewalDate > today because we're within the allowed window)
 
-    // Check if total amount has changed
-    const currentTotalAmount = Number(form.getValues('totalAmount') || 0);
-    const hasAmountChanged = currentTotalAmount !== originalTotalAmount;
-
-    // Always show confirmation dialog, but skip effective date if amount hasn't changed
+    // Skip effective date dialog and proceed directly with renewal
     setIsRenewing(true);
-    if (hasAmountChanged) {
-      // Reset effective date
-      setEffectiveDate('');
-      // Show effective date dialog
-      setEffectiveDateDialog({show: true});
-    } else {
-      // Show simple confirmation dialog for renewals without amount change
-      setRenewalConfirmDialog({show: true});
-    }
+    setRenewalConfirmDialog({show: true});
   };
 
   const handleConfirmRenewal = async () => {
-    // Check if total amount changed
-    const currentTotalAmount = Number(form.getValues('totalAmount') || 0);
-    const hasAmountChanged = currentTotalAmount !== originalTotalAmount;
-    
-    // Only require effective date if amount changed
-    if (hasAmountChanged && !effectiveDate) {
-      toast({
-        title: "Effective Date Required",
-        description: "Please enter an effective date for the renewal",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setEffectiveDateDialog({show: false});
+    setRenewalConfirmDialog({show: false});
     setIsRenewing(true);
     
     try {
@@ -2747,26 +2773,61 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   />
                 </div>
               </div>
-              <div className={`grid gap-4 mb-6 ${isFullscreen ? 'grid-cols-1' : 'grid-cols-1'}`}>
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Additional Notes</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          className="w-full border border-slate-400 rounded-lg p-2 text-base min-h-[80px] max-h-[120px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
-                          
-                          rows={3}
-                          {...field} 
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              
+              {/* Notes Section with Card-based UI */}
+              <div className="mb-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <h3 className="text-base font-semibold text-gray-700">Notes ({notes.length})</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddNoteDialog(true)}
+                    className="flex items-center justify-center w-6 h-6 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-full transition-colors"
+                    title="Add note"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" x2="12" y1="8" y2="16"></line>
+                      <line x1="8" x2="16" y1="12" y2="12"></line>
+                    </svg>
+                  </button>
+                </div>
+                
+                {notes.length > 0 ? (
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                    {notes.map((note) => (
+                      <div key={note.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedNote(note);
+                              setShowViewNoteDialog(true);
+                            }}
+                            className="text-left text-cyan-600 hover:text-cyan-800 hover:underline text-base flex-1 font-medium"
+                          >
+                            {note.text}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNotes(notes.filter(n => n.id !== note.id));
+                            }}
+                            className="text-red-500 hover:text-red-700 text-sm font-medium flex-shrink-0"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                        <div className="text-sm text-gray-500 flex items-center gap-2">
+                          <span>{new Date(note.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '/')}</span>
+                          <span>•</span>
+                          <span>{note.createdBy}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm italic">No notes added yet. Click + to add a note.</p>
+                )}
               </div>
               
               <div className="flex justify-end gap-4 mt-10 pt-6 border-t border-gray-200 bg-gray-50/50 -mx-8 px-8 -mb-8 pb-8 rounded-b-2xl">
@@ -3057,6 +3118,123 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             >
               Confirm Renewal
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add Note Dialog */}
+      <AlertDialog open={showAddNoteDialog} onOpenChange={(open) => !open && setShowAddNoteDialog(false)}>
+        <AlertDialogContent className="sm:max-w-[900px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl font-bold text-gray-900">Add a note</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="py-6">
+            {/* Note field - label on left, input on right */}
+            <div className="grid grid-cols-[120px_1fr] gap-4 items-start">
+              <label className="text-base font-medium text-gray-700 pt-3">
+                Note <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg p-3 text-base min-h-[120px] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 resize-none"
+                placeholder="Enter your note here..."
+              />
+            </div>
+          </div>
+          <AlertDialogFooter className="flex justify-end gap-3">
+            <AlertDialogCancel
+              onClick={() => {
+                setNewNoteText('');
+                setShowAddNoteDialog(false);
+              }}
+              className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 px-8 py-2 rounded-md"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (newNoteText.trim()) {
+                  const newNote = {
+                    id: Date.now().toString(),
+                    text: newNoteText.trim(),
+                    createdAt: new Date().toISOString(),
+                    createdBy: currentUserName || 'User'
+                  };
+                  setNotes([...notes, newNote]);
+                  setNewNoteText('');
+                  setShowAddNoteDialog(false);
+                }
+              }}
+              className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-md"
+              disabled={!newNoteText.trim()}
+            >
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* View Note Dialog */}
+      <AlertDialog open={showViewNoteDialog} onOpenChange={(open) => !open && setShowViewNoteDialog(false)}>
+        <AlertDialogContent className="sm:max-w-[900px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl font-bold text-gray-900">Notes</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="py-6 space-y-6">
+            {/* Note field - label on left, value on right */}
+            <div className="grid grid-cols-[120px_1fr] gap-4 items-start">
+              <label className="text-base font-medium text-gray-700 pt-3">Note</label>
+              <Textarea
+                value={selectedNote?.text || ''}
+                readOnly
+                className="w-full border border-gray-300 rounded-lg p-3 text-base min-h-[120px] bg-white text-gray-900 resize-none"
+              />
+            </div>
+            
+            {/* Created field - combined date and time */}
+            <div className="grid grid-cols-[120px_1fr] gap-4 items-center">
+              <label className="text-base font-medium text-gray-700">Created</label>
+              <div className="w-full border border-gray-300 rounded-lg p-3 text-base bg-gray-100 text-gray-900">
+                {selectedNote?.createdAt ? new Date(selectedNote.createdAt).toLocaleString('en-US', {
+                  month: '2-digit',
+                  day: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false
+                }).replace(',', '') : ''}
+              </div>
+            </div>
+            
+            {/* User ID field */}
+            <div className="grid grid-cols-[120px_1fr] gap-4 items-center">
+              <label className="text-base font-medium text-gray-700">User ID</label>
+              <div className="w-full border border-gray-300 rounded-lg p-3 text-base bg-gray-100 text-gray-900">
+                {selectedNote?.createdBy}
+              </div>
+            </div>
+          </div>
+          <AlertDialogFooter className="flex justify-end gap-3">
+            <AlertDialogAction
+              onClick={() => {
+                setShowViewNoteDialog(false);
+                setSelectedNote(null);
+              }}
+              className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-md"
+            >
+              OK
+            </AlertDialogAction>
+            <AlertDialogCancel
+              onClick={() => {
+                setShowViewNoteDialog(false);
+                setSelectedNote(null);
+              }}
+              className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 px-8 py-2 rounded-md"
+            >
+              Cancel
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
