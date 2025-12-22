@@ -290,6 +290,113 @@ export default function Compliance() {
   const [newDepartmentHead, setNewDepartmentHead] = useState<string>('');
   const [newDepartmentEmail, setNewDepartmentEmail] = useState<string>('');
   
+  // Notes management state (card-based like subscription modal)
+  const [notes, setNotes] = useState<Array<{id: string, text: string, createdAt: string, createdBy: string}>>([]);
+  const [showAddNoteDialog, setShowAddNoteDialog] = useState(false);
+  const [showViewNoteDialog, setShowViewNoteDialog] = useState(false);
+  const [selectedNote, setSelectedNote] = useState<{id: string, text: string, createdAt: string, createdBy: string} | null>(null);
+  const [newNoteText, setNewNoteText] = useState('');
+  
+  // Get current user name for notes (same logic as subscription modal)
+  const [currentUserName, setCurrentUserName] = useState<string>('');
+  
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        // Get logged-in user information from window.user
+        const loggedInUser = (window as any).user;
+        
+        // First try to get name directly from window.user (works for all roles: admin, super admin, etc.)
+        if (loggedInUser?.name) {
+          setCurrentUserName(loggedInUser.name);
+          return;
+        }
+        
+        // Try to fetch from /api/me or current user endpoint
+        try {
+          const meResponse = await fetch('/api/me', {
+            method: 'GET',
+            credentials: 'include',
+          });
+          if (meResponse.ok) {
+            const meData = await meResponse.json();
+            // Check for fullName (login collection) or name
+            if (meData.fullName) {
+              setCurrentUserName(meData.fullName);
+              return;
+            } else if (meData.name) {
+              setCurrentUserName(meData.name);
+              return;
+            }
+          }
+        } catch (meError) {
+          // /api/me not available
+        }
+        
+        // If name not in window.user, fetch from employees/users API using email
+        const userEmail = loggedInUser?.email;
+        if (userEmail) {
+          const response = await fetch('/api/employees', {
+            method: 'GET',
+            credentials: 'include',
+          });
+          if (response.ok) {
+            const users = await response.json();
+            const currentUser = users.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
+            if (currentUser && currentUser.name) {
+              setCurrentUserName(currentUser.name);
+              return;
+            }
+          }
+          
+          // Try users endpoint for login collection
+          try {
+            const usersResponse = await fetch('/api/users', {
+              method: 'GET',
+              credentials: 'include',
+            });
+            if (usersResponse.ok) {
+              const allUsers = await usersResponse.json();
+              const loginUser = allUsers.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
+              if (loginUser && loginUser.name) {
+                setCurrentUserName(loginUser.name);
+                return;
+              }
+            }
+          } catch (usersError) {
+            // /api/users not available
+          }
+          
+          // Fallback to email username if name not found
+          const fallbackName = userEmail.split('@')[0];
+          // Capitalize first letter
+          const capitalizedName = fallbackName.charAt(0).toUpperCase() + fallbackName.slice(1);
+          setCurrentUserName(capitalizedName);
+        } else {
+          // Try one more fallback - get from window.user.email if available
+          const lastResortEmail = loggedInUser?.email;
+          if (lastResortEmail) {
+            const lastResortName = lastResortEmail.split('@')[0];
+            const capitalizedLastResort = lastResortName.charAt(0).toUpperCase() + lastResortName.slice(1);
+            setCurrentUserName(capitalizedLastResort);
+          } else {
+            setCurrentUserName('User');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch current user:', error);
+        // Use email as fallback
+        const userEmail = (window as any).user?.email;
+        if (userEmail) {
+          setCurrentUserName(userEmail.split('@')[0]);
+        } else {
+          setCurrentUserName('Unknown User');
+        }
+      }
+    };
+    fetchCurrentUser();
+  }, []);
+  
   // Fetch employees for the submit by dropdown with auto-refresh
   const { data: employees = [], isLoading: isLoadingEmployees } = useQuery({
     queryKey: ["/api/employees"],
@@ -1670,15 +1777,61 @@ export default function Compliance() {
                   <li>Until Renewal: Daily reminders from {form.reminderDays} days until renewal</li>
                 </ul>
               </div>
-              {/* Moved Remarks (Additional Notes) into Compliance Details; hidden when Submission view is active */}
+              {/* Card-based Notes Section (like subscription modal) */}
               {!showSubmissionDetails && (
-              <div className="space-y-2 col-span-full">
-                <label className="block text-sm font-medium text-slate-700">Compliance Notes</label>
-                <textarea 
-                  className="w-full border border-slate-400 rounded-lg p-2 text-base min-h-[80px] max-h-[120px] focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
-                  value={form.filingRemarks} 
-                  onChange={e => handleFormChange("filingRemarks", e.target.value)} 
-                />
+              <div className="col-span-full mb-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <h3 className="text-base font-semibold text-gray-700">Notes ({notes.length})</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddNoteDialog(true)}
+                    className="flex items-center justify-center w-6 h-6 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-full transition-colors"
+                    title="Add note"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" x2="12" y1="8" y2="16"></line>
+                      <line x1="8" x2="16" y1="12" y2="12"></line>
+                    </svg>
+                  </button>
+                </div>
+                
+                {notes.length > 0 ? (
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                    {notes.map((note) => (
+                      <div key={note.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedNote(note);
+                              setShowViewNoteDialog(true);
+                            }}
+                            className="text-left text-cyan-600 hover:text-cyan-800 hover:underline text-base flex-1 font-medium"
+                          >
+                            {note.text}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNotes(notes.filter(n => n.id !== note.id));
+                            }}
+                            className="text-red-500 hover:text-red-700 text-sm font-medium flex-shrink-0"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                        <div className="text-sm text-gray-500 flex items-center gap-2">
+                          <span>{new Date(note.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '/')}</span>
+                          <span>•</span>
+                          <span className="uppercase">{note.createdBy}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm italic">No notes added yet. Click + to add a note.</p>
+                )}
               </div>
               )}
               
@@ -2090,6 +2243,119 @@ export default function Compliance() {
             >
               Add Department
             </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add Note Dialog */}
+      <AlertDialog open={showAddNoteDialog} onOpenChange={(open) => !open && setShowAddNoteDialog(false)}>
+        <AlertDialogContent className="sm:max-w-[900px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl font-bold text-gray-900">Add a note</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="py-6">
+            <div className="grid grid-cols-[120px_1fr] gap-4 items-start">
+              <label className="text-base font-medium text-gray-700 pt-3">
+                Note <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg p-3 text-base min-h-[120px] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 resize-none"
+                placeholder="Enter your note here..."
+              />
+            </div>
+          </div>
+          <AlertDialogFooter className="flex justify-end gap-3">
+            <AlertDialogCancel
+              onClick={() => {
+                setNewNoteText('');
+                setShowAddNoteDialog(false);
+              }}
+              className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 px-8 py-2 rounded-md"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (newNoteText.trim()) {
+                  const newNote = {
+                    id: Date.now().toString(),
+                    text: newNoteText.trim(),
+                    createdAt: new Date().toISOString(),
+                    createdBy: currentUserName || 'User'
+                  };
+                  setNotes([...notes, newNote]);
+                  setNewNoteText('');
+                  setShowAddNoteDialog(false);
+                }
+              }}
+              className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-md"
+              disabled={!newNoteText.trim()}
+            >
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* View Note Dialog */}
+      <AlertDialog open={showViewNoteDialog} onOpenChange={(open) => !open && setShowViewNoteDialog(false)}>
+        <AlertDialogContent className="sm:max-w-[900px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-2xl font-bold text-gray-900">Notes</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="py-6 space-y-6">
+            <div className="grid grid-cols-[120px_1fr] gap-4 items-start">
+              <label className="text-base font-medium text-gray-700 pt-3">Note</label>
+              <Textarea
+                value={selectedNote?.text || ''}
+                readOnly
+                className="w-full border border-gray-300 rounded-lg p-3 text-base min-h-[120px] bg-white text-gray-900 resize-none"
+              />
+            </div>
+            
+            <div className="grid grid-cols-[120px_1fr] gap-4 items-center">
+              <label className="text-base font-medium text-gray-700">Created</label>
+              <div className="w-full border border-gray-300 rounded-lg p-3 text-base bg-gray-100 text-gray-900">
+                {selectedNote?.createdAt ? new Date(selectedNote.createdAt).toLocaleString('en-US', {
+                  month: '2-digit',
+                  day: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false
+                }).replace(',', '') : ''}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-[120px_1fr] gap-4 items-center">
+              <label className="text-base font-medium text-gray-700">User ID</label>
+              <div className="w-full border border-gray-300 rounded-lg p-3 text-base bg-gray-100 text-gray-900">
+                {selectedNote?.createdBy}
+              </div>
+            </div>
+          </div>
+          <AlertDialogFooter className="flex justify-end gap-3">
+            <AlertDialogAction
+              onClick={() => {
+                setShowViewNoteDialog(false);
+                setSelectedNote(null);
+              }}
+              className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-md"
+            >
+              OK
+            </AlertDialogAction>
+            <AlertDialogCancel
+              onClick={() => {
+                setShowViewNoteDialog(false);
+                setSelectedNote(null);
+              }}
+              className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 px-8 py-2 rounded-md"
+            >
+              Cancel
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

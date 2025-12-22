@@ -645,9 +645,26 @@ export default function Subscriptions() {
                           >
                             {subscription.serviceName}
                           </button>
-                          {subscription.notes && (
-                            <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">{subscription.notes}</div>
-                          )}
+                          {subscription.notes && (() => {
+                            try {
+                              const notesArray = typeof subscription.notes === 'string' ? JSON.parse(subscription.notes) : subscription.notes;
+                              if (Array.isArray(notesArray) && notesArray.length > 0) {
+                                // Show the first note's text
+                                const firstNote = notesArray[0];
+                                return (
+                                  <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">
+                                    {firstNote.text}
+                                  </div>
+                                );
+                              }
+                            } catch {
+                              // If it's old format (plain text), show it
+                              if (typeof subscription.notes === 'string' && !subscription.notes.startsWith('[')) {
+                                return <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">{subscription.notes}</div>;
+                              }
+                            }
+                            return null;
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3 text-sm text-gray-700">

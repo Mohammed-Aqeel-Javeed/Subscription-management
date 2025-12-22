@@ -46,6 +46,21 @@ function AppWithSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Clear session when window/tab is closed
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Clear session storage when browser/tab closes
+      sessionStorage.clear();
+    };
+
+    // Add event listener for window close
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
   // Check authentication on every route change
   useEffect(() => {
     const checkAuth = async () => {

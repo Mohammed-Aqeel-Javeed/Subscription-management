@@ -76,6 +76,7 @@ export default function Configuration() {
     setPaymentForm({
       title: method.title || method.name || '',
       type: method.type || '',
+      owner: method.owner || '',
       manager: method.manager || '',
       expiresAt: method.expiresAt || '',
       financialInstitution: method.financialInstitution || '',
@@ -101,6 +102,7 @@ export default function Configuration() {
       body: JSON.stringify({
         name: paymentForm.title,
         type: paymentForm.type,
+        owner: paymentForm.owner,
         manager: paymentForm.manager,
         expiresAt: paymentForm.expiresAt,
         financialInstitution: paymentForm.financialInstitution,
@@ -687,15 +689,16 @@ export default function Configuration() {
     const paymentExportData = paymentMethods.map(method => ({
       'Title': method.name || method.title,
       'Type': method.type,
-      'Description': method.description || '',
-      'Icon': method.icon || '',
+      'Owner': method.owner || '',
       'Manager': method.manager || '',
-      'Expires At': method.expiresAt || ''
+      'Financial Institution': method.financialInstitution || '',
+      'Expires At': method.expiresAt || '',
+      'Last 4 Digits': method.lastFourDigits || ''
     }));
     
     const wsPayment = XLSX.utils.json_to_sheet(paymentExportData);
     wsPayment['!cols'] = [
-      { wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 15 }
+      { wch: 20 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 15 }, { wch: 15 }
     ];
     XLSX.utils.book_append_sheet(wb, wsPayment, 'Payment Methods');
     
@@ -1028,10 +1031,11 @@ export default function Configuration() {
     const exportData = paymentMethods.map(method => ({
       'Title': method.name || method.title,
       'Type': method.type,
-      'Description': method.description || '',
-      'Icon': method.icon || '',
+      'Owner': method.owner || '',
       'Manager': method.manager || '',
-      'Expires At': method.expiresAt || ''
+      'Financial Institution': method.financialInstitution || '',
+      'Expires At': method.expiresAt || '',
+      'Last 4 Digits': method.lastFourDigits || ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -1717,6 +1721,7 @@ export default function Configuration() {
       body: JSON.stringify({
         name: paymentForm.title,
         type: paymentForm.type,
+        owner: paymentForm.owner,
         manager: paymentForm.manager,
         expiresAt: paymentForm.expiresAt,
         financialInstitution: paymentForm.financialInstitution,
@@ -1734,6 +1739,7 @@ export default function Configuration() {
         setPaymentForm({
           title: '',
           type: '',
+          owner: '',
           manager: '',
           expiresAt: '',
           financialInstitution: '',
@@ -1751,6 +1757,7 @@ export default function Configuration() {
   const [paymentForm, setPaymentForm] = useState({
     title: '',
     type: '',
+    owner: '',
     manager: '',
     expiresAt: '',
     financialInstitution: '',
@@ -2575,6 +2582,32 @@ export default function Configuration() {
                                 <option value="Digital Wallet">Digital Wallet</option>
                                 <option value="Other">Other</option>
                               </select>
+                            </div>
+
+                            {/* Owner Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Owner
+                              </Label>
+                              <Select
+                                value={paymentForm.owner}
+                                onValueChange={(value) => setPaymentForm(f => ({ ...f, owner: value }))}
+                              >
+                                <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
+                                  <SelectValue placeholder="Select employee" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {employeesRaw.length > 0 ? (
+                                    employeesRaw.map((emp: any) => (
+                                      <SelectItem key={emp._id || emp.id || emp.name} value={emp.name}>
+                                        {emp.name}
+                                      </SelectItem>
+                                    ))
+                                  ) : (
+                                    <SelectItem value="no-employee" disabled>No employees found</SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
                             </div>
 
                             {/* Manager Field */}
