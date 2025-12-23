@@ -75,22 +75,22 @@ export default function AuthPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
             <img
               src="/assets/logo.png"
-              alt="SubsTracker Logo"
+              alt="Trackla Logo"
               style={{
-                width: 52,
-                height: 52,
+                width: 64,
+                height: 64,
                 filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.35)) brightness(1.05)",
               }}
             />
             <div
               style={{
                 fontWeight: 700,
-                fontSize: 24,
+                fontSize: 28,
                 letterSpacing: "0.03em",
                 color: "#f9fafb",
               }}
             >
-              SubsTracker
+              Trackla
             </div>
           </div>
 
@@ -128,16 +128,35 @@ export default function AuthPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div
                 style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,0.15)",
+                  width: 56,
+                  height: 56,
+                  borderRadius: 14,
+                  background: "linear-gradient(135deg, rgba(99, 102, 241, 0.9) 0%, rgba(168, 85, 247, 0.9) 100%)",
+                  backdropFilter: "blur(10px)",
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
+                  boxShadow: "0 8px 32px rgba(99, 102, 241, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3)",
+                  position: "relative",
+                  overflow: "hidden",
                 }}
               >
-                <span style={{ fontSize: 20 }}>📊</span>
+                <div style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "50%",
+                  background: "linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 100%)",
+                  borderRadius: "14px 14px 0 0",
+                }} />
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ position: "relative", zIndex: 1 }}>
+                  <rect x="4" y="14" width="3" height="7" rx="1.5" fill="white" opacity="0.9"/>
+                  <rect x="8.5" y="10" width="3" height="11" rx="1.5" fill="white" opacity="0.95"/>
+                  <rect x="13" y="6" width="3" height="15" rx="1.5" fill="white"/>
+                  <rect x="17.5" y="11" width="3" height="10" rx="1.5" fill="white" opacity="0.95"/>
+                </svg>
               </div>
               <div>
                 <div style={{ fontWeight: 600, color: "#ffffff", marginBottom: 2 }}>
@@ -152,16 +171,32 @@ export default function AuthPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div
                 style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,0.15)",
+                  width: 56,
+                  height: 56,
+                  borderRadius: 14,
+                  background: "linear-gradient(135deg, rgba(251, 146, 60, 0.9) 0%, rgba(239, 68, 68, 0.9) 100%)",
+                  backdropFilter: "blur(10px)",
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
+                  boxShadow: "0 8px 32px rgba(251, 146, 60, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3)",
+                  position: "relative",
+                  overflow: "hidden",
                 }}
               >
-                <span style={{ fontSize: 20 }}>🔔</span>
+                <div style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "50%",
+                  background: "linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 100%)",
+                  borderRadius: "14px 14px 0 0",
+                }} />
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ position: "relative", zIndex: 1 }}>
+                  <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" fill="white" fillOpacity="0.95"/>
+                </svg>
               </div>
               <div>
                 <div style={{ fontWeight: 600, color: "#ffffff", marginBottom: 2 }}>
@@ -176,16 +211,32 @@ export default function AuthPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div
                 style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,0.15)",
+                  width: 56,
+                  height: 56,
+                  borderRadius: 14,
+                  background: "linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(6, 182, 212, 0.9) 100%)",
+                  backdropFilter: "blur(10px)",
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
+                  boxShadow: "0 8px 32px rgba(34, 197, 94, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3)",
+                  position: "relative",
+                  overflow: "hidden",
                 }}
               >
-                <span style={{ fontSize: 20 }}>🛡️</span>
+                <div style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "50%",
+                  background: "linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 100%)",
+                  borderRadius: "14px 14px 0 0",
+                }} />
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ position: "relative", zIndex: 1 }}>
+                  <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" fill="white" fillOpacity="0.95"/>
+                </svg>
               </div>
               <div>
                 <div style={{ fontWeight: 600, color: "#ffffff", marginBottom: 2 }}>

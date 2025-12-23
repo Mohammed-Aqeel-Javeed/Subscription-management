@@ -209,6 +209,7 @@ toast({
 title: "Success",
 description: "Employee created successfully",
 duration: 1000,
+variant: "success",
 });
 setModalOpen(false);
 form.reset();
@@ -233,6 +234,7 @@ const updateEmployeeMutation = useMutation({
       title: "Success",
       description: "Employee updated successfully",
       duration: 1000,
+      variant: "success",
     });
     setModalOpen(false);
     form.reset();
@@ -257,6 +259,7 @@ const deleteEmployeeMutation = useMutation({
       title: "Success",
       description: "Employee deleted successfully",
       duration: 1000,
+      variant: "destructive",
     });
   },
   onError: (error: any) => {
@@ -814,6 +817,7 @@ toast({
 title: "Success",
 description: "User created successfully",
 duration: 1000,
+variant: "success",
 });
 setModalOpen(false);
 form.reset();
@@ -843,6 +847,7 @@ toast({
 title: "Success",
 description: "User updated successfully",
 duration: 1000,
+variant: "success",
 });
 setModalOpen(false);
 form.reset();
@@ -853,6 +858,7 @@ toast({
 title: "Success",
 description: "User updated successfully",
 duration: 1000,
+variant: "success",
 });
 setModalOpen(false);
 form.reset();
@@ -869,6 +875,7 @@ toast({
 title: "Success",
 description: "User deleted successfully",
 duration: 1000,
+variant: "destructive",
 });
 },
 onError: (error: any) => {
@@ -1529,6 +1536,7 @@ toast({
 title: "Department Added",
 description: `Department has been added successfully`,
 duration: 1000,
+variant: "success",
 });
 },
 onError: (error: any) => {
@@ -1555,6 +1563,7 @@ toast({
 title: "Department Updated",
 description: `Department has been updated successfully`,
 duration: 1000,
+variant: "success",
 });
 },
 onError: (error: any) => {
@@ -1593,6 +1602,7 @@ toast({
 title: "Department Deleted",
 description: "Department has been removed.",
 duration: 1000,
+variant: "destructive",
 });
 },
 onError: (error: any) => {
@@ -2545,12 +2555,26 @@ transition={{ duration: 0.3 }}
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-gray-700 font-medium text-sm">Department Head</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
-                  />
-                </FormControl>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+                      <SelectValue placeholder="Select employee" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {employeesData && employeesData.length > 0 ? (
+                      employeesData.map((emp: any) => (
+                        <SelectItem key={emp._id || emp.id || emp.email} value={emp.name}>
+                          {emp.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-employee" disabled>
+                        No employees found
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
                 <FormMessage className="text-red-600" />
               </FormItem>
             )}
@@ -2567,7 +2591,6 @@ transition={{ duration: 0.3 }}
                   <Input
                     {...field}
                     type="email"
-                    placeholder="example@company.com"
                     onBlur={() => {
                       // Trigger validation when field loses focus
                       departmentForm.trigger('email');

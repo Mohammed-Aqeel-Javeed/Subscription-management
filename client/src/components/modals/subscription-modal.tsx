@@ -308,6 +308,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Get tenant ID for API calls
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
   
+  // Fetch employees for department head dropdown
+  const { data: employeesData = [] } = useQuery<any[]>({
+    queryKey: ["/api/employees"],
+  });
+  
   // Get current user name from User Management based on login email
   const [currentUserName, setCurrentUserName] = useState<string>('');
   
@@ -681,23 +686,28 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [confirmDialog, setConfirmDialog] = useState<{show: boolean}>({show: false});
   const [exitConfirmDialog, setExitConfirmDialog] = useState<{show: boolean}>({show: false});
   const [cancelRenewalConfirmDialog, setCancelRenewalConfirmDialog] = useState<{show: boolean}>({show: false});
+  const [saveDraftRequiredDialog, setSaveDraftRequiredDialog] = useState<{show: boolean}>({show: false});
   const [subscriptionCreated, setSubscriptionCreated] = useState<boolean>(false);
   const [departmentModal, setDepartmentModal] = useState<{show: boolean}>({show: false});
   const [newDepartmentName, setNewDepartmentName] = useState<string>('');
   const [newDepartmentHead, setNewDepartmentHead] = useState<string>('');
   const [newDepartmentEmail, setNewDepartmentEmail] = useState<string>('');
+  const [newDepartmentEmailError, setNewDepartmentEmailError] = useState<string>('');
   const [categoryModal, setCategoryModal] = useState<{show: boolean}>({show: false});
   const [newCategoryName, setNewCategoryName] = useState<string>('');
   const [paymentMethodModal, setPaymentMethodModal] = useState<{show: boolean}>({show: false});
   const [newPaymentMethodName, setNewPaymentMethodName] = useState<string>('');
   const [newPaymentMethodType, setNewPaymentMethodType] = useState<string>('');
-  const [newPaymentMethodDescription, setNewPaymentMethodDescription] = useState<string>('');
+  const [newPaymentMethodOwner, setNewPaymentMethodOwner] = useState<string>('');
   const [newPaymentMethodManagedBy, setNewPaymentMethodManagedBy] = useState<string>('');
+  const [newPaymentMethodFinancialInstitution, setNewPaymentMethodFinancialInstitution] = useState<string>('');
+  const [newPaymentMethodLast4Digits, setNewPaymentMethodLast4Digits] = useState<string>('');
   const [newPaymentMethodExpiresAt, setNewPaymentMethodExpiresAt] = useState<string>('');
   const [newPaymentMethodCardImage, setNewPaymentMethodCardImage] = useState<string>('visa');
   const [ownerModal, setOwnerModal] = useState<{show: boolean}>({show: false});
   const [newOwnerName, setNewOwnerName] = useState<string>('');
   const [newOwnerEmail, setNewOwnerEmail] = useState<string>('');
+  const [newOwnerEmailError, setNewOwnerEmailError] = useState<string>('');
   const [newOwnerRole, setNewOwnerRole] = useState<string>('');
   const [newOwnerStatus, setNewOwnerStatus] = useState<string>('Active');
   const [newOwnerDepartment, setNewOwnerDepartment] = useState<string>('');
@@ -1138,6 +1148,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       toast({
         title: "Success",
         description: `Subscription ${isEditing ? 'updated' : 'created'} successfully`,
+        variant: "success",
       });
       // Keep modal open - don't close
       // onOpenChange(false);
@@ -1183,6 +1194,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       toast({
         title: "Draft Saved",
         description: "Subscription saved as draft successfully",
+        variant: "success",
       });
       onOpenChange(false);
       setTimeout(() => {
@@ -1329,6 +1341,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           toast({
             title: "Success",
             description: "Subscription created successfully",
+            variant: "success",
           });
           onOpenChange(false);
         } else {
@@ -1563,7 +1576,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         toast({
           title: "Subscription Renewed",
           description: `Subscription renewed from ${formatDate(newStartDate)} to ${formatDate(newEndDate)}`,
-          className: "bg-white border border-green-500 text-green-700 font-semibold shadow-lg",
+          variant: "success",
         });
         // Notify parent/card page to update dates
         if (typeof window !== 'undefined' && window.dispatchEvent) {
@@ -1593,6 +1606,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const handleAddDepartment = async () => {
     if (!newDepartmentName.trim()) return;
     
+    // Validate department head
+    if (!newDepartmentHead.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Department head is required",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate email
+    const emailValidation = validateEmail(newDepartmentEmail);
+    if (!emailValidation.valid) {
+      setNewDepartmentEmailError(emailValidation.error || 'Invalid email');
+      return;
+    }
+    
     try {
       await apiRequest(
         "POST",
@@ -1613,9 +1643,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setNewDepartmentName('');
       setNewDepartmentHead('');
       setNewDepartmentEmail('');
+      setNewDepartmentEmailError('');
       setDepartmentModal({ show: false });
+      
+      toast({
+        title: "Success",
+        description: "Department added successfully",
+        variant: "success",
+      });
     } catch (error) {
       console.error('Error adding department:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add department",
+        variant: "destructive",
+      });
     }
   };
 
@@ -1653,8 +1695,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           name: newPaymentMethodName.trim(),
           title: newPaymentMethodName.trim(),
           type: newPaymentMethodType,
-          description: newPaymentMethodDescription.trim(),
+          owner: newPaymentMethodOwner.trim(),
           manager: newPaymentMethodManagedBy.trim(),
+          financialInstitution: newPaymentMethodFinancialInstitution.trim(),
+          lastFourDigits: newPaymentMethodLast4Digits.trim(),
           expiresAt: newPaymentMethodExpiresAt,
           icon: newPaymentMethodCardImage
         }
@@ -1666,8 +1710,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       form.setValue('paymentMethod', newPaymentMethodName.trim());
       setNewPaymentMethodName('');
       setNewPaymentMethodType('');
-      setNewPaymentMethodDescription('');
+      setNewPaymentMethodOwner('');
       setNewPaymentMethodManagedBy('');
+      setNewPaymentMethodFinancialInstitution('');
+      setNewPaymentMethodLast4Digits('');
       setNewPaymentMethodExpiresAt('');
       setNewPaymentMethodCardImage('visa');
       setPaymentMethodModal({ show: false });
@@ -1679,6 +1725,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Handle adding new owner
   const handleAddOwner = async () => {
     if (!newOwnerName.trim() || !newOwnerEmail.trim()) return;
+    
+    // Validate email
+    const emailValidation = validateEmail(newOwnerEmail.trim());
+    if (!emailValidation.valid) {
+      setNewOwnerEmailError(emailValidation.error || 'Invalid email address');
+      toast({
+        title: "Invalid Email",
+        description: emailValidation.error || 'Please enter a valid email address',
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Check for duplicate email
     const emailExists = employeesRaw.some((emp: any) => 
@@ -1714,7 +1772,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       form.setValue('ownerEmail', newOwnerEmail.trim());
       setNewOwnerName('');
       setNewOwnerEmail('');
-  setNewOwnerRole('');
+      setNewOwnerEmailError('');
+      setNewOwnerRole('');
       setNewOwnerStatus('Active');
       setNewOwnerDepartment('');
       setOwnerModal({ show: false });
@@ -1868,6 +1927,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 onClick={() => {
                   const subscriptionId = subscription?._id || subscription?.id;
                   const serviceName = subscription?.serviceName || subscription?.name || 'Subscription';
+                  
+                  // Check if subscription has been saved
+                  if (!subscriptionId) {
+                    setSaveDraftRequiredDialog({show: true});
+                    return;
+                  }
+                  
                   window.location.href = `/subscription-user?id=${subscriptionId}&name=${encodeURIComponent(serviceName)}`;
                 }}
               >
@@ -3165,7 +3231,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 // Close modal immediately for fast UX
                 setStatus('Cancelled');
                 onOpenChange(false);
-                toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.' });
+                toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.', variant: 'destructive' });
                 // Update cache immediately for instant table refresh
                 if (isEditing && subscription?.id) {
                   queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
@@ -3236,6 +3302,38 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md px-6 py-2"
             >
               Confirm Renewal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Save Draft Required Dialog */}
+      <AlertDialog open={saveDraftRequiredDialog.show} onOpenChange={(open) => !open && setSaveDraftRequiredDialog({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[500px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-orange-600" />
+              Save Required
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              You need to save the subscription as draft before managing users. Otherwise, your data will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => setSaveDraftRequiredDialog({ show: false })}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={async () => {
+                setSaveDraftRequiredDialog({ show: false });
+                await handleSaveDraft();
+              }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md px-6 py-2"
+            >
+              Save Draft
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -3390,17 +3488,24 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Department Head</label>
-              <Input
-                placeholder=""
-                value={newDepartmentHead}
-                onChange={(e) => setNewDepartmentHead(e.target.value)}
-                className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddDepartment();
-                  }
-                }}
-              />
+              <Select value={newDepartmentHead} onValueChange={setNewDepartmentHead}>
+                <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employeesData && employeesData.length > 0 ? (
+                    employeesData.map((emp: any) => (
+                      <SelectItem key={emp._id || emp.id || emp.email} value={emp.name}>
+                        {emp.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-employee" disabled>
+                      No employees found
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
@@ -3408,14 +3513,28 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 type="email"
                 placeholder=""
                 value={newDepartmentEmail}
-                onChange={(e) => setNewDepartmentEmail(e.target.value)}
-                className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                onChange={(e) => {
+                  setNewDepartmentEmail(e.target.value);
+                  setNewDepartmentEmailError('');
+                }}
+                onBlur={() => {
+                  const validation = validateEmail(newDepartmentEmail);
+                  if (!validation.valid) {
+                    setNewDepartmentEmailError(validation.error || 'Invalid email');
+                  }
+                }}
+                className={`w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+                  newDepartmentEmailError ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
+                }`}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     handleAddDepartment();
                   }
                 }}
               />
+              {newDepartmentEmailError && (
+                <p className="text-red-600 text-sm mt-1">{newDepartmentEmailError}</p>
+              )}
             </div>
           </div>
           <AlertDialogFooter className="flex gap-2 mt-6">
@@ -3426,6 +3545,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 setNewDepartmentName('');
                 setNewDepartmentHead('');
                 setNewDepartmentEmail('');
+                setNewDepartmentEmailError('');
               }}
               className="bg-gray-100 hover:bg-gray-200 text-gray-700"
             >
@@ -3433,7 +3553,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             </Button>
             <Button 
               onClick={handleAddDepartment}
-              disabled={!newDepartmentName.trim()}
+              disabled={!newDepartmentName.trim() || !newDepartmentHead.trim() || !newDepartmentEmail.trim() || !!newDepartmentEmailError}
               className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
             >
               Add Department
@@ -3517,7 +3637,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Title <span className="text-red-500">*</span>
+                  Name <span className="text-red-500">*</span>
                 </label>
                 <Input
                   placeholder=""
@@ -3542,9 +3662,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   <SelectContent>
                     <SelectItem value="Credit">Credit Card</SelectItem>
                     <SelectItem value="Debit">Debit Card</SelectItem>
+                    <SelectItem value="Cash">Cash</SelectItem>
                     <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
                     <SelectItem value="Digital Wallet">Digital Wallet</SelectItem>
-                    <SelectItem value="Cash">Cash</SelectItem>
                     <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
@@ -3552,13 +3672,34 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <Input
-                  placeholder=""
-                  value={newPaymentMethodDescription}
-                  onChange={(e) => setNewPaymentMethodDescription(e.target.value)}
-                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Owner</label>
+                <Select value={newPaymentMethodOwner} onValueChange={setNewPaymentMethodOwner}>
+                  <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+                    <SelectValue placeholder="Select employee" />
+                  </SelectTrigger>
+                  <SelectContent className="dropdown-content">
+                    {employeesRaw.length > 0 ? (
+                      employeesRaw.map((emp: any) => {
+                        const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                        const displayName = duplicateNames.length > 1 
+                          ? `${emp.name} (${emp.email})` 
+                          : emp.name;
+                        
+                        return (
+                          <SelectItem 
+                            key={emp._id || emp.id || emp.email} 
+                            value={emp.name} 
+                            className="dropdown-item"
+                          >
+                            {displayName}
+                          </SelectItem>
+                        );
+                      })
+                    ) : (
+                      <SelectItem value="no-employee" disabled className="dropdown-item disabled">No employees found</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Managed by</label>
@@ -3569,7 +3710,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   <SelectContent className="dropdown-content">
                     {employeesRaw.length > 0 ? (
                       employeesRaw.map((emp: any) => {
-                        // Check if there are duplicate names
                         const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
                         const displayName = duplicateNames.length > 1 
                           ? `${emp.name} (${emp.email})` 
@@ -3592,52 +3732,36 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </Select>
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Financial Institution</label>
+                <Input
+                  placeholder=""
+                  value={newPaymentMethodFinancialInstitution}
+                  onChange={(e) => setNewPaymentMethodFinancialInstitution(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last 4 Digits</label>
+                <Input
+                  placeholder=""
+                  value={newPaymentMethodLast4Digits}
+                  onChange={(e) => setNewPaymentMethodLast4Digits(e.target.value)}
+                  maxLength={4}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                />
+              </div>
+            </div>
             <div className="w-1/2 pr-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Expires at</label>
               <Input
-                type="date"
-                placeholder="dd-mm-yyyy"
+                type="month"
+                placeholder="MM/YYYY"
                 value={newPaymentMethodExpiresAt}
                 onChange={(e) => setNewPaymentMethodExpiresAt(e.target.value)}
                 className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Card Image</label>
-              <div className="grid grid-cols-5 gap-3">
-                {[
-                  { value: 'visa', label: 'Visa', img: cardImages.visa },
-                  { value: 'mastercard', label: 'MasterCard', img: cardImages.mastercard },
-                  { value: 'paypal', label: 'PayPal', img: cardImages.paypal },
-                  { value: 'amex', label: 'Amex', img: cardImages.amex },
-                  { value: 'apple_pay', label: 'Apple Pay', img: cardImages.apple_pay },
-                  { value: 'google_pay', label: 'Google Pay', img: cardImages.google_pay },
-                  { value: 'bank', label: 'Bank', img: cardImages.bank },
-                  { value: 'cash', label: 'Cash', img: cardImages.cash },
-                  { value: 'other', label: 'Other', img: cardImages.other },
-                ].map((card) => (
-                  <button
-                    key={card.value}
-                    type="button"
-                    onClick={() => setNewPaymentMethodCardImage(card.value)}
-                    className={`relative p-3 border-2 rounded-lg bg-white hover:bg-gray-100 transition-all duration-200 transform hover:scale-105 ${
-                      newPaymentMethodCardImage === card.value 
-                        ? 'border-blue-500 bg-blue-50 shadow-lg ring-2 ring-blue-500 ring-opacity-20' 
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                    title={card.label}
-                  >
-                    <img src={card.img} alt={card.label} className="w-12 h-8 object-contain mx-auto" />
-                    {newPaymentMethodCardImage === card.value && (
-                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
           <AlertDialogFooter className="flex gap-2 mt-6">
@@ -3647,8 +3771,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 setPaymentMethodModal({ show: false });
                 setNewPaymentMethodName('');
                 setNewPaymentMethodType('');
-                setNewPaymentMethodDescription('');
+                setNewPaymentMethodOwner('');
                 setNewPaymentMethodManagedBy('');
+                setNewPaymentMethodFinancialInstitution('');
+                setNewPaymentMethodLast4Digits('');
                 setNewPaymentMethodExpiresAt('');
                 setNewPaymentMethodCardImage('visa');
               }}
@@ -3704,9 +3830,26 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   type="email"
                   placeholder=""
                   value={newOwnerEmail}
-                  onChange={(e) => setNewOwnerEmail(e.target.value)}
-                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  onChange={(e) => {
+                    setNewOwnerEmail(e.target.value);
+                    setNewOwnerEmailError(''); // Clear error on change
+                  }}
+                  onBlur={() => {
+                    // Validate email on blur
+                    if (newOwnerEmail) {
+                      const result = validateEmail(newOwnerEmail);
+                      if (!result.valid) {
+                        setNewOwnerEmailError(result.error || 'Invalid email address');
+                      }
+                    }
+                  }}
+                  className={`w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+                    newOwnerEmailError ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
+                  }`}
                 />
+                {newOwnerEmailError && (
+                  <p className="text-red-600 text-sm font-medium mt-1">{newOwnerEmailError}</p>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -3808,6 +3951,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       title: "Refreshed",
                       description: "Documents refreshed",
                       duration: 2000,
+                      variant: "success",
                     });
                   }}
                   className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 border-gray-300"
@@ -3875,6 +4019,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               title: "Success",
                               description: `${file.name} uploaded successfully`,
                               duration: 2000,
+                              variant: "success",
                             });
                           };
                           reader.readAsDataURL(file);
@@ -3999,6 +4144,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 title: "Download Started",
                                 description: `Downloading ${doc.name}`,
                                 duration: 2000,
+                                variant: "success",
                               });
                             } catch (error) {
                               toast({
@@ -4024,6 +4170,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               title: "Document Removed",
                               description: `${doc.name} has been removed`,
                               duration: 2000,
+                              variant: "destructive",
                             });
                           }}
                           className="px-2 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-600 hover:bg-red-50 rounded-md transition-colors flex items-center gap-1"

@@ -352,22 +352,22 @@ export default function SignupPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
               <img
                 src="/assets/logo.png"
-                alt="SubsTracker Logo"
+                alt="Trackla Logo"
                 style={{
-                  width: 52,
-                  height: 52,
+                  width: 64,
+                  height: 64,
                   filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.35)) brightness(1.05)",
                 }}
               />
               <div
                 style={{
                   fontWeight: 700,
-                  fontSize: 24,
+                  fontSize: 28,
                   letterSpacing: "0.03em",
                   color: "#f9fafb",
                 }}
               >
-                SubsTracker
+                Trackla
               </div>
             </div>
 

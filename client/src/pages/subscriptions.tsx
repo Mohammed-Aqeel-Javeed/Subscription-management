@@ -147,6 +147,7 @@ export default function Subscriptions() {
       toast({
         title: "Success",
         description: "Subscription deleted successfully",
+        variant: "destructive",
       });
     },
     onError: (error: any) => {
@@ -424,7 +425,7 @@ export default function Subscriptions() {
   }
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
       <div className="max-w-[1400px] mx-auto px-6 py-8">
         {/* Header Section */}
         <div className="flex items-center justify-between mb-6">

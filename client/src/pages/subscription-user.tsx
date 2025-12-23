@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -32,6 +33,7 @@ function getSubscriptionFromUrl() {
 export default function SubscriptionUserPage() {
   const { name: subscriptionName, id: subscriptionId } = getSubscriptionFromUrl();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // Fetch all employees
   const { data: employees = [], isLoading: employeesLoading } = useQuery({
@@ -161,16 +163,17 @@ if (!response.ok) {
       }
 
       const result = await response.json();
-toast({
+      toast({
         title: "Success",
         description: "Subscription users updated successfully.",
+        variant: "success",
       });
       
       // Refetch to ensure data is up to date
       await refetchSubscriptionUsers();
       
-      // Immediately redirect to subscriptions card/modal (fast close)
-      window.location.href = `/subscriptions?open=${subscriptionId}`;
+      // Navigate back to subscriptions page with modal open
+      navigate(`/subscriptions?open=${subscriptionId}`, { replace: true });
     } catch (error: unknown) {
       console.error("Error saving users:", error);
       toast({
@@ -185,11 +188,11 @@ toast({
 
   // Cancel handler
   const handleCancel = () => {
-    // Redirect back to the subscription modal page
+    // Navigate back to the subscription modal page
     if (subscriptionId) {
-      window.location.href = `/subscriptions?open=${subscriptionId}`;
+      navigate(`/subscriptions?open=${subscriptionId}`, { replace: true });
     } else {
-      window.history.back();
+      navigate(-1);
     }
   };
 

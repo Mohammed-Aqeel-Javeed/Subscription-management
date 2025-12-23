@@ -120,6 +120,7 @@ export default function Configuration() {
         toast({
           title: "Payment Method Updated",
           description: `Payment method has been updated successfully`,
+          variant: "success",
         });
       });
   };
@@ -662,6 +663,7 @@ export default function Configuration() {
     toast({
       title: "Template Downloaded",
       description: "Excel template with Currency and Payment Methods sheets downloaded successfully",
+      variant: "success",
     });
   };
 
@@ -707,6 +709,7 @@ export default function Configuration() {
     toast({
       title: "Export Successful",
       description: `Exported ${currencies.length} currencies and ${paymentMethods.length} payment methods to Excel`,
+      variant: "success",
     });
   };
 
@@ -818,7 +821,7 @@ export default function Configuration() {
         toast({
           title: "Import Complete",
           description: `Currencies: ${currencySuccess} success, ${currencyError} failed. Payment Methods: ${paymentSuccess} success, ${paymentError} failed.`,
-          variant: (currencyError > 0 || paymentError > 0) ? "destructive" : "default",
+          variant: (currencyError > 0 || paymentError > 0) ? "destructive" : "success",
         });
       } catch (error) {
         toast({
@@ -871,6 +874,7 @@ export default function Configuration() {
     toast({
       title: "Template Downloaded",
       description: "Use this template to import currencies",
+      variant: "success",
     });
   };
 
@@ -909,6 +913,7 @@ export default function Configuration() {
     toast({
       title: "Template Downloaded",
       description: "Use this template to import payment methods. Valid icons: visa, mastercard, paypal, amex, apple_pay, google_pay, bank, cash, other",
+      variant: "success",
     });
   };
 
@@ -944,6 +949,7 @@ export default function Configuration() {
     toast({
       title: "Export Successful",
       description: `${currencies.length} currencies exported to Excel`,
+      variant: "success",
     });
   };
 
@@ -1008,7 +1014,7 @@ export default function Configuration() {
         toast({
           title: "Import Complete",
           description: `Successfully imported ${successCount} currencies. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
-          variant: errorCount > 0 ? "destructive" : "default",
+          variant: errorCount > 0 ? "destructive" : "success",
         });
       } catch (error) {
         toast({
@@ -1058,6 +1064,7 @@ export default function Configuration() {
     toast({
       title: "Export Successful",
       description: `${paymentMethods.length} payment methods exported to Excel`,
+      variant: "success",
     });
   };
 
@@ -1119,7 +1126,7 @@ export default function Configuration() {
         toast({
           title: "Import Complete",
           description: `Successfully imported ${successCount} payment methods. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
-          variant: errorCount > 0 ? "destructive" : "default",
+          variant: errorCount > 0 ? "destructive" : "success",
         });
       } catch (error) {
         toast({
@@ -1251,6 +1258,7 @@ export default function Configuration() {
           toast({
             title: isEditMode ? "Currency Updated" : "Currency Added",
             description: `${newCurrency.name} currency has been ${isEditMode ? 'updated' : 'added'} successfully`,
+            variant: "success",
           });
         } else {
           const error = await res.json();
@@ -1344,6 +1352,7 @@ export default function Configuration() {
         toast({
           title: "Currency Rates Updated",
           description: "All currency rates have been updated successfully",
+          variant: "success",
         });
       } else {
         toast({
@@ -1497,6 +1506,7 @@ export default function Configuration() {
         toast({
           title: "Field Added",
           description: `${newFieldName} field has been added successfully`,
+          variant: "success",
         });
       } catch (error) {
         toast({
@@ -1532,6 +1542,7 @@ export default function Configuration() {
       toast({
         title: "Compliance Field Added",
         description: `${name} field has been added successfully`,
+        variant: "success",
       });
     } catch (error) {
       toast({
@@ -1593,6 +1604,7 @@ export default function Configuration() {
       toast({
         title: "Settings Saved",
         description: "Field enablement configuration has been saved successfully",
+        variant: "success",
       });
     } catch (error) {
       console.error("Error saving fields:", error);
@@ -1627,6 +1639,7 @@ export default function Configuration() {
       toast({
         title: "Compliance Settings Saved",
         description: "Compliance field configuration has been saved successfully",
+        variant: "success",
       });
     } catch (error) {
       toast({
