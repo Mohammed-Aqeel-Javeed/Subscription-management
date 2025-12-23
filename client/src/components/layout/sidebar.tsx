@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check } from "lucide-react";
+import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, FileSpreadsheet } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api";
 import { UnifiedImportExport } from "../unified-import-export";
@@ -70,6 +70,7 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
       toast({
         title: "Company Switched",
         description: "Successfully switched to the selected company",
+        variant: "success",
       });
     } catch (error) {
       toast({
@@ -178,14 +179,14 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
 }
 
 const navItems = [
-  { path: "/", label: "Dashboard", icon: BarChart3 },
-  { path: "/subscriptions", label: "Subscriptions", icon: Layers },
-  { path: "/compliance", label: "Compliance", icon: Award },
-  { path: "/government-license", label: "Government License", icon: ShieldCheck },
-  { path: "/notifications", label: "Notifications", icon: BellRing },
-  { path: "/reminders", label: "Setup & Configuration", icon: Settings },
-  { path: "/company-details", label: "Company Details", icon: Building2 },
-  { path: "/reports", label: "Reports", icon: FileBarChart },
+  { path: "/", label: "Dashboard", icon: BarChart3, gradient: "from-blue-500 to-indigo-600", shadow: "rgba(59, 130, 246, 0.5)" },
+  { path: "/subscriptions", label: "Subscriptions", icon: Layers, gradient: "from-purple-500 to-pink-600", shadow: "rgba(168, 85, 247, 0.5)" },
+  { path: "/compliance", label: "Compliance", icon: Award, gradient: "from-amber-500 to-orange-600", shadow: "rgba(245, 158, 11, 0.5)" },
+  { path: "/government-license", label: "Government License", icon: ShieldCheck, gradient: "from-emerald-500 to-teal-600", shadow: "rgba(16, 185, 129, 0.5)" },
+  { path: "/notifications", label: "Notifications", icon: BellRing, gradient: "from-rose-500 to-red-600", shadow: "rgba(244, 63, 94, 0.5)" },
+  { path: "/reminders", label: "Setup & Configuration", icon: Settings, gradient: "from-cyan-500 to-blue-600", shadow: "rgba(6, 182, 212, 0.5)" },
+  { path: "/company-details", label: "Company Details", icon: Building2, gradient: "from-violet-500 to-purple-600", shadow: "rgba(139, 92, 246, 0.5)" },
+  { path: "/reports", label: "Reports", icon: FileBarChart, gradient: "from-lime-500 to-green-600", shadow: "rgba(132, 204, 22, 0.5)" },
   // ...removed User Management link...
 ];
 
@@ -231,16 +232,16 @@ export default function Sidebar() {
     navigate("/login", { replace: true });
   };
   return (
-    <div className="flex flex-col h-full bg-gray-50 border-r border-gray-200">
-      <div className="flex flex-col items-start gap-2 px-6 pt-3 pb-2">
-        <div className="flex items-center gap-2">
+    <div className="flex flex-col h-full bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-r border-gray-200/50 shadow-lg">
+      <div className="flex flex-col items-start gap-2 px-6 pt-3 pb-2 bg-white/40 backdrop-blur-sm border-b border-gray-200/50">
+        <div className="flex items-center gap-3">
           <img 
             src="/assets/logo.png"
-            alt="SubsTracker Logo" 
-            className="w-7 h-7 object-contain"
+            alt="Trackla Logo" 
+            className="w-16 h-16 object-contain drop-shadow-lg"
           />
-          <h1 className="text-base font-semibold text-gray-900 tracking-tight">
-            SubsTracker
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">
+            Trackla
           </h1>
         </div>
         {currentUser?.companyName && (
@@ -270,7 +271,7 @@ export default function Sidebar() {
         />
       )}
       <nav className="flex-1 p-4 overflow-y-auto">
-        <ul className="space-y-1">
+        <ul className="space-y-1.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -281,28 +282,32 @@ export default function Sidebar() {
                 <Can I="manage" a="Settings" key={item.path} fallback={null}>
                   <li>
                     <Link to={item.path} className={`
-                      relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-                      transition-all duration-200 group overflow-hidden
+                      relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+                      transition-all duration-200 group
                       ${isActive 
-                        ? 'bg-blue-600 text-white shadow-md' 
-                        : 'text-gray-700 hover:bg-white/60 hover:text-gray-900 hover:shadow-sm'
+                        ? 'bg-gradient-to-r ' + item.gradient + ' text-white shadow-xl' 
+                        : 'text-gray-700 hover:bg-white/60 hover:text-gray-900 hover:shadow-md backdrop-blur-sm'
                       }
                     `}>
-                      {/* Blue line that travels from left to right */}
                       <div className={`
-                        absolute top-0 bottom-0 w-1 transition-all duration-500 ease-in-out
+                        relative flex items-center justify-center w-9 h-9 rounded-lg
+                        transition-all duration-200
                         ${isActive 
-                          ? 'bg-white right-0 rounded-l-full' 
-                          : 'bg-blue-500 -left-1 group-hover:left-0 group-hover:right-0 group-hover:w-full group-hover:opacity-10 rounded-none'
+                          ? 'bg-white/25 backdrop-blur-md border border-white/40 shadow-inner' 
+                          : 'bg-gradient-to-br ' + item.gradient + ' shadow-lg border border-white/20'
                         }
-                      `} />
-                      <Icon 
-                        size={18} 
-                        className={`
-                          ${isActive ? 'text-white' : 'text-gray-500'} 
-                          transition-colors duration-200
-                        `} 
-                      />
+                      `}
+                      style={{
+                        boxShadow: isActive 
+                          ? 'inset 0 2px 8px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
+                          : `0 6px 20px ${item.shadow}, inset 0 1px 0 rgba(255,255,255,0.3)`
+                      }}>
+                        <div className={`absolute inset-0 rounded-lg ${!isActive ? 'bg-gradient-to-b from-white/30 to-transparent' : ''}`} style={{ height: '50%' }} />
+                        <Icon 
+                          size={16} 
+                          className="text-white relative z-10" 
+                        />
+                      </div>
                       <span className="font-medium">
                         {item.label}
                       </span>
@@ -315,28 +320,32 @@ export default function Sidebar() {
             return (
               <li key={item.path}>
                 <Link to={item.path} className={`
-                  relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-                  transition-all duration-200 group overflow-hidden
+                  relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+                  transition-all duration-200 group
                   ${isActive 
-                    ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-700 hover:bg-white/60 hover:text-gray-900 hover:shadow-sm'
+                    ? 'bg-gradient-to-r ' + item.gradient + ' text-white shadow-xl' 
+                    : 'text-gray-700 hover:bg-white/60 hover:text-gray-900 hover:shadow-md backdrop-blur-sm'
                   }
                 `}>
-                  {/* Blue line that travels from left to right */}
                   <div className={`
-                    absolute top-0 bottom-0 w-1 transition-all duration-500 ease-in-out
+                    relative flex items-center justify-center w-9 h-9 rounded-lg
+                    transition-all duration-200
                     ${isActive 
-                      ? 'bg-white right-0 rounded-l-full' 
-                      : 'bg-blue-500 -left-1 group-hover:left-0 group-hover:right-0 group-hover:w-full group-hover:opacity-10 rounded-none'
+                      ? 'bg-white/25 backdrop-blur-md border border-white/40 shadow-inner' 
+                      : 'bg-gradient-to-br ' + item.gradient + ' shadow-lg border border-white/20'
                     }
-                  `} />
-                  <Icon 
-                    size={18} 
-                    className={`
-                      ${isActive ? 'text-white' : 'text-gray-500'} 
-                      transition-colors duration-200
-                    `} 
-                  />
+                  `}
+                  style={{
+                    boxShadow: isActive 
+                      ? 'inset 0 2px 8px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
+                      : `0 6px 20px ${item.shadow}, inset 0 1px 0 rgba(255,255,255,0.3)`
+                  }}>
+                    <div className={`absolute inset-0 rounded-lg ${!isActive ? 'bg-gradient-to-b from-white/30 to-transparent' : ''}`} style={{ height: '50%' }} />
+                    <Icon 
+                      size={16} 
+                      className="text-white relative z-10" 
+                    />
+                  </div>
                   <span className="font-medium">
                     {item.label}
                   </span>
@@ -352,11 +361,17 @@ export default function Sidebar() {
         </div>
       </nav>
       
-      <div className="p-4 border-t border-gray-200 bg-white/60 backdrop-blur-sm">
+      <div className="p-4 border-t border-gray-200/50 bg-white/60 backdrop-blur-sm">
         
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-white/80 hover:bg-white hover:shadow-sm transition-all duration-200 cursor-pointer mb-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <User className="text-white" size={16} />
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/80 hover:bg-white hover:shadow-md transition-all duration-200 cursor-pointer mb-3">
+          <div 
+            className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg border border-white/20"
+            style={{
+              boxShadow: '0 6px 20px rgba(59, 130, 246, 0.5), inset 0 1px 0 rgba(255,255,255,0.3)'
+            }}
+          >
+            <div className="absolute inset-0 rounded-lg bg-gradient-to-b from-white/30 to-transparent" style={{ height: '50%' }} />
+            <User className="text-white relative z-10" size={16} />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">

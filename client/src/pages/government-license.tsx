@@ -431,6 +431,7 @@ export default function GovernmentLicense() {
       toast({
         title: "Success",
         description: `License ${editingLicense ? 'updated' : 'created'} successfully`,
+        variant: "success",
       });
       setHeaderStatus('Active');
       setIsModalOpen(false);
@@ -507,6 +508,7 @@ export default function GovernmentLicense() {
       toast({
         title: "Success",
         description: "License deleted successfully",
+        variant: "destructive",
       });
     },
     onError: (error: any) => {
