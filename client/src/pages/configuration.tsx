@@ -2497,13 +2497,55 @@ export default function Configuration() {
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Expires at
                               </Label>
-                              <Input 
-                                type="month" 
-                                placeholder="MM/YYYY"
-                                value={paymentForm.expiresAt} 
-                                onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
-                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
-                              />
+                              <div className="relative">
+                                <Input 
+                                  type="month" 
+                                  placeholder="MM/YYYY"
+                                  value={paymentForm.expiresAt} 
+                                  onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
+                                  className="h-9 px-3 pr-10 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                                />
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (paymentForm.expiresAt) {
+                                        const [year, month] = paymentForm.expiresAt.split('-');
+                                        const newYear = parseInt(year) + 1;
+                                        setPaymentForm(f => ({ ...f, expiresAt: `${newYear}-${month}` }));
+                                      } else {
+                                        const now = new Date();
+                                        setPaymentForm(f => ({ ...f, expiresAt: `${now.getFullYear() + 1}-${String(now.getMonth() + 1).padStart(2, '0')}` }));
+                                      }
+                                    }}
+                                    className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+                                    title="Next year"
+                                  >
+                                    <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (paymentForm.expiresAt) {
+                                        const [year, month] = paymentForm.expiresAt.split('-');
+                                        const newYear = parseInt(year) - 1;
+                                        setPaymentForm(f => ({ ...f, expiresAt: `${newYear}-${month}` }));
+                                      } else {
+                                        const now = new Date();
+                                        setPaymentForm(f => ({ ...f, expiresAt: `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, '0')}` }));
+                                      }
+                                    }}
+                                    className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+                                    title="Previous year"
+                                  >
+                                    <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
                             </div>
 
                             {/* Action Buttons - Full Width */}
@@ -2682,13 +2724,55 @@ export default function Configuration() {
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Expires at
                               </Label>
-                              <Input 
-                                type="month" 
-                                placeholder="MM/YYYY"
-                                value={paymentForm.expiresAt} 
-                                onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
-                                className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
-                              />
+                              <div className="relative">
+                                <Input 
+                                  type="month" 
+                                  placeholder="MM/YYYY"
+                                  value={paymentForm.expiresAt} 
+                                  onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
+                                  className="h-9 px-3 pr-10 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                                />
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (paymentForm.expiresAt) {
+                                        const [year, month] = paymentForm.expiresAt.split('-');
+                                        const newYear = parseInt(year) + 1;
+                                        setPaymentForm(f => ({ ...f, expiresAt: `${newYear}-${month}` }));
+                                      } else {
+                                        const now = new Date();
+                                        setPaymentForm(f => ({ ...f, expiresAt: `${now.getFullYear() + 1}-${String(now.getMonth() + 1).padStart(2, '0')}` }));
+                                      }
+                                    }}
+                                    className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+                                    title="Next year"
+                                  >
+                                    <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (paymentForm.expiresAt) {
+                                        const [year, month] = paymentForm.expiresAt.split('-');
+                                        const newYear = parseInt(year) - 1;
+                                        setPaymentForm(f => ({ ...f, expiresAt: `${newYear}-${month}` }));
+                                      } else {
+                                        const now = new Date();
+                                        setPaymentForm(f => ({ ...f, expiresAt: `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, '0')}` }));
+                                      }
+                                    }}
+                                    className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+                                    title="Previous year"
+                                  >
+                                    <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
                             </div>
 
                             {/* Action Buttons - Full Width */}

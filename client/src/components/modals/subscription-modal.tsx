@@ -142,37 +142,64 @@ const validateEmail = (email: string): { valid: boolean; error?: string } => {
   if (!domain.includes('.')) {
     return { valid: false, error: 'Email domain must contain a dot' };
   }
-
-  // Rule 10: Valid TLD - ≥ 2 characters and only letters
+  
+  // Rule 9.5: Check for suspicious patterns like double TLDs (e.g., .com.com, .org.net)
   const domainParts = domain.split('.');
+  if (domainParts.length > 2) {
+    // Check if any part before the last one looks like a TLD
+    const commonTLDs = ['com', 'org', 'net', 'edu', 'gov', 'mil', 'int', 'co', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'jp', 'cn', 'in', 'br', 'ru', 'io', 'ai'];
+    for (let i = 0; i < domainParts.length - 1; i++) {
+      if (commonTLDs.includes(domainParts[i].toLowerCase())) {
+        return { valid: false, error: 'Email domain has invalid format (duplicate domain extension detected)' };
+      }
+    }
+  }
+
+  // Rule 10: Valid TLD - ≥ 2 characters and ≤ 6 characters, only letters
   const tld = domainParts[domainParts.length - 1];
   if (tld.length < 2) {
     return { valid: false, error: 'Email domain extension must be at least 2 characters' };
+  }
+  if (tld.length > 6) {
+    return { valid: false, error: 'Email domain extension must be 6 characters or less' };
   }
   // TLD should only contain letters
   if (!/^[a-zA-Z]+$/.test(tld)) {
     return { valid: false, error: 'Email domain extension must contain only letters' };
   }
+  
+  // Rule 11: Additional check - Validate against common TLDs for better accuracy
+  const commonTLDs = [
+    'com', 'org', 'net', 'edu', 'gov', 'mil', 'int',
+    'co', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'jp', 'cn', 'in', 'br', 'ru',
+    'io', 'ai', 'app', 'dev', 'tech', 'info', 'biz', 'name', 'pro',
+    'email', 'online', 'site', 'store', 'cloud', 'digital', 'global',
+    'xyz', 'top', 'vip', 'club', 'shop', 'live', 'today', 'world'
+  ];
+  
+  if (!commonTLDs.includes(tld.toLowerCase())) {
+    return { valid: false, error: 'Please enter a valid email domain extension (e.g., .com, .org, .net)' };
+  }
 
-  // Rule 11: Valid characters - Only allowed chars
+  // Rule 12: Valid characters in local part - Only allowed chars
   const validLocalRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
   if (!validLocalRegex.test(localPart)) {
     return { valid: false, error: 'Email username contains invalid characters' };
   }
 
-  // Domain parts (except TLD) can contain letters, numbers, and hyphens
+  // Rule 13: Domain parts (except TLD) can contain letters, numbers, and hyphens
   for (let i = 0; i < domainParts.length - 1; i++) {
     if (!/^[a-zA-Z0-9-]+$/.test(domainParts[i])) {
       return { valid: false, error: 'Email domain contains invalid characters' };
     }
   }
 
-  // Rule 12: Domain format - No - or . at edges
+  // Rule 14: Domain format - No - or . at edges
   if (domain.startsWith('-') || domain.startsWith('.') || domain.endsWith('-') || domain.endsWith('.')) {
     return { valid: false, error: 'Email domain cannot start or end with a hyphen or dot' };
   }
 
-  // Check each domain part doesn't start/end with hyphen
+  // Rule 15: Check each domain part doesn't start/end with hyphen
   for (const part of domainParts) {
     if (part.startsWith('-') || part.endsWith('-')) {
       return { valid: false, error: 'Email domain parts cannot start or end with a hyphen' };
@@ -180,6 +207,66 @@ const validateEmail = (email: string): { valid: boolean; error?: string } => {
     if (part.length === 0) {
       return { valid: false, error: 'Email domain cannot have empty parts' };
     }
+  }
+  
+  // Rule 16: Check for repeated characters in domain name (suspicious pattern)
+  const domainName = domainParts[domainParts.length - 2]; // Get the part before TLD (e.g., "gmail" from "gmail.com")
+  if (domainName) {
+    // Check for 4+ consecutive repeated characters (e.g., "gmaillll")
+    if (/(.)\1{3,}/.test(domainName)) {
+      return { valid: false, error: 'Email domain contains suspicious repeated characters' };
+    }
+  }
+  
+  // Rule 17: Validate common email providers with correct spelling
+  const knownProviders = {
+    'gmail': 'gmail.com',
+    'yahoo': 'yahoo.com',
+    'outlook': 'outlook.com',
+    'hotmail': 'hotmail.com',
+    'icloud': 'icloud.com',
+    'protonmail': 'protonmail.com',
+    'aol': 'aol.com',
+    'zoho': 'zoho.com'
+  };
+  
+  const fullDomain = domain.toLowerCase();
+  for (const [provider, correctDomain] of Object.entries(knownProviders)) {
+    // Check if domain starts with provider name but isn't exactly correct
+    if (fullDomain.startsWith(provider) && fullDomain !== correctDomain) {
+      // Allow subdomains like mail.google.com, but not gmaillll.com
+      const afterProvider = fullDomain.substring(provider.length);
+      if (!afterProvider.startsWith('.') && afterProvider.length > 0) {
+        return { valid: false, error: `Did you mean ${correctDomain}? Please check the spelling` };
+      }
+    }
+  }
+  
+  // Rule 18: Check minimum domain name length (before TLD)
+  if (domainName && domainName.length < 2) {
+    return { valid: false, error: 'Email domain name must be at least 2 characters' };
+  }
+  
+  // Rule 19: No special characters at start/end of local part
+  if (/^[^a-zA-Z0-9]/.test(localPart) || /[^a-zA-Z0-9]$/.test(localPart)) {
+    return { valid: false, error: 'Email username must start and end with a letter or number' };
+  }
+  
+  // Rule 20: Check for common typos in TLD
+  const typoTLDs: { [key: string]: string } = {
+    'con': 'com',
+    'cmo': 'com',
+    'ocm': 'com',
+    'comm': 'com',
+    'comn': 'com',
+    'rog': 'org',
+    'ogr': 'org',
+    'nte': 'net',
+    'ent': 'net'
+  };
+  
+  if (typoTLDs[tld.toLowerCase()]) {
+    return { valid: false, error: `Did you mean .${typoTLDs[tld.toLowerCase()]}? Please check the spelling` };
   }
 
   return { valid: true };
@@ -709,7 +796,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [newOwnerEmail, setNewOwnerEmail] = useState<string>('');
   const [newOwnerEmailError, setNewOwnerEmailError] = useState<string>('');
   const [newOwnerRole, setNewOwnerRole] = useState<string>('');
-  const [newOwnerStatus, setNewOwnerStatus] = useState<string>('Active');
+  const [newOwnerStatus, setNewOwnerStatus] = useState<string>('active');
   const [newOwnerDepartment, setNewOwnerDepartment] = useState<string>('');
   const [documents, setDocuments] = useState<Array<{name: string, url: string}>>([]);
   const [showDocumentDialog, setShowDocumentDialog] = useState<boolean>(false);
@@ -1130,7 +1217,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       }
       return res.json();
     },
-  onSuccess: async () => {
+  onSuccess: async (result) => {
       // Use only the subscription's id
       if (subscription?.id) {
   // removed currentSubscriptionId usage
@@ -1139,9 +1226,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Mark subscription as created to disable draft button
       if (!isEditing) {
         setSubscriptionCreated(true);
+        
+        // Dispatch subscription creation event
+        const subscriptionId = result?._id || result?.subscription?._id;
+        if (typeof window !== 'undefined' && window.dispatchEvent && subscriptionId) {
+          window.dispatchEvent(new CustomEvent('subscription-created', { 
+            detail: { ...result, _id: subscriptionId }
+          }));
+        }
       }
       
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
       
@@ -1150,10 +1246,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         description: `Subscription ${isEditing ? 'updated' : 'created'} successfully`,
         variant: "success",
       });
-      // Keep modal open - don't close
-      // onOpenChange(false);
-      // Refresh the subscription data to show updated values
-      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+      
+      // Close modal after successful save
+      onOpenChange(false);
     },
     onError: (error: any) => {
       console.error("Mutation error:", error);
@@ -1319,34 +1414,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           nextRenewal: payload.nextRenewal instanceof Date ? payload.nextRenewal.toISOString() : String(payload.nextRenewal),
         });
       } else {
-        // Create new subscription using apiRequest helper for consistent headers
-        const res = await apiRequest("POST", "/api/subscriptions", payload);
-        const result = await res.json();
-        
-        if (res.ok && result) {
-          const subscriptionId = result._id || result.subscription?._id;
-          
-          // Dispatch subscription creation event
-          if (typeof window !== 'undefined' && window.dispatchEvent) {
-            window.dispatchEvent(new CustomEvent('subscription-created', { 
-              detail: { ...payload, _id: subscriptionId }
-            }));
-          }
-          
-          // Invalidate queries to refresh data
-          queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/history"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-          
-          toast({
-            title: "Success",
-            description: "Subscription created successfully",
-            variant: "success",
-          });
-          onOpenChange(false);
-        } else {
-          throw new Error("Failed to create subscription");
-        }
+        // Create new subscription - use mutation for consistent state management
+        mutation.mutate({
+          ...payload,
+          startDate: payload.startDate instanceof Date ? payload.startDate.toISOString() : String(payload.startDate),
+          nextRenewal: payload.nextRenewal instanceof Date ? payload.nextRenewal.toISOString() : String(payload.nextRenewal),
+        });
       }
     } catch (error: any) {
       toast({
@@ -1738,6 +1811,30 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       return;
     }
     
+    // Validate department is selected
+    if (!newOwnerDepartment) {
+      toast({
+        title: "Department Required",
+        description: "Please select a department",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check for duplicate name
+    const nameExists = employeesRaw.some((emp: any) => 
+      emp.name?.toLowerCase().trim() === newOwnerName.trim().toLowerCase()
+    );
+    
+    if (nameExists) {
+      toast({
+        title: "Error",
+        description: "An employee with this name already exists",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // Check for duplicate email
     const emailExists = employeesRaw.some((emp: any) => 
       emp.email?.toLowerCase() === newOwnerEmail.trim().toLowerCase()
@@ -1774,9 +1871,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setNewOwnerEmail('');
       setNewOwnerEmailError('');
       setNewOwnerRole('');
-      setNewOwnerStatus('Active');
+      setNewOwnerStatus('active'); // Reset to active for next time
       setNewOwnerDepartment('');
       setOwnerModal({ show: false });
+      
+      toast({
+        title: "Success",
+        description: "Employee added successfully",
+        variant: "success",
+      });
     } catch (error) {
       console.error('Error adding owner:', error);
       toast({
@@ -2913,8 +3016,22 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             max="365"
                             disabled={autoRenewal}
                             className="w-full border-slate-300 rounded-lg p-1 text-base" 
-                            {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                            value={field.value || ""}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // If empty, set to empty string
+                              if (value === "") {
+                                field.onChange("");
+                                return;
+                              }
+                              // Convert to number and validate
+                              const numValue = Number(value);
+                              if (!isNaN(numValue) && numValue >= 1 && numValue <= 365) {
+                                field.onChange(numValue);
+                              }
+                            }}
+                            onBlur={field.onBlur}
+                            name={field.name}
                           />
                         </FormControl>
                         <FormMessage />
@@ -3761,13 +3878,55 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             </div>
             <div className="w-1/2 pr-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Expires at</label>
-              <Input
-                type="month"
-                placeholder="MM/YYYY"
-                value={newPaymentMethodExpiresAt}
-                onChange={(e) => setNewPaymentMethodExpiresAt(e.target.value)}
-                className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
-              />
+              <div className="relative">
+                <Input
+                  type="month"
+                  placeholder="MM/YYYY"
+                  value={newPaymentMethodExpiresAt}
+                  onChange={(e) => setNewPaymentMethodExpiresAt(e.target.value)}
+                  className="w-full pr-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newPaymentMethodExpiresAt) {
+                        const [year, month] = newPaymentMethodExpiresAt.split('-');
+                        const newYear = parseInt(year) + 1;
+                        setNewPaymentMethodExpiresAt(`${newYear}-${month}`);
+                      } else {
+                        const now = new Date();
+                        setNewPaymentMethodExpiresAt(`${now.getFullYear() + 1}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+                      }
+                    }}
+                    className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+                    title="Next year"
+                  >
+                    <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newPaymentMethodExpiresAt) {
+                        const [year, month] = newPaymentMethodExpiresAt.split('-');
+                        const newYear = parseInt(year) - 1;
+                        setNewPaymentMethodExpiresAt(`${newYear}-${month}`);
+                      } else {
+                        const now = new Date();
+                        setNewPaymentMethodExpiresAt(`${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+                      }
+                    }}
+                    className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+                    title="Previous year"
+                  >
+                    <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           <AlertDialogFooter className="flex gap-2 mt-6">
@@ -3862,7 +4021,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
                 <Select value={newOwnerDepartment} onValueChange={setNewOwnerDepartment}>
-                  <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+                  <SelectTrigger className={`w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+                    !newOwnerDepartment ? 'border-red-300' : ''
+                  }`}>
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
                   <SelectContent>
@@ -3881,6 +4042,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     )}
                   </SelectContent>
                 </Select>
+                {!newOwnerDepartment && newOwnerName && (
+                  <p className="text-red-600 text-sm font-medium mt-1">Department is required</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
@@ -3900,9 +4064,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -3916,8 +4080,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 setNewOwnerName('');
                 setNewOwnerEmail('');
                 setNewOwnerRole('');
-                setNewOwnerStatus('Active');
+                setNewOwnerStatus('active');
                 setNewOwnerDepartment('');
+                setNewOwnerEmailError('');
               }}
               className="bg-gray-100 hover:bg-gray-200 text-gray-700"
             >
@@ -3925,7 +4090,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             </Button>
             <Button 
               onClick={handleAddOwner}
-              disabled={!newOwnerName.trim() || !newOwnerEmail.trim()}
+              disabled={!newOwnerName.trim() || !newOwnerEmail.trim() || !newOwnerDepartment || newOwnerEmailError !== ''}
               className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
             >
               <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">

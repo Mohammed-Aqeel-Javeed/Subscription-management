@@ -25,6 +25,7 @@ import SignupPage from "@/pages/signup";
 import CompanyDetails from "@/pages/company-details";
 import CalendarMonthly from "@/pages/calendar-monthly";
 import CalendarYearly from "@/pages/calendar-yearly";
+import LandingPage from "@/pages/landing";
 
 function App() {
   return (
@@ -42,7 +43,7 @@ function App() {
 }
 
 function AppWithSidebar() {
-  const hideSidebarPaths = ["/login", "/signup", "/auth"];
+  const hideSidebarPaths = ["/", "/login", "/signup", "/auth", "/landing"];
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -65,21 +66,37 @@ function AppWithSidebar() {
   useEffect(() => {
     const checkAuth = async () => {
       // Skip auth check for public pages
-      if (hideSidebarPaths.includes(location.pathname)) {
+      const publicPaths = ["/login", "/signup", "/auth", "/landing"];
+      if (publicPaths.includes(location.pathname)) {
+        return;
+      }
+
+      // For root path, check if user is authenticated
+      if (location.pathname === "/") {
+        try {
+          const res = await fetch("/api/me", { credentials: "include" });
+          if (res.ok) {
+            // User is authenticated, redirect to dashboard
+            navigate("/dashboard", { replace: true });
+          }
+          // If not authenticated, stay on landing page
+        } catch (error) {
+          // Network error, stay on landing page
+        }
         return;
       }
 
       try {
         const res = await fetch("/api/me", { credentials: "include" });
         if (!res.ok) {
-          // Not authenticated, redirect to login
+          // Not authenticated, redirect to landing page
           sessionStorage.clear();
-          navigate("/login", { replace: true });
+          navigate("/", { replace: true });
         }
       } catch (error) {
-        // Network error or server error, redirect to login
+        // Network error or server error, redirect to landing page
         sessionStorage.clear();
-        navigate("/login", { replace: true });
+        navigate("/", { replace: true });
       }
     };
 
@@ -91,10 +108,11 @@ function AppWithSidebar() {
       {hideSidebarPaths.includes(location.pathname) ? null : <Sidebar />}
       <main className="flex-1 overflow-auto">
         <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/landing" element={<LandingPage />} />
           <Route path="/login" element={<AuthPage />} />
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/signup" element={<SignupPage />} />
-          <Route path="/" element={<Dashboard />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/subscriptions" element={<Subscriptions />} />
           <Route path="/subscriptions/cancelled" element={<CancelledSubscriptionsPage />} />

@@ -426,29 +426,29 @@ if (!response.ok) {
             </div>
             
             {/* Import/Export Buttons */}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 justify-center md:justify-end">
               <Button
                 onClick={handleDownloadTemplate}
                 variant="outline"
-                className="bg-white hover:bg-gray-50 border-gray-300"
+                className="bg-white hover:bg-gray-50 border-gray-300 text-sm sm:text-base px-3 sm:px-4"
               >
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                <FileSpreadsheet className="h-4 w-4 mr-1 sm:mr-2" />
                 Template
               </Button>
               <Button
                 onClick={handleExport}
                 variant="outline"
-                className="bg-white hover:bg-gray-50 border-gray-300"
+                className="bg-white hover:bg-gray-50 border-gray-300 text-sm sm:text-base px-3 sm:px-4"
               >
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="h-4 w-4 mr-1 sm:mr-2" />
                 Export
               </Button>
               <Button
                 onClick={() => fileInputRef.current?.click()}
                 variant="outline"
-                className="bg-white hover:bg-gray-50 border-gray-300"
+                className="bg-white hover:bg-gray-50 border-gray-300 text-sm sm:text-base px-3 sm:px-4"
               >
-                <Upload className="h-4 w-4 mr-2" />
+                <Upload className="h-4 w-4 mr-1 sm:mr-2" />
                 Import
               </Button>
               <input
@@ -538,10 +538,10 @@ if (!response.ok) {
                   <table className="w-full table-fixed">
                     <thead className="bg-gray-50 border-b-2 border-gray-200 sticky top-0 z-10">
                       <tr>
-                        <th className="w-[30%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">User</th>
-                        <th className="w-[30%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
-                        <th className="w-[20%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Department</th>
-                        <th className="w-[20%] px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                        <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">User</th>
+                        <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[150px]">Email</th>
+                        <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px]">Department</th>
+                        <th className="px-3 sm:px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px]">Action</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -559,31 +559,31 @@ if (!response.ok) {
                               transitionDelay: `${index * 30}ms` 
                             }}
                           >
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
+                            <td className="px-3 sm:px-6 py-4">
+                              <div className="flex items-center gap-2 sm:gap-3">
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md flex-shrink-0">
                                   {user.name?.split(" ").map((n: string) => n[0]).join("").toUpperCase()}
                                 </div>
-                                <div className="font-medium text-gray-900 truncate">{user.name || 'Unnamed'}</div>
+                                <div className="font-medium text-gray-900 truncate text-sm">{user.name || 'Unnamed'}</div>
                               </div>
                             </td>
-                            <td className="px-6 py-4">
-                              <div className="text-sm text-gray-600 truncate">{user.email || '—'}</div>
+                            <td className="px-3 sm:px-6 py-4">
+                              <div className="text-xs sm:text-sm text-gray-600 truncate">{user.email || '—'}</div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                               {user.department ? (
-                                <Badge className="bg-indigo-100 text-indigo-800 hover:bg-indigo-200 font-medium">
+                                <Badge className="bg-indigo-100 text-indigo-800 hover:bg-indigo-200 font-medium text-xs">
                                   {user.department}
                                 </Badge>
                               ) : (
-                                <span className="text-sm text-gray-400">—</span>
+                                <span className="text-xs sm:text-sm text-gray-400">—</span>
                               )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center">
                               <Button
                                 onClick={() => handleRemoveUser(user)}
                                 size="sm"
-                                className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-200 transform hover:scale-105"
+                                className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-200 transform hover:scale-105 text-xs sm:text-sm px-2 sm:px-3"
                               >
                                 Remove
                               </Button>
@@ -687,14 +687,14 @@ if (!response.ok) {
                       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
                     </div>
                   ) : availableEmployees.length > 0 ? (
-                    <div className="w-full">
-                      <table className="w-full table-fixed">
+                    <div className="w-full overflow-x-auto">
+                      <table className="w-full">
                         <thead className="bg-gray-50 border-b-2 border-gray-200 sticky top-0 z-10">
                           <tr>
-                            <th className="w-[30%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Team Member</th>
-                            <th className="w-[30%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
-                            <th className="w-[20%] px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Department</th>
-                            <th className="w-[20%] px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">Team Member</th>
+                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[150px]">Email</th>
+                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px]">Department</th>
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px]">Action</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -712,31 +712,31 @@ if (!response.ok) {
                                   transitionDelay: `${index * 30}ms` 
                                 }}
                               >
-                                <td className="px-6 py-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
+                                <td className="px-3 sm:px-6 py-4">
+                                  <div className="flex items-center gap-2 sm:gap-3">
+                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md flex-shrink-0">
                                       {emp.name?.split(" ").map((n: string) => n[0]).join("").toUpperCase()}
                                     </div>
-                                    <div className="font-medium text-gray-900 truncate">{emp.name || 'Unnamed'}</div>
+                                    <div className="font-medium text-gray-900 truncate text-sm">{emp.name || 'Unnamed'}</div>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4">
-                                  <div className="text-sm text-gray-600 truncate">{emp.email || '—'}</div>
+                                <td className="px-3 sm:px-6 py-4">
+                                  <div className="text-xs sm:text-sm text-gray-600 truncate">{emp.email || '—'}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                                   {emp.department ? (
-                                    <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium">
+                                    <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium text-xs">
                                       {emp.department}
                                     </Badge>
                                   ) : (
-                                    <span className="text-sm text-gray-400">—</span>
+                                    <span className="text-xs sm:text-sm text-gray-400">—</span>
                                   )}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center">
                                   <Button
                                     onClick={() => handleAddUser(emp)}
                                     size="sm"
-                                    className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-semibold shadow-md transition-all duration-200 transform hover:scale-105"
+                                    className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-semibold shadow-md transition-all duration-200 transform hover:scale-105 text-xs sm:text-sm px-2 sm:px-3"
                                   >
                                     Add
                                   </Button>
@@ -776,22 +776,22 @@ if (!response.ok) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
-          className="flex justify-end gap-4 mt-10"
+          className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 mt-10 px-2"
         >
           <Button
             variant="outline"
-            className="border-gray-300 text-gray-700 px-8 py-3 text-lg font-medium rounded-xl shadow-sm hover:bg-gray-50 transition-colors duration-300"
+            className="w-full sm:w-auto border-gray-300 text-gray-700 px-6 sm:px-8 py-3 text-base sm:text-lg font-medium rounded-xl shadow-sm hover:bg-gray-50 transition-colors duration-300"
             onClick={handleCancel}
           >
             Cancel
           </Button>
           <Button
-            className="bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white px-8 py-3 text-lg font-semibold rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-75 disabled:cursor-not-allowed"
+            className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white px-6 sm:px-8 py-3 text-base sm:text-lg font-semibold rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-75 disabled:cursor-not-allowed"
             onClick={handleSave}
             disabled={isSaving}
           >
             {isSaving ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2">
                 <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
