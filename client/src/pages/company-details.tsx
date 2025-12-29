@@ -168,6 +168,8 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
 const [modalOpen, setModalOpen] = useState(false);
 const [editingEmployee, setEditingEmployee] = useState<Employee | undefined>();
 const [searchTerm, setSearchTerm] = useState("");
+const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
+const [selectedEmployeeSubscriptions, setSelectedEmployeeSubscriptions] = useState<{employeeName: string; subscriptions: any[]}>({employeeName: '', subscriptions: []});
 const fileInputRef = React.useRef<HTMLInputElement>(null);
 const { toast } = useToast();
 const queryClient = useQueryClient();
@@ -714,12 +716,20 @@ transition={{ duration: 0.5, delay: 0.3 }}
 <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Role</TableHead>
 <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Department</TableHead>
 <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Email</TableHead>
+<TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">Subscriptions</TableHead>
 <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Status</TableHead>
 <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">Actions</TableHead>
 </TableRow>
 </TableHeader>
 <TableBody className="bg-white divide-y divide-gray-200">
-{filteredEmployees.map((employee, index) => (
+{filteredEmployees.map((employee, index) => {
+  // Count subscriptions owned by this employee
+  const subscriptionCount = subscriptions.filter((sub: any) => 
+    sub.owner?.toLowerCase() === employee.name?.toLowerCase() ||
+    sub.ownerName?.toLowerCase() === employee.name?.toLowerCase()
+  ).length;
+  
+  return (
 <motion.tr
   key={employee._id}
   initial={{ opacity: 0, y: 10 }}
@@ -737,6 +747,24 @@ transition={{ duration: 0.5, delay: 0.3 }}
     </Badge>
   </TableCell>
   <TableCell className="py-3 px-4 text-gray-900 text-sm">{employee.email}</TableCell>
+  <TableCell className="py-3 px-4 text-center">
+    <button
+      onClick={() => {
+        const employeeSubs = subscriptions.filter((sub: any) => 
+          sub.owner?.toLowerCase() === employee.name?.toLowerCase() ||
+          sub.ownerName?.toLowerCase() === employee.name?.toLowerCase()
+        );
+        setSelectedEmployeeSubscriptions({
+          employeeName: employee.name,
+          subscriptions: employeeSubs
+        });
+        setSubscriptionModalOpen(true);
+      }}
+      className="inline-flex items-center bg-blue-100 text-blue-700 rounded-full px-3 py-1 text-xs font-semibold hover:bg-blue-200 hover:shadow-md transition-all cursor-pointer border border-blue-200"
+    >
+      {subscriptionCount}
+    </button>
+  </TableCell>
   <TableCell className="py-3 px-4">{getStatusBadge(employee.status)}</TableCell>
   <TableCell className="py-3 px-4">
     <div className="flex justify-end space-x-2">
@@ -764,7 +792,8 @@ transition={{ duration: 0.5, delay: 0.3 }}
     </div>
   </TableCell>
 </motion.tr>
-))}
+  );
+})}
 {filteredEmployees.length === 0 && (
 <TableRow>
   <TableCell colSpan={6} className="text-center py-6">
@@ -781,6 +810,80 @@ transition={{ duration: 0.5, delay: 0.3 }}
 </CardContent>
 </Card>
 </motion.div>
+
+{/* Employee Subscriptions Modal */}
+<Dialog open={subscriptionModalOpen} onOpenChange={setSubscriptionModalOpen}>
+  <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white">
+    {/* Header with Gradient Background */}
+    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+      <DialogHeader>
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
+            <Monitor className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <DialogTitle className="text-2xl font-bold tracking-tight text-white">
+              {selectedEmployeeSubscriptions.employeeName}'s Subscriptions
+            </DialogTitle>
+          </div>
+        </div>
+      </DialogHeader>
+    </div>
+
+    {/* Subscriptions List */}
+    <div className="p-8">
+      {selectedEmployeeSubscriptions.subscriptions.length > 0 ? (
+        <Table className="min-w-full divide-y divide-gray-200">
+          <TableHeader className="bg-gray-50">
+            <TableRow>
+              <TableHead className="h-12 px-6 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Service</TableHead>
+              <TableHead className="h-12 px-6 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Billing Cycle</TableHead>
+              <TableHead className="h-12 px-6 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Next Renewal</TableHead>
+              <TableHead className="h-12 px-6 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Category</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="bg-white divide-y divide-gray-200">
+            {selectedEmployeeSubscriptions.subscriptions.map((sub: any, index: number) => (
+              <motion.tr
+                key={sub.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.05 }}
+                className="hover:bg-gray-50 transition-colors"
+              >
+                <TableCell className="px-6 py-4">
+                  <div className="font-semibold text-gray-900 text-sm">{sub.serviceName}</div>
+                </TableCell>
+                <TableCell className="px-6 py-4">
+                  <div className="text-sm text-gray-600">{sub.billingCycle || '-'}</div>
+                </TableCell>
+                <TableCell className="px-6 py-4">
+                  <div className="text-sm text-gray-600">
+                    {sub.nextRenewal ? new Date(sub.nextRenewal).toLocaleDateString() : '-'}
+                  </div>
+                </TableCell>
+                <TableCell className="px-6 py-4">
+                  {sub.category ? (
+                    <Badge className="bg-indigo-100 text-indigo-800 rounded-full px-3 py-1">
+                      {sub.category}
+                    </Badge>
+                  ) : (
+                    <span className="text-sm text-gray-400">-</span>
+                  )}
+                </TableCell>
+              </motion.tr>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Monitor className="w-16 h-16 text-gray-300 mb-4" />
+          <p className="text-gray-500 text-lg">No subscriptions found</p>
+        </div>
+      )}
+    </div>
+  </DialogContent>
+</Dialog>
 </motion.div>
 );
 }
