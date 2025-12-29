@@ -233,14 +233,15 @@ export default function Sidebar() {
   };
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-r border-gray-200/50 shadow-lg">
-      <div className="flex flex-col items-start gap-2 px-6 pt-3 pb-2 bg-white/40 backdrop-blur-sm border-b border-gray-200/50">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col items-start gap-1 px-4 pt-3 pb-2 bg-white/40 backdrop-blur-sm border-b border-gray-200/50">
+        <div className="flex items-center gap-2">
           <img 
             src="/assets/logo.png"
             alt="Trackla Logo" 
-            className="w-16 h-16 object-contain drop-shadow-lg"
+            className="w-20 h-20 object-contain drop-shadow-xl"
+            style={{ imageRendering: 'crisp-edges' }}
           />
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
             Trackla
           </h1>
         </div>
@@ -361,9 +362,9 @@ export default function Sidebar() {
         </div>
       </nav>
       
-      <div className="p-4 border-t border-gray-200/50 bg-white/60 backdrop-blur-sm">
+      <div className="p-3 border-t border-gray-200/50 bg-white/60 backdrop-blur-sm">
         
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/80 hover:bg-white hover:shadow-md transition-all duration-200 cursor-pointer mb-3">
+        <div className="flex items-center gap-2 p-2 rounded-xl bg-white/80 hover:bg-white hover:shadow-md transition-all duration-200 cursor-pointer mb-2">
           <div 
             className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg border border-white/20"
             style={{
@@ -387,7 +388,7 @@ export default function Sidebar() {
         <div className="flex justify-center">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 group relative overflow-hidden"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 group relative overflow-hidden"
           >
             {/* Animated background effect */}
             <div className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />

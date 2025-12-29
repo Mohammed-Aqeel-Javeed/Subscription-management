@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+import { Download, Upload, FileSpreadsheet } from "lucide-react";
+import Papa from 'papaparse';
 
 // Dummy fallback for company name
 const COMPANY_NAME = "Your Company";
@@ -63,6 +65,7 @@ export default function SubscriptionUserPage() {
   const [searchRight, setSearchRight] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [showTeamMembers, setShowTeamMembers] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // On initial mount, set selectedUsers from backend
   useEffect(() => {
@@ -70,6 +73,181 @@ export default function SubscriptionUserPage() {
       setSelectedUsers(subscriptionUsers);
     }
   }, [subscriptionUsers]);
+
+  // Download Template
+  const handleDownloadTemplate = () => {
+    const template = [
+      { Name: 'John Doe', Email: 'john@example.com' },
+      { Name: 'Jane Smith', Email: 'jane@example.com' }
+    ];
+    const csv = Papa.unparse(template);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'subscription_users_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({
+      title: 'Template Downloaded',
+      description: 'Use this template to bulk import users',
+    });
+  };
+
+  // Export current assigned users
+  const handleExport = () => {
+    if (!selectedUsers.length) {
+      toast({
+        title: 'No users to export',
+        description: 'Add users first before exporting',
+        variant: 'destructive'
+      });
+      return;
+    }
+    const exportData = selectedUsers.map(user => ({
+      Name: user.name || '',
+      Email: user.email || ''
+    }));
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${subscriptionName}_users_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({
+      title: 'Exported',
+      description: `${selectedUsers.length} users exported successfully`,
+      variant: 'success'
+    });
+  };
+
+  // Import users from CSV
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const rows: any[] = results.data as any[];
+        if (!rows.length) {
+          toast({
+            title: 'Empty file',
+            description: 'No rows found in file',
+            variant: 'destructive'
+          });
+          return;
+        }
+        
+        let added = 0;
+        let skipped = 0;
+        const mismatchErrors: string[] = [];
+        const notFoundUsers: string[] = [];
+        const duplicatesInCSV: string[] = [];
+        const seenEmails = new Set<string>();
+        
+        rows.forEach((row, index) => {
+          const email = (row.Email || row.email || '').trim().toLowerCase();
+          const name = (row.Name || row.name || '').trim();
+          
+          if (!email || !name) {
+            skipped++;
+            notFoundUsers.push(name || email || 'Unknown');
+            return;
+          }
+          
+          // Check for duplicates within the CSV
+          if (seenEmails.has(email)) {
+            duplicatesInCSV.push(`${name} (${email}) on row ${index + 2}`);
+            skipped++;
+            return;
+          }
+          seenEmails.add(email);
+          
+          // Find employee by email
+          const employee = employees.find(emp => 
+            emp.email?.toLowerCase() === email
+          );
+          
+          if (employee) {
+            // Check if name also matches (trim both sides for comparison)
+            const employeeName = (employee.name || '').trim().toLowerCase();
+            const csvName = name.toLowerCase();
+            
+            if (employeeName === csvName) {
+              const empId = employee.id || employee._id;
+              // Check if not already added
+              if (!selectedUsers.some(u => (u.id || u._id) === empId)) {
+                setSelectedUsers(prev => [...prev, employee]);
+                added++;
+              } else {
+                skipped++;
+              }
+            } else {
+              // Email matches but name doesn't match
+              mismatchErrors.push(`${name} (email: ${email}) - Found employee "${employee.name?.trim()}" with this email`);
+              skipped++;
+            }
+          } else {
+            // Email not found
+            notFoundUsers.push(`${name} (${email})`);
+            skipped++;
+          }
+        });
+        
+        // Show detailed error message
+        if (duplicatesInCSV.length > 0 || mismatchErrors.length > 0 || notFoundUsers.length > 0) {
+          let errorMsg = '';
+          
+          if (duplicatesInCSV.length > 0) {
+            const dupList = duplicatesInCSV.slice(0, 3).join('; ');
+            const moreCount = duplicatesInCSV.length > 3 ? ` and ${duplicatesInCSV.length - 3} more` : '';
+            errorMsg += `Duplicate entries in CSV: ${dupList}${moreCount}. `;
+          }
+          
+          if (mismatchErrors.length > 0) {
+            const mismatchList = mismatchErrors.slice(0, 3).join('; ');
+            const moreCount = mismatchErrors.length > 3 ? ` and ${mismatchErrors.length - 3} more` : '';
+            errorMsg += `Name/Email mismatch: ${mismatchList}${moreCount}. `;
+          }
+          
+          if (notFoundUsers.length > 0) {
+            const notFoundList = notFoundUsers.slice(0, 3).join(', ');
+            const moreCount = notFoundUsers.length > 3 ? ` and ${notFoundUsers.length - 3} more` : '';
+            errorMsg += `Not found: ${notFoundList}${moreCount}.`;
+          }
+          
+          toast({
+            title: added > 0 ? 'Import Complete with Errors' : 'Import Failed',
+            description: `Added ${added} users. ${skipped} skipped. ${errorMsg}`,
+            variant: added === 0 ? 'destructive' : 'default'
+          });
+        } else {
+          toast({
+            title: 'Import Complete',
+            description: `Added ${added} users successfully`,
+            variant: 'success'
+          });
+        }
+        
+        e.target.value = '';
+      },
+      error: () => {
+        toast({
+          title: 'Import error',
+          description: 'Failed to parse file',
+          variant: 'destructive'
+        });
+      }
+    });
+  };
 
   // Filtered employees (not already added)
   const availableEmployees = useMemo(() => {
@@ -235,14 +413,53 @@ if (!response.ok) {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="text-center mb-10"
+          className="mb-10"
         >
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
-            Manage Subscription Users
-          </h1>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            Add or remove team members from the <span className="font-semibold text-indigo-600">{subscriptionName}</span> subscription.
-          </p>
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+            <div className="text-center md:text-left">
+              <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
+                Manage Subscription Users
+              </h1>
+              <p className="text-gray-600">
+                Add or remove team members from the <span className="font-semibold text-indigo-600">{subscriptionName}</span> subscription.
+              </p>
+            </div>
+            
+            {/* Import/Export Buttons */}
+            <div className="flex gap-2">
+              <Button
+                onClick={handleDownloadTemplate}
+                variant="outline"
+                className="bg-white hover:bg-gray-50 border-gray-300"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Template
+              </Button>
+              <Button
+                onClick={handleExport}
+                variant="outline"
+                className="bg-white hover:bg-gray-50 border-gray-300"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+              <Button
+                onClick={() => fileInputRef.current?.click()}
+                variant="outline"
+                className="bg-white hover:bg-gray-50 border-gray-300"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Import
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleImport}
+                className="hidden"
+              />
+            </div>
+          </div>
         </motion.div>
 
         <div className={`grid gap-6 ${showTeamMembers ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>

@@ -139,6 +139,12 @@ export default function SubscriptionHistory() {
 
     let filtered = [...history];
 
+    // Filter out Draft subscriptions - no history for drafts
+    filtered = filtered.filter(item => {
+      const record = item.data || item.updatedFields || {};
+      return record.status !== 'Draft';
+    });
+
     // Apply search term filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
