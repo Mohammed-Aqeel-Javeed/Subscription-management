@@ -2315,23 +2315,52 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <FormField
                   control={form.control}
                   name="paymentFrequency"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="block text-sm font-medium text-slate-700">Payment Frequency</FormLabel>
-                      <Select value={field.value || ""} onValueChange={field.onChange}>
-                        <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent className="dropdown-content">
-                          <SelectItem value="monthly" className="dropdown-item">Monthly</SelectItem>
-                          <SelectItem value="weekly" className="dropdown-item">Weekly</SelectItem>
-                          <SelectItem value="quarterly" className="dropdown-item">Quarterly</SelectItem>
-                          <SelectItem value="yearly" className="dropdown-item">Yearly</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    // Define cycle hierarchy (lower index = shorter period)
+                    const cycleHierarchy = ['weekly', 'monthly', 'quarterly', 'yearly'];
+                    const commitmentCycle = (billingCycle || '').toLowerCase();
+                    
+                    // For Trial and Pay-as-you-go, don't show any payment frequency options
+                    const isTrialOrPayAsYouGo = commitmentCycle === 'trial' || commitmentCycle === 'pay-as-you-go';
+                    
+                    // Get the index of the commitment cycle
+                    const commitmentIndex = cycleHierarchy.indexOf(commitmentCycle);
+                    
+                    // Filter frequencies: only show options <= commitment cycle
+                    const availableFrequencies = commitmentIndex >= 0 
+                      ? cycleHierarchy.slice(0, commitmentIndex + 1)
+                      : []; // Empty for trial and pay-as-you-go
+                    
+                    return (
+                      <FormItem>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Payment Frequency</FormLabel>
+                        <Select 
+                          value={field.value || ""} 
+                          onValueChange={field.onChange}
+                          disabled={isTrialOrPayAsYouGo}
+                        >
+                          <SelectTrigger className={`w-full border-slate-300 rounded-lg p-2 text-base ${isTrialOrPayAsYouGo ? 'bg-gray-100 cursor-not-allowed' : ''}`}>
+                            <SelectValue placeholder={isTrialOrPayAsYouGo ? "N/A" : "Select"} />
+                          </SelectTrigger>
+                          <SelectContent className="dropdown-content">
+                            {!isTrialOrPayAsYouGo && availableFrequencies.includes('weekly') && (
+                              <SelectItem value="weekly" className="dropdown-item">Weekly</SelectItem>
+                            )}
+                            {!isTrialOrPayAsYouGo && availableFrequencies.includes('monthly') && (
+                              <SelectItem value="monthly" className="dropdown-item">Monthly</SelectItem>
+                            )}
+                            {!isTrialOrPayAsYouGo && availableFrequencies.includes('quarterly') && (
+                              <SelectItem value="quarterly" className="dropdown-item">Quarterly</SelectItem>
+                            )}
+                            {!isTrialOrPayAsYouGo && availableFrequencies.includes('yearly') && (
+                              <SelectItem value="yearly" className="dropdown-item">Yearly</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
                 <FormField
                   control={form.control}
@@ -2834,21 +2863,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full border-slate-300 rounded-lg p-1 text-base"
+                            className="w-full border-slate-300 rounded-lg p-1 text-base bg-gray-100 cursor-not-allowed"
                             value={startDate || ''} 
-                            onChange={e => { 
-                              setStartDate(e.target.value); 
-                              field.onChange(e);
-                              // Auto-update next renewal date if Auto Renewal is enabled
-                              if (autoRenewal && e.target.value) {
-                                const cycle = form.watch("billingCycle") || billingCycle;
-                                if (cycle) {
-                                  const nextDate = calculateEndDate(e.target.value, cycle);
-                                  form.setValue("nextRenewal", nextDate);
-                                  setEndDate(nextDate);
-                                }
-                              }
-                            }} 
+                            readOnly
+                            disabled
                           />
                         </FormControl>
                         <FormMessage className="text-red-500" />
@@ -2869,22 +2887,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full border-slate-300 rounded-lg p-1 text-base"
+                            className="w-full border-slate-300 rounded-lg p-1 text-base bg-gray-100 cursor-not-allowed"
                             value={endDate || ''} 
-                            onChange={e => {
-                              setEndDate(e.target.value);
-                              field.onChange(e);
-                              // If nextRenewal matches today's date, update both start and next renewal
-                              const todayStr = new Date().toISOString().split('T')[0];
-                              if (e.target.value === todayStr) {
-                                setStartDate(todayStr);
-                                form.setValue("startDate", todayStr);
-                                const cycle = form.watch("billingCycle") || billingCycle;
-                                const nextDate = calculateEndDate(todayStr, cycle);
-                                setEndDate(nextDate);
-                                form.setValue("nextRenewal", nextDate);
-                              }
-                            }} 
+                            readOnly
+                            disabled
                           />
                         </FormControl>
                         <FormMessage className="text-red-500" />

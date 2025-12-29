@@ -72,22 +72,23 @@ export default function AuthPage() {
             justifyContent: "center",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 32 }}>
             <img
               src="/assets/logo.png"
               alt="Trackla Logo"
               style={{
-                width: 64,
-                height: 64,
-                filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.35)) brightness(1.05)",
+                width: 120,
+                height: 120,
+                filter: "drop-shadow(0 8px 16px rgba(0,0,0,0.4)) brightness(1.1) contrast(1.1)",
               }}
             />
             <div
               style={{
                 fontWeight: 700,
-                fontSize: 28,
+                fontSize: 36,
                 letterSpacing: "0.03em",
-                color: "#f9fafb",
+                color: "#ffffff",
+                textShadow: "0 4px 12px rgba(0,0,0,0.3)",
               }}
             >
               Trackla
