@@ -171,6 +171,10 @@ const [searchTerm, setSearchTerm] = useState("");
 const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
 const [selectedEmployeeSubscriptions, setSelectedEmployeeSubscriptions] = useState<{employeeName: string; subscriptions: any[]}>({employeeName: '', subscriptions: []});
 const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+// Delete confirmation dialog state
+const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
 const { toast } = useToast();
 const queryClient = useQueryClient();
 
@@ -293,9 +297,16 @@ const handleEdit = (employee: Employee) => {
   setModalOpen(true);
 };
 
-const handleDelete = (_id: string) => {
-  if (confirm("Are you sure you want to delete this employee?")) {
-    deleteEmployeeMutation.mutate(_id);
+const handleDelete = (employee: Employee) => {
+  setEmployeeToDelete(employee);
+  setDeleteConfirmOpen(true);
+};
+
+const confirmDelete = () => {
+  if (employeeToDelete) {
+    deleteEmployeeMutation.mutate(employeeToDelete._id);
+    setDeleteConfirmOpen(false);
+    setEmployeeToDelete(null);
   }
 };
 
@@ -782,7 +793,7 @@ transition={{ duration: 0.5, delay: 0.3 }}
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => handleDelete(employee._id)}
+          onClick={() => handleDelete(employee)}
           disabled={deleteEmployeeMutation.isPending}
           className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-8 w-8"
         >
@@ -881,6 +892,61 @@ transition={{ duration: 0.5, delay: 0.3 }}
           <p className="text-gray-500 text-lg">No subscriptions found</p>
         </div>
       )}
+    </div>
+  </DialogContent>
+</Dialog>
+
+{/* Delete Confirmation Dialog */}
+<Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+    {/* Header with Red Gradient Background */}
+    <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+      <DialogHeader>
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+            <Trash2 className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <DialogTitle className="text-xl font-bold tracking-tight text-white">
+              Delete Employee
+            </DialogTitle>
+            <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+          </div>
+        </div>
+      </DialogHeader>
+    </div>
+
+    {/* Content */}
+    <div className="px-6 py-5">
+      <p className="text-gray-700 text-sm leading-relaxed mb-4">
+        Are you sure you want to delete the employee <span className="font-semibold text-gray-900">"{employeeToDelete?.name}"</span>?
+      </p>
+      <p className="text-gray-600 text-xs leading-relaxed">
+        This will permanently remove this employee and all associated data from your system.
+      </p>
+    </div>
+
+    {/* Action Buttons */}
+    <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+      <Button 
+        type="button" 
+        variant="outline" 
+        onClick={() => {
+          setDeleteConfirmOpen(false);
+          setEmployeeToDelete(null);
+        }}
+        className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
+      >
+        Cancel
+      </Button>
+      <Button 
+        type="button"
+        onClick={confirmDelete}
+        disabled={deleteEmployeeMutation.isPending}
+        className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+      >
+        {deleteEmployeeMutation.isPending ? "Deleting..." : "Delete"}
+      </Button>
     </div>
   </DialogContent>
 </Dialog>

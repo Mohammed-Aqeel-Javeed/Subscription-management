@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Edit, Trash2, Search, Layers, AlertCircle, Calendar, XCircle, Download, Upload } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Plus, Edit, Trash2, Search, Layers, AlertCircle, Calendar, XCircle, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import Papa from 'papaparse';
 import SubscriptionModal from "@/components/modals/subscription-modal";
 import { apiRequest } from "@/lib/queryClient";
@@ -49,6 +50,15 @@ export default function Subscriptions() {
   const initialIsCancelledView = location.pathname.includes('cancelled');
   const [statusFilter, setStatusFilter] = useState(initialIsCancelledView ? "Cancelled" : "all");
   const [metricsFilter, setMetricsFilter] = useState<"all" | "active" | "Trial" | "draft" | "cancelled">("all");
+  
+  // Delete confirmation dialog state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [subscriptionToDelete, setSubscriptionToDelete] = useState<SubscriptionWithExtras | null>(null);
+  
+  // Sorting state
+  const [sortField, setSortField] = useState<"serviceName" | "amount" | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  
   React.useEffect(() => {
     if (location.pathname.includes('cancelled')) {
       setStatusFilter('Cancelled');
@@ -63,8 +73,7 @@ export default function Subscriptions() {
     queryKey: ["/api/subscriptions", tenantId],
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    refetchInterval: 10000, // auto refresh every 10s
-    refetchIntervalInBackground: true,
+    refetchInterval: false, // Disable auto-refresh, rely on invalidation
     staleTime: 5000,
     gcTime: 0,
   });
@@ -184,9 +193,16 @@ export default function Subscriptions() {
     setEditingSubscription(undefined);
   };
   
-  const handleDelete = (id: string | number) => {
-    if (confirm("Are you sure you want to delete this subscription?")) {
-      deleteMutation.mutate(id);
+  const handleDelete = (subscription: SubscriptionWithExtras) => {
+    setSubscriptionToDelete(subscription);
+    setDeleteConfirmOpen(true);
+  };
+  
+  const confirmDelete = () => {
+    if (subscriptionToDelete) {
+      deleteMutation.mutate(subscriptionToDelete._id || subscriptionToDelete.id);
+      setDeleteConfirmOpen(false);
+      setSubscriptionToDelete(null);
     }
   };
   
@@ -301,7 +317,54 @@ export default function Subscriptions() {
     }
     
     return matchesSearch && matchesCategory && matchesVendor && matchesStatus && matchesMetrics;
+  }).sort((a, b) => {
+    // Apply sorting if a field is selected
+    if (!sortField) return 0;
+    
+    if (sortField === "serviceName") {
+      const aVal = (a.serviceName || "").toLowerCase();
+      const bVal = (b.serviceName || "").toLowerCase();
+      return sortDirection === "asc" 
+        ? aVal.localeCompare(bVal)
+        : bVal.localeCompare(aVal);
+    }
+    
+    if (sortField === "amount") {
+      const aVal = parseFloat(String(a.amount)) || 0;
+      const bVal = parseFloat(String(b.amount)) || 0;
+      return sortDirection === "asc" 
+        ? aVal - bVal
+        : bVal - aVal;
+    }
+    
+    return 0;
   }) : [];
+  
+  // Toggle sort function
+  const handleSort = (field: "serviceName" | "amount") => {
+    if (sortField === field) {
+      // Toggle direction or clear sort
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortField(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+  
+  // Get sort icon
+  const getSortIcon = (field: "serviceName" | "amount") => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 inline-block opacity-40" />;
+    }
+    return sortDirection === "asc" 
+      ? <ArrowUp className="h-3 w-3 ml-1 inline-block" />
+      : <ArrowDown className="h-3 w-3 ml-1 inline-block" />;
+  };
   
   const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.category) : []));
   const uniqueVendors = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.vendor) : []));
@@ -598,13 +661,25 @@ export default function Subscriptions() {
               <TableHeader>
                 <TableRow className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
                   <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
-                    Service
+                    <button 
+                      onClick={() => handleSort("serviceName")}
+                      className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      Service
+                      {getSortIcon("serviceName")}
+                    </button>
                   </TableHead>
                   <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     Vendor
                   </TableHead>
                   <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Amount
+                    <button 
+                      onClick={() => handleSort("amount")}
+                      className="flex items-center justify-end w-full hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      Amount
+                      {getSortIcon("amount")}
+                    </button>
                   </TableHead>
                   <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     Billing
@@ -620,9 +695,6 @@ export default function Subscriptions() {
                   </TableHead>
                   <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     Category
-                  </TableHead>
-                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Reminder
                   </TableHead>
                   <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
                     Actions
@@ -726,9 +798,6 @@ export default function Subscriptions() {
                           {subscription.category || '-'}
                         </span>
                       </TableCell>
-                      <TableCell className="px-4 py-3 text-sm text-gray-600">
-                        {subscription.reminderPolicy} ({subscription.reminderDays}d)
-                      </TableCell>
                       <TableCell className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end space-x-1">
                           <Can I="update" a="Subscription">
@@ -745,7 +814,7 @@ export default function Subscriptions() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDelete(subscription._id || subscription.id)}
+                              onClick={() => handleDelete(subscription)}
                               className="h-8 w-8 p-0 text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
                               disabled={deleteMutation.isPending}
                             >
@@ -758,7 +827,7 @@ export default function Subscriptions() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-32 text-center">
+                    <TableCell colSpan={9} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-gray-500">
                         <AlertCircle className="h-8 w-8 text-gray-300 mb-2" />
                         <p className="text-sm font-medium text-gray-900">No subscriptions found</p>
@@ -778,6 +847,62 @@ export default function Subscriptions() {
         onOpenChange={handleCloseModal}
         subscription={editingSubscription}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+          {/* Header with Red Gradient Background */}
+          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Trash2 className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                    Delete Subscription
+                  </DialogTitle>
+                  <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-5">
+            <p className="text-gray-700 text-sm leading-relaxed mb-4">
+              Are you sure you want to delete the subscription <span className="font-semibold text-gray-900">"{subscriptionToDelete?.serviceName}"</span>?
+            </p>
+            <p className="text-gray-600 text-xs leading-relaxed">
+              This will permanently remove this subscription and all its associated data from your system.
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+                setSubscriptionToDelete(null);
+              }}
+              className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="button"
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+              className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <input
         type="file"
         accept=".csv,text/csv"
