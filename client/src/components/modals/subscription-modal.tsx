@@ -716,6 +716,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [categoryOpen, setCategoryOpen] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   
+  // Validation error dialog state
+  const [validationErrorOpen, setValidationErrorOpen] = useState(false);
+  const [validationErrorMessage, setValidationErrorMessage] = useState("");
+  
   const [startDate, setStartDate] = useState(subscription?.startDate ? toISODateOnly(subscription.startDate) : "");
   const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle || "");
   const [endDate, setEndDate] = useState(subscription?.nextRenewal ? toISODateOnly(subscription.nextRenewal) : "");
@@ -791,6 +795,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [newPaymentMethodLast4Digits, setNewPaymentMethodLast4Digits] = useState<string>('');
   const [newPaymentMethodExpiresAt, setNewPaymentMethodExpiresAt] = useState<string>('');
   const [newPaymentMethodCardImage, setNewPaymentMethodCardImage] = useState<string>('visa');
+  const [isCreatingPaymentMethod, setIsCreatingPaymentMethod] = useState<boolean>(false);
   const [ownerModal, setOwnerModal] = useState<{show: boolean}>({show: false});
   const [newOwnerName, setNewOwnerName] = useState<string>('');
   const [newOwnerEmail, setNewOwnerEmail] = useState<string>('');
@@ -1217,7 +1222,35 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       }
       return res.json();
     },
-  onSuccess: async (result) => {
+  onMutate: async (newData) => {
+      const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
+      
+      // Cancel any outgoing refetches for this tenant
+      await queryClient.cancelQueries({ queryKey: ["/api/subscriptions", tenantId] });
+      
+      // Snapshot the previous value
+      const previousSubscriptions = queryClient.getQueryData(["/api/subscriptions", tenantId]);
+      
+      // Optimistically update to the new value
+      if (!isEditing) {
+        queryClient.setQueryData(["/api/subscriptions", tenantId], (old: any) => {
+          const optimisticSub = {
+            ...newData,
+            _id: 'temp-' + Date.now(),
+            id: 'temp-' + Date.now(),
+            createdAt: new Date().toISOString(),
+            tenantId: tenantId,
+          };
+          return old ? [...old, optimisticSub] : [optimisticSub];
+        });
+      }
+      
+      // Return a context object with the snapshotted value
+      return { previousSubscriptions, tenantId };
+    },
+  onSuccess: (result, variables, context) => {
+      const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
+      
       // Use only the subscription's id
       if (subscription?.id) {
   // removed currentSubscriptionId usage
@@ -1236,21 +1269,33 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         }
       }
       
-      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/history"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
-      
+      // Show success message immediately
       toast({
         title: "Success",
         description: `Subscription ${isEditing ? 'updated' : 'created'} successfully`,
         variant: "success",
       });
       
-      // Close modal after successful save
+      // Close modal immediately
       onOpenChange(false);
+      
+      // Invalidate and refetch with correct tenant key immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions", tenantId] });
+      queryClient.refetchQueries({ queryKey: ["/api/subscriptions", tenantId] });
+      
+      // Invalidate other queries in background
+      queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
     },
-    onError: (error: any) => {
+    onError: (error: any, newData, context: any) => {
+      const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
+      
+      // Rollback to the previous value on error
+      if (context?.previousSubscriptions) {
+        queryClient.setQueryData(["/api/subscriptions", tenantId], context.previousSubscriptions);
+      }
+      
       console.error("Mutation error:", error);
       toast({
         title: "Error",
@@ -1359,6 +1404,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     
     // Validate service name uniqueness one more time before submission
     if (data.serviceName && !validateServiceName(data.serviceName)) {
+      return;
+    }
+    
+    // Validate Current Cycle Start >= First Purchase Date
+    if (initialDate && startDate && new Date(startDate) < new Date(initialDate)) {
+      toast({
+        title: "Validation Error",
+        description: "Current Cycle Start must be on or after First Purchase Date",
+        variant: "destructive",
+      });
       return;
     }
     
@@ -1760,21 +1815,57 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const handleAddPaymentMethod = async () => {
     if (!newPaymentMethodName.trim()) return;
     
+    // Prevent multiple submissions
+    if (isCreatingPaymentMethod) return;
+    
+    // Check for duplicate payment method name
+    const duplicateName = paymentMethods.find(
+      method => method.name?.toLowerCase().trim() === newPaymentMethodName.toLowerCase().trim() ||
+                method.title?.toLowerCase().trim() === newPaymentMethodName.toLowerCase().trim()
+    );
+    
+    if (duplicateName) {
+      setValidationErrorMessage(`A payment method with the name "${newPaymentMethodName.trim()}" already exists. Please use a different name.`);
+      setValidationErrorOpen(true);
+      return;
+    }
+    
+    // Validate expiry date is not in the past
+    if (newPaymentMethodExpiresAt) {
+      const [year, month] = newPaymentMethodExpiresAt.split('-');
+      const expiryDate = new Date(parseInt(year), parseInt(month) - 1); // month is 0-indexed
+      const today = new Date();
+      today.setDate(1); // Set to first day of current month for comparison
+      today.setHours(0, 0, 0, 0);
+      
+      if (expiryDate < today) {
+        setValidationErrorMessage("Card expiry date cannot be in the past");
+        setValidationErrorOpen(true);
+        return;
+      }
+    }
+    
+    setIsCreatingPaymentMethod(true);
+    
     try {
+      const paymentData = { 
+        name: newPaymentMethodName.trim(),
+        title: newPaymentMethodName.trim(),
+        type: newPaymentMethodType,
+        owner: newPaymentMethodOwner.trim(),
+        manager: newPaymentMethodManagedBy.trim(),
+        financialInstitution: newPaymentMethodFinancialInstitution.trim(),
+        lastFourDigits: newPaymentMethodLast4Digits.trim(),
+        expiresAt: newPaymentMethodExpiresAt,
+        icon: newPaymentMethodCardImage
+      };
+      
+      console.log('Creating payment method with data:', paymentData);
+      
       await apiRequest(
         "POST",
         "/api/payment",
-        { 
-          name: newPaymentMethodName.trim(),
-          title: newPaymentMethodName.trim(),
-          type: newPaymentMethodType,
-          owner: newPaymentMethodOwner.trim(),
-          manager: newPaymentMethodManagedBy.trim(),
-          financialInstitution: newPaymentMethodFinancialInstitution.trim(),
-          lastFourDigits: newPaymentMethodLast4Digits.trim(),
-          expiresAt: newPaymentMethodExpiresAt,
-          icon: newPaymentMethodCardImage
-        }
+        paymentData
       );
       
       // If no error thrown, consider success
@@ -1792,6 +1883,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setPaymentMethodModal({ show: false });
     } catch (error) {
       console.error('Error adding payment method:', error);
+    } finally {
+      setIsCreatingPaymentMethod(false);
     }
   };
 
@@ -2934,8 +3027,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     value={initialDate}
                     onChange={e => { 
                       const newInitialDate = e.target.value;
+                      
+                      // Validate before changing
+                      if (startDate && newInitialDate && new Date(startDate) < new Date(newInitialDate)) {
+                        setValidationErrorMessage("Current Cycle Start must be on or after First Purchase Date");
+                        setValidationErrorOpen(true);
+                        return; // Don't change the date
+                      }
+                      
                       setInitialDate(newInitialDate);
                       savedInitialDateRef.current = newInitialDate; // Save to ref to persist across renewals
+                      
                       // When Initial Date is entered, auto-populate Start Date
                       if (newInitialDate) {
                         setStartDate(newInitialDate); 
@@ -2966,10 +3068,31 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormControl>
                           <Input 
                             type="date" 
-                            className="w-full border-slate-300 rounded-lg p-1 text-base bg-gray-100 cursor-not-allowed"
+                            className="w-full border-slate-300 rounded-lg p-1 text-base"
                             value={startDate || ''} 
-                            readOnly
-                            disabled
+                            onChange={(e) => {
+                              const newStartDate = e.target.value;
+                              
+                              // Validate before changing
+                              if (initialDate && newStartDate && new Date(newStartDate) < new Date(initialDate)) {
+                                setValidationErrorMessage("Current Cycle Start must be on or after First Purchase Date");
+                                setValidationErrorOpen(true);
+                                return; // Don't change the date
+                              }
+                              
+                              setStartDate(newStartDate);
+                              form.setValue("startDate", newStartDate);
+                              
+                              // Update next renewal if auto-renewal is on
+                              if (autoRenewal) {
+                                const cycle = form.watch("billingCycle") || billingCycle;
+                                if (cycle) {
+                                  const nextDate = calculateEndDate(newStartDate, cycle);
+                                  form.setValue("nextRenewal", nextDate);
+                                  setEndDate(nextDate);
+                                }
+                              }
+                            }}
                           />
                         </FormControl>
                         <FormMessage className="text-red-500" />
@@ -3766,6 +3889,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   placeholder=""
                   value={newPaymentMethodName}
                   onChange={(e) => setNewPaymentMethodName(e.target.value)}
+                  onBlur={() => {
+                    // Check for duplicate name when user leaves the field
+                    if (newPaymentMethodName.trim()) {
+                      const duplicateName = paymentMethods.find(
+                        method => method.name?.toLowerCase().trim() === newPaymentMethodName.toLowerCase().trim() ||
+                                  method.title?.toLowerCase().trim() === newPaymentMethodName.toLowerCase().trim()
+                      );
+                      
+                      if (duplicateName) {
+                        setValidationErrorMessage(`A payment method with the name "${newPaymentMethodName.trim()}" already exists. Please use a different name.`);
+                        setValidationErrorOpen(true);
+                      }
+                    }
+                  }}
                   className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -3883,7 +4020,26 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   type="month"
                   placeholder="MM/YYYY"
                   value={newPaymentMethodExpiresAt}
-                  onChange={(e) => setNewPaymentMethodExpiresAt(e.target.value)}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setNewPaymentMethodExpiresAt(newValue);
+                    
+                    // Validate immediately when date is selected
+                    if (newValue) {
+                      const [year, month] = newValue.split('-');
+                      const expiryDate = new Date(parseInt(year), parseInt(month) - 1);
+                      const today = new Date();
+                      today.setDate(1);
+                      today.setHours(0, 0, 0, 0);
+                      
+                      if (expiryDate < today) {
+                        setValidationErrorMessage("Card expiry date cannot be in the past");
+                        setValidationErrorOpen(true);
+                        // Clear the invalid date
+                        setNewPaymentMethodExpiresAt('');
+                      }
+                    }
+                  }}
                   className="w-full pr-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col">
@@ -3949,10 +4105,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             </Button>
             <Button 
               onClick={handleAddPaymentMethod}
-              disabled={!newPaymentMethodName.trim() || !newPaymentMethodType}
+              disabled={!newPaymentMethodName.trim() || !newPaymentMethodType || isCreatingPaymentMethod}
               className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
             >
-              Create Payment Method
+              {isCreatingPaymentMethod ? 'Creating...' : 'Create Payment Method'}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -4389,6 +4545,46 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 Done
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Validation Error Dialog */}
+      <Dialog open={validationErrorOpen} onOpenChange={setValidationErrorOpen}>
+        <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+          {/* Header with Red Gradient Background */}
+          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <AlertCircle className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                    Validation Error
+                  </DialogTitle>
+                  <p className="text-red-100 mt-0.5 text-sm font-medium">Please correct the error</p>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-5">
+            <p className="text-gray-700 text-sm leading-relaxed">
+              {validationErrorMessage}
+            </p>
+          </div>
+
+          {/* Action Button */}
+          <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+            <Button 
+              type="button"
+              onClick={() => setValidationErrorOpen(false)}
+              className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+            >
+              OK
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

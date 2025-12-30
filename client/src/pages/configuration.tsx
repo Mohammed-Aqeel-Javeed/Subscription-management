@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, FileSpreadsheet } from "lucide-react";
+import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, FileSpreadsheet, AlertCircle } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -52,11 +52,17 @@ export default function Configuration() {
   const [editingRates, setEditingRates] = useState<{ [key: string]: string }>({});
   // Delete payment method handler (DELETE from backend)
   const handleDeletePaymentMethod = (method: any) => {
-    if (!method._id) {
+    setPaymentToDelete(method);
+    setDeleteConfirmOpen(true);
+  };
+  
+  // Confirm delete payment method
+  const confirmDeletePaymentMethod = () => {
+    if (!paymentToDelete?._id) {
       toast({ title: "Error", description: "Cannot delete: missing id", variant: "destructive" });
       return;
     }
-    fetch(`/api/payment/${method._id}`, { method: "DELETE" })
+    fetch(`/api/payment/${paymentToDelete._id}`, { method: "DELETE" })
       .then(res => res.json())
       .then(() => {
         fetch("/api/payment")
@@ -68,11 +74,14 @@ export default function Configuration() {
           description: `Payment method has been deleted successfully`,
           variant: "destructive",
         });
+        setDeleteConfirmOpen(false);
+        setPaymentToDelete(null);
       });
   };
   
   // Edit payment method logic
   const openEditPayment = (method: any) => {
+    console.log('Opening edit payment with method:', method);
     setPaymentForm({
       title: method.title || method.name || '',
       type: method.type || '',
@@ -96,6 +105,35 @@ export default function Configuration() {
       toast({ title: "Error", description: "Cannot update: missing id", variant: "destructive" });
       return;
     }
+    
+    // Check for duplicate payment method name (excluding the current one being edited)
+    const duplicateName = paymentMethods.find(
+      method => (method._id !== editingPaymentId) && 
+                (method.name?.toLowerCase().trim() === paymentForm.title.toLowerCase().trim() ||
+                 method.title?.toLowerCase().trim() === paymentForm.title.toLowerCase().trim())
+    );
+    
+    if (duplicateName) {
+      setValidationErrorMessage(`A payment method with the name "${paymentForm.title}" already exists. Please use a different name.`);
+      setValidationErrorOpen(true);
+      return;
+    }
+    
+    // Validate expiry date is not in the past
+    if (paymentForm.expiresAt) {
+      const [year, month] = paymentForm.expiresAt.split('-');
+      const expiryDate = new Date(parseInt(year), parseInt(month) - 1); // month is 0-indexed
+      const today = new Date();
+      today.setDate(1); // Set to first day of current month for comparison
+      today.setHours(0, 0, 0, 0);
+      
+      if (expiryDate < today) {
+        setValidationErrorMessage("Card expiry date cannot be in the past");
+        setValidationErrorOpen(true);
+        return;
+      }
+    }
+    
   fetch(`/api/payment/${editingPaymentId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -127,6 +165,14 @@ export default function Configuration() {
   
   // Edit Payment Method Modal state
   const [editPaymentModalOpen, setEditPaymentModalOpen] = useState(false);
+  
+  // Delete confirmation dialog state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState<any>(null);
+  
+  // Validation error dialog state
+  const [validationErrorOpen, setValidationErrorOpen] = useState(false);
+  const [validationErrorMessage, setValidationErrorMessage] = useState("");
   
   // Payment methods state (now loaded from backend)
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
@@ -1728,6 +1774,34 @@ export default function Configuration() {
   function handleAddPaymentMethod(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!paymentForm.title.trim() || !paymentForm.type.trim()) return;
+    
+    // Check for duplicate payment method name
+    const duplicateName = paymentMethods.find(
+      method => method.name?.toLowerCase().trim() === paymentForm.title.toLowerCase().trim() ||
+                method.title?.toLowerCase().trim() === paymentForm.title.toLowerCase().trim()
+    );
+    
+    if (duplicateName) {
+      setValidationErrorMessage(`A payment method with the name "${paymentForm.title}" already exists. Please use a different name.`);
+      setValidationErrorOpen(true);
+      return;
+    }
+    
+    // Validate expiry date is not in the past
+    if (paymentForm.expiresAt) {
+      const [year, month] = paymentForm.expiresAt.split('-');
+      const expiryDate = new Date(parseInt(year), parseInt(month) - 1); // month is 0-indexed
+      const today = new Date();
+      today.setDate(1); // Set to first day of current month for comparison
+      today.setHours(0, 0, 0, 0);
+      
+      if (expiryDate < today) {
+        setValidationErrorMessage("Card expiry date cannot be in the past");
+        setValidationErrorOpen(true);
+        return;
+      }
+    }
+    
   fetch("/api/payment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2413,6 +2487,21 @@ export default function Configuration() {
                                 required 
                                 value={paymentForm.title} 
                                 onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))}
+                                onBlur={() => {
+                                  // Check for duplicate name when user leaves the field (excluding current one being edited)
+                                  if (paymentForm.title.trim()) {
+                                    const duplicateName = paymentMethods.find(
+                                      method => (method._id !== editingPaymentId) && 
+                                                (method.name?.toLowerCase().trim() === paymentForm.title.toLowerCase().trim() ||
+                                                 method.title?.toLowerCase().trim() === paymentForm.title.toLowerCase().trim())
+                                    );
+                                    
+                                    if (duplicateName) {
+                                      setValidationErrorMessage(`A payment method with the name "${paymentForm.title}" already exists. Please use a different name.`);
+                                      setValidationErrorOpen(true);
+                                    }
+                                  }
+                                }}
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>
@@ -2436,6 +2525,32 @@ export default function Configuration() {
                                 <option value="Digital Wallet">Digital Wallet</option>
                                 <option value="Other">Other</option>
                               </select>
+                            </div>
+
+                            {/* Owner Field */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700 tracking-wide">
+                                Owner
+                              </Label>
+                              <Select
+                                value={paymentForm.owner}
+                                onValueChange={(value) => setPaymentForm(f => ({ ...f, owner: value }))}
+                              >
+                                <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
+                                  <SelectValue placeholder="Select employee" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {employeesRaw.length > 0 ? (
+                                    employeesRaw.map((emp: any) => (
+                                      <SelectItem key={emp._id || emp.id || emp.name} value={emp.name}>
+                                        {emp.name}
+                                      </SelectItem>
+                                    ))
+                                  ) : (
+                                    <SelectItem value="no-employee" disabled>No employees found</SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
                             </div>
 
                             {/* Manager Field */}
@@ -2502,7 +2617,28 @@ export default function Configuration() {
                                   type="month" 
                                   placeholder="MM/YYYY"
                                   value={paymentForm.expiresAt} 
-                                  onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
+                                  onChange={e => {
+                                    const newValue = e.target.value;
+                                    
+                                    // Validate immediately when date is selected
+                                    if (newValue) {
+                                      const [year, month] = newValue.split('-');
+                                      const expiryDate = new Date(parseInt(year), parseInt(month) - 1);
+                                      const today = new Date();
+                                      today.setDate(1);
+                                      today.setHours(0, 0, 0, 0);
+                                      
+                                      if (expiryDate < today) {
+                                        setValidationErrorMessage("Card expiry date cannot be in the past");
+                                        setValidationErrorOpen(true);
+                                        // Clear the invalid date
+                                        setPaymentForm(f => ({ ...f, expiresAt: '' }));
+                                        return;
+                                      }
+                                    }
+                                    
+                                    setPaymentForm(f => ({ ...f, expiresAt: newValue }));
+                                  }}
                                   className="h-9 px-3 pr-10 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                                 />
                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col">
@@ -2569,6 +2705,101 @@ export default function Configuration() {
                         </div>
                       </DialogContent>
                     </Dialog>
+                    
+                    {/* Delete Confirmation Dialog */}
+                    <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                      <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+                        {/* Header with Red Gradient Background */}
+                        <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+                          <DialogHeader>
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                <Trash2 className="h-5 w-5 text-white" />
+                              </div>
+                              <div>
+                                <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                                  Delete Payment Method
+                                </DialogTitle>
+                                <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+                              </div>
+                            </div>
+                          </DialogHeader>
+                        </div>
+
+                        {/* Content */}
+                        <div className="px-6 py-5">
+                          <p className="text-gray-700 text-sm leading-relaxed mb-4">
+                            Are you sure you want to delete the payment method <span className="font-semibold text-gray-900">"{paymentToDelete?.name || paymentToDelete?.title}"</span>?
+                          </p>
+                          <p className="text-gray-600 text-xs leading-relaxed">
+                            This will permanently remove this payment method from your system.
+                          </p>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={() => {
+                              setDeleteConfirmOpen(false);
+                              setPaymentToDelete(null);
+                            }}
+                            className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
+                          >
+                            Cancel
+                          </Button>
+                          <Button 
+                            type="button"
+                            onClick={confirmDeletePaymentMethod}
+                            className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    
+                    {/* Validation Error Dialog */}
+                    <Dialog open={validationErrorOpen} onOpenChange={setValidationErrorOpen}>
+                      <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+                        {/* Header with Red Gradient Background */}
+                        <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+                          <DialogHeader>
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                <AlertCircle className="h-5 w-5 text-white" />
+                              </div>
+                              <div>
+                                <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                                  Validation Error
+                                </DialogTitle>
+                                <p className="text-red-100 mt-0.5 text-sm font-medium">Please correct the error</p>
+                              </div>
+                            </div>
+                          </DialogHeader>
+                        </div>
+
+                        {/* Content */}
+                        <div className="px-6 py-5">
+                          <p className="text-gray-700 text-sm leading-relaxed">
+                            {validationErrorMessage}
+                          </p>
+                        </div>
+
+                        {/* Action Button */}
+                        <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+                          <Button 
+                            type="button"
+                            onClick={() => setValidationErrorOpen(false)}
+                            className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+                          >
+                            OK
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    
                     {/* Modal for Add Payment Method */}
                     <Dialog open={addPaymentModalOpen} onOpenChange={setAddPaymentModalOpen}>
                       <DialogContent className={`${isAddPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
@@ -2614,6 +2845,20 @@ export default function Configuration() {
                                 required 
                                 value={paymentForm.title} 
                                 onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))}
+                                onBlur={() => {
+                                  // Check for duplicate name when user leaves the field
+                                  if (paymentForm.title.trim()) {
+                                    const duplicateName = paymentMethods.find(
+                                      method => method.name?.toLowerCase().trim() === paymentForm.title.toLowerCase().trim() ||
+                                                method.title?.toLowerCase().trim() === paymentForm.title.toLowerCase().trim()
+                                    );
+                                    
+                                    if (duplicateName) {
+                                      setValidationErrorMessage(`A payment method with the name "${paymentForm.title}" already exists. Please use a different name.`);
+                                      setValidationErrorOpen(true);
+                                    }
+                                  }
+                                }}
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>
@@ -2729,7 +2974,28 @@ export default function Configuration() {
                                   type="month" 
                                   placeholder="MM/YYYY"
                                   value={paymentForm.expiresAt} 
-                                  onChange={e => setPaymentForm(f => ({ ...f, expiresAt: e.target.value }))}
+                                  onChange={e => {
+                                    const newValue = e.target.value;
+                                    
+                                    // Validate immediately when date is selected
+                                    if (newValue) {
+                                      const [year, month] = newValue.split('-');
+                                      const expiryDate = new Date(parseInt(year), parseInt(month) - 1);
+                                      const today = new Date();
+                                      today.setDate(1);
+                                      today.setHours(0, 0, 0, 0);
+                                      
+                                      if (expiryDate < today) {
+                                        setValidationErrorMessage("Card expiry date cannot be in the past");
+                                        setValidationErrorOpen(true);
+                                        // Clear the invalid date
+                                        setPaymentForm(f => ({ ...f, expiresAt: '' }));
+                                        return;
+                                      }
+                                    }
+                                    
+                                    setPaymentForm(f => ({ ...f, expiresAt: newValue }));
+                                  }}
                                   className="h-9 px-3 pr-10 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                                 />
                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col">
