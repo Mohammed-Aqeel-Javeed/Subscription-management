@@ -4336,6 +4336,56 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           return;
                         }
                         
+                        // Validate actual file content (magic bytes) to prevent file extension spoofing
+                        const validateFileType = async (file: File): Promise<boolean> => {
+                          return new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = (e) => {
+                              if (!e.target?.result) {
+                                resolve(false);
+                                return;
+                              }
+                              
+                              const arr = new Uint8Array(e.target.result as ArrayBuffer).subarray(0, 8);
+                              let header = '';
+                              for (let i = 0; i < arr.length; i++) {
+                                header += arr[i].toString(16).padStart(2, '0');
+                              }
+                              
+                              // File signatures (magic bytes) for allowed types
+                              const signatures: { [key: string]: string[] } = {
+                                pdf: ['25504446'], // %PDF
+                                jpg: ['ffd8ffe0', 'ffd8ffe1', 'ffd8ffe2', 'ffd8ffe3', 'ffd8ffe8'],
+                                png: ['89504e47'],
+                                doc: ['d0cf11e0'], // Old Word format
+                                docx: ['504b0304'], // ZIP-based (Office Open XML)
+                                xlsx: ['504b0304'], // ZIP-based (Office Open XML)
+                                xls: ['d0cf11e0'], // Old Excel format
+                              };
+                              
+                              // Check if file header matches any allowed signature
+                              const isValid = Object.values(signatures).some(sigs => 
+                                sigs.some(sig => header.startsWith(sig))
+                              );
+                              
+                              resolve(isValid);
+                            };
+                            reader.readAsArrayBuffer(file.slice(0, 8));
+                          });
+                        };
+                        
+                        // Validate file content
+                        const isValidFile = await validateFileType(file);
+                        if (!isValidFile) {
+                          toast({
+                            title: "Invalid File",
+                            description: "File content does not match the extension. Please upload a valid document.",
+                            variant: "destructive",
+                            duration: 4000,
+                          });
+                          return;
+                        }
+                        
                         try {
                           const reader = new FileReader();
                           reader.onloadend = async () => {
@@ -4526,7 +4576,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           </div>
           <div className="flex justify-between items-center gap-3 pt-3 border-t border-gray-200 bg-gray-50 -mx-6 px-6 -mb-6 pb-4 rounded-b-lg">
             <span className="text-xs text-gray-600">
-              {documents.length} document{documents.length !== 1 ? 's' : ''} uploaded
+              {documents.length} document{documents.length !== 1 ? 's' : ''}
             </span>
             <div className="flex gap-2">
               <Button
