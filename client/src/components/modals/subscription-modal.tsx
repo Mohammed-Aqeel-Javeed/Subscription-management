@@ -1861,6 +1861,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       };
       
       console.log('Creating payment method with data:', paymentData);
+      console.log('Owner being saved:', `"${paymentData.owner}"`);
+      console.log('Manager being saved:', `"${paymentData.manager}"`);
+      console.log('Owner length:', paymentData.owner.length);
+      console.log('Manager length:', paymentData.manager.length);
       
       await apiRequest(
         "POST",
@@ -1868,10 +1872,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         paymentData
       );
       
-      // If no error thrown, consider success
-      await refetchPaymentMethods();
-      // Select the new payment method
+      // Invalidate queries to refetch data
+      queryClient.invalidateQueries({ queryKey: ['/api/payment'] });
+      
+      // Select the new payment method and close modal immediately
       form.setValue('paymentMethod', newPaymentMethodName.trim());
+      setPaymentMethodModal({ show: false });
+      
+      // Clear form fields
       setNewPaymentMethodName('');
       setNewPaymentMethodType('');
       setNewPaymentMethodOwner('');
@@ -1880,7 +1888,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setNewPaymentMethodLast4Digits('');
       setNewPaymentMethodExpiresAt('');
       setNewPaymentMethodCardImage('visa');
-      setPaymentMethodModal({ show: false });
     } catch (error) {
       console.error('Error adding payment method:', error);
     } finally {
@@ -2647,7 +2654,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         onValueChange={() => {}}
                         disabled={departmentsLoading}
                       >
-                        <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden">
+                        <SelectTrigger 
+                          className="w-full border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden"
+                          onPointerDown={(e) => {
+                            // Check if click is on a badge X button or the X icon itself
+                            const target = e.target as HTMLElement;
+                            const isXButton = target.closest('button[data-remove-dept]') || 
+                                            target.closest('[data-remove-dept]') ||
+                                            target.hasAttribute('data-remove-dept');
+                            if (isXButton) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }
+                          }}
+                        >
                           <div className="w-full overflow-hidden">
                             {/* Render selected departments as badges inside the input box */}
                             {selectedDepartments.length > 0 ? (
@@ -2657,11 +2677,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                     <span className="truncate max-w-[80px]">{dept}</span>
                                     <button
                                       type="button"
-                                      onClick={e => { e.stopPropagation(); removeDepartment(dept); }}
+                                      data-remove-dept="true"
+                                      onClick={(e) => { 
+                                        e.preventDefault();
+                                        e.stopPropagation(); 
+                                        removeDepartment(dept); 
+                                      }}
+                                      onPointerDown={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                      }}
                                       className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
                                       tabIndex={-1}
                                     >
-                                      <X className="h-3 w-3" />
+                                      <X className="h-3 w-3" data-remove-dept="true" />
                                     </button>
                                   </Badge>
                                 ))}
@@ -2746,7 +2775,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
                           <SelectValue placeholder="Select" />
                         </SelectTrigger>
-                        <SelectContent className="dropdown-content">
+                        <SelectContent className="dropdown-content max-h-[300px]">
                           {Array.isArray(paymentMethods) && paymentMethods.length > 0 ? (
                             paymentMethods.map((pm: any) => (
                               <SelectItem 
@@ -3933,7 +3962,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Owner</label>
-                <Select value={newPaymentMethodOwner} onValueChange={setNewPaymentMethodOwner}>
+                <Select value={newPaymentMethodOwner} onValueChange={(value) => setNewPaymentMethodOwner(value.trim())}>
                   <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
                     <SelectValue placeholder="Select employee" />
                   </SelectTrigger>
@@ -3963,7 +3992,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Managed by</label>
-                <Select value={newPaymentMethodManagedBy} onValueChange={setNewPaymentMethodManagedBy}>
+                <Select value={newPaymentMethodManagedBy} onValueChange={(value) => setNewPaymentMethodManagedBy(value.trim())}>
                   <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
                     <SelectValue placeholder="Select employee" />
                   </SelectTrigger>
@@ -4005,9 +4034,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Last 4 Digits</label>
                 <Input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   placeholder=""
                   value={newPaymentMethodLast4Digits}
-                  onChange={(e) => setNewPaymentMethodLast4Digits(e.target.value)}
+                  onChange={(e) => {
+                    // Only allow numbers
+                    const value = e.target.value.replace(/[^0-9]/g, '');
+                    setNewPaymentMethodLast4Digits(value);
+                  }}
                   maxLength={4}
                   className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
                 />

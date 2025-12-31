@@ -73,7 +73,7 @@ interface SelectContentProps extends React.ComponentPropsWithoutRef<typeof Selec
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   SelectContentProps
->(({ className, children, position = "popper", hideScrollButtons = false, thinScrollbar = false, ...props }, ref) => (
+>(({ className, children, position = "popper", hideScrollButtons = true, thinScrollbar = false, ...props }, ref) => (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
@@ -90,12 +90,10 @@ const SelectContent = React.forwardRef<
       {!hideScrollButtons && <SelectScrollUpButton />}
       <SelectPrimitive.Viewport
         className={cn(
-          "p-1 overflow-y-auto",
+          "p-1",
           position === "popper" &&
-            "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]",
-          thinScrollbar && "custom-scrollbar"
+            "w-full min-w-[var(--radix-select-trigger-width)]"
         )}
-        style={thinScrollbar ? { maxHeight: '160px', height: '160px' } : undefined}
       >
         {children}
       </SelectPrimitive.Viewport>
