@@ -447,9 +447,18 @@ setModalOpen(true);
 };
 
 const onSubmit = (data: EmployeeFormValues) => {
+  // Trim all string fields
+  const trimmedData = {
+    ...data,
+    name: data.name.trim(),
+    email: data.email.trim(),
+    role: data.role.trim(),
+    department: data.department?.trim() || data.department
+  };
+  
   // Check for duplicate email
   const duplicateEmail = employees.find(emp =>
-    emp.email.trim().toLowerCase() === data.email.trim().toLowerCase() &&
+    emp.email.trim().toLowerCase() === trimmedData.email.toLowerCase() &&
     (!editingEmployee || emp._id !== editingEmployee._id)
   );
   if (duplicateEmail) {
@@ -463,7 +472,7 @@ const onSubmit = (data: EmployeeFormValues) => {
   }
   // Check for duplicate name
   const duplicateName = employees.find(emp =>
-    emp.name.trim().toLowerCase() === data.name.trim().toLowerCase() &&
+    emp.name.trim().toLowerCase() === trimmedData.name.toLowerCase() &&
     (!editingEmployee || emp._id !== editingEmployee._id)
   );
   if (duplicateName) {
@@ -477,10 +486,10 @@ const onSubmit = (data: EmployeeFormValues) => {
   }
   if (editingEmployee) {
     // Update existing employee
-    updateEmployeeMutation.mutate({ _id: editingEmployee._id, data });
+    updateEmployeeMutation.mutate({ _id: editingEmployee._id, data: trimmedData });
   } else {
     // Add new employee
-    createEmployeeMutation.mutate(data);
+    createEmployeeMutation.mutate(trimmedData);
   }
 };
 

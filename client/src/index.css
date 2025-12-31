@@ -125,3 +125,41 @@
     background: #f9fafb;
   }
 }
+
+/* Radix UI Select Viewport Scrollbar - Global Styles */
+[data-radix-select-viewport] {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f9fafb;
+  overflow-y: scroll !important;
+  max-height: 240px !important;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar {
+  width: 14px !important;
+  display: block !important;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar-track {
+  background: #f9fafb;
+  border-radius: 7px;
+  border: 1px solid #e5e7eb;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 7px;
+  border: 2px solid #f9fafb;
+  min-height: 40px;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar-thumb:active {
+  background: #6b7280;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar-corner {
+  background: #f9fafb;
+}

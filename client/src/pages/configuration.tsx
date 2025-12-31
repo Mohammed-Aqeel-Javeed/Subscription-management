@@ -62,31 +62,52 @@ export default function Configuration() {
       toast({ title: "Error", description: "Cannot delete: missing id", variant: "destructive" });
       return;
     }
+    
+    // Close dialog and show toast immediately for better UX
+    setDeleteConfirmOpen(false);
+    const deletedName = paymentToDelete.name || paymentToDelete.title;
+    setPaymentToDelete(null);
+    
     fetch(`/api/payment/${paymentToDelete._id}`, { method: "DELETE" })
       .then(res => res.json())
       .then(() => {
-        fetch("/api/payment")
-          .then(res => res.json())
-          .then(data => setPaymentMethods(data));
-  queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
+        // Only use queryClient to invalidate and refetch
+        queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
         toast({
           title: "Payment Method Deleted",
-          description: `Payment method has been deleted successfully`,
+          description: `${deletedName} has been deleted successfully`,
           variant: "destructive",
         });
-        setDeleteConfirmOpen(false);
-        setPaymentToDelete(null);
+      })
+      .catch(() => {
+        toast({
+          title: "Error",
+          description: "Failed to delete payment method",
+          variant: "destructive",
+        });
       });
   };
   
   // Edit payment method logic
   const openEditPayment = (method: any) => {
     console.log('Opening edit payment with method:', method);
+    console.log('Owner value:', method.owner);
+    console.log('Manager value:', method.manager);
+    console.log('Available employees:', employeesRaw.map((e: any) => e.name));
+    console.log('Employees loaded:', employeesRaw.length > 0);
+    
+    // Trim values to remove any extra spaces
+    const ownerValue = method.owner?.trim() || '';
+    const managerValue = method.manager?.trim() || '';
+    
+    console.log('Trimmed owner:', ownerValue);
+    console.log('Trimmed manager:', managerValue);
+    
     setPaymentForm({
       title: method.title || method.name || '',
       type: method.type || '',
-      owner: method.owner || '',
-      manager: method.manager || '',
+      owner: ownerValue,
+      manager: managerValue,
       expiresAt: method.expiresAt || '',
       financialInstitution: method.financialInstitution || '',
       lastFourDigits: method.lastFourDigits || '',
@@ -149,10 +170,7 @@ export default function Configuration() {
     })
       .then(res => res.json())
       .then(() => {
-        fetch("/api/payment")
-          .then(res => res.json())
-          .then(data => setPaymentMethods(data));
-  queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
+        // Close modal and show toast immediately
         setEditPaymentModalOpen(false);
         setEditingPaymentId(null);
         toast({
@@ -160,6 +178,9 @@ export default function Configuration() {
           description: `Payment method has been updated successfully`,
           variant: "success",
         });
+        
+        // Only use queryClient to invalidate and refetch
+        queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
       });
   };
   
@@ -174,25 +195,26 @@ export default function Configuration() {
   const [validationErrorOpen, setValidationErrorOpen] = useState(false);
   const [validationErrorMessage, setValidationErrorMessage] = useState("");
   
-  // Payment methods state (now loaded from backend)
-  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
-  
-  // Fetch payment methods from backend on mount
-  useEffect(() => {
-    fetch("/api/payment")
-      .then(res => res.json())
-      .then(data => setPaymentMethods(data))
-      .catch(() => setPaymentMethods([]));
-  }, []);
+  // Fetch payment methods using React Query
+  const { data: paymentMethods = [] } = useQuery({
+    queryKey: ["/api/payment"],
+    queryFn: async () => {
+      const res = await fetch("/api/payment", { credentials: 'include' });
+      const data = await res.json();
+      console.log('Fetched payment methods:', data);
+      return Array.isArray(data) ? data : [];
+    }
+  });
 
   // Fetch subscriptions to count payment method usage
-  const [subscriptions, setSubscriptions] = useState<any[]>([]);
-  useEffect(() => {
-    fetch("/api/subscriptions")
-      .then(res => res.json())
-      .then(data => setSubscriptions(data))
-      .catch(() => setSubscriptions([]));
-  }, []);
+  const { data: subscriptions = [] } = useQuery({
+    queryKey: ["/api/subscriptions"],
+    queryFn: async () => {
+      const res = await fetch("/api/subscriptions", { credentials: 'include' });
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+  });
 
   // Payment method subscription modal state
   const [paymentSubsModalOpen, setPaymentSubsModalOpen] = useState(false);
@@ -858,9 +880,6 @@ export default function Configuration() {
 
         // Refresh data
         await fetchCurrencies();
-        const refreshRes = await fetch("/api/payment");
-        const refreshData = await refreshRes.json();
-        setPaymentMethods(refreshData);
         queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
         queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
 
@@ -1164,9 +1183,6 @@ export default function Configuration() {
         }
 
         // Refetch payment methods
-        const refreshRes = await fetch("/api/payment");
-        const refreshData = await refreshRes.json();
-        setPaymentMethods(refreshData);
         queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
 
         toast({
@@ -1817,12 +1833,11 @@ export default function Configuration() {
     })
       .then(res => res.json())
       .then(() => {
-        // Refetch payment methods after adding
-        fetch("/api/payment")
-          .then(res => res.json())
-          .then(data => setPaymentMethods(data));
-  queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
+        // Close modal and show toast immediately
         setAddPaymentModalOpen(false);
+        toast({ title: 'Payment method added', description: 'A new payment method has been added.' });
+        
+        // Clear form
         setPaymentForm({
           title: '',
           type: '',
@@ -1832,7 +1847,9 @@ export default function Configuration() {
           financialInstitution: '',
           lastFourDigits: '',
         });
-        toast({ title: 'Payment method added', description: 'A new payment method has been added.' });
+        
+        // Only use queryClient to invalidate and refetch
+        queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
       });
   }
   
@@ -2296,22 +2313,11 @@ export default function Configuration() {
                       
                       <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                         <Button
-                          onClick={() => {
-                            if (paymentMethods.length >= 4) {
-                              toast({ 
-                                title: 'Limit Reached', 
-                                description: 'Maximum 4 payment methods allowed.',
-                                variant: 'destructive'
-                              });
-                              return;
-                            }
-                            setAddPaymentModalOpen(true);
-                          }}
+                          onClick={() => setAddPaymentModalOpen(true)}
                           className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
-                          disabled={paymentMethods.length >= 4}
                         >
                           <Plus className="w-4 h-4 mr-2" />
-                          Add Payment Method {paymentMethods.length >= 4 && '(Max 4)'}
+                          Add Payment Method
                         </Button>
                       </motion.div>
                     </div>
@@ -2533,8 +2539,8 @@ export default function Configuration() {
                                 Owner
                               </Label>
                               <Select
-                                value={paymentForm.owner}
-                                onValueChange={(value) => setPaymentForm(f => ({ ...f, owner: value }))}
+                                value={paymentForm.owner || undefined}
+                                onValueChange={(value) => setPaymentForm(f => ({ ...f, owner: value.trim() }))}
                               >
                                 <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
                                   <SelectValue placeholder="Select employee" />
@@ -2559,8 +2565,8 @@ export default function Configuration() {
                                 Managed by
                               </Label>
                               <Select
-                                value={paymentForm.manager}
-                                onValueChange={(value) => setPaymentForm(f => ({ ...f, manager: value }))}
+                                value={paymentForm.manager || undefined}
+                                onValueChange={(value) => setPaymentForm(f => ({ ...f, manager: value.trim() }))}
                               >
                                 <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
                                   <SelectValue placeholder="Select employee" />
@@ -2597,6 +2603,9 @@ export default function Configuration() {
                                 Last 4 Digits
                               </Label>
                               <Input 
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 value={paymentForm.lastFourDigits} 
                                 onChange={e => {
                                   const value = e.target.value.replace(/\D/g, '').slice(0, 4);
@@ -2890,8 +2899,8 @@ export default function Configuration() {
                                 Owner
                               </Label>
                               <Select
-                                value={paymentForm.owner}
-                                onValueChange={(value) => setPaymentForm(f => ({ ...f, owner: value }))}
+                                value={paymentForm.owner || undefined}
+                                onValueChange={(value) => setPaymentForm(f => ({ ...f, owner: value.trim() }))}
                               >
                                 <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
                                   <SelectValue placeholder="Select employee" />
@@ -2916,8 +2925,8 @@ export default function Configuration() {
                                 Managed by
                               </Label>
                               <Select
-                                value={paymentForm.manager}
-                                onValueChange={(value) => setPaymentForm(f => ({ ...f, manager: value }))}
+                                value={paymentForm.manager || undefined}
+                                onValueChange={(value) => setPaymentForm(f => ({ ...f, manager: value.trim() }))}
                               >
                                 <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
                                   <SelectValue placeholder="Select employee" />
@@ -2954,6 +2963,9 @@ export default function Configuration() {
                                 Last 4 Digits
                               </Label>
                               <Input 
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 value={paymentForm.lastFourDigits} 
                                 onChange={e => {
                                   const value = e.target.value.replace(/\D/g, '').slice(0, 4);
