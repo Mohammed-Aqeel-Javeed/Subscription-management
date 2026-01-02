@@ -1,14 +1,13 @@
 // import { insertUserSchema } from "@shared/schema";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, FileSpreadsheet, BarChart3 } from "lucide-react";
+import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, FileSpreadsheet, BarChart3, ChevronDown, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -172,6 +171,10 @@ const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
 const [selectedEmployeeSubscriptions, setSelectedEmployeeSubscriptions] = useState<{employeeName: string; subscriptions: any[]}>({employeeName: '', subscriptions: []});
 const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+const [employeeDeptOpen, setEmployeeDeptOpen] = useState(false);
+const [employeeDeptSearch, setEmployeeDeptSearch] = useState("");
+const employeeDeptDropdownRef = useRef<HTMLDivElement | null>(null);
+
 // Delete confirmation dialog state
 const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
@@ -186,6 +189,19 @@ const { data: subscriptions = [] } = useQuery<any[]>({
 // Refetch employees on login/logout or page refresh
 React.useEffect(() => {
   queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+}, []);
+
+useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (
+      employeeDeptDropdownRef.current &&
+      !employeeDeptDropdownRef.current.contains(event.target as Node)
+    ) {
+      setEmployeeDeptOpen(false);
+    }
+  };
+  document.addEventListener("mousedown", handleClickOutside);
+  return () => document.removeEventListener("mousedown", handleClickOutside);
 }, []);
 
 // Fetch employees from database
@@ -205,6 +221,13 @@ status: "active",
 role: "",
 },
 });
+
+useEffect(() => {
+  if (!modalOpen) return;
+  const current = form.getValues("department") || "";
+  setEmployeeDeptSearch(current);
+  setEmployeeDeptOpen(false);
+}, [modalOpen]);
 
 // Create employee mutation
 const createEmployeeMutation = useMutation({
@@ -646,18 +669,61 @@ name="department"
 render={({ field }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Department</FormLabel>
-<Select onValueChange={field.onChange} value={field.value}>
-<FormControl>
-<SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
-<SelectValue />
-</SelectTrigger>
-</FormControl>
-<SelectContent>
-{departments.map((dept) => (
-<SelectItem key={dept} value={dept}>{dept}</SelectItem>
-))}
-</SelectContent>
-</Select>
+  <div className="relative" ref={employeeDeptDropdownRef}>
+    <div className="relative">
+      <Input
+        value={employeeDeptSearch}
+        placeholder="Select department"
+        className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10 cursor-pointer"
+        onFocus={() => setEmployeeDeptOpen(true)}
+        onClick={() => setEmployeeDeptOpen(true)}
+        onChange={(e) => {
+          setEmployeeDeptSearch(e.target.value);
+          setEmployeeDeptOpen(true);
+          field.onChange('');
+        }}
+        autoComplete="off"
+      />
+      <ChevronDown
+        className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+        onClick={() => setEmployeeDeptOpen(!employeeDeptOpen)}
+      />
+    </div>
+
+    {employeeDeptOpen && (
+      <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+        {departments
+          .filter((dept) => {
+            const q = employeeDeptSearch.trim().toLowerCase();
+            if (!q) return true;
+            return String(dept).toLowerCase().includes(q);
+          })
+          .map((dept) => {
+            const selected = field.value === dept;
+            return (
+              <div
+                key={dept}
+                className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                  selected ? 'bg-blue-50 text-blue-700' : ''
+                }`}
+                onClick={() => {
+                  field.onChange(dept);
+                  setEmployeeDeptSearch(dept);
+                  setEmployeeDeptOpen(false);
+                }}
+              >
+                <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                <span className="font-normal">{dept}</span>
+              </div>
+            );
+          })}
+
+        {departments.length === 0 && (
+          <div className="px-3 py-2.5 text-sm text-slate-500">No departments found</div>
+        )}
+      </div>
+    )}
+  </div>
 <FormMessage />
 </FormItem>
 )}
@@ -1019,7 +1085,7 @@ return result;
 throw error;
 }
 },
-onSuccess: (result: any) => {
+onSuccess: () => {
 queryClient.invalidateQueries({ queryKey: ["/api/users"] });
 toast({
 title: "Success",
@@ -1753,23 +1819,6 @@ duration: 1000,
 });
 },
 });
-
-const updateDepartmentVisibilityMutation = useMutation({
-mutationFn: async ({ name, visible }: { name: string; visible: boolean }) => {
-return await apiRequest("PATCH", `/api/company/departments/${encodeURIComponent(name)}`, { visible });
-},
-onSuccess: () => {
-queryClient.invalidateQueries({ queryKey: ["/api/company/departments"] });
-},
-onError: (error: any) => {
-toast({
-title: "Error",
-description: error.message || "Failed to update department visibility",
-variant: "destructive",
-duration: 1000,
-});
-},
-});
 const deleteDepartmentMutation = useMutation({
 mutationFn: async (name: string) => {
 return await apiRequest("DELETE", `/api/company/departments/${encodeURIComponent(name)}`);
@@ -1796,8 +1845,11 @@ duration: 1000,
 const [newCategoryName, setNewCategoryName] = useState('');
 const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
 const [editingDepartment, setEditingDepartment] = useState<Department | undefined>();
+const [deptHeadOpen, setDeptHeadOpen] = useState(false);
+const [deptHeadSearch, setDeptHeadSearch] = useState('');
+const deptHeadDropdownRef = useRef<HTMLDivElement>(null);
+const [isDepartmentEmailLocked, setIsDepartmentEmailLocked] = useState(false);
 const [departmentSearchTerm, setDepartmentSearchTerm] = useState('');
-const [expandedDepartment, setExpandedDepartment] = useState<string | null>(null);
 const [detailsModalOpen, setDetailsModalOpen] = useState(false);
 const [selectedDepartmentForDetails, setSelectedDepartmentForDetails] = useState<string | null>(null);
 const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
@@ -1806,6 +1858,27 @@ const { toast } = useToast();
 
 // File input ref for Excel import
 const companyFileInputRef = React.useRef<HTMLInputElement>(null);
+
+// Fetch employees for department counts / dropdowns
+const { data: employeesData = [] } = useQuery<any[]>({
+  queryKey: ["/api/employees"],
+});
+
+// Fetch subscriptions for department counts
+const { data: subscriptionsData = [] } = useQuery<any[]>({
+  queryKey: ["/api/subscriptions"],
+});
+
+useEffect(() => {
+  if (!deptHeadOpen) return;
+  function handleClickOutside(event: MouseEvent) {
+    if (deptHeadDropdownRef.current && !deptHeadDropdownRef.current.contains(event.target as Node)) {
+      setDeptHeadOpen(false);
+    }
+  }
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => document.removeEventListener('mousedown', handleClickOutside);
+}, [deptHeadOpen]);
 
 // Excel Template Download (Departments, Employees, Subscription Categories)
 const downloadCombinedTemplate = () => {
@@ -2067,16 +2140,6 @@ const importCombinedExcel = async (event: React.ChangeEvent<HTMLInputElement>) =
   }
 };
 
-// Fetch employees for department counts
-const { data: employeesData = [] } = useQuery<any[]>({
-  queryKey: ["/api/employees"],
-});
-
-// Fetch subscriptions for department counts
-const { data: subscriptionsData = [] } = useQuery<any[]>({
-  queryKey: ["/api/subscriptions"],
-});
-
 // Department form
 const departmentForm = useForm<DepartmentFormValues>({
   resolver: zodResolver(departmentSchema),
@@ -2086,6 +2149,32 @@ const departmentForm = useForm<DepartmentFormValues>({
     email: "",
   },
 });
+
+const selectedDepartmentHead = departmentForm.watch('departmentHead');
+
+useEffect(() => {
+  if (!departmentModalOpen) return;
+
+  const headName = String(selectedDepartmentHead || '').trim();
+  if (!headName) {
+    setIsDepartmentEmailLocked(false);
+    departmentForm.setValue('email', '', { shouldDirty: true, shouldValidate: true });
+    return;
+  }
+
+  const match = (Array.isArray(employeesData) ? employeesData : []).find(
+    (emp: any) => String(emp?.name || '').trim() === headName
+  );
+  const email = String(match?.email || '').trim();
+
+  if (email) {
+    departmentForm.setValue('email', email, { shouldDirty: true, shouldValidate: true });
+    setIsDepartmentEmailLocked(true);
+    departmentForm.clearErrors('email');
+  } else {
+    setIsDepartmentEmailLocked(false);
+  }
+}, [selectedDepartmentHead, employeesData, departmentModalOpen]);
 
 const addNewCategory = () => {
 if (
@@ -2154,26 +2243,6 @@ const filteredDepartments = departments.filter(dept =>
   dept.name?.toLowerCase().includes(departmentSearchTerm.toLowerCase())
 );
 
-const updateCategoryVisibilityMutation = useMutation({
-mutationFn: async ({ name, visible }: { name: string; visible: boolean }) => {
-return await apiRequest("PATCH", `/api/company/categories/${encodeURIComponent(name)}`, { visible });
-},
-onSuccess: () => {
-queryClient.invalidateQueries({ queryKey: ["/api/company/categories"] });
-// No toast for category visibility update
-},
-onError: (error: any) => {
-toast({
-title: "Error",
-description: error.message || "Failed to update category visibility",
-variant: "destructive",
-duration: 1000,
-});
-},
-});
-const updateCategoryVisibility = (categoryName: string, visible: boolean) => {
-updateCategoryVisibilityMutation.mutate({ name: categoryName, visible });
-};
 const deleteCategoryMutation = useMutation({
 mutationFn: async (name: string) => {
 return await apiRequest("DELETE", `/api/company/categories/${encodeURIComponent(name)}`);
@@ -2199,35 +2268,8 @@ duration: 1000,
 },
 });
 
-const updateDepartmentVisibility = (departmentName: string, visible: boolean) => {
-updateDepartmentVisibilityMutation.mutate({ name: departmentName, visible });
-};
-
-const saveCategorySettings = () => {
-toast({
-title: "Settings Saved",
-description: "Category configuration has been saved successfully (local only)",
-duration: 1000,
-});
-};
-
-const saveDepartmentSettings = () => {
-toast({
-title: "Settings Saved",
-description: "Department configuration has been saved successfully",
-duration: 1000,
-});
-};
-
-// Get visible categories for use in dropdowns and cards (as objects)
-const visibleCategoryObjects = categories.filter(cat => cat.visible);
-const hiddenCategoryObjects = categories.filter(cat => !cat.visible);
-// Get visible category names (strings) for dropdowns and forms
-const visibleCategoryNames = visibleCategoryObjects.map(cat => cat.name).filter(name => typeof name === "string" && name.trim());
-
 // Get visible departments for use in dropdowns and cards
 const visibleDepartments = departments.filter(dept => dept.visible);
-const hiddenDepartments = departments.filter(dept => !dept.visible);
 
 // Handle input changes
 const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2272,7 +2314,6 @@ const { data: currencies = [], isLoading: currenciesLoading } = useQuery<any[]>(
 // Tab selection logic from query param
 const [searchParams] = useSearchParams();
 const tabParam = searchParams.get("tab");
-const validTabs = ["company", "department", "employee", "subscription", "users", "subscription-category"];
 let initialTab = "company";
 if (tabParam === "department") initialTab = "department";
 else if (tabParam === "employee") initialTab = "employee";
@@ -2678,6 +2719,9 @@ transition={{ duration: 0.3 }}
             departmentHead: "",
             email: "",
           });
+          setDeptHeadSearch('');
+          setDeptHeadOpen(false);
+          setIsDepartmentEmailLocked(false);
           setDepartmentModalOpen(true);
         }}
         className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
@@ -2733,26 +2777,67 @@ transition={{ duration: 0.3 }}
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-gray-700 font-medium text-sm">Department Head</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
-                      <SelectValue placeholder="Select employee" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {employeesData && employeesData.length > 0 ? (
-                      employeesData.map((emp: any) => (
-                        <SelectItem key={emp._id || emp.id || emp.email} value={emp.name}>
-                          {emp.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-employee" disabled>
-                        No employees found
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                <div className="relative" ref={deptHeadDropdownRef}>
+                  <div className="relative">
+                    <Input
+                      value={deptHeadSearch}
+                      placeholder="Select employee"
+                      className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10 cursor-pointer"
+                      onFocus={() => setDeptHeadOpen(true)}
+                      onClick={() => setDeptHeadOpen(true)}
+                      onChange={(e) => {
+                        setDeptHeadSearch(e.target.value);
+                        setDeptHeadOpen(true);
+                        field.onChange('');
+                      }}
+                      autoComplete="off"
+                    />
+                    <ChevronDown
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                      onClick={() => setDeptHeadOpen(!deptHeadOpen)}
+                    />
+                  </div>
+
+                  {deptHeadOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                      {(Array.isArray(employeesData) ? employeesData : [])
+                        .filter((emp: any) => {
+                          const q = deptHeadSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            String(emp?.name || '').toLowerCase().includes(q) ||
+                            String(emp?.email || '').toLowerCase().includes(q)
+                          );
+                        })
+                        .map((emp: any) => {
+                          const duplicateNames = employeesData.filter((e: any) => e.name === emp.name);
+                          const displayName = duplicateNames.length > 1 ? `${emp.name} (${emp.email})` : emp.name;
+                          const selected = field.value === emp.name;
+                          return (
+                            <div
+                              key={emp._id || emp.id || emp.email}
+                              className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                selected ? 'bg-blue-50 text-blue-700' : ''
+                              }`}
+                              onClick={() => {
+                                const name = String(emp.name || '').trim();
+                                field.onChange(name);
+                                setDeptHeadSearch(name);
+                                setDeptHeadOpen(false);
+                              }}
+                            >
+                              <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                              <span className="font-normal">{displayName}</span>
+                            </div>
+                          );
+                        })}
+
+                      {(Array.isArray(employeesData) ? employeesData : []).length === 0 && (
+                        <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <FormMessage className="text-red-600" />
               </FormItem>
             )}
@@ -2769,13 +2854,14 @@ transition={{ duration: 0.3 }}
                   <Input
                     {...field}
                     type="email"
+                    readOnly={isDepartmentEmailLocked}
                     onBlur={() => {
                       // Trigger validation when field loses focus
                       departmentForm.trigger('email');
                     }}
                     className={`border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
                       fieldState.error ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
-                    }`}
+                    } ${isDepartmentEmailLocked ? 'bg-slate-50 cursor-not-allowed' : ''}`}
                   />
                 </FormControl>
                 <FormMessage className="text-red-600 text-sm font-medium mt-1" />
@@ -2792,6 +2878,9 @@ transition={{ duration: 0.3 }}
                 setDepartmentModalOpen(false);
                 setEditingDepartment(undefined);
                 departmentForm.reset();
+                setDeptHeadSearch('');
+                setDeptHeadOpen(false);
+                setIsDepartmentEmailLocked(false);
               }}
               className="border-gray-300 text-gray-700 rounded-lg h-10 px-4"
             >
@@ -2852,6 +2941,8 @@ return (
               departmentHead: department.departmentHead || "",
               email: department.email || "",
             });
+            setDeptHeadSearch(department.departmentHead || "");
+            setDeptHeadOpen(false);
             setEditingDepartment(department);
             setDepartmentModalOpen(true);
           }}

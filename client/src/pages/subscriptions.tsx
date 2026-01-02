@@ -569,50 +569,56 @@ export default function Subscriptions() {
           </div>
         </div>
 
-        {/* Key Metrics Cards - 3 boxes in professional layout */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+        {/* Key Metrics - Icon boxes with text */}
+        <div className="flex items-center justify-between w-full mb-10 gap-4">
           <div 
-            onClick={() => setMetricsFilter(metricsFilter === "active" ? "all" : "active")}
-            className={`bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-xl p-5 shadow-md cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${metricsFilter === "active" ? "ring-2 ring-emerald-400" : ""}`}
+            className="flex items-center gap-3 flex-1"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-emerald-100">Active Services</p>
-                <p className="text-2xl font-bold text-white mt-1">{active}</p>
-              </div>
-              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <AlertCircle className="h-5 w-5 text-white" />
-              </div>
+            <div onClick={() => setMetricsFilter(metricsFilter === "active" ? "all" : "active")}
+              className="cursor-pointer transition-all duration-200 hover:opacity-80">
+              <img src="/assets/Active.png" alt="Active Services" className="h-24 w-24" />
+            </div>
+            <div>
+              <p onClick={() => setMetricsFilter(metricsFilter === "active" ? "all" : "active")}
+                className="text-sm font-medium text-gray-600 cursor-pointer hover:underline">
+                Active Services
+              </p>
+              <p className="text-3xl font-bold text-gray-900">{active}</p>
+              <a href="#active-details" className="text-xs text-blue-500 hover:underline cursor-pointer">Click to view details</a>
             </div>
           </div>
 
           <div 
-            onClick={() => setMetricsFilter(metricsFilter === "Trial" ? "all" : "Trial")}
-            className={`bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-5 shadow-md cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${metricsFilter === "Trial" ? "ring-2 ring-purple-400" : ""}`}
+            className="flex items-center gap-3 flex-1"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-purple-100">Trial Subscriptions</p>
-                <p className="text-2xl font-bold text-white mt-1">{Trial}</p>
-              </div>
-              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <Search className="h-5 w-5 text-white" />
-              </div>
+            <div onClick={() => setMetricsFilter(metricsFilter === "Trial" ? "all" : "Trial")}
+              className="cursor-pointer transition-all duration-200 hover:opacity-80">
+              <img src="/assets/Free Trial.png" alt="Trial Subscriptions" className="h-24 w-24" />
+            </div>
+            <div>
+              <p onClick={() => setMetricsFilter(metricsFilter === "Trial" ? "all" : "Trial")}
+                className="text-sm font-medium text-gray-600 cursor-pointer hover:underline">
+                Trial Subscriptions
+              </p>
+              <p className="text-3xl font-bold text-gray-900">{Trial}</p>
+              <a href="#trial-details" className="text-xs text-blue-500 hover:underline cursor-pointer">Click to view details</a>
             </div>
           </div>
 
           <div 
-            onClick={() => setMetricsFilter(metricsFilter === "draft" ? "all" : "draft")}
-            className={`bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl p-5 shadow-md cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${metricsFilter === "draft" ? "ring-2 ring-orange-400" : ""}`}
+            className="flex items-center gap-3 flex-1"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-orange-100">Draft Subscriptions</p>
-                <p className="text-2xl font-bold text-white mt-1">{draft}</p>
-              </div>
-              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <Edit className="h-5 w-5 text-white" />
-              </div>
+            <div onClick={() => setMetricsFilter(metricsFilter === "draft" ? "all" : "draft")}
+              className="cursor-pointer transition-all duration-200 hover:opacity-80">
+              <img src="/assets/Drafts.png" alt="Draft Subscriptions" className="h-24 w-24" />
+            </div>
+            <div>
+              <p onClick={() => setMetricsFilter(metricsFilter === "draft" ? "all" : "draft")}
+                className="text-sm font-medium text-gray-600 cursor-pointer hover:underline">
+                Draft Subscriptions
+              </p>
+              <p className="text-3xl font-bold text-gray-900">{draft}</p>
+              <a href="#draft-details" className="text-xs text-blue-500 hover:underline cursor-pointer">Click to view details</a>
             </div>
           </div>
         </div>

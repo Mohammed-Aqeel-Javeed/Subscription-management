@@ -101,7 +101,7 @@
     overflow-y: scroll !important;
   }
   .custom-scrollbar::-webkit-scrollbar {
-    width: 14px;
+    width: 16px;
     display: block !important;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
@@ -128,38 +128,37 @@
 
 /* Radix UI Select Viewport Scrollbar - Global Styles */
 [data-radix-select-viewport] {
-  scrollbar-width: thin;
-  scrollbar-color: #d1d5db #f9fafb;
+  scrollbar-width: thin !important;
+  scrollbar-color: #d1d5db #f9fafb !important;
   overflow-y: scroll !important;
-  max-height: 240px !important;
 }
 
 [data-radix-select-viewport]::-webkit-scrollbar {
-  width: 14px !important;
+  width: 16px !important;
   display: block !important;
 }
 
 [data-radix-select-viewport]::-webkit-scrollbar-track {
-  background: #f9fafb;
-  border-radius: 7px;
-  border: 1px solid #e5e7eb;
+  background: #f9fafb !important;
+  border-radius: 7px !important;
+  border: 1px solid #e5e7eb !important;
 }
 
 [data-radix-select-viewport]::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 7px;
-  border: 2px solid #f9fafb;
-  min-height: 40px;
+  background: #d1d5db !important;
+  border-radius: 7px !important;
+  border: 2px solid #f9fafb !important;
+  min-height: 40px !important;
 }
 
 [data-radix-select-viewport]::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: #9ca3af !important;
 }
 
 [data-radix-select-viewport]::-webkit-scrollbar-thumb:active {
-  background: #6b7280;
+  background: #6b7280 !important;
 }
 
 [data-radix-select-viewport]::-webkit-scrollbar-corner {
-  background: #f9fafb;
+  background: #f9fafb !important;
 }

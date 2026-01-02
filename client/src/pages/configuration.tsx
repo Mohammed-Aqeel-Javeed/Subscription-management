@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChevronDown, Check } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, FileSpreadsheet, AlertCircle } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
@@ -904,307 +905,7 @@ export default function Configuration() {
     }
   };
 
-  // Download Currency Template
-  const downloadCurrencyTemplate = () => {
-    const templateData = [
-      {
-        'Currency Code': 'USD',
-        'Description': 'United States Dollar',
-        'Symbol': '$',
-        'Exchange Rate': '1.00',
-        'Created': '',
-        'Last Updated': ''
-      },
-      {
-        'Currency Code': 'EUR',
-        'Description': 'Euro',
-        'Symbol': '€',
-        'Exchange Rate': '0.85',
-        'Created': '',
-        'Last Updated': ''
-      }
-    ];
-
-    const ws = XLSX.utils.json_to_sheet(templateData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Currencies');
-    
-    const wscols = [
-      { wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
-    ];
-    ws['!cols'] = wscols;
-
-    XLSX.writeFile(wb, 'Currency_Template.xlsx');
-    
-    toast({
-      title: "Template Downloaded",
-      description: "Use this template to import currencies",
-      variant: "success",
-    });
-  };
-
-  // Download Payment Method Template
-  const downloadPaymentTemplate = () => {
-    const templateData = [
-      {
-        'Title': 'Corporate Visa',
-        'Type': 'Credit',
-        'Description': 'Company credit card',
-        'Icon': 'visa',
-        'Manager': 'John Doe',
-        'Expires At': '2025-12-31'
-      },
-      {
-        'Title': 'Business PayPal',
-        'Type': 'Digital Wallet',
-        'Description': 'PayPal business account',
-        'Icon': 'paypal',
-        'Manager': 'Jane Smith',
-        'Expires At': ''
-      }
-    ];
-
-    const ws = XLSX.utils.json_to_sheet(templateData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Payment Methods');
-    
-    const wscols = [
-      { wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 15 }
-    ];
-    ws['!cols'] = wscols;
-
-    XLSX.writeFile(wb, 'PaymentMethod_Template.xlsx');
-    
-    toast({
-      title: "Template Downloaded",
-      description: "Use this template to import payment methods. Valid icons: visa, mastercard, paypal, amex, apple_pay, google_pay, bank, cash, other",
-      variant: "success",
-    });
-  };
-
-  // Excel Export for Currencies
-  const exportCurrenciesToExcel = () => {
-    const exportData = currencies.map(currency => ({
-      'Currency Code': currency.code,
-      'Description': currency.name,
-      'Symbol': currency.symbol,
-      'Exchange Rate': currency.exchangeRate || '',
-      'Created': currency.created || '',
-      'Last Updated': currency.lastUpdated || ''
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Currencies');
-    
-    // Auto-size columns
-    const maxWidth = 20;
-    const wscols = [
-      { wch: 15 }, // Currency Code
-      { wch: 30 }, // Description
-      { wch: 10 }, // Symbol
-      { wch: 15 }, // Exchange Rate
-      { wch: 15 }, // Created
-      { wch: 15 }  // Last Updated
-    ];
-    ws['!cols'] = wscols;
-
-    XLSX.writeFile(wb, `Currencies_${new Date().toISOString().split('T')[0]}.xlsx`);
-    
-    toast({
-      title: "Export Successful",
-      description: `${currencies.length} currencies exported to Excel`,
-      variant: "success",
-    });
-  };
-
-  // Excel Import for Currencies
-  const importCurrenciesFromExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
-
-        let successCount = 0;
-        let errorCount = 0;
-
-        for (const row of jsonData) {
-          try {
-            const currencyData = {
-              code: (row['Currency Code'] || '').toString().trim().toUpperCase(),
-              name: (row['Description'] || '').toString().trim(),
-              symbol: (row['Symbol'] || '').toString().trim(),
-              exchangeRate: (row['Exchange Rate'] || '').toString().trim(),
-            };
-
-            if (!currencyData.code || !currencyData.name || !currencyData.symbol) {
-              errorCount++;
-              continue;
-            }
-
-            // Check if currency already exists
-            const exists = currencies.find(c => c.code === currencyData.code);
-            const method = exists ? 'PUT' : 'POST';
-            const url = exists 
-              ? `${API_BASE_URL}/api/currencies/${currencyData.code}` 
-              : `${API_BASE_URL}/api/currencies`;
-
-            const res = await fetch(url, {
-              method,
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify(currencyData),
-            });
-
-            if (res.ok) {
-              successCount++;
-            } else {
-              errorCount++;
-            }
-          } catch (error) {
-            errorCount++;
-          }
-        }
-
-        await fetchCurrencies();
-        queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
-
-        toast({
-          title: "Import Complete",
-          description: `Successfully imported ${successCount} currencies. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
-          variant: errorCount > 0 ? "destructive" : "success",
-        });
-      } catch (error) {
-        toast({
-          title: "Import Failed",
-          description: "Failed to parse Excel file. Please check the file format.",
-          variant: "destructive",
-        });
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    
-    // Reset file input
-    if (currencyFileInputRef.current) {
-      currencyFileInputRef.current.value = '';
-    }
-  };
-
-  // Excel Export for Payment Methods
-  const exportPaymentMethodsToExcel = () => {
-    const exportData = paymentMethods.map(method => ({
-      'Title': method.name || method.title,
-      'Type': method.type,
-      'Owner': method.owner || '',
-      'Manager': method.manager || '',
-      'Financial Institution': method.financialInstitution || '',
-      'Expires At': method.expiresAt || '',
-      'Last 4 Digits': method.lastFourDigits || ''
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Payment Methods');
-    
-    // Auto-size columns
-    const wscols = [
-      { wch: 20 }, // Title
-      { wch: 15 }, // Type
-      { wch: 30 }, // Description
-      { wch: 15 }, // Icon
-      { wch: 20 }, // Manager
-      { wch: 15 }  // Expires At
-    ];
-    ws['!cols'] = wscols;
-
-    XLSX.writeFile(wb, `PaymentMethods_${new Date().toISOString().split('T')[0]}.xlsx`);
-    
-    toast({
-      title: "Export Successful",
-      description: `${paymentMethods.length} payment methods exported to Excel`,
-      variant: "success",
-    });
-  };
-
-  // Excel Import for Payment Methods
-  const importPaymentMethodsFromExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
-
-        let successCount = 0;
-        let errorCount = 0;
-
-        for (const row of jsonData) {
-          try {
-            const paymentData = {
-              name: (row['Title'] || '').toString().trim(),
-              type: (row['Type'] || '').toString().trim(),
-              description: (row['Description'] || '').toString().trim(),
-              icon: (row['Icon'] || '').toString().trim(),
-              manager: (row['Manager'] || '').toString().trim(),
-              expiresAt: (row['Expires At'] || '').toString().trim(),
-            };
-
-            if (!paymentData.name || !paymentData.type) {
-              errorCount++;
-              continue;
-            }
-
-            const res = await fetch("/api/payment", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(paymentData),
-            });
-
-            if (res.ok) {
-              successCount++;
-            } else {
-              errorCount++;
-            }
-          } catch (error) {
-            errorCount++;
-          }
-        }
-
-        // Refetch payment methods
-        queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
-
-        toast({
-          title: "Import Complete",
-          description: `Successfully imported ${successCount} payment methods. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
-          variant: errorCount > 0 ? "destructive" : "success",
-        });
-      } catch (error) {
-        toast({
-          title: "Import Failed",
-          description: "Failed to parse Excel file. Please check the file format.",
-          variant: "destructive",
-        });
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    
-    // Reset file input
-    if (currencyFileInputRef.current) {
-      currencyFileInputRef.current.value = '';
-    }
-  };
+  // Note: legacy single-sheet import/export helpers were removed (unused).
   
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [currenciesLoading, setCurrenciesLoading] = useState(true);
@@ -1650,69 +1351,7 @@ export default function Configuration() {
     }
   };
   
-  // Save enabled fields to backend and refetch after save
-  const saveFieldSettings = async () => {
-    try {
-      const response = await fetch('/api/config/fields', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields }),
-      });
-      if (!response.ok) throw new Error('Failed to save fields');
-      // Refetch from backend to ensure UI is in sync
-      const fetchRes = await fetch('/api/config/fields');
-      const data = await fetchRes.json();
-      setFields(Array.isArray(data) ? data : fields);
-      toast({
-        title: "Settings Saved",
-        description: "Field enablement configuration has been saved successfully",
-        variant: "success",
-      });
-    } catch (error) {
-      console.error("Error saving fields:", error);
-      toast({
-        title: "Error",
-        description: "Failed to save field configuration",
-        variant: "destructive",
-      });
-    }
-  };
-  
-  // Save compliance fields: update all fields (enabled/disabled/order) using PATCH for each field
-  const saveComplianceFieldSettings = async () => {
-    setIsLoadingCompliance(true);
-    try {
-      // Update all fields in parallel
-      await Promise.all(complianceFields.map(async (field) => {
-        if (!field._id) return;
-        await fetch(`/api/config/compliance-fields/${field._id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            enabled: field.enabled,
-            displayOrder: field.displayOrder,
-          }),
-        });
-      }));
-      // Refetch
-      const fetchRes = await fetch('/api/config/compliance-fields');
-      const data = await fetchRes.json();
-      setComplianceFields(Array.isArray(data) ? data : complianceFields);
-      toast({
-        title: "Compliance Settings Saved",
-        description: "Compliance field configuration has been saved successfully",
-        variant: "success",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save compliance field configuration",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoadingCompliance(false);
-    }
-  };
+  // Note: unused bulk-save helpers removed.
   
   // Delete field from backend
   const deleteField = async (fieldName: string) => {
@@ -1867,6 +1506,43 @@ export default function Configuration() {
     financialInstitution: '',
     lastFourDigits: '',
   });
+
+  // Payment Method tab: Category-style dropdowns for Owner / Managed by
+  const [pmOwnerOpen, setPmOwnerOpen] = useState(false);
+  const [pmOwnerSearch, setPmOwnerSearch] = useState('');
+  const pmOwnerDropdownRef = useRef<HTMLDivElement>(null);
+  const [pmManagerOpen, setPmManagerOpen] = useState(false);
+  const [pmManagerSearch, setPmManagerSearch] = useState('');
+  const pmManagerDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!pmOwnerOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (pmOwnerDropdownRef.current && !pmOwnerDropdownRef.current.contains(event.target as Node)) {
+        setPmOwnerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [pmOwnerOpen]);
+
+  useEffect(() => {
+    if (!pmManagerOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (pmManagerDropdownRef.current && !pmManagerDropdownRef.current.contains(event.target as Node)) {
+        setPmManagerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [pmManagerOpen]);
+
+  useEffect(() => {
+    if (addPaymentModalOpen || editPaymentModalOpen) {
+      setPmOwnerSearch(paymentForm.owner || '');
+      setPmManagerSearch(paymentForm.manager || '');
+    }
+  }, [addPaymentModalOpen, editPaymentModalOpen]);
   
 
   
@@ -2533,30 +2209,71 @@ export default function Configuration() {
                               </select>
                             </div>
 
-                            {/* Owner Field */}
+
+                            {/* Owner Field - Unified Select Dropdown with Scrollbar and Search */}
                             <div className="space-y-2">
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Owner
                               </Label>
-                              <Select
-                                value={paymentForm.owner || undefined}
-                                onValueChange={(value) => setPaymentForm(f => ({ ...f, owner: value.trim() }))}
-                              >
-                                <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
-                                  <SelectValue placeholder="Select employee" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {employeesRaw.length > 0 ? (
-                                    employeesRaw.map((emp: any) => (
-                                      <SelectItem key={emp._id || emp.id || emp.name} value={emp.name}>
-                                        {emp.name}
-                                      </SelectItem>
-                                    ))
-                                  ) : (
-                                    <SelectItem value="no-employee" disabled>No employees found</SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
+                              <div className="relative" ref={pmOwnerDropdownRef}>
+                                <div className="relative">
+                                  <Input
+                                    value={pmOwnerSearch}
+                                    placeholder="Select employee"
+                                    className="w-full border-gray-300 rounded-lg h-10 p-2 pr-10 text-base focus:border-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                                    onFocus={() => setPmOwnerOpen(true)}
+                                    onClick={() => setPmOwnerOpen(true)}
+                                    onChange={(e) => {
+                                      setPmOwnerSearch(e.target.value);
+                                      setPmOwnerOpen(true);
+                                      setPaymentForm(f => ({ ...f, owner: '' }));
+                                    }}
+                                    autoComplete="off"
+                                  />
+                                  <ChevronDown
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                                    onClick={() => setPmOwnerOpen(!pmOwnerOpen)}
+                                  />
+                                </div>
+                                {pmOwnerOpen && (
+                                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                                    {(Array.isArray(employeesRaw) ? employeesRaw : [])
+                                      .filter((emp: any) => {
+                                        const q = pmOwnerSearch.trim().toLowerCase();
+                                        if (!q) return true;
+                                        return (
+                                          String(emp?.name || '').toLowerCase().includes(q) ||
+                                          String(emp?.email || '').toLowerCase().includes(q)
+                                        );
+                                      })
+                                      .map((emp: any) => {
+                                        const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                                        const displayName = duplicateNames.length > 1 ? `${emp.name} (${emp.email})` : emp.name;
+                                        const selected = paymentForm.owner === emp.name;
+                                        return (
+                                          <div
+                                            key={emp._id || emp.id || emp.email || emp.name}
+                                            className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                              selected ? 'bg-blue-50 text-blue-700' : ''
+                                            }`}
+                                            onClick={() => {
+                                              const name = String(emp.name || '').trim();
+                                              setPaymentForm(f => ({ ...f, owner: name }));
+                                              setPmOwnerSearch(name);
+                                              setPmOwnerOpen(false);
+                                            }}
+                                          >
+                                            <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                            <span className="font-normal">{displayName}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    {(Array.isArray(employeesRaw) ? employeesRaw : []).length === 0 && (
+                                      <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {/* Manager Field */}
@@ -2564,25 +2281,65 @@ export default function Configuration() {
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Managed by
                               </Label>
-                              <Select
-                                value={paymentForm.manager || undefined}
-                                onValueChange={(value) => setPaymentForm(f => ({ ...f, manager: value.trim() }))}
-                              >
-                                <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
-                                  <SelectValue placeholder="Select employee" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {employeesRaw.length > 0 ? (
-                                    employeesRaw.map((emp: any) => (
-                                      <SelectItem key={emp._id || emp.id || emp.name} value={emp.name}>
-                                        {emp.name}
-                                      </SelectItem>
-                                    ))
-                                  ) : (
-                                    <SelectItem value="no-employee" disabled>No employees found</SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
+                              <div className="relative" ref={pmManagerDropdownRef}>
+                                <div className="relative">
+                                  <Input
+                                    value={pmManagerSearch}
+                                    placeholder="Select employee"
+                                    className="w-full border-gray-300 rounded-lg h-10 p-2 pr-10 text-base focus:border-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                                    onFocus={() => setPmManagerOpen(true)}
+                                    onClick={() => setPmManagerOpen(true)}
+                                    onChange={(e) => {
+                                      setPmManagerSearch(e.target.value);
+                                      setPmManagerOpen(true);
+                                      setPaymentForm(f => ({ ...f, manager: '' }));
+                                    }}
+                                    autoComplete="off"
+                                  />
+                                  <ChevronDown
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                                    onClick={() => setPmManagerOpen(!pmManagerOpen)}
+                                  />
+                                </div>
+                                {pmManagerOpen && (
+                                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                                    {(Array.isArray(employeesRaw) ? employeesRaw : [])
+                                      .filter((emp: any) => {
+                                        const q = pmManagerSearch.trim().toLowerCase();
+                                        if (!q) return true;
+                                        return (
+                                          String(emp?.name || '').toLowerCase().includes(q) ||
+                                          String(emp?.email || '').toLowerCase().includes(q)
+                                        );
+                                      })
+                                      .map((emp: any) => {
+                                        const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                                        const displayName = duplicateNames.length > 1 ? `${emp.name} (${emp.email})` : emp.name;
+                                        const selected = paymentForm.manager === emp.name;
+                                        return (
+                                          <div
+                                            key={emp._id || emp.id || emp.email || emp.name}
+                                            className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                              selected ? 'bg-blue-50 text-blue-700' : ''
+                                            }`}
+                                            onClick={() => {
+                                              const name = String(emp.name || '').trim();
+                                              setPaymentForm(f => ({ ...f, manager: name }));
+                                              setPmManagerSearch(name);
+                                              setPmManagerOpen(false);
+                                            }}
+                                          >
+                                            <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                            <span className="font-normal">{displayName}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    {(Array.isArray(employeesRaw) ? employeesRaw : []).length === 0 && (
+                                      <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {/* Financial Institution Field */}
@@ -2898,51 +2655,136 @@ export default function Configuration() {
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Owner
                               </Label>
-                              <Select
-                                value={paymentForm.owner || undefined}
-                                onValueChange={(value) => setPaymentForm(f => ({ ...f, owner: value.trim() }))}
-                              >
-                                <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
-                                  <SelectValue placeholder="Select employee" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {employeesRaw.length > 0 ? (
-                                    employeesRaw.map((emp: any) => (
-                                      <SelectItem key={emp._id || emp.id || emp.name} value={emp.name}>
-                                        {emp.name}
-                                      </SelectItem>
-                                    ))
-                                  ) : (
-                                    <SelectItem value="no-employee" disabled>No employees found</SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
+                              <div className="relative" ref={pmOwnerDropdownRef}>
+                                <div className="relative">
+                                  <Input
+                                    value={pmOwnerSearch}
+                                    className="w-full border-gray-300 rounded-lg h-10 p-2 pr-10 text-base focus:border-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                                    placeholder="Select employee"
+                                    onFocus={() => setPmOwnerOpen(true)}
+                                    onClick={() => setPmOwnerOpen(true)}
+                                    onChange={e => {
+                                      setPmOwnerSearch(e.target.value);
+                                      setPmOwnerOpen(true);
+                                      setPaymentForm(f => ({ ...f, owner: "" }));
+                                    }}
+                                    autoComplete="off"
+                                  />
+                                  <ChevronDown
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                                    onClick={() => setPmOwnerOpen(!pmOwnerOpen)}
+                                  />
+                                </div>
+
+                                {pmOwnerOpen && (
+                                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                                    {(Array.isArray(employeesRaw) ? employeesRaw : [])
+                                      .filter((emp: any) => {
+                                        const q = pmOwnerSearch.trim().toLowerCase();
+                                        if (!q) return true;
+                                        return (
+                                          String(emp?.name || '').toLowerCase().includes(q) ||
+                                          String(emp?.email || '').toLowerCase().includes(q)
+                                        );
+                                      })
+                                      .map((emp: any) => {
+                                        const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                                        const displayName = duplicateNames.length > 1 ? `${emp.name} (${emp.email})` : emp.name;
+                                        const selected = paymentForm.owner === emp.name;
+                                        return (
+                                          <div
+                                            key={emp._id || emp.id || emp.email || emp.name}
+                                            className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                              selected ? 'bg-blue-50 text-blue-700' : ''
+                                            }`}
+                                            onClick={() => {
+                                              const name = String(emp.name || '').trim();
+                                              setPaymentForm(f => ({ ...f, owner: name }));
+                                              setPmOwnerSearch(name);
+                                              setPmOwnerOpen(false);
+                                            }}
+                                          >
+                                            <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                            <span className="font-normal">{displayName}</span>
+                                          </div>
+                                        );
+                                      })}
+
+                                    {(Array.isArray(employeesRaw) ? employeesRaw : []).length === 0 && (
+                                      <div className="px-3 py-2.5 text-slate-400 text-sm">No employees found</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
+
 
                             {/* Manager Field */}
                             <div className="space-y-2">
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Managed by
                               </Label>
-                              <Select
-                                value={paymentForm.manager || undefined}
-                                onValueChange={(value) => setPaymentForm(f => ({ ...f, manager: value.trim() }))}
-                              >
-                                <SelectTrigger className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full">
-                                  <SelectValue placeholder="Select employee" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {employeesRaw.length > 0 ? (
-                                    employeesRaw.map((emp: any) => (
-                                      <SelectItem key={emp._id || emp.id || emp.name} value={emp.name}>
-                                        {emp.name}
-                                      </SelectItem>
-                                    ))
-                                  ) : (
-                                    <SelectItem value="no-employee" disabled>No employees found</SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
+                              <div className="relative" ref={pmManagerDropdownRef}>
+                                <div className="relative">
+                                  <Input
+                                    value={pmManagerSearch}
+                                    className="w-full border-gray-300 rounded-lg h-10 p-2 pr-10 text-base focus:border-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                                    placeholder="Select employee"
+                                    onFocus={() => setPmManagerOpen(true)}
+                                    onClick={() => setPmManagerOpen(true)}
+                                    onChange={e => {
+                                      setPmManagerSearch(e.target.value);
+                                      setPmManagerOpen(true);
+                                      setPaymentForm(f => ({ ...f, manager: "" }));
+                                    }}
+                                    autoComplete="off"
+                                  />
+                                  <ChevronDown
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                                    onClick={() => setPmManagerOpen(!pmManagerOpen)}
+                                  />
+                                </div>
+
+                                {pmManagerOpen && (
+                                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                                    {(Array.isArray(employeesRaw) ? employeesRaw : [])
+                                      .filter((emp: any) => {
+                                        const q = pmManagerSearch.trim().toLowerCase();
+                                        if (!q) return true;
+                                        return (
+                                          String(emp?.name || '').toLowerCase().includes(q) ||
+                                          String(emp?.email || '').toLowerCase().includes(q)
+                                        );
+                                      })
+                                      .map((emp: any) => {
+                                        const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                                        const displayName = duplicateNames.length > 1 ? `${emp.name} (${emp.email})` : emp.name;
+                                        const selected = paymentForm.manager === emp.name;
+                                        return (
+                                          <div
+                                            key={emp._id || emp.id || emp.email || emp.name}
+                                            className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                              selected ? 'bg-blue-50 text-blue-700' : ''
+                                            }`}
+                                            onClick={() => {
+                                              const name = String(emp.name || '').trim();
+                                              setPaymentForm(f => ({ ...f, manager: name }));
+                                              setPmManagerSearch(name);
+                                              setPmManagerOpen(false);
+                                            }}
+                                          >
+                                            <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                            <span className="font-normal">{displayName}</span>
+                                          </div>
+                                        );
+                                      })}
+
+                                    {(Array.isArray(employeesRaw) ? employeesRaw : []).length === 0 && (
+                                      <div className="px-3 py-2.5 text-slate-400 text-sm">No employees found</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {/* Financial Institution Field */}
