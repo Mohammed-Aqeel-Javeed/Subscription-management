@@ -13,14 +13,10 @@ import {
   AlertCircle, 
   Search, 
   Download, 
-  Calendar,
-  X,
-  FileText,
-  BarChart3,
   CheckCircle,
   Clock
 } from "lucide-react";
-import { format, subMonths } from "date-fns";
+import { format } from "date-fns";
 
 interface HistoryData {
   serviceName: string;
@@ -60,12 +56,12 @@ export default function SubscriptionHistory() {
   } catch (e) {
     idParam = null;
   }
-  const serviceNameParam = null; // Not used
   const [searchTerm, setSearchTerm] = useState("");
   const [quantityFilter, setQuantityFilter] = useState<string>("");
   const [lcyMin, setLcyMin] = useState<string>("");
   const [lcyMax, setLcyMax] = useState<string>("");
   const [filteredHistory, setFilteredHistory] = useState<HistoryRecord[]>([]);
+  const [fetchLimit, setFetchLimit] = useState(200);
   const [displayLimit, setDisplayLimit] = useState(50); // Show 50 records initially
   const queryClient = useQueryClient();
 
@@ -88,12 +84,14 @@ export default function SubscriptionHistory() {
     };
   }, [queryClient]);
 
-  const { data, isLoading, error } = useQuery<HistoryRecord[]>({
-    queryKey: ["history", idParam],
+  const historyKey = idParam ? ["history", idParam, fetchLimit] : ["history", "list", fetchLimit];
+
+  const { data, isLoading, error, isFetching } = useQuery<HistoryRecord[]>({
+    queryKey: historyKey,
     queryFn: async () => {
       // Build URL based on whether we're looking at specific subscription or all
       const endpoint = idParam ? `/api/history/${idParam}` : `/api/history/list`;
-      const url = `${API_BASE_URL}${endpoint}`;
+      const url = `${API_BASE_URL}${endpoint}?limit=${fetchLimit}`;
 
       const res = await fetch(url, {
         method: "GET",
@@ -127,7 +125,8 @@ export default function SubscriptionHistory() {
     refetchOnWindowFocus: false, // Don't refetch on window focus
     refetchOnReconnect: true,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    gcTime: 10 * 60 * 1000 // Keep in cache for 10 minutes
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    placeholderData: (previous) => previous
   });
 
   const history: HistoryRecord[] = Array.isArray(data) ? data : [];
@@ -473,12 +472,21 @@ export default function SubscriptionHistory() {
                 Showing {displayLimit} of {filteredHistory.length} records
               </p>
               <Button
-                onClick={() => setDisplayLimit(prev => prev + 50)}
+                onClick={() => {
+                  setDisplayLimit(prev => {
+                    const next = prev + 50;
+                    // If we're about to exceed what we fetched, fetch more from server
+                    if (next >= history.length - 10) {
+                      setFetchLimit(l => l + 200);
+                    }
+                    return next;
+                  });
+                }}
                 variant="outline"
                 className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-sm"
               >
                 <Clock className="h-4 w-4 mr-2" />
-                Load More (50)
+                {isFetching ? 'Loading…' : 'Load More (50)'}
               </Button>
             </motion.div>
           )}

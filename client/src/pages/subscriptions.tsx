@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, Search, Layers, AlertCircle, Calendar, XCircle, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
@@ -17,24 +16,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Subscription } from "@shared/schema";
 import { Can } from "@/components/Can";
 
-// Helper component to display departments
 // Extend Subscription type locally to include department and _id for frontend use
 type SubscriptionWithExtras = Subscription & { 
   departments?: string[]; 
   _id?: string; 
 };
-  const DepartmentDisplay = ({ departments }: { departments?: string[] }) => {
-    if (!departments || !departments.length) return <span>-</span>;
-    return (
-      <div className="flex flex-wrap gap-1">
-        {departments.map((dept, idx) => (
-          <span key={dept + idx} className="inline-block bg-indigo-100 text-indigo-700 text-xs font-medium px-2 py-0.5 rounded-full">
-            {dept}
-          </span>
-        ))}
-      </div>
-    );
-  };
 
 export default function Subscriptions() {
   const location = useLocation();
@@ -372,7 +358,6 @@ export default function Subscriptions() {
   // Category color helper removed (unused)
 
   // Helper to display department(s) from JSON string or array
-  // (Removed duplicate DepartmentDisplay definition. Use the one at the top of the file.)
   
   // Helper to format date as dd/mm/yyyy
   const formatDate = (dateVal?: string | Date) => {
@@ -390,42 +375,10 @@ export default function Subscriptions() {
     return `${dd}/${mm}/${yyyy}`;
   };
   
-  // Status badge component - exactly matching Compliance page
-  const StatusBadge = ({ status }: { status: string }) => {
-    const statusConfig = {
-      "Active": { 
-        variant: "outline", 
-        icon: <AlertCircle className="h-3 w-3 mr-1" />, 
-        color: "bg-emerald-50 text-emerald-700 border-emerald-200" 
-      },
-      "Cancelled": { 
-        variant: "outline", 
-        icon: <AlertCircle className="h-3 w-3 mr-1" />, 
-        color: "bg-rose-50 text-rose-700 border-rose-200" 
-      },
-      "default": { 
-        variant: "outline", 
-        icon: <AlertCircle className="h-3 w-3 mr-1" />, 
-        color: "bg-gray-100 text-gray-700 border-gray-200" 
-      }
-    };
-    
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.default;
-    
-    return (
-      <Badge className={`${config.color} flex items-center font-medium`} variant={config.variant as any}>
-        {config.icon}
-        {status}
-      </Badge>
-    );
-  };
-  
   // --- Summary Stats Section ---
-  const total = Array.isArray(subscriptions) ? subscriptions.length : 0;
   const active = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active" && sub.billingCycle !== "Trial").length : 0;
   const Trial = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.billingCycle === "Trial").length : 0;
   const draft = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Draft").length : 0;
-  const cancelled = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Cancelled").length : 0;
   
   if (isLoading) {
     return (
@@ -516,7 +469,39 @@ export default function Subscriptions() {
             {/* History button - second */}
             <Button
               variant="outline"
-              onClick={() => window.location.href = '/subscription-history'}
+              onMouseEnter={() => {
+                queryClient.prefetchQuery({
+                  queryKey: ["history", "list", 200],
+                  queryFn: async () => {
+                    const res = await fetch(`/api/history/list?limit=200`, {
+                      method: "GET",
+                      credentials: "include",
+                      headers: { "Content-Type": "application/json" },
+                    });
+                    if (!res.ok) return [];
+                    const json = await res.json();
+                    return Array.isArray(json) ? json : [];
+                  },
+                  staleTime: 5 * 60 * 1000,
+                });
+              }}
+              onFocus={() => {
+                queryClient.prefetchQuery({
+                  queryKey: ["history", "list", 200],
+                  queryFn: async () => {
+                    const res = await fetch(`/api/history/list?limit=200`, {
+                      method: "GET",
+                      credentials: "include",
+                      headers: { "Content-Type": "application/json" },
+                    });
+                    if (!res.ok) return [];
+                    const json = await res.json();
+                    return Array.isArray(json) ? json : [];
+                  },
+                  staleTime: 5 * 60 * 1000,
+                });
+              }}
+              onClick={() => navigate('/subscription-history')}
               className="w-44 bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200 hover:border-indigo-300 font-medium transition-all duration-200"
             >
               <Calendar className="h-4 w-4 mr-2" />
@@ -574,51 +559,72 @@ export default function Subscriptions() {
           <div 
             className="flex items-center gap-3 flex-1"
           >
-            <div onClick={() => setMetricsFilter(metricsFilter === "active" ? "all" : "active")}
-              className="cursor-pointer transition-all duration-200 hover:opacity-80">
+            <div className="transition-all duration-200">
               <img src="/assets/Active.png" alt="Active Services" className="h-24 w-24" />
             </div>
             <div>
-              <p onClick={() => setMetricsFilter(metricsFilter === "active" ? "all" : "active")}
-                className="text-sm font-medium text-gray-600 cursor-pointer hover:underline">
+              <p className="text-sm font-medium text-gray-600">
                 Active Services
               </p>
               <p className="text-3xl font-bold text-gray-900">{active}</p>
-              <a href="#active-details" className="text-xs text-blue-500 hover:underline cursor-pointer">Click to view details</a>
+              <a 
+                href="#active-details" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  setMetricsFilter(metricsFilter === "active" ? "all" : "active");
+                }}
+                className="text-xs text-blue-500 hover:underline cursor-pointer"
+              >
+                Click to view details
+              </a>
             </div>
           </div>
 
           <div 
             className="flex items-center gap-3 flex-1"
           >
-            <div onClick={() => setMetricsFilter(metricsFilter === "Trial" ? "all" : "Trial")}
-              className="cursor-pointer transition-all duration-200 hover:opacity-80">
+            <div className="transition-all duration-200">
               <img src="/assets/Free Trial.png" alt="Trial Subscriptions" className="h-24 w-24" />
             </div>
             <div>
-              <p onClick={() => setMetricsFilter(metricsFilter === "Trial" ? "all" : "Trial")}
-                className="text-sm font-medium text-gray-600 cursor-pointer hover:underline">
+              <p className="text-sm font-medium text-gray-600">
                 Trial Subscriptions
               </p>
               <p className="text-3xl font-bold text-gray-900">{Trial}</p>
-              <a href="#trial-details" className="text-xs text-blue-500 hover:underline cursor-pointer">Click to view details</a>
+              <a 
+                href="#trial-details" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  setMetricsFilter(metricsFilter === "Trial" ? "all" : "Trial");
+                }}
+                className="text-xs text-blue-500 hover:underline cursor-pointer"
+              >
+                Click to view details
+              </a>
             </div>
           </div>
 
           <div 
             className="flex items-center gap-3 flex-1"
           >
-            <div onClick={() => setMetricsFilter(metricsFilter === "draft" ? "all" : "draft")}
-              className="cursor-pointer transition-all duration-200 hover:opacity-80">
+            <div className="transition-all duration-200">
               <img src="/assets/Drafts.png" alt="Draft Subscriptions" className="h-24 w-24" />
             </div>
             <div>
-              <p onClick={() => setMetricsFilter(metricsFilter === "draft" ? "all" : "draft")}
-                className="text-sm font-medium text-gray-600 cursor-pointer hover:underline">
+              <p className="text-sm font-medium text-gray-600">
                 Draft Subscriptions
               </p>
               <p className="text-3xl font-bold text-gray-900">{draft}</p>
-              <a href="#draft-details" className="text-xs text-blue-500 hover:underline cursor-pointer">Click to view details</a>
+              <a 
+                href="#draft-details" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  setMetricsFilter(metricsFilter === "draft" ? "all" : "draft");
+                }}
+                className="text-xs text-blue-500 hover:underline cursor-pointer"
+              >
+                Click to view details
+              </a>
             </div>
           </div>
         </div>

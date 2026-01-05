@@ -64,8 +64,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 (async () => {
   // Ensure TTL indexes for notifications, reminders, compliance_notifications
-  const { ensureTTLIndexes } = await import("./mongo.js");
+  const { ensureTTLIndexes, ensureHistoryIndexes } = await import("./mongo.js");
   await ensureTTLIndexes();
+  await ensureHistoryIndexes();
 
   // One-time cleanup: remove compliance-only fields from subscription reminders
   try {

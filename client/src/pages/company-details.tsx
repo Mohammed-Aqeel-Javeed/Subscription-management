@@ -707,6 +707,13 @@ render={({ field }) => (
                   selected ? 'bg-blue-50 text-blue-700' : ''
                 }`}
                 onClick={() => {
+                  // If already selected, clear it
+                  if (field.value === dept) {
+                    field.onChange('');
+                    setEmployeeDeptSearch('');
+                    setEmployeeDeptOpen(false);
+                    return;
+                  }
                   field.onChange(dept);
                   setEmployeeDeptSearch(dept);
                   setEmployeeDeptOpen(false);
@@ -2820,6 +2827,13 @@ transition={{ duration: 0.3 }}
                                 selected ? 'bg-blue-50 text-blue-700' : ''
                               }`}
                               onClick={() => {
+                                // If already selected, clear it
+                                if (field.value === emp.name) {
+                                  field.onChange('');
+                                  setDeptHeadSearch('');
+                                  setDeptHeadOpen(false);
+                                  return;
+                                }
                                 const name = String(emp.name || '').trim();
                                 field.onChange(name);
                                 setDeptHeadSearch(name);

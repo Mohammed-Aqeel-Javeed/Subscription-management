@@ -331,10 +331,15 @@ router.get("/api/history/list", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 2000) : 200;
+
     // Sort by timestamp and _id for consistent ordering
     const items = await collection
       .find({ tenantId })
+      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, data: 1, updatedFields: 1 })
       .sort({ timestamp: -1, _id: -1 })
+      .limit(limit)
       .toArray();
 
     // Import decryption function
@@ -388,10 +393,15 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
       { subscriptionId: subObjId, tenantId } :
       { subscriptionId: subscriptionId, tenantId };
 
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 2000) : 200;
+
     // Sort by timestamp descending (newest first)
     const items = await collection
       .find(filter)
-      .sort({ timestamp: -1 })
+      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, data: 1, updatedFields: 1 })
+      .sort({ timestamp: -1, _id: -1 })
+      .limit(limit)
       .toArray();
     
     // Import decryption function
