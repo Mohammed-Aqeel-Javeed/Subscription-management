@@ -59,3 +59,13 @@ export async function ensureTTLIndexes() {
     // Collection may not exist, ignore error
   }
 }
+
+export async function ensureHistoryIndexes() {
+  const db = await connectToDatabase();
+  try {
+    await db.collection("history").createIndex({ tenantId: 1, timestamp: -1, _id: -1 });
+    await db.collection("history").createIndex({ tenantId: 1, subscriptionId: 1, timestamp: -1, _id: -1 });
+  } catch (err) {
+    // Ignore index creation errors (e.g., permissions or missing collection)
+  }
+}

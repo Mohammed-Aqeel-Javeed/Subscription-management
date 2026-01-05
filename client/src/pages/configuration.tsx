@@ -2195,17 +2195,17 @@ export default function Configuration() {
                               </Label>
                               <select 
                                 required 
-                                className="w-full h-9 px-3 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-20 font-medium bg-gray-50 focus:bg-white transition-all duration-200 text-gray-900"
+                                className="w-full h-9 px-3 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-20 font-inter text-sm bg-gray-50 focus:bg-white transition-all duration-200 text-gray-900"
                                 value={paymentForm.type} 
                                 onChange={e => setPaymentForm(f => ({ ...f, type: e.target.value }))}
                               >
-                                <option value="">Select payment type</option>
-                                <option value="Credit">Credit Card</option>
-                                <option value="Debit">Debit Card</option>
-                                <option value="Cash">Cash</option>
-                                <option value="Bank Transfer">Bank Transfer</option>
-                                <option value="Digital Wallet">Digital Wallet</option>
-                                <option value="Other">Other</option>
+                                <option value="" className="font-inter text-sm">Select payment type</option>
+                                <option value="Credit" className="font-inter text-sm">Credit Card</option>
+                                <option value="Debit" className="font-inter text-sm">Debit Card</option>
+                                <option value="Cash" className="font-inter text-sm">Cash</option>
+                                <option value="Bank Transfer" className="font-inter text-sm">Bank Transfer</option>
+                                <option value="Digital Wallet" className="font-inter text-sm">Digital Wallet</option>
+                                <option value="Other" className="font-inter text-sm">Other</option>
                               </select>
                             </div>
 
@@ -2257,6 +2257,13 @@ export default function Configuration() {
                                               selected ? 'bg-blue-50 text-blue-700' : ''
                                             }`}
                                             onClick={() => {
+                                              // If already selected, clear it
+                                              if (paymentForm.owner === emp.name) {
+                                                setPaymentForm(f => ({ ...f, owner: '' }));
+                                                setPmOwnerSearch('');
+                                                setPmOwnerOpen(false);
+                                                return;
+                                              }
                                               const name = String(emp.name || '').trim();
                                               setPaymentForm(f => ({ ...f, owner: name }));
                                               setPmOwnerSearch(name);
@@ -2323,6 +2330,13 @@ export default function Configuration() {
                                               selected ? 'bg-blue-50 text-blue-700' : ''
                                             }`}
                                             onClick={() => {
+                                              // If already selected, clear it
+                                              if (paymentForm.manager === emp.name) {
+                                                setPaymentForm(f => ({ ...f, manager: '' }));
+                                                setPmManagerSearch('');
+                                                setPmManagerOpen(false);
+                                                return;
+                                              }
                                               const name = String(emp.name || '').trim();
                                               setPaymentForm(f => ({ ...f, manager: name }));
                                               setPmManagerSearch(name);
@@ -2343,6 +2357,7 @@ export default function Configuration() {
                             </div>
 
                             {/* Financial Institution Field */}
+                            {paymentForm.type !== 'Cash' && (
                             <div className="space-y-2">
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Financial Institution
@@ -2353,8 +2368,10 @@ export default function Configuration() {
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>
+                            )}
 
                             {/* Last 4 Digits Field */}
+                            {paymentForm.type !== 'Cash' && (
                             <div className="space-y-2">
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Last 4 Digits
@@ -2372,8 +2389,10 @@ export default function Configuration() {
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>
+                            )}
 
                             {/* Expires At Field */}
+                            {paymentForm.type !== 'Cash' && (
                             <div className={`space-y-2 ${isEditPaymentFullscreen ? 'lg:col-span-1' : 'md:col-span-1'}`}>
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Expires at
@@ -2449,6 +2468,7 @@ export default function Configuration() {
                                 </div>
                               </div>
                             </div>
+                            )}
 
                             {/* Action Buttons - Full Width */}
                             <div className={`flex justify-end space-x-4 pt-6 border-t border-gray-200 ${isEditPaymentFullscreen ? 'lg:col-span-2' : 'md:col-span-2'}`}>
@@ -2636,17 +2656,17 @@ export default function Configuration() {
                               </Label>
                               <select 
                                 required 
-                                className="w-full h-9 px-3 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 font-medium bg-gray-50 focus:bg-white transition-all duration-200 text-gray-900"
+                                className="w-full h-9 px-3 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 font-inter text-sm bg-gray-50 focus:bg-white transition-all duration-200 text-gray-900"
                                 value={paymentForm.type} 
                                 onChange={e => setPaymentForm(f => ({ ...f, type: e.target.value }))}
                               >
-                                <option value="">Select payment type</option>
-                                <option value="Credit">Credit Card</option>
-                                <option value="Debit">Debit Card</option>
-                                <option value="Cash">Cash</option>
-                                <option value="Bank Transfer">Bank Transfer</option>
-                                <option value="Digital Wallet">Digital Wallet</option>
-                                <option value="Other">Other</option>
+                                <option value="" className="font-inter text-sm">Select payment type</option>
+                                <option value="Credit" className="font-inter text-sm">Credit Card</option>
+                                <option value="Debit" className="font-inter text-sm">Debit Card</option>
+                                <option value="Cash" className="font-inter text-sm">Cash</option>
+                                <option value="Bank Transfer" className="font-inter text-sm">Bank Transfer</option>
+                                <option value="Digital Wallet" className="font-inter text-sm">Digital Wallet</option>
+                                <option value="Other" className="font-inter text-sm">Other</option>
                               </select>
                             </div>
 
@@ -2698,6 +2718,13 @@ export default function Configuration() {
                                               selected ? 'bg-blue-50 text-blue-700' : ''
                                             }`}
                                             onClick={() => {
+                                              // If already selected, clear it
+                                              if (paymentForm.owner === emp.name) {
+                                                setPaymentForm(f => ({ ...f, owner: '' }));
+                                                setPmOwnerSearch('');
+                                                setPmOwnerOpen(false);
+                                                return;
+                                              }
                                               const name = String(emp.name || '').trim();
                                               setPaymentForm(f => ({ ...f, owner: name }));
                                               setPmOwnerSearch(name);
@@ -2767,6 +2794,13 @@ export default function Configuration() {
                                               selected ? 'bg-blue-50 text-blue-700' : ''
                                             }`}
                                             onClick={() => {
+                                              // If already selected, clear it
+                                              if (paymentForm.manager === emp.name) {
+                                                setPaymentForm(f => ({ ...f, manager: '' }));
+                                                setPmManagerSearch('');
+                                                setPmManagerOpen(false);
+                                                return;
+                                              }
                                               const name = String(emp.name || '').trim();
                                               setPaymentForm(f => ({ ...f, manager: name }));
                                               setPmManagerSearch(name);
@@ -2788,6 +2822,7 @@ export default function Configuration() {
                             </div>
 
                             {/* Financial Institution Field */}
+                            {paymentForm.type !== 'Cash' && (
                             <div className="space-y-2">
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Financial Institution
@@ -2798,8 +2833,10 @@ export default function Configuration() {
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>
+                            )}
 
                             {/* Last 4 Digits Field */}
+                            {paymentForm.type !== 'Cash' && (
                             <div className="space-y-2">
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Last 4 Digits
@@ -2817,8 +2854,10 @@ export default function Configuration() {
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>
+                            )}
 
                             {/* Expires At Field */}
+                            {paymentForm.type !== 'Cash' && (
                             <div className={`space-y-2 ${isAddPaymentFullscreen ? 'lg:col-span-1' : 'md:col-span-1'}`}>
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
                                 Expires at
@@ -2894,6 +2933,7 @@ export default function Configuration() {
                                 </div>
                               </div>
                             </div>
+                            )}
 
                             {/* Action Buttons - Full Width */}
                             <div className={`flex justify-end space-x-4 pt-6 border-t border-gray-200 ${isAddPaymentFullscreen ? 'lg:col-span-2' : 'md:col-span-2'}`}>

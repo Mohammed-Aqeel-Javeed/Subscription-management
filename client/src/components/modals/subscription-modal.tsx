@@ -1298,7 +1298,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   }, [form.watch('website'), open]);
   
   const mutation = useMutation({
-    mutationFn: async (data: FormData) => {
+    mutationFn: async (data: FormData & { id?: string }) => {
       const { id, createdAt, ...rest } = data as any;
       
       // Convert departments array to JSON string for storage
@@ -1310,10 +1310,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       };
       
       let res;
-      const subId = subscription?.id;
+      const subId = subscription?.id || subscription?._id;
       // Remove tenantId from update payload
       if (isEditing && subId) {
-  delete (subscriptionData as any).tenantId;
+        delete (subscriptionData as any).tenantId;
         res = await apiRequest("PUT", `/api/subscriptions/${subId}`, subscriptionData);
       } else {
         res = await apiRequest("POST", "/api/subscriptions", subscriptionData);
@@ -1330,7 +1330,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const previousSubscriptions = queryClient.getQueryData(["/api/subscriptions", tenantId]);
       
       // Optimistically update to the new value
-      if (!isEditing) {
+      if (isEditing && (newData as any).id) {
+        // Update existing subscription
+        queryClient.setQueryData(["/api/subscriptions", tenantId], (old: any) => {
+          if (!old) return old;
+          return old.map((sub: any) => 
+            (sub.id === (newData as any).id || sub._id === (newData as any).id) 
+              ? { ...sub, ...newData }
+              : sub
+          );
+        });
+      } else if (!isEditing) {
+        // Create new subscription
         queryClient.setQueryData(["/api/subscriptions", tenantId], (old: any) => {
           const optimisticSub = {
             ...newData,
@@ -1349,11 +1360,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   onSuccess: (result, variables, context) => {
       const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
       
-      // Use only the subscription's id
-      if (subscription?.id) {
-  // removed currentSubscriptionId usage
-      }
-      
       // Mark subscription as created to disable draft button
       if (!isEditing) {
         setSubscriptionCreated(true);
@@ -1363,6 +1369,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         if (typeof window !== 'undefined' && window.dispatchEvent && subscriptionId) {
           window.dispatchEvent(new CustomEvent('subscription-created', { 
             detail: { ...result, _id: subscriptionId }
+          }));
+        }
+      } else {
+        // For updates, dispatch update event
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent('subscription-updated', { 
+            detail: result
           }));
         }
       }
@@ -1377,9 +1390,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Close modal immediately
       onOpenChange(false);
       
-      // Invalidate and refetch with correct tenant key immediately
+      // Invalidate and refetch with correct tenant key immediately (in background)
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions", tenantId] });
-      queryClient.refetchQueries({ queryKey: ["/api/subscriptions", tenantId] });
+      queryClient.refetchQueries({ 
+        queryKey: ["/api/subscriptions", tenantId],
+        type: 'active'
+      });
       
       // Invalidate other queries in background
       queryClient.invalidateQueries({ queryKey: ["/api/history"] });
@@ -1563,6 +1579,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         
         mutation.mutate({
           ...payload,
+          id: subscription?.id || subscription?._id, // Include the subscription id
           startDate: payload.startDate instanceof Date ? payload.startDate.toISOString() : String(payload.startDate),
           nextRenewal: payload.nextRenewal instanceof Date ? payload.nextRenewal.toISOString() : String(payload.nextRenewal),
         });
@@ -1622,6 +1639,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     
     mutation.mutate({
       ...payload,
+      id: subscription?.id || subscription?._id, // Include the subscription id
       startDate: payload.startDate instanceof Date ? payload.startDate.toISOString() : String(payload.startDate),
       nextRenewal: payload.nextRenewal instanceof Date ? payload.nextRenewal.toISOString() : String(payload.nextRenewal),
       effectiveDate: effectiveDate, // Add effective date as ISO string
@@ -1630,11 +1648,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Handle department selection
   const handleDepartmentChange = (departmentName: string, checked: boolean) => {
-    // If Company Level is selected, select all departments
+    // If Company Level is selected, show only Company Level
     if (departmentName === 'Company Level' && checked) {
-      const allDepts = ['Company Level', ...(departments?.filter(d => d.visible).map(d => d.name) || [])];
-      setSelectedDepartments(allDepts);
-      form.setValue("departments", allDepts);
+      setSelectedDepartments(['Company Level']);
+      form.setValue("departments", ['Company Level']);
       return;
     }
     
@@ -1645,8 +1662,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       return;
     }
     
-    // Cannot uncheck individual departments when Company Level is selected
-    if (selectedDepartments.includes('Company Level') && !checked) {
+    // When selecting other departments, remove Company Level if it exists
+    if (checked && selectedDepartments.includes('Company Level')) {
+      setSelectedDepartments([departmentName]);
+      form.setValue("departments", [departmentName]);
       return;
     }
     
@@ -1660,18 +1679,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Remove a department from the selected list
   const removeDepartment = (departmentName: string) => {
-    // If removing Company Level, remove all
-    if (departmentName === 'Company Level') {
-      setSelectedDepartments([]);
-      form.setValue("departments", []);
-      return;
-    }
-    
-    // Cannot remove individual departments when Company Level is selected
-    if (selectedDepartments.includes('Company Level')) {
-      return;
-    }
-    
     const newSelectedDepartments = selectedDepartments.filter(dept => dept !== departmentName);
     setSelectedDepartments(newSelectedDepartments);
     form.setValue("departments", newSelectedDepartments);
@@ -2360,75 +2367,77 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <FormField
                   control={form.control}
                   name="vendor"
-                  render={({ field }) => (
-                    <FormItem className="relative">
-                      <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Vendor</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input 
-                            className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
-                            value={field.value || ''}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              field.onChange(value);
-                              
-                              // Filter vendor suggestions based on input
-                              if (value.trim()) {
-                                const filtered = VENDOR_LIST.filter(vendor => 
-                                  vendor.toLowerCase().includes(value.toLowerCase())
-                                );
-                                setVendorSuggestions(filtered);
-                                setShowVendorSuggestions(filtered.length > 0);
-                              } else {
-                                setVendorSuggestions([]);
-                                setShowVendorSuggestions(false);
-                              }
-                            }}
-                            onFocus={(e) => {
-                              const value = e.target.value;
-                              if (value.trim()) {
-                                const filtered = VENDOR_LIST.filter(vendor => 
-                                  vendor.toLowerCase().includes(value.toLowerCase())
-                                );
-                                setVendorSuggestions(filtered);
-                                setShowVendorSuggestions(filtered.length > 0);
-                              }
-                            }}
-                            onBlur={() => {
-                              // Delay hiding to allow click on suggestion
-                              setTimeout(() => setShowVendorSuggestions(false), 200);
-                            }}
-                            autoComplete="off"
-                          />
-                          {showVendorSuggestions && vendorSuggestions.length > 0 && (
-                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                              {vendorSuggestions.map((vendor, index) => (
-                                <div
-                                  key={index}
-                                  className="px-4 py-2 hover:bg-indigo-50 cursor-pointer transition-colors text-sm"
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    field.onChange(vendor);
-                                    setShowVendorSuggestions(false);
-                                  }}
-                                >
-                                  {vendor}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    const [vendorOpen, setVendorOpen] = useState(false);
+                    const vendorDropdownRef = useRef<HTMLDivElement>(null);
+                    useEffect(() => {
+                      if (!vendorOpen) return;
+                      function handleClickOutside(event: MouseEvent) {
+                        if (vendorDropdownRef.current && !vendorDropdownRef.current.contains(event.target as Node)) {
+                          setVendorOpen(false);
+                        }
+                      }
+                      document.addEventListener('mousedown', handleClickOutside);
+                      return () => {
+                        document.removeEventListener('mousedown', handleClickOutside);
+                      };
+                    }, [vendorOpen]);
+                    
+                    const filteredVendors = field.value ? VENDOR_LIST.filter(v => v === field.value) : VENDOR_LIST;
+                    
+                    return (
+                      <FormItem className="relative" ref={vendorDropdownRef}>
+                        <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Vendor</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input 
+                              className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer" 
+                              value={field.value || ''}
+                              readOnly
+                              onFocus={() => setVendorOpen(true)}
+                              onClick={() => setVendorOpen(true)}
+                            />
+                            <ChevronDown
+                              className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                              onClick={() => setVendorOpen(!vendorOpen)}
+                            />
+                            {vendorOpen && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
+                                {filteredVendors.map((vendor, index) => (
+                                  <div
+                                    key={index}
+                                    className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                                    onClick={() => {
+                                      // If already selected, clear it
+                                      if (field.value === vendor) {
+                                        field.onChange('');
+                                        setVendorOpen(false);
+                                        return;
+                                      }
+                                      field.onChange(vendor);
+                                      setVendorOpen(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 text-blue-600 ${field.value === vendor ? "opacity-100" : "opacity-0"}`}
+                                    />
+                                    <span className="font-normal">{vendor}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
                 <FormField
                   control={form.control}
                   name="currency"
                   render={({ field }) => {
                     const [currencyOpen, setCurrencyOpen] = useState(false);
-                    const [search, setSearch] = useState(field.value || '');
                     const currencyDropdownRef = useRef<HTMLDivElement>(null);
                     useEffect(() => {
                       if (!currencyOpen) return;
@@ -2442,25 +2451,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         document.removeEventListener('mousedown', handleClickOutside);
                       };
                     }, [currencyOpen]);
-                    const filtered = currencies && currencies.length > 0
-                      ? currencies.filter((curr: any) =>
-                          curr.code.toLowerCase().includes(search.toLowerCase())
-                        )
-                      : [];
+                    const allCurrencies = currencies && currencies.length > 0 ? currencies : [];
+                    const filtered = field.value 
+                      ? allCurrencies.filter((curr: any) => curr.code === field.value)
+                      : allCurrencies;
                     return (
                       <FormItem className="relative" ref={currencyDropdownRef}>
                         <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Currency</FormLabel>
                         <div className="relative">
                           <Input
-                            value={search}
-                            className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
-                            // no placeholder
+                            value={field.value || ''}
+                            className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer"
+                            readOnly
                             onFocus={() => setCurrencyOpen(true)}
                             onClick={() => setCurrencyOpen(true)}
-                            onChange={e => {
-                              setSearch(e.target.value);
-                              setCurrencyOpen(true);
-                            }}
                           />
                           <ChevronDown
                             className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
@@ -2475,8 +2479,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                   key={curr.code}
                                   className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
                                   onClick={() => {
+                                    // If already selected, clear it
+                                    if (field.value === curr.code) {
+                                      field.onChange('');
+                                      setCurrencyOpen(false);
+                                      return;
+                                    }
                                     field.onChange(curr.code);
-                                    setSearch(curr.code);
                                     setCurrencyOpen(false);
                                   }}
                                 >
@@ -2771,11 +2780,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     // Combine and deduplicate
                     const allCategories = [...new Set([...dbCategories, ...DEFAULT_CATEGORY_SUGGESTIONS])];
                     
-                    // Filter based on current input - show all if no input, filter if user has typed
+                    // Filter to show only selected category when value exists, otherwise show all
                     const filtered = field.value 
-                      ? allCategories.filter(cat => 
-                          cat.toLowerCase().includes(field.value?.toLowerCase() || '')
-                        )
+                      ? allCategories.filter(cat => cat === field.value)
                       : allCategories;
                     
                     const shouldShowDropdown = categoryOpen && filtered.length > 0;
@@ -2789,10 +2796,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             value={field.value || ''}
                             className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
                             disabled={categoriesLoading}
-                            onChange={e => {
-                              field.onChange(e.target.value);
-                              setCategoryOpen(true);
-                            }}
+                            readOnly
                             onFocus={() => setCategoryOpen(true)}
                             onClick={() => setCategoryOpen(true)}
                             autoComplete="off"
@@ -2809,6 +2813,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 key={catName}
                                 className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${field.value === catName ? 'bg-blue-50 text-blue-700' : ''}`}
                                 onClick={() => {
+                                  // If already selected, clear it
+                                  if (field.value === catName) {
+                                    field.onChange('');
+                                    setCategoryOpen(false);
+                                    return;
+                                  }
                                   field.onChange(catName);
                                   setCategoryOpen(false);
                                 }}
@@ -2894,6 +2904,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             />
                           </div>
                         </div>
+                        {selectedDepartments.includes('Company Level') && (
+                          <p className="mt-1 text-xs text-slate-500">All departments are selected</p>
+                        )}
                         {deptOpen && (
                           <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
                             <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
@@ -2952,9 +2965,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   control={form.control}
                   name="paymentMethod"
                   render={({ field }) => {
-                    const filtered = Array.isArray(paymentMethods)
+                    const allPaymentMethods = Array.isArray(paymentMethods)
                       ? paymentMethods.map(pm => pm.name)
                       : [];
+                    const filtered = field.value 
+                      ? allPaymentMethods.filter(pm => pm === field.value)
+                      : allPaymentMethods;
                     const [dropdownOpen, setDropdownOpen] = useState(false);
                     const dropdownRef = useRef<HTMLDivElement>(null);
                     useEffect(() => {
@@ -2995,6 +3011,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 key={pmName}
                                 className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
                                 onClick={() => {
+                                  // If already selected, clear it
+                                  if (field.value === pmName) {
+                                    field.onChange('');
+                                    setDropdownOpen(false);
+                                    return;
+                                  }
                                   field.onChange(pmName);
                                   setDropdownOpen(false);
                                 }}
@@ -3029,7 +3051,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="owner"
                   render={({ field }) => {
                     const [ownerOpen, setOwnerOpen] = useState(false);
-                    const [search, setSearch] = useState(field.value || '');
                     const ownerDropdownRef = useRef<HTMLDivElement>(null);
                     useEffect(() => {
                       if (!ownerOpen) return;
@@ -3055,23 +3076,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           return { displayName, uniqueValue, name: emp.name, email: emp.email };
                         })
                       : [];
-                    const filtered = ownerOptions.filter(opt =>
-                      opt.displayName.toLowerCase().includes(search.toLowerCase())
-                    );
+                    // Filter to show only selected owner when value exists, otherwise show all
+                    const filtered = field.value 
+                      ? ownerOptions.filter(opt => opt.uniqueValue === field.value || opt.name === field.value)
+                      : ownerOptions;
                     return (
                       <FormItem className="relative" ref={ownerDropdownRef}>
                         <FormLabel className="block text-sm font-medium text-slate-700">Owner</FormLabel>
                         <div className="relative">
                           <Input
-                            value={search}
-                            className="w-full border-slate-300 rounded-lg p-2 text-base"
-                            // no placeholder
+                            value={field.value || ''}
+                            className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base cursor-pointer"
+                            readOnly
                             onFocus={() => setOwnerOpen(true)}
                             onClick={() => setOwnerOpen(true)}
-                            onChange={e => {
-                              setSearch(e.target.value);
-                              setOwnerOpen(true);
-                            }}
                           />
                           <ChevronDown
                             className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
@@ -3090,6 +3108,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                     if (value === "add-new-owner") {
                                       setOwnerModal({ show: true });
                                     } else {
+                                      // If clicking on already selected item, clear it
+                                      if (field.value === opt.uniqueValue || field.value === opt.name) {
+                                        field.onChange('');
+                                        form.setValue('ownerEmail', '');
+                                        setOwnerOpen(false);
+                                        return;
+                                      }
+                                      
                                       const empId = value.includes('|') ? value.split('|')[0] : value;
                                       const emp = employeesRaw.find((e: any) => {
                                         if (value.includes('|')) {
@@ -3099,7 +3125,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                         return e.name === value;
                                       });
                                       field.onChange(emp?.name || value);
-                                      setSearch(emp?.name || value);
                                       if (emp?.email) {
                                         form.setValue('ownerEmail', emp.email);
                                       }
@@ -4255,16 +4280,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   Type <span className="text-red-500">*</span>
                 </label>
                 <Select value={newPaymentMethodType} onValueChange={setNewPaymentMethodType}>
-                  <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
-                    <SelectValue placeholder="Select payment type" />
+                  <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter text-sm">
+                    <SelectValue placeholder="Select payment type" className="font-inter text-sm" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Credit">Credit Card</SelectItem>
-                    <SelectItem value="Debit">Debit Card</SelectItem>
-                    <SelectItem value="Cash">Cash</SelectItem>
-                    <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="Digital Wallet">Digital Wallet</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
+                  <SelectContent className="font-inter text-sm">
+                    <SelectItem value="Credit" className="font-inter text-sm">Credit Card</SelectItem>
+                    <SelectItem value="Debit" className="font-inter text-sm">Debit Card</SelectItem>
+                    <SelectItem value="Cash" className="font-inter text-sm">Cash</SelectItem>
+                    <SelectItem value="Bank Transfer" className="font-inter text-sm">Bank Transfer</SelectItem>
+                    <SelectItem value="Digital Wallet" className="font-inter text-sm">Digital Wallet</SelectItem>
+                    <SelectItem value="Other" className="font-inter text-sm">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -4313,6 +4338,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 selected ? 'bg-blue-50 text-blue-700' : ''
                               }`}
                               onClick={() => {
+                                // If already selected, clear it
+                                if (newPaymentMethodOwner === emp.name) {
+                                  setNewPaymentMethodOwner('');
+                                  setPmOwnerSearch('');
+                                  setPmOwnerOpen(false);
+                                  return;
+                                }
                                 setNewPaymentMethodOwner(String(emp.name || '').trim());
                                 setPmOwnerSearch(String(emp.name || '').trim());
                                 setPmOwnerOpen(false);
@@ -4373,6 +4405,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 selected ? 'bg-blue-50 text-blue-700' : ''
                               }`}
                               onClick={() => {
+                                // If already selected, clear it
+                                if (newPaymentMethodManagedBy === emp.name) {
+                                  setNewPaymentMethodManagedBy('');
+                                  setPmManagedSearch('');
+                                  setPmManagedOpen(false);
+                                  return;
+                                }
                                 setNewPaymentMethodManagedBy(String(emp.name || '').trim());
                                 setPmManagedSearch(String(emp.name || '').trim());
                                 setPmManagedOpen(false);
@@ -4391,6 +4430,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </div>
               </div>
             </div>
+            {newPaymentMethodType !== 'Cash' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Financial Institution</label>
@@ -4419,6 +4459,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 />
               </div>
             </div>
+            )}
+            {newPaymentMethodType !== 'Cash' && (
             <div className="w-1/2 pr-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Expires at</label>
               <div className="relative">
@@ -4490,6 +4532,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </div>
               </div>
             </div>
+            )}
           </div>
           <AlertDialogFooter className="flex gap-2 mt-6">
             <Button

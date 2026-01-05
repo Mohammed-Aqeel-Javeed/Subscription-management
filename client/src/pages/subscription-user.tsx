@@ -420,10 +420,7 @@ if (!response.ok) {
               <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
                 Manage Subscription Users
               </h1>
-              <p className="text-gray-600">
-                Add or remove team members from the <span className="font-semibold text-indigo-600">{subscriptionName}</span> subscription.
-              </p>
-            </div>
+          </div>
             
             {/* Import/Export Buttons */}
             <div className="flex flex-wrap gap-2 justify-center md:justify-end">
@@ -471,41 +468,20 @@ if (!response.ok) {
             className="w-full bg-white rounded-2xl shadow-xl overflow-hidden"
           >
             <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex justify-between items-center gap-4">
                 <h2 className="text-2xl font-bold text-gray-900">
                   Users in <span className="text-indigo-600">{subscriptionName}</span>
                 </h2>
-              </div>
-              <div className="flex gap-3">
-                <div className="relative flex-1">
-                  <Input
-                    placeholder=""
-                    value={searchRight}
-                    onChange={(e) => setSearchRight(e.target.value)}
-                    className="pl-10 h-11 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm"
-                  />
-                  <svg 
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24" 
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                      strokeWidth={2} 
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
+                <div className="flex items-center gap-3">
+                  <div className="relative w-64">
+                    <Input
+                      placeholder="Search users..."
+                      value={searchRight}
+                      onChange={(e) => setSearchRight(e.target.value)}
+                      className="pl-10 h-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm"
                     />
-                  </svg>
-                </div>
-                {!showTeamMembers ? (
-                  <Button
-                    onClick={() => setShowTeamMembers(true)}
-                    className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 h-11 px-6"
-                  >
                     <svg 
-                      className="w-5 h-5 mr-2" 
+                      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" 
                       fill="none" 
                       stroke="currentColor" 
                       viewBox="0 0 24 24" 
@@ -515,20 +491,41 @@ if (!response.ok) {
                         strokeLinecap="round" 
                         strokeLinejoin="round" 
                         strokeWidth={2} 
-                        d="M12 6v6m0 0v6m0-6h6m-6 0H6" 
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
                       />
                     </svg>
-                    Add Team Member
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleRemoveAll}
-                    className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed h-11 px-6"
-                    disabled={selectedUsers.length === 0}
-                  >
-                    Remove All
-                  </Button>
-                )}
+                  </div>
+                  {!showTeamMembers ? (
+                    <Button
+                      onClick={() => setShowTeamMembers(true)}
+                      className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 h-10 px-5 whitespace-nowrap"
+                    >
+                      <svg 
+                        className="w-4 h-4 mr-2" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24" 
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                          strokeWidth={2} 
+                          d="M12 6v6m0 0v6m0-6h6m-6 0H6" 
+                        />
+                      </svg>
+                      Add Team Member
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleRemoveAll}
+                      className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed h-10 px-5 whitespace-nowrap"
+                      disabled={selectedUsers.length === 0}
+                    >
+                      Remove All
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
             
