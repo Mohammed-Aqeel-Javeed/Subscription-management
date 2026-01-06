@@ -69,3 +69,23 @@ export async function ensureHistoryIndexes() {
     // Ignore index creation errors (e.g., permissions or missing collection)
   }
 }
+
+export async function ensureSubscriptionIndexes() {
+  const db = await connectToDatabase();
+  try {
+    await db.collection("subscriptions").createIndex({ tenantId: 1, _id: 1 });
+    await db.collection("subscriptions").createIndex({ tenantId: 1, ownerEmail: 1 });
+    await db.collection("subscriptions").createIndex({ tenantId: 1, owner: 1 });
+    await db.collection("subscriptions").createIndex({ tenantId: 1, departments: 1 });
+    await db.collection("subscriptions").createIndex({ tenantId: 1, department: 1 });
+    await db.collection("subscriptions").createIndex(
+      { tenantId: 1, clientDraftKey: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { clientDraftKey: { $type: "string" } },
+      }
+    );
+  } catch (err) {
+    // Ignore index creation errors (e.g., permissions or missing collection)
+  }
+}

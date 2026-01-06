@@ -55,13 +55,14 @@ export default function Subscriptions() {
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
-  const { data: subscriptions, isLoading, refetch } = useQuery<SubscriptionWithExtras[]>({
+  const { data: subscriptions, isLoading } = useQuery<SubscriptionWithExtras[]>({
     queryKey: ["/api/subscriptions", tenantId],
+    enabled: !!tenantId,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchInterval: false, // Disable auto-refresh, rely on invalidation
-    staleTime: 5000,
-    gcTime: 0,
+    staleTime: 30 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
   
   // Handle URL parameter to open specific subscription modal (placed after subscriptions declaration)
@@ -86,9 +87,9 @@ export default function Subscriptions() {
   // Listen for login/logout/account change events and trigger immediate refetch
   React.useEffect(() => {
     function triggerImmediateRefresh() {
-      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-      refetch();
+      if (!tenantId) return;
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard", tenantId], exact: false });
     }
       // Listen for subscription-renewed event and refetch subscriptions
     function handleSubscriptionRenewed() { triggerImmediateRefresh(); }
@@ -98,15 +99,12 @@ export default function Subscriptions() {
     events.forEach(ev => window.addEventListener(ev, triggerImmediateRefresh));
     window.addEventListener('subscription-renewed', handleSubscriptionRenewed);
 
-    // Trigger initial fetch
-  triggerImmediateRefresh();
-
     return () => {
       // Remove event listeners
       events.forEach(ev => window.removeEventListener(ev, triggerImmediateRefresh));
       window.removeEventListener('subscription-renewed', handleSubscriptionRenewed);
     };
-  }, [queryClient, refetch]);
+  }, [queryClient, tenantId]);
   // Listen for new subscription created from modal
   React.useEffect(() => {
     function handleCreated(e: any) {

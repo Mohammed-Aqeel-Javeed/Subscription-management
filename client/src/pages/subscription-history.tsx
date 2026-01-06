@@ -3,7 +3,6 @@ import { useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "../components/ui/card";
-import { API_BASE_URL } from "@/lib/config";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -38,11 +37,11 @@ interface HistoryRecord {
 }
 
 function formatDate(date: string | Date) {
-  return format(new Date(date), "MMM dd, yyyy");
+  return format(new Date(date), "MM/dd/yyyy");
 }
 
 function formatDateTime(date: string | Date) {
-  return format(new Date(date), "MMM dd, yyyy HH:mm:ss");
+  return format(new Date(date), "MM/dd/yyyy HH:mm:ss");
 }
 
 export default function SubscriptionHistory() {
@@ -91,7 +90,7 @@ export default function SubscriptionHistory() {
     queryFn: async () => {
       // Build URL based on whether we're looking at specific subscription or all
       const endpoint = idParam ? `/api/history/${idParam}` : `/api/history/list`;
-      const url = `${API_BASE_URL}${endpoint}?limit=${fetchLimit}`;
+      const url = `${endpoint}?limit=${fetchLimit}`;
 
       const res = await fetch(url, {
         method: "GET",
@@ -121,10 +120,10 @@ export default function SubscriptionHistory() {
       return result;
     },
     retry: 1, // Reduce retries
-    refetchOnMount: false, // Don't refetch on mount if we have data
-    refetchOnWindowFocus: false, // Don't refetch on window focus
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
     refetchOnReconnect: true,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    staleTime: 0,
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     placeholderData: (previous) => previous
   });
@@ -382,20 +381,20 @@ export default function SubscriptionHistory() {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.4 }}
                 >
-                  <Table className="w-full divide-y divide-slate-100">
+                  <Table className="w-full table-fixed divide-y divide-slate-100">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Service</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Vendor</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Owner</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Start Date</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">End Date</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Amount per unit</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Qty</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Total Amount</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">LCY Amount</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Timestamp</TableHead>
-                        <TableHead className="font-semibold text-slate-800 py-4 px-6">Status</TableHead>
+                        <TableHead className="w-[12%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Service</TableHead>
+                        <TableHead className="w-[18%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Vendor</TableHead>
+                        <TableHead className="w-[10%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Owner</TableHead>
+                        <TableHead className="w-[8%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Start Date</TableHead>
+                        <TableHead className="w-[8%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">End Date</TableHead>
+                        <TableHead className="w-[10%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Amount per unit</TableHead>
+                        <TableHead className="w-[5%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Qty</TableHead>
+                        <TableHead className="w-[10%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Total Amount</TableHead>
+                        <TableHead className="w-[9%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">LCY Amount</TableHead>
+                        <TableHead className="w-[12%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Timestamp</TableHead>
+                        <TableHead className="w-[6%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody className="divide-y divide-slate-100">
@@ -412,39 +411,39 @@ export default function SubscriptionHistory() {
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0 }}
                               transition={{ delay: Math.min(0.05 * index, 1) }}
-                              whileHover={{ scale: 1.01, backgroundColor: "#f8fafc" }}
+                              whileHover={{ backgroundColor: "#f8fafc" }}
                             >
-                              <TableCell className="py-4 px-6 font-medium text-slate-800">
+                              <TableCell className="py-2 px-3 text-xs font-medium text-slate-800 whitespace-normal break-words">
                                 {record.serviceName || "-"}
                               </TableCell>
-                              <TableCell className="py-4 px-6 text-slate-700">
+                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-normal break-words">
                                 {record.vendor || record.serviceName || "-"}
                               </TableCell>
-                              <TableCell className="py-4 px-6 text-slate-700">
+                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-normal break-words">
                                 {record.owner || record.ownerName || "-"}
                               </TableCell>
-                              <TableCell className="py-4 px-6 text-slate-600">
+                              <TableCell className="py-2 px-3 text-xs text-slate-600 whitespace-nowrap">
                                 {record.startDate ? formatDate(record.startDate) : "-"}
                               </TableCell>
-                              <TableCell className="py-4 px-6 text-slate-600">
+                              <TableCell className="py-2 px-3 text-xs text-slate-600 whitespace-nowrap">
                                 {record.nextRenewal ? formatDate(record.nextRenewal) : "-"}
                               </TableCell>
-                              <TableCell className="py-4 px-6 text-slate-700">
+                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-nowrap">
                                 {record.amount !== undefined ? `$${Number(record.amount).toFixed(2)}` : "-"}
                               </TableCell>
-                              <TableCell className="py-4 px-6 text-slate-700">
+                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-nowrap">
                                 {record.qty !== undefined ? record.qty : "-"}
                               </TableCell>
-                              <TableCell className="py-4 px-6 text-slate-700">
+                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-nowrap">
                                 {record.totalAmount !== undefined ? `$${Number(record.totalAmount).toFixed(2)}` : "-"}
                               </TableCell>
-                              <TableCell className="py-4 px-6 text-slate-700">
+                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-nowrap">
                                 {record.lcyAmount !== undefined && record.lcyAmount !== null ? `$${Number(record.lcyAmount).toFixed(2)}` : "-"}
                               </TableCell>
-                              <TableCell className="py-4 px-6 text-slate-600">
+                              <TableCell className="py-2 px-3 text-xs text-slate-600 whitespace-normal break-words">
                                 {item.timestamp ? formatDateTime(item.timestamp) : "-"}
                               </TableCell>
-                              <TableCell className="py-4 px-6">
+                              <TableCell className="py-2 px-3 text-xs">
                                 <Badge className={getStatusColor(record.status || '')}>
                                   {record.status || "-"}
                                 </Badge>

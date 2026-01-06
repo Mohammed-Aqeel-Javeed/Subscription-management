@@ -811,59 +811,51 @@ router.get("/api/subscriptions", async (req, res) => {
 if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
+
+    const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     
     // Import decryption function
     const { decryptSubscriptionData } = await import("./encryption.service.js");
     
-    let subscriptions = await collection.find({ tenantId }).toArray();
-// Apply role-based filtering
+    // Build Mongo filter (avoid in-memory filtering + per-item JSON.parse)
+    let filter: any = { tenantId };
+
+    // Apply role-based filtering
     if (userRole === 'contributor') {
       // Contributors can only see items where they are the owner (match by email)
       const userEmail = req.user?.email;
-      subscriptions = subscriptions.filter(sub => {
-        const isOwner = sub.ownerEmail === userEmail || sub.owner === userId;
-return isOwner;
-      });
-} else if (userRole === 'department_editor' || userRole === 'department_viewer') {
+      filter = {
+        tenantId,
+        $or: [
+          ...(userEmail ? [{ ownerEmail: userEmail }] : []),
+          ...(userId ? [{ owner: userId }] : [])
+        ]
+      };
+    } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
       // Department roles can only see items in their department OR Company Level items
-      console.log(`[Department Filter] User: ${req.user?.email}, Role: ${userRole}, Department: ${userDepartment}`);
-      console.log(`[Department Filter] Total subscriptions before filter: ${subscriptions.length}`);
-      
       if (userDepartment) {
-        subscriptions = subscriptions.filter(sub => {
-          if (!sub.department && !sub.departments) {
-            console.log(`[Department Filter] ${sub.serviceName}: No department field - EXCLUDED`);
-            return false;
-          }
-          
-          try {
-            // Try parsing department field (JSON string)
-            let depts = [];
-            if (sub.department) {
-              depts = JSON.parse(sub.department);
-            } else if (sub.departments) {
-              depts = Array.isArray(sub.departments) ? sub.departments : [sub.departments];
-            }
-            
-            // Allow access if:
-            // 1. Subscription has "Company Level" in departments
-            // 2. User's department is in the subscription's departments
-            const hasCompanyLevel = Array.isArray(depts) && depts.includes('Company Level');
-            const hasUserDepartment = Array.isArray(depts) && depts.includes(userDepartment);
-            
-            console.log(`[Department Filter] ${sub.serviceName}: depts=${JSON.stringify(depts)}, hasCompanyLevel=${hasCompanyLevel}, hasUserDept=${hasUserDepartment}, result=${hasCompanyLevel || hasUserDepartment}`);
-            
-            return hasCompanyLevel || hasUserDepartment;
-          } catch {
-            // Fallback for non-JSON department field
-            const hasAccess = sub.department === userDepartment || sub.department === 'Company Level';
-            return hasAccess;
-          }
-        });
-        
-        console.log(`[Department Filter] Subscriptions after filter: ${subscriptions.length}`);
+        const deptRegex = new RegExp(`\\"${escapeRegex(userDepartment)}\\"`, 'i');
+        const companyLevelRegex = /Company Level/i;
+
+        filter = {
+          tenantId,
+          $or: [
+            // departments stored as array
+            { departments: { $in: ['Company Level', userDepartment] } },
+
+            // department stored as plain string
+            { department: userDepartment },
+            { department: 'Company Level' },
+
+            // department stored as JSON string
+            { department: { $regex: deptRegex } },
+            { department: { $regex: companyLevelRegex } }
+          ]
+        };
       }
     }
+
+    const subscriptions = await collection.find(filter).toArray();
     
     // Transform MongoDB documents to have consistent id field AND decrypt sensitive data
     const transformedSubscriptions = subscriptions.map(sub => {
@@ -875,7 +867,6 @@ return isOwner;
       };
     });
     
-    console.log(`[Department Filter] Final response: ${transformedSubscriptions.length} subscriptions`);
     res.status(200).json(transformedSubscriptions);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch subscriptions", error });
@@ -1532,27 +1523,41 @@ router.post("/api/subscriptions/draft", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
 
+    const now = new Date();
+    const clientDraftKey = typeof req.body?.clientDraftKey === 'string' ? req.body.clientDraftKey : null;
+
     // Prepare draft subscription document
     const draftSubscription = {
       ...req.body,
       tenantId,
       isDraft: true,
       status: "Draft",
-      createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: now
     };
 
-    // Create the draft subscription (no reminders or notifications for drafts)
-    const result = await collection.insertOne(draftSubscription);
-    const subscriptionId = result.insertedId;
+    // Idempotent behavior: if clientDraftKey is present, upsert instead of insert
+    if (clientDraftKey) {
+      await collection.updateOne(
+        { tenantId, clientDraftKey },
+        { $set: draftSubscription, $setOnInsert: { createdAt: now } },
+        { upsert: true }
+      );
 
-    // Get the complete draft subscription document
-    const createdDraft = await collection.findOne({ _id: subscriptionId });
+      const createdDraft = await collection.findOne({ tenantId, clientDraftKey });
+      return res.status(201).json({
+        message: "Draft saved successfully",
+        _id: createdDraft?._id,
+        subscription: createdDraft
+      });
+    }
 
-    res.status(201).json({ 
+    // Fallback: legacy behavior (may create duplicates if called multiple times)
+    const result = await collection.insertOne({ ...draftSubscription, createdAt: now });
+    const createdDraft = await collection.findOne({ _id: result.insertedId });
+    return res.status(201).json({
       message: "Draft saved successfully",
-      _id: subscriptionId,
-      subscription: createdDraft 
+      _id: result.insertedId,
+      subscription: createdDraft
     });
   } catch (error: unknown) {
     console.error("Draft creation error:", error);

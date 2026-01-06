@@ -420,7 +420,10 @@ if (!response.ok) {
               <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
                 Manage Subscription Users
               </h1>
-          </div>
+              <p className="text-gray-600">
+                Add or remove team members from the <span className="font-semibold text-indigo-600">{subscriptionName}</span> subscription.
+              </p>
+            </div>
             
             {/* Import/Export Buttons */}
             <div className="flex flex-wrap gap-2 justify-center md:justify-end">
