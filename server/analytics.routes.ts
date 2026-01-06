@@ -11,6 +11,9 @@ router.get("/api/analytics/dashboard", async (req, res) => {
   const tenantId = req.user?.tenantId;
   if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
   try {
+    // Cache for 30 seconds
+    res.setHeader('Cache-Control', 'public, max-age=30');
+    
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
     const now = new Date();
@@ -26,8 +29,11 @@ router.get("/api/analytics/dashboard", async (req, res) => {
       nextRenewal: { $gte: now.toISOString(), $lte: thirtyDaysFromNow.toISOString() }
     });
     
-    // Fetch all active subscriptions and decrypt amounts
-    const subscriptions = await collection.find({ status: "Active", tenantId }).toArray();
+    // OPTIMIZED: Only fetch amount and billingCycle, not full documents
+    const subscriptions = await collection.find(
+      { status: "Active", tenantId },
+      { projection: { amount: 1, billingCycle: 1 } }
+    ).toArray();
     
     let monthlySpend = 0;
     let yearlySpend = 0;
@@ -75,6 +81,9 @@ router.get("/api/analytics/trends", async (req, res) => {
   const tenantId = req.user?.tenantId;
   if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
   try {
+    // Cache for 1 minute
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
     
@@ -92,8 +101,11 @@ router.get("/api/analytics/trends", async (req, res) => {
       };
     }).reverse();
     
-    // Get all active subscriptions for tenant
-    const subscriptions = await collection.find({ status: "Active", tenantId }).toArray();
+    // OPTIMIZED: Only fetch needed fields
+    const subscriptions = await collection.find(
+      { status: "Active", tenantId },
+      { projection: { amount: 1, status: 1, startDate: 1, nextRenewal: 1 } }
+    ).toArray();
     
     // Calculate monthly spend for each month
     const trendsData = monthsArray.map(monthData => {
@@ -131,11 +143,17 @@ router.get("/api/analytics/categories", async (req, res) => {
   const tenantId = req.user?.tenantId;
   if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
   try {
+    // Cache for 1 minute
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
     
-    // Fetch all active subscriptions
-    const subscriptions = await collection.find({ status: "Active", tenantId }).toArray();
+    // OPTIMIZED: Only fetch category and amount
+    const subscriptions = await collection.find(
+      { status: "Active", tenantId },
+      { projection: { category: 1, amount: 1 } }
+    ).toArray();
     
     // Group by category and sum amounts (after decryption)
     const categoryMap = new Map<string, number>();

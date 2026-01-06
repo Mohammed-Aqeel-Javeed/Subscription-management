@@ -325,6 +325,24 @@ const handleDelete = (employee: Employee) => {
   setDeleteConfirmOpen(true);
 };
 
+const getEmployeeSubscriptionsForDelete = (employee: Employee | null) => {
+  if (!employee) return [];
+  const empName = (employee.name || '').toLowerCase().trim();
+  const empEmail = (employee.email || '').toLowerCase().trim();
+  const empId = String((employee as any)._id || (employee as any).id || '').trim();
+
+  return (subscriptions || []).filter((sub: any) => {
+    const owner = String(sub?.owner || '').toLowerCase().trim();
+    const ownerEmail = String(sub?.ownerEmail || '').toLowerCase().trim();
+    const ownerId = String(sub?.ownerId || sub?.owner_id || '').trim();
+    return (
+      (empEmail && ownerEmail && ownerEmail === empEmail) ||
+      (empName && owner && owner === empName) ||
+      (empId && ownerId && ownerId === empId)
+    );
+  });
+};
+
 const confirmDelete = () => {
   if (employeeToDelete) {
     deleteEmployeeMutation.mutate(employeeToDelete._id);
@@ -560,9 +578,6 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl fle
 <h3 className="text-2xl font-semibold text-gray-900 tracking-tight">Employee Management</h3>
 {/* Description removed as requested */}
 </div>
-<Badge className="bg-indigo-100 text-indigo-800 h-8 px-3 text-sm font-medium">
-{filteredEmployees.length} {filteredEmployees.length === 1 ? 'Employee' : 'Employees'}
-</Badge>
 </div>
 <div className="flex flex-col sm:flex-row gap-4 justify-between">
 <div className="flex items-center gap-4">
@@ -980,9 +995,9 @@ transition={{ duration: 0.5, delay: 0.3 }}
 
 {/* Delete Confirmation Dialog */}
 <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
     {/* Header with Red Gradient Background */}
-    <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+    <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
       <DialogHeader>
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
@@ -1000,16 +1015,35 @@ transition={{ duration: 0.5, delay: 0.3 }}
 
     {/* Content */}
     <div className="px-6 py-5">
-      <p className="text-gray-700 text-sm leading-relaxed mb-4">
-        Are you sure you want to delete the employee <span className="font-semibold text-gray-900">"{employeeToDelete?.name}"</span>?
-      </p>
-      <p className="text-gray-600 text-xs leading-relaxed">
-        This will permanently remove this employee and all associated data from your system.
-      </p>
+      {(() => {
+        const inUseCount = getEmployeeSubscriptionsForDelete(employeeToDelete).length;
+        if (inUseCount > 0) {
+          return (
+            <>
+              <p className="text-gray-700 text-sm leading-relaxed mb-4">
+                The employee <span className="font-semibold text-gray-900">"{employeeToDelete?.name}"</span> is linked to <span className="font-semibold text-gray-900">{inUseCount}</span> subscription(s).
+              </p>
+              <p className="text-gray-600 text-xs leading-relaxed">
+                You can’t delete it right now. Please reassign the subscriptions to another employee and then try again.
+              </p>
+            </>
+          );
+        }
+        return (
+          <>
+            <p className="text-gray-700 text-sm leading-relaxed mb-4">
+              Are you sure you want to delete the employee <span className="font-semibold text-gray-900">"{employeeToDelete?.name}"</span>?
+            </p>
+            <p className="text-gray-600 text-xs leading-relaxed">
+              This will permanently remove this employee and all associated data from your system.
+            </p>
+          </>
+        );
+      })()}
     </div>
 
     {/* Action Buttons */}
-    <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+    <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
       <Button 
         type="button" 
         variant="outline" 
@@ -1019,16 +1053,18 @@ transition={{ duration: 0.5, delay: 0.3 }}
         }}
         className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
       >
-        Cancel
+        {getEmployeeSubscriptionsForDelete(employeeToDelete).length > 0 ? 'OK' : 'Cancel'}
       </Button>
-      <Button 
-        type="button"
-        onClick={confirmDelete}
-        disabled={deleteEmployeeMutation.isPending}
-        className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
-      >
-        {deleteEmployeeMutation.isPending ? "Deleting..." : "Delete"}
-      </Button>
+      {getEmployeeSubscriptionsForDelete(employeeToDelete).length > 0 ? null : (
+        <Button 
+          type="button"
+          onClick={confirmDelete}
+          disabled={deleteEmployeeMutation.isPending}
+          className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+        >
+          {deleteEmployeeMutation.isPending ? "Deleting..." : "Delete"}
+        </Button>
+      )}
     </div>
   </DialogContent>
 </Dialog>
@@ -1040,6 +1076,8 @@ const [modalOpen, setModalOpen] = useState(false);
 const [editingUser, setEditingUser] = useState<UserType | undefined>();
 const [searchTerm, setSearchTerm] = useState("");
 const [showPassword, setShowPassword] = useState(false);
+const [userDeleteConfirmOpen, setUserDeleteConfirmOpen] = useState(false);
+const [userToDelete, setUserToDelete] = useState<UserType | null>(null);
 const { toast } = useToast();
 const queryClient = useQueryClient();
 
@@ -1161,9 +1199,9 @@ setModalOpen(true);
 };
 
 const handleDelete = (id: string) => {
-if (confirm("Are you sure you want to delete this user?")) {
-deleteMutation.mutate(id);
-}
+const u = users?.find((x) => x.id === id) || null;
+setUserToDelete(u);
+setUserDeleteConfirmOpen(true);
 }
 
 const handleAddNew = () => {
@@ -1483,6 +1521,69 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 </div>
 </div>
 
+{/* User Delete Confirmation Dialog */}
+<Dialog
+  open={userDeleteConfirmOpen}
+  onOpenChange={(open) => {
+    setUserDeleteConfirmOpen(open);
+    if (!open) setUserToDelete(null);
+  }}
+>
+  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+    <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
+      <DialogHeader>
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+            <Trash2 className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <DialogTitle className="text-xl font-bold tracking-tight text-white">
+              Delete User
+            </DialogTitle>
+            <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+          </div>
+        </div>
+      </DialogHeader>
+    </div>
+
+    <div className="px-6 py-5 bg-white">
+      <p className="text-gray-700 text-sm leading-relaxed mb-4">
+        Are you sure you want to delete the user <span className="font-semibold text-gray-900">&quot;{userToDelete?.name || 'this user'}&quot;</span>?
+      </p>
+      <p className="text-gray-600 text-xs leading-relaxed">
+        This will permanently remove this user from your system.
+      </p>
+    </div>
+
+    <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          setUserDeleteConfirmOpen(false);
+          setUserToDelete(null);
+        }}
+        className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
+      >
+        Cancel
+      </Button>
+      <Button
+        type="button"
+        onClick={() => {
+          if (!userToDelete?.id) return;
+          deleteMutation.mutate(userToDelete.id);
+          setUserDeleteConfirmOpen(false);
+          setUserToDelete(null);
+        }}
+        disabled={deleteMutation.isPending || !userToDelete?.id}
+        className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+      >
+        {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
+
 {/* Users List */}
 <motion.div
 initial={{ opacity: 0, y: 20 }}
@@ -1705,9 +1806,10 @@ const queryClient = useQueryClient();
 const { data: categories = [], isLoading: categoriesLoading, refetch: refetchCategories } = useQuery<Category[]>({
 queryKey: ["/api/company/categories"],
 initialData: [],
-refetchOnWindowFocus: true,
-refetchOnMount: true,
-staleTime: 0,
+refetchOnWindowFocus: false,
+refetchOnMount: false,
+staleTime: 5 * 60 * 1000,
+gcTime: 10 * 60 * 1000,
 });
 const addCategoryMutation = useMutation({
 mutationFn: async (newCategory: { name: string }) => {
@@ -1767,9 +1869,10 @@ refetch: refetchDepartments
 } = useQuery<Department[]>({
 queryKey: ["/api/company/departments"],
 initialData: [],
-refetchOnWindowFocus: true,
-refetchOnMount: true,
-staleTime: 0,
+refetchOnWindowFocus: false,
+refetchOnMount: false,
+staleTime: 5 * 60 * 1000,
+gcTime: 10 * 60 * 1000,
 });
 const addDepartmentMutation = useMutation({
 mutationFn: async (newDepartment: { name: string; departmentHead: string; email: string }) => {
@@ -2534,9 +2637,9 @@ transition={{ duration: 0.3 }}
         id="companyName"
         name="companyName"
         value={companyInfo.companyName}
-        readOnly
+        onChange={handleInputChange}
         placeholder=""
-        className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-gray-100 shadow-sm cursor-not-allowed"
+        className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm"
       />
     </div>
 
@@ -3036,8 +3139,8 @@ return (
   setDeptDeleteOpen(open);
   if (!open) setDeptToDelete(null);
 }}>
-  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white">
-    <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+    <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
       <DialogHeader>
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
@@ -3075,7 +3178,7 @@ return (
       )}
     </div>
 
-    <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+    <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
       <Button
         type="button"
         variant="outline"
@@ -3376,8 +3479,8 @@ title="Delete Category"
   setCategoryDeleteOpen(open);
   if (!open) setCategoryToDelete(null);
 }}>
-  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white">
-    <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+    <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
       <DialogHeader>
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
@@ -3415,7 +3518,7 @@ title="Delete Category"
       )}
     </div>
 
-    <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+    <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
       <Button
         type="button"
         variant="outline"

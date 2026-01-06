@@ -45,21 +45,30 @@ export default function Dashboard() {
       const res = await apiFetch("/api/analytics/dashboard");
       if (res.status === 401) throw new Error("Unauthorized");
       return res.json();
-    }
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
   const { data: trends, isLoading: trendsLoading } = useQuery<SpendingTrend[]>({
     queryKey: ["/api/analytics/trends"],
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/trends");
       return res.json();
-    }
+    },
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
   const { data: categories, isLoading: categoriesLoading } = useQuery<CategoryBreakdown[]>({
     queryKey: ["/api/analytics/categories"],
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/categories");
       return res.json();
-    }
+    },
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: subscriptions, isLoading: subscriptionsLoading } = useQuery<Subscription[]>({
@@ -67,7 +76,11 @@ export default function Dashboard() {
     queryFn: async () => {
       const res = await apiFetch("/api/subscriptions");
       return res.json();
-    }
+    },
+    staleTime: 60 * 1000, // 1 minute
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
   });
 
   // Get unique categories from actual subscriptions (like subscriptions page does)

@@ -8,16 +8,26 @@ const TAG_LENGTH = 16;
 const TAG_POSITION = SALT_LENGTH + IV_LENGTH;
 const ENCRYPTED_POSITION = TAG_POSITION + TAG_LENGTH;
 
+// Cache the derived encryption key to avoid expensive scrypt calls on every decrypt
+let cachedEncryptionKey: Buffer | null = null;
+
 // Get encryption key from environment or generate a strong one
 function getEncryptionKey(): Buffer {
+  // Return cached key if already derived
+  if (cachedEncryptionKey) {
+    return cachedEncryptionKey;
+  }
+  
   const key = process.env.ENCRYPTION_KEY;
   if (!key) {
     console.warn('ENCRYPTION_KEY not set in environment. Using default (NOT SECURE FOR PRODUCTION)');
     // In production, this should throw an error
-    return crypto.scryptSync('default-key-change-this', 'salt', 32);
+    cachedEncryptionKey = crypto.scryptSync('default-key-change-this', 'salt', 32);
+    return cachedEncryptionKey;
   }
-  // Derive a 256-bit key from the provided key
-  return crypto.scryptSync(key, 'salt', 32);
+  // Derive a 256-bit key from the provided key (expensive operation - cache it!)
+  cachedEncryptionKey = crypto.scryptSync(key, 'salt', 32);
+  return cachedEncryptionKey;
 }
 
 /**
@@ -88,13 +98,22 @@ export function decrypt(encryptedData: string | number): string {
     const result = decrypted.toString('utf8');
     return result;
   } catch (error) {
-    // If decryption fails, return original (likely plain text)
-    console.error('Decryption error:', {
-      error: error instanceof Error ? error.message : String(error),
-      dataLength: dataStr.length,
-      dataPreview: dataStr.substring(0, 50) + '...',
-      hasEncryptionKey: !!process.env.ENCRYPTION_KEY
-    });
+    // If decryption fails, return original (likely plain text or wrong key).
+    // Avoid spamming logs on every field/record in production, which can severely hurt performance.
+    const shouldLog = process.env.LOG_DECRYPT_ERRORS === 'true' || process.env.NODE_ENV !== 'production';
+    if (shouldLog) {
+      // Basic rate limit per process
+      (globalThis as any).__decryptErrorCount = ((globalThis as any).__decryptErrorCount || 0) + 1;
+      const count = (globalThis as any).__decryptErrorCount;
+      if (count <= 5) {
+        console.error('Decryption error:', {
+          error: error instanceof Error ? error.message : String(error),
+          dataLength: dataStr.length,
+          dataPreview: dataStr.substring(0, 50) + '...',
+          hasEncryptionKey: !!process.env.ENCRYPTION_KEY,
+        });
+      }
+    }
     return dataStr;
   }
 }

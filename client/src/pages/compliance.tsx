@@ -406,9 +406,10 @@ export default function Compliance() {
       return response.json();
     },
     refetchInterval: false,
-    refetchOnWindowFocus: true,
-    refetchOnMount: true,
-    staleTime: 0
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
   
   const { toast } = useToast();
@@ -706,9 +707,11 @@ export default function Compliance() {
       return response.json();
     },
     refetchInterval: false,
-    refetchOnWindowFocus: true,
-    refetchOnMount: true,
-    staleTime: 0
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    placeholderData: (previousData) => previousData,
   });
   
   useEffect(() => {
