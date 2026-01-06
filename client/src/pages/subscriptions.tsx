@@ -1,9 +1,12 @@
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,11 +18,14 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Subscription } from "@shared/schema";
 import { Can } from "@/components/Can";
+import { useSidebarSlot } from "@/context/SidebarSlotContext";
 
 // Extend Subscription type locally to include department and _id for frontend use
 type SubscriptionWithExtras = Subscription & { 
   departments?: string[]; 
   _id?: string; 
+  owner?: string | null;
+  ownerEmail?: string | null;
 };
 
 export default function Subscriptions() {
@@ -31,11 +37,41 @@ export default function Subscriptions() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Partial<SubscriptionWithExtras> | undefined>();
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [vendorFilter, setVendorFilter] = useState("all");
   const initialIsCancelledView = location.pathname.includes('cancelled');
-  const [statusFilter, setStatusFilter] = useState(initialIsCancelledView ? "Cancelled" : "all");
-  const [metricsFilter, setMetricsFilter] = useState<"all" | "active" | "Trial" | "draft" | "cancelled">("all");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(initialIsCancelledView ? ["Cancelled"] : []);
+  const [selectedBillingCycles, setSelectedBillingCycles] = useState<string[]>([]);
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [selectedOwners, setSelectedOwners] = useState<string[]>([]);
+  const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<string[]>([]);
+  const [selectedReminderPolicies, setSelectedReminderPolicies] = useState<string[]>([]);
+
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const { setActive: setSidebarSlotActive, setReplaceNav: setSidebarReplaceNav } = useSidebarSlot();
+  const [sidebarSlotEl, setSidebarSlotEl] = React.useState<HTMLElement | null>(null);
+
+  React.useEffect(() => {
+    const el = document.getElementById("page-sidebar-slot") as HTMLElement | null;
+    setSidebarSlotEl(el);
+  }, []);
+
+  React.useEffect(() => {
+    setSidebarSlotActive(filtersOpen);
+    setSidebarReplaceNav(filtersOpen);
+
+    return () => {
+      setSidebarSlotActive(false);
+      setSidebarReplaceNav(false);
+    };
+  }, [filtersOpen, setSidebarSlotActive, setSidebarReplaceNav]);
+
+  const [amountMin, setAmountMin] = useState<string>("");
+  const [amountMax, setAmountMax] = useState<string>("");
+  const [startDateFrom, setStartDateFrom] = useState<string>("");
+  const [startDateTo, setStartDateTo] = useState<string>("");
+  const [nextRenewalFrom, setNextRenewalFrom] = useState<string>("");
+  const [nextRenewalTo, setNextRenewalTo] = useState<string>("");
   
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -47,7 +83,9 @@ export default function Subscriptions() {
   
   React.useEffect(() => {
     if (location.pathname.includes('cancelled')) {
-      setStatusFilter('Cancelled');
+      setSelectedStatuses(['Cancelled']);
+    } else {
+      setSelectedStatuses([]);
     }
   }, [location.pathname]);
   const { toast } = useToast();
@@ -279,28 +317,78 @@ export default function Subscriptions() {
     });
   };
   
+  const parseDate = (val: unknown): Date | null => {
+    if (!val) return null;
+    const d = val instanceof Date ? val : new Date(String(val));
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const endOfDay = (date: Date) => {
+    const d = new Date(date);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  };
+
   const filteredSubscriptions = Array.isArray(subscriptions) ? subscriptions.filter(sub => {
     // Only show subscriptions for current tenant
     if (tenantId && sub.tenantId !== tenantId) return false;
-    const matchesSearch = (sub.serviceName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (sub.vendor || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === "all" || sub.category === categoryFilter;
-    const matchesVendor = vendorFilter === "all" || sub.vendor === vendorFilter;
-    const matchesStatus = statusFilter === "all" || sub.status === statusFilter;
-    
-    // Apply metrics filter
-    let matchesMetrics = true;
-    if (metricsFilter === "active") {
-      matchesMetrics = sub.status === "Active" && sub.billingCycle !== "Trial";
-    } else if (metricsFilter === "Trial") {
-      matchesMetrics = sub.billingCycle === "Trial";
-    } else if (metricsFilter === "draft") {
-      matchesMetrics = sub.status === "Draft";
-    } else if (metricsFilter === "cancelled") {
-      matchesMetrics = sub.status === "Cancelled";
-    }
-    
-    return matchesSearch && matchesCategory && matchesVendor && matchesStatus && matchesMetrics;
+    const q = searchTerm.trim().toLowerCase();
+    const ownerVal = String((sub as any)?.owner || (sub as any)?.ownerEmail || '').trim();
+    const effectiveStatus = (String(sub.billingCycle || '').toLowerCase() === 'trial')
+      ? 'Trial'
+      : String(sub.status || '');
+
+    const matchesSearch = !q ||
+      (sub.serviceName || '').toLowerCase().includes(q) ||
+      (sub.vendor || '').toLowerCase().includes(q) ||
+      (sub.category || '').toLowerCase().includes(q) ||
+      effectiveStatus.toLowerCase().includes(q) ||
+      ownerVal.toLowerCase().includes(q);
+
+    const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(String(sub.category || ''));
+    const matchesVendor = selectedVendors.length === 0 || selectedVendors.includes(String(sub.vendor || ''));
+    const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(effectiveStatus);
+    const matchesBilling = selectedBillingCycles.length === 0 || selectedBillingCycles.includes(String(sub.billingCycle || ''));
+    const matchesDepartment = selectedDepartments.length === 0 || selectedDepartments.some(d => (sub.departments || []).includes(d));
+    const matchesOwner = selectedOwners.length === 0 || selectedOwners.includes(ownerVal);
+    const matchesPaymentMethod = selectedPaymentMethods.length === 0 || selectedPaymentMethods.includes(String((sub as any)?.paymentMethod || ''));
+    const matchesReminderPolicy = selectedReminderPolicies.length === 0 || selectedReminderPolicies.includes(String((sub as any)?.reminderPolicy || ''));
+
+    const amountVal = parseFloat(String(sub.amount)) || 0;
+    const min = amountMin.trim() ? parseFloat(amountMin) : null;
+    const max = amountMax.trim() ? parseFloat(amountMax) : null;
+    const matchesAmount = (min === null || amountVal >= min) && (max === null || amountVal <= max);
+
+    const startVal = parseDate((sub as any)?.startDate);
+    const startFromVal = startDateFrom ? parseDate(startDateFrom) : null;
+    const startToVal = startDateTo ? endOfDay(parseDate(startDateTo) || new Date('invalid')) : null;
+    const matchesStartDate = (!startFromVal || (startVal && startVal >= startFromVal)) && (!startToVal || (startVal && startVal <= startToVal));
+
+    const renewVal = parseDate((sub as any)?.nextRenewal);
+    const renewFromVal = nextRenewalFrom ? parseDate(nextRenewalFrom) : null;
+    const renewToVal = nextRenewalTo ? endOfDay(parseDate(nextRenewalTo) || new Date('invalid')) : null;
+    const matchesNextRenewal = (!renewFromVal || (renewVal && renewVal >= renewFromVal)) && (!renewToVal || (renewVal && renewVal <= renewToVal));
+
+    // If date filters are active but the record has invalid date, exclude it.
+    const startDateFiltersActive = !!startFromVal || !!startToVal;
+    const nextRenewalFiltersActive = !!renewFromVal || !!renewToVal;
+    if (startDateFiltersActive && !startVal) return false;
+    if (nextRenewalFiltersActive && !renewVal) return false;
+
+    return (
+      matchesSearch &&
+      matchesCategory &&
+      matchesVendor &&
+      matchesStatus &&
+      matchesBilling &&
+      matchesDepartment &&
+      matchesOwner &&
+      matchesPaymentMethod &&
+      matchesReminderPolicy &&
+      matchesAmount &&
+      matchesStartDate &&
+      matchesNextRenewal
+    );
   }).sort((a, b) => {
     // Apply sorting if a field is selected
     if (!sortField) return 0;
@@ -350,8 +438,39 @@ export default function Subscriptions() {
       : <ArrowDown className="h-3 w-3 ml-1 inline-block" />;
   };
   
-  const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.category) : []));
-  const uniqueVendors = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.vendor) : []));
+  const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => String(sub.category || '')).filter(Boolean) : [])).sort();
+  const uniqueVendors = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => String(sub.vendor || '')).filter(Boolean) : [])).sort();
+  const uniqueBillingCycles = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => String(sub.billingCycle || '')).filter(Boolean) : [])).sort();
+  const uniqueDepartments = Array.from(new Set(
+    Array.isArray(subscriptions)
+      ? subscriptions.flatMap(sub => (sub.departments || []).map(d => String(d || '')).filter(Boolean))
+      : []
+  )).sort((a, b) => (a === 'Company Level' ? -1 : b === 'Company Level' ? 1 : a.localeCompare(b)));
+  const uniqueOwners = Array.from(new Set(
+    Array.isArray(subscriptions)
+      ? subscriptions
+          .map(sub => String((sub as any)?.owner || (sub as any)?.ownerEmail || '').trim())
+          .filter(Boolean)
+      : []
+  )).sort();
+  const uniquePaymentMethods = Array.from(new Set(
+    Array.isArray(subscriptions)
+      ? subscriptions.map(sub => String((sub as any)?.paymentMethod || '').trim()).filter(Boolean)
+      : []
+  )).sort();
+  const uniqueReminderPolicies = Array.from(new Set(
+    Array.isArray(subscriptions)
+      ? subscriptions.map(sub => String((sub as any)?.reminderPolicy || '').trim()).filter(Boolean)
+      : []
+  )).sort();
+
+  const uniqueStatuses = Array.from(new Set(
+    Array.isArray(subscriptions)
+      ? subscriptions
+          .map(sub => (String(sub.billingCycle || '').toLowerCase() === 'trial') ? 'Trial' : String(sub.status || '').trim())
+          .filter(Boolean)
+      : []
+  )).sort();
   
   // Category color helper removed (unused)
 
@@ -373,10 +492,328 @@ export default function Subscriptions() {
     return `${dd}/${mm}/${yyyy}`;
   };
   
-  // --- Summary Stats Section ---
-  const active = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active" && sub.billingCycle !== "Trial").length : 0;
-  const Trial = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.billingCycle === "Trial").length : 0;
-  const draft = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Draft").length : 0;
+  const toggleSelected = (current: string[], value: string) => {
+    return current.includes(value) ? current.filter(v => v !== value) : [...current, value];
+  };
+
+  const CheckboxList = ({
+    sectionId,
+    options,
+    selected,
+    onChange,
+  }: {
+    sectionId: string;
+    options: string[];
+    selected: string[];
+    onChange: (next: string[]) => void;
+  }) => {
+    if (options.length === 0) {
+      return <div className="px-2 py-1 text-sm text-gray-500">No options</div>;
+    }
+    return (
+      <div className="max-h-56 overflow-auto pr-1">
+        {options.map((opt) => {
+          const checked = selected.includes(opt);
+          const id = `${sectionId}-${opt}`.replace(/\s+/g, '-').toLowerCase();
+          return (
+            <div key={opt} className="flex items-center gap-2 px-2 py-2 hover:bg-slate-100 rounded-md">
+              <Checkbox id={id} checked={checked} onCheckedChange={() => onChange(toggleSelected(selected, opt))} />
+              <label htmlFor={id} className="text-sm cursor-pointer select-none flex-1 truncate">
+                {opt}
+              </label>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const [filterSearch, setFilterSearch] = useState<Record<string, string>>({});
+  const [filterShowAll, setFilterShowAll] = useState<Record<string, boolean>>({});
+
+  const FilterSection = ({
+    sectionId,
+    title,
+    options,
+    selected,
+    onChange,
+  }: {
+    sectionId: string;
+    title: string;
+    options: string[];
+    selected: string[];
+    onChange: (next: string[]) => void;
+  }) => {
+    const query = (filterSearch[sectionId] || '').trim().toLowerCase();
+    const showAll = !!filterShowAll[sectionId];
+    const filtered = query
+      ? options.filter((opt) => opt.toLowerCase().includes(query))
+      : options;
+
+    const MAX_VISIBLE = 50;
+    const visible = showAll ? filtered : filtered.slice(0, MAX_VISIBLE);
+    const remaining = Math.max(0, filtered.length - visible.length);
+
+    return (
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            value={filterSearch[sectionId] || ''}
+            onChange={(e) => {
+              const next = e.target.value;
+              setFilterSearch((prev) => ({ ...prev, [sectionId]: next }));
+              setFilterShowAll((prev) => ({ ...prev, [sectionId]: false }));
+            }}
+            placeholder={`Search ${title}`}
+            className="pl-10 h-9 text-sm"
+          />
+        </div>
+
+        <CheckboxList sectionId={sectionId} options={visible} selected={selected} onChange={onChange} />
+
+        {remaining > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-8 px-2 text-blue-600 hover:text-blue-700 justify-start"
+            onClick={() => setFilterShowAll((prev) => ({ ...prev, [sectionId]: true }))}
+          >
+            {remaining} more
+          </Button>
+        )}
+      </div>
+    );
+  };
+
+  const activeFilterCount =
+    selectedCategories.length +
+    selectedVendors.length +
+    selectedStatuses.length +
+    selectedBillingCycles.length +
+    selectedDepartments.length +
+    selectedOwners.length +
+    selectedPaymentMethods.length +
+    selectedReminderPolicies.length +
+    (amountMin.trim() ? 1 : 0) +
+    (amountMax.trim() ? 1 : 0) +
+    (startDateFrom ? 1 : 0) +
+    (startDateTo ? 1 : 0) +
+    (nextRenewalFrom ? 1 : 0) +
+    (nextRenewalTo ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setSelectedCategories([]);
+    setSelectedVendors([]);
+    setSelectedStatuses(initialIsCancelledView ? ['Cancelled'] : []);
+    setSelectedBillingCycles([]);
+    setSelectedDepartments([]);
+    setSelectedOwners([]);
+    setSelectedPaymentMethods([]);
+    setSelectedReminderPolicies([]);
+    setAmountMin('');
+    setAmountMax('');
+    setStartDateFrom('');
+    setStartDateTo('');
+    setNextRenewalFrom('');
+    setNextRenewalTo('');
+  };
+
+  const FiltersSidebarPanel = () => (
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden">
+      <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3">
+        <div>
+          <div className="text-base font-semibold text-gray-900">Filters</div>
+          <div className="text-xs text-gray-500 mt-0.5">Refine subscriptions</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" className="h-9" onClick={clearAllFilters}>
+            Clear all
+          </Button>
+          <Button type="button" variant="ghost" className="h-9" onClick={() => setFiltersOpen(false)}>
+            Close
+          </Button>
+        </div>
+      </div>
+
+      <div className="p-5 max-h-[calc(100vh-260px)] overflow-auto">
+        <Accordion type="multiple" defaultValue={["categories", "price", "vendor"]}>
+          <AccordionItem value="categories">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Categories
+            </AccordionTrigger>
+            <AccordionContent>
+              <FilterSection
+                sectionId="categories"
+                title="Category"
+                options={uniqueCategories}
+                selected={selectedCategories}
+                onChange={setSelectedCategories}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="vendor">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Vendor
+            </AccordionTrigger>
+            <AccordionContent>
+              <FilterSection
+                sectionId="vendor"
+                title="Vendor"
+                options={uniqueVendors}
+                selected={selectedVendors}
+                onChange={setSelectedVendors}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="status">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Status
+            </AccordionTrigger>
+            <AccordionContent>
+              <FilterSection
+                sectionId="status"
+                title="Status"
+                options={uniqueStatuses}
+                selected={selectedStatuses}
+                onChange={setSelectedStatuses}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="billing">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Billing
+            </AccordionTrigger>
+            <AccordionContent>
+              <FilterSection
+                sectionId="billing"
+                title="Billing"
+                options={uniqueBillingCycles}
+                selected={selectedBillingCycles}
+                onChange={setSelectedBillingCycles}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="department">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Department
+            </AccordionTrigger>
+            <AccordionContent>
+              <FilterSection
+                sectionId="department"
+                title="Department"
+                options={uniqueDepartments}
+                selected={selectedDepartments}
+                onChange={setSelectedDepartments}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="owner">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Owner
+            </AccordionTrigger>
+            <AccordionContent>
+              <FilterSection
+                sectionId="owner"
+                title="Owner"
+                options={uniqueOwners}
+                selected={selectedOwners}
+                onChange={setSelectedOwners}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="payment">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Payment
+            </AccordionTrigger>
+            <AccordionContent>
+              <FilterSection
+                sectionId="payment"
+                title="Payment"
+                options={uniquePaymentMethods}
+                selected={selectedPaymentMethods}
+                onChange={setSelectedPaymentMethods}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="reminder">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Reminder
+            </AccordionTrigger>
+            <AccordionContent>
+              <FilterSection
+                sectionId="reminder"
+                title="Reminder"
+                options={uniqueReminderPolicies}
+                selected={selectedReminderPolicies}
+                onChange={setSelectedReminderPolicies}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="price">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Price
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="flex items-center gap-2 px-1">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Min"
+                  value={amountMin}
+                  onChange={(e) => setAmountMin(e.target.value)}
+                  className="h-9"
+                />
+                <span className="text-sm text-gray-500">to</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Max"
+                  value={amountMax}
+                  onChange={(e) => setAmountMax(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="dates">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Dates
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 mb-1">Start date</div>
+                  <div className="flex items-center gap-2">
+                    <Input type="date" value={startDateFrom} onChange={(e) => setStartDateFrom(e.target.value)} className="h-9" />
+                    <span className="text-sm text-gray-500">to</span>
+                    <Input type="date" value={startDateTo} onChange={(e) => setStartDateTo(e.target.value)} className="h-9" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 mb-1">Next renewal</div>
+                  <div className="flex items-center gap-2">
+                    <Input type="date" value={nextRenewalFrom} onChange={(e) => setNextRenewalFrom(e.target.value)} className="h-9" />
+                    <span className="text-sm text-gray-500">to</span>
+                    <Input type="date" value={nextRenewalTo} onChange={(e) => setNextRenewalTo(e.target.value)} className="h-9" />
+                  </div>
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+    </div>
+  );
   
   if (isLoading) {
     return (
@@ -399,12 +836,6 @@ export default function Subscriptions() {
               <div className="flex flex-row gap-4 items-center">
                 <Skeleton className="h-12 w-48 rounded-xl" />
               </div>
-            </div>
-            {/* --- Summary Stats --- */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-              <Skeleton className="h-20 w-full rounded-xl" />
-              <Skeleton className="h-20 w-full rounded-xl" />
-              <Skeleton className="h-20 w-full rounded-xl" />
             </div>
           </div>
           
@@ -441,6 +872,7 @@ export default function Subscriptions() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
       <div className="max-w-[1400px] mx-auto px-6 py-8">
+        {filtersOpen && sidebarSlotEl ? createPortal(<FiltersSidebarPanel />, sidebarSlotEl) : null}
         {/* Header Section */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
@@ -552,122 +984,34 @@ export default function Subscriptions() {
           </div>
         </div>
 
-        {/* Key Metrics - Icon boxes with text */}
-        <div className="flex items-center justify-between w-full mb-10 gap-4">
-          <div 
-            className="flex items-center gap-3 flex-1"
-          >
-            <div className="transition-all duration-200">
-              <img src="/assets/Active.png" alt="Active Services" className="h-24 w-24" />
+        {/* Search + Filter By */}
+        <div className="mb-6 bg-white border border-gray-200 rounded-2xl shadow-sm p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Search subscriptions..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm rounded-lg"
+              />
             </div>
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Active Services
-              </p>
-              <p className="text-3xl font-bold text-gray-900">{active}</p>
-              <a 
-                href="#active-details" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  setMetricsFilter(metricsFilter === "active" ? "all" : "active");
-                }}
-                className="text-xs text-blue-500 hover:underline cursor-pointer"
-              >
-                Click to view details
-              </a>
-            </div>
-          </div>
-
-          <div 
-            className="flex items-center gap-3 flex-1"
-          >
-            <div className="transition-all duration-200">
-              <img src="/assets/Free Trial.png" alt="Trial Subscriptions" className="h-24 w-24" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Trial Subscriptions
-              </p>
-              <p className="text-3xl font-bold text-gray-900">{Trial}</p>
-              <a 
-                href="#trial-details" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  setMetricsFilter(metricsFilter === "Trial" ? "all" : "Trial");
-                }}
-                className="text-xs text-blue-500 hover:underline cursor-pointer"
-              >
-                Click to view details
-              </a>
-            </div>
-          </div>
-
-          <div 
-            className="flex items-center gap-3 flex-1"
-          >
-            <div className="transition-all duration-200">
-              <img src="/assets/Drafts.png" alt="Draft Subscriptions" className="h-24 w-24" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Draft Subscriptions
-              </p>
-              <p className="text-3xl font-bold text-gray-900">{draft}</p>
-              <a 
-                href="#draft-details" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  setMetricsFilter(metricsFilter === "draft" ? "all" : "draft");
-                }}
-                className="text-xs text-blue-500 hover:underline cursor-pointer"
-              >
-                Click to view details
-              </a>
-            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 border-gray-200 bg-white text-gray-900 text-sm font-normal"
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+            </Button>
           </div>
         </div>
 
-        {/* Search and Filters Row */}
-        <div className="mb-6 flex items-center space-x-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="Search subscriptions..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm rounded-lg"
-            />
-          </div>
-          
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {uniqueCategories.filter(category => category && category !== "").map(category => (
-                <SelectItem key={category} value={category}>{category}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          
-          <Select value={vendorFilter} onValueChange={setVendorFilter}>
-            <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
-              <SelectValue placeholder="All Vendors" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Vendors</SelectItem>
-              {uniqueVendors.filter(vendor => vendor && vendor !== "").map(vendor => (
-                <SelectItem key={vendor} value={vendor}>{vendor}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        
         {/* Professional Data Table */}
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden">
-          <div className="overflow-x-auto">
-            <Table>
+        <div className="min-w-0">
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden">
+              <div className="overflow-x-auto">
+                <Table>
               <TableHeader>
                 <TableRow className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
                   <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
@@ -847,8 +1191,10 @@ export default function Subscriptions() {
                   </TableRow>
                 )}
               </TableBody>
-            </Table>
+                </Table>
+            </div>
           </div>
+
         </div>
       </div>
       

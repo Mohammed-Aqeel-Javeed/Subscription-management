@@ -63,6 +63,17 @@ export default function Configuration() {
       toast({ title: "Error", description: "Cannot delete: missing id", variant: "destructive" });
       return;
     }
+
+    const paymentName = String(paymentToDelete.name || paymentToDelete.title || '').trim();
+    const inUseCount = paymentName ? getPaymentMethodSubscriptions(paymentName).length : 0;
+    if (inUseCount > 0) {
+      toast({
+        title: "Cannot delete payment method",
+        description: `This payment method is linked to ${inUseCount} subscription(s). Please reassign the payment method before deleting.`,
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Close dialog and show toast immediately for better UX
     setDeleteConfirmOpen(false);
@@ -70,7 +81,14 @@ export default function Configuration() {
     setPaymentToDelete(null);
     
     fetch(`/api/payment/${paymentToDelete._id}`, { method: "DELETE" })
-      .then(res => res.json())
+      .then(async (res) => {
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = (json as any)?.message || "Failed to delete payment method";
+          throw new Error(msg);
+        }
+        return json;
+      })
       .then(() => {
         // Only use queryClient to invalidate and refetch
         queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
@@ -80,10 +98,10 @@ export default function Configuration() {
           variant: "destructive",
         });
       })
-      .catch(() => {
+      .catch((err) => {
         toast({
           title: "Error",
-          description: "Failed to delete payment method",
+          description: err?.message || "Failed to delete payment method",
           variant: "destructive",
         });
       });
@@ -229,6 +247,16 @@ export default function Configuration() {
     return subscriptions.filter(sub => {
       return sub.paymentMethod && 
              sub.paymentMethod.toLowerCase().trim() === paymentMethodName.toLowerCase().trim();
+    });
+  };
+
+  // Get subscriptions for a currency
+  const getCurrencySubscriptions = (currencyCode: string) => {
+    const code = (currencyCode || '').toUpperCase().trim();
+    if (!code) return [];
+    return subscriptions.filter((sub) => {
+      const subCurrency = (sub?.currency || '').toUpperCase().trim();
+      return subCurrency === code;
     });
   };
 
@@ -624,13 +652,35 @@ export default function Configuration() {
     
     if (upperValue.length > 0) {
       const search = upperValue.trim();
+
+      const rank = (curr: { code: string; description: string }, q: string) => {
+        const code = curr.code.toUpperCase();
+        const name = curr.description.toUpperCase();
+        const codeIdx = code.indexOf(q);
+        const nameIdx = name.indexOf(q);
+        // Prefer what user is typing as text first (name prefix), then code.
+        // This makes "SR" show "Sri..." before "Surinamese (SRD)".
+        if (code === q) return 0;
+        if (nameIdx === 0) return 10;
+        if (codeIdx === 0) return 20;
+        if (codeIdx > 0) return 20 + codeIdx;
+        if (nameIdx > 0) return 100 + nameIdx;
+        return 1000;
+      };
+
       const filtered = currencyList
-        .filter(curr => {
-          const codeMatch = curr.code.toUpperCase().startsWith(search);
-          const nameMatch = curr.description.toUpperCase().includes(search);
-          return codeMatch || nameMatch;
+        .filter((curr) => {
+          const code = curr.code.toUpperCase();
+          const name = curr.description.toUpperCase();
+          return code.includes(search) || name.includes(search);
         })
-        .map(curr => ({
+        .sort((a, b) => {
+          const ra = rank(a, search);
+          const rb = rank(b, search);
+          if (ra !== rb) return ra - rb;
+          return a.description.localeCompare(b.description);
+        })
+        .map((curr) => ({
           ...curr,
           countryCode: getCountryCodeForCurrency(curr.code),
         }));
@@ -1080,6 +1130,10 @@ export default function Configuration() {
       });
     }
   };
+
+  // Currency delete confirmation dialog state
+  const [currencyDeleteOpen, setCurrencyDeleteOpen] = useState(false);
+  const [currencyToDelete, setCurrencyToDelete] = useState<{ code: string; name?: string; inUseCount: number } | null>(null);
 
   // Update currency rates handler
   const updateCurrencyRates = async () => {
@@ -1804,6 +1858,11 @@ export default function Configuration() {
                                         <button
                                           key={curr.code}
                                           type="button"
+                                          onPointerDown={(e) => {
+                                            // Select before input blur closes the dropdown.
+                                            e.preventDefault();
+                                            handleCurrencySelect(curr);
+                                          }}
                                           onClick={() => handleCurrencySelect(curr)}
                                           className="w-full px-4 py-2 text-left hover:bg-blue-50 transition-colors duration-150 flex items-center justify-between border-b border-gray-100 last:border-b-0"
                                         >
@@ -1864,6 +1923,84 @@ export default function Configuration() {
                             </div>
                           </DialogContent>
                         </Dialog>
+
+                        {/* Currency Delete Confirmation Dialog */}
+                        <Dialog
+                          open={currencyDeleteOpen}
+                          onOpenChange={(open) => {
+                            setCurrencyDeleteOpen(open);
+                            if (!open) setCurrencyToDelete(null);
+                          }}
+                        >
+                          <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white">
+                            <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+                              <DialogHeader>
+                                <div className="flex items-center gap-3">
+                                  <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                    <Trash2 className="h-5 w-5 text-white" />
+                                  </div>
+                                  <div>
+                                    <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                                      Delete Currency
+                                    </DialogTitle>
+                                    <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+                                  </div>
+                                </div>
+                              </DialogHeader>
+                            </div>
+
+                            <div className="px-6 py-5">
+                              {(currencyToDelete?.inUseCount ?? 0) > 0 ? (
+                                <>
+                                  <p className="text-gray-700 text-sm leading-relaxed mb-4">
+                                    The currency <span className="font-semibold text-gray-900">"{currencyToDelete?.code}"</span> is linked to <span className="font-semibold text-gray-900">{currencyToDelete?.inUseCount ?? 0}</span> subscription(s).
+                                  </p>
+                                  <p className="text-gray-600 text-xs leading-relaxed">
+                                    You can’t delete it right now. Please reassign the currency in those subscriptions and then try again.
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-gray-700 text-sm leading-relaxed mb-4">
+                                    Are you sure you want to delete the currency <span className="font-semibold text-gray-900">"{currencyToDelete?.code}"</span>?
+                                  </p>
+                                  <p className="text-gray-600 text-xs leading-relaxed">
+                                    This will permanently remove this currency from your system.
+                                  </p>
+                                </>
+                              )}
+                            </div>
+
+                            <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setCurrencyDeleteOpen(false);
+                                  setCurrencyToDelete(null);
+                                }}
+                                className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
+                              >
+                                {(currencyToDelete?.inUseCount ?? 0) > 0 ? 'OK' : 'Cancel'}
+                              </Button>
+                              {(currencyToDelete?.inUseCount ?? 0) > 0 ? null : (
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    const code = currencyToDelete?.code;
+                                    if (code) deleteCurrency(code);
+                                    setCurrencyDeleteOpen(false);
+                                    setCurrencyToDelete(null);
+                                  }}
+                                  className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+                                >
+                                  Delete
+                                </Button>
+                              )}
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+
                         {currenciesLoading ? (
                           <div className="flex items-center justify-center py-12">
                             <div className="text-gray-500">Loading currencies...</div>
@@ -1950,7 +2087,17 @@ export default function Configuration() {
                                             variant="ghost"
                                             size="sm"
                                             className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                            onClick={() => deleteCurrency(currency.code)}
+                                            onClick={() => {
+                                              const code = (currency.code || '').toUpperCase().trim();
+                                              if (!code) return;
+                                              const inUseCount = getCurrencySubscriptions(code).length;
+                                              setCurrencyToDelete({
+                                                code,
+                                                name: currency.name,
+                                                inUseCount,
+                                              });
+                                              setCurrencyDeleteOpen(true);
+                                            }}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </Button>
@@ -2514,12 +2661,32 @@ export default function Configuration() {
 
                         {/* Content */}
                         <div className="px-6 py-5">
-                          <p className="text-gray-700 text-sm leading-relaxed mb-4">
-                            Are you sure you want to delete the payment method <span className="font-semibold text-gray-900">"{paymentToDelete?.name || paymentToDelete?.title}"</span>?
-                          </p>
-                          <p className="text-gray-600 text-xs leading-relaxed">
-                            This will permanently remove this payment method from your system.
-                          </p>
+                          {(() => {
+                            const pmName = String(paymentToDelete?.name || paymentToDelete?.title || '').trim();
+                            const inUse = pmName ? getPaymentMethodSubscriptions(pmName).length : 0;
+                            if (inUse > 0) {
+                              return (
+                                <>
+                                  <p className="text-gray-700 text-sm leading-relaxed mb-4">
+                                    The payment method <span className="font-semibold text-gray-900">"{pmName}"</span> is linked to <span className="font-semibold text-gray-900">{inUse}</span> subscription(s).
+                                  </p>
+                                  <p className="text-gray-600 text-xs leading-relaxed">
+                                    You can’t delete it right now. Please reassign the payment method in those subscriptions and then try again.
+                                  </p>
+                                </>
+                              );
+                            }
+                            return (
+                              <>
+                                <p className="text-gray-700 text-sm leading-relaxed mb-4">
+                                  Are you sure you want to delete the payment method <span className="font-semibold text-gray-900">"{paymentToDelete?.name || paymentToDelete?.title}"</span>?
+                                </p>
+                                <p className="text-gray-600 text-xs leading-relaxed">
+                                  This will permanently remove this payment method from your system.
+                                </p>
+                              </>
+                            );
+                          })()}
                         </div>
 
                         {/* Action Buttons */}
@@ -2533,15 +2700,26 @@ export default function Configuration() {
                             }}
                             className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
                           >
-                            Cancel
+                            {(() => {
+                              const pmName = String(paymentToDelete?.name || paymentToDelete?.title || '').trim();
+                              const inUse = pmName ? getPaymentMethodSubscriptions(pmName).length : 0;
+                              return inUse > 0 ? 'OK' : 'Cancel';
+                            })()}
                           </Button>
-                          <Button 
-                            type="button"
-                            onClick={confirmDeletePaymentMethod}
-                            className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
-                          >
-                            Delete
-                          </Button>
+                          {(() => {
+                            const pmName = String(paymentToDelete?.name || paymentToDelete?.title || '').trim();
+                            const inUse = pmName ? getPaymentMethodSubscriptions(pmName).length : 0;
+                            if (inUse > 0) return null;
+                            return (
+                              <Button 
+                                type="button"
+                                onClick={confirmDeletePaymentMethod}
+                                className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+                              >
+                                Delete
+                              </Button>
+                            );
+                          })()}
                         </div>
                       </DialogContent>
                     </Dialog>

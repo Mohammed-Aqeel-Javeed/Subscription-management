@@ -504,6 +504,34 @@ router.delete("/api/payment/:id", async (req, res) => {
     } catch {
       return res.status(400).json({ message: "Invalid payment id" });
     }
+
+    // Block deletion if this payment method is linked to any subscription.
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const existing = await collection.findOne(filter);
+    const paymentName = String((existing as any)?.name || (existing as any)?.title || '').trim();
+    if (!existing) {
+      return res.status(404).json({ message: "Payment method not found" });
+    }
+
+    if (paymentName) {
+      const subsCollection = db.collection("subscriptions");
+      const linkedCount = await subsCollection.countDocuments({
+        tenantId,
+        paymentMethod: paymentName,
+      });
+
+      if (linkedCount > 0) {
+        return res.status(409).json({
+          message: `Payment method is linked to ${linkedCount} subscription(s). Please reassign the payment method before deleting.`,
+          linkedCount,
+        });
+      }
+    }
+
     const result = await collection.deleteOne(filter);
     if (result.deletedCount === 1) {
       res.status(200).json({ message: "Payment method deleted" });
@@ -1176,14 +1204,28 @@ router.delete("/api/currencies/:code", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("currencies");
+    const subsCollection = db.collection("subscriptions");
     const { code } = req.params;
     const tenantId = req.user?.tenantId;
     
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
+
+    const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const codeTrimmed = (code || '').toUpperCase().trim();
+    const linkedCount = await subsCollection.countDocuments({
+      tenantId,
+      currency: { $regex: `^${escapeRegex(codeTrimmed)}$`, $options: "i" }
+    });
+    if (linkedCount > 0) {
+      return res.status(409).json({
+        message: "Please reassign the currency before deleting.",
+        linkedCount,
+      });
+    }
     
-    const result = await collection.deleteOne({ code: code.toUpperCase(), tenantId });
+    const result = await collection.deleteOne({ code: codeTrimmed, tenantId });
     
     if (result.deletedCount === 1) {
       res.status(200).json({ message: "Currency deleted" });
@@ -1250,12 +1292,33 @@ router.delete("/api/company/categories/:name", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
+    const subsCollection = db.collection("subscriptions");
     const name = req.params.name;
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Category name required" });
     }
-    // Case-insensitive and trimmed match
-    const result = await collection.deleteOne({ name: { $regex: `^${name.trim()}$`, $options: "i" } });
+
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const trimmed = name.trim();
+    const nameRegex = `^${escapeRegex(trimmed)}$`;
+    const linkedCount = await subsCollection.countDocuments({
+      tenantId,
+      category: { $regex: nameRegex, $options: "i" }
+    });
+    if (linkedCount > 0) {
+      return res.status(409).json({
+        message: "Please reassign the category before deleting.",
+        linkedCount,
+      });
+    }
+
+    // Case-insensitive and trimmed match (within tenant)
+    const result = await collection.deleteOne({ tenantId, name: { $regex: nameRegex, $options: "i" } });
     if (result.deletedCount === 1) {
       res.status(200).json({ message: "Category deleted" });
     } else {
@@ -1408,12 +1471,45 @@ router.delete("/api/company/departments/:name", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
+    const subsCollection = db.collection("subscriptions");
     const name = req.params.name;
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Department name required" });
     }
-    // Case-insensitive and trimmed match
-    const result = await collection.deleteOne({ name: { $regex: `^${name.trim()}$`, $options: "i" } });
+
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const trimmed = name.trim();
+    const deptNameRegex = `^${escapeRegex(trimmed)}$`;
+    const deptQuotedRegex = new RegExp(`\\"${escapeRegex(trimmed)}\\"`, 'i');
+
+    const linkedCount = await subsCollection.countDocuments({
+      tenantId,
+      $or: [
+        // stored as array
+        { departments: { $regex: deptNameRegex, $options: "i" } },
+        { departments: trimmed },
+        // stored as plain string
+        { department: { $regex: deptNameRegex, $options: "i" } },
+        { department: trimmed },
+        // stored as JSON string
+        { departments: { $regex: deptQuotedRegex } },
+        { department: { $regex: deptQuotedRegex } }
+      ]
+    });
+    if (linkedCount > 0) {
+      return res.status(409).json({
+        message: "Please reassign the department before deleting.",
+        linkedCount,
+      });
+    }
+
+    // Case-insensitive and trimmed match (within tenant)
+    const result = await collection.deleteOne({ tenantId, name: { $regex: deptNameRegex, $options: "i" } });
     if (result.deletedCount === 1) {
       res.status(200).json({ message: "Department deleted" });
     } else {

@@ -1858,6 +1858,11 @@ const deptHeadDropdownRef = useRef<HTMLDivElement>(null);
 const [isDepartmentEmailLocked, setIsDepartmentEmailLocked] = useState(false);
 const [departmentSearchTerm, setDepartmentSearchTerm] = useState('');
 const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [deptDeleteOpen, setDeptDeleteOpen] = useState(false);
+  const [deptToDelete, setDeptToDelete] = useState<any>(null);
+
+  const [categoryDeleteOpen, setCategoryDeleteOpen] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState<any>(null);
 const [selectedDepartmentForDetails, setSelectedDepartmentForDetails] = useState<string | null>(null);
 const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
 const [selectedEmployeeSubscriptions, setSelectedEmployeeSubscriptions] = useState<{employeeName: string; subscriptions: any[]}>({employeeName: '', subscriptions: []});
@@ -2235,6 +2240,16 @@ const getDepartmentSubscriptions = (deptName: string) => {
       return sub.departments.includes(deptName) || sub.departments.includes(`"${deptName}"`);
     }
     return false;
+  });
+};
+
+// Get subscriptions for a category
+const getCategorySubscriptions = (categoryName: string) => {
+  const name = (categoryName || '').toLowerCase().trim();
+  if (!name) return [];
+  return subscriptionsData.filter((sub) => {
+    const subCategory = (sub?.category || '').toLowerCase().trim();
+    return subCategory === name;
   });
 };
 
@@ -2969,9 +2984,13 @@ return (
           variant="ghost"
           size="sm"
           onClick={() => {
-            if (department.name && window.confirm(`Delete department '${displayName}'?`)) {
-              deleteDepartmentMutation.mutate(department.name);
-            }
+            if (!department.name) return;
+            setDeptToDelete({
+              department,
+              displayName,
+              subCount,
+            });
+            setDeptDeleteOpen(true);
           }}
           disabled={deleteDepartmentMutation.isPending || !department.name}
           className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-7 w-7"
@@ -3011,6 +3030,82 @@ return (
 )
 }
 </div>
+
+{/* Department Delete Confirmation Dialog */}
+<Dialog open={deptDeleteOpen} onOpenChange={(open) => {
+  setDeptDeleteOpen(open);
+  if (!open) setDeptToDelete(null);
+}}>
+  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white">
+    <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+      <DialogHeader>
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+            <Trash2 className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <DialogTitle className="text-xl font-bold tracking-tight text-white">
+              Delete Department
+            </DialogTitle>
+            <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+          </div>
+        </div>
+      </DialogHeader>
+    </div>
+
+    <div className="px-6 py-5">
+      {deptToDelete?.subCount > 0 ? (
+        <>
+          <p className="text-gray-700 text-sm leading-relaxed mb-4">
+            The department <span className="font-semibold text-gray-900">"{deptToDelete?.displayName}"</span> is linked to <span className="font-semibold text-gray-900">{deptToDelete?.subCount}</span> subscription(s).
+          </p>
+          <p className="text-gray-600 text-xs leading-relaxed">
+            You can’t delete it right now. Please reassign the department in those subscriptions and then try again.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="text-gray-700 text-sm leading-relaxed mb-4">
+            Are you sure you want to delete the department <span className="font-semibold text-gray-900">"{deptToDelete?.displayName}"</span>?
+          </p>
+          <p className="text-gray-600 text-xs leading-relaxed">
+            This will permanently remove this department from your system.
+          </p>
+        </>
+      )}
+    </div>
+
+    <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          setDeptDeleteOpen(false);
+          setDeptToDelete(null);
+        }}
+        className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
+      >
+        {deptToDelete?.subCount > 0 ? 'OK' : 'Cancel'}
+      </Button>
+      {deptToDelete?.subCount > 0 ? null : (
+        <Button
+          type="button"
+          onClick={() => {
+            const deptName = deptToDelete?.department?.name;
+            if (deptName) {
+              deleteDepartmentMutation.mutate(deptName);
+            }
+            setDeptDeleteOpen(false);
+            setDeptToDelete(null);
+          }}
+          className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+        >
+          Delete
+        </Button>
+      )}
+    </div>
+  </DialogContent>
+</Dialog>
 </div>
 
 {/* Department Details Modal */}
@@ -3233,6 +3328,7 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 ) : (
 categories.map((category, idx) => {
 const displayName = typeof category.name === "string" && category.name.trim() ? category.name : `Unnamed Category ${idx + 1}`;
+const subCount = category.name ? getCategorySubscriptions(category.name).length : 0;
 return (
 <motion.div
 key={displayName + idx}
@@ -3248,9 +3344,13 @@ className="p-4 border border-indigo-200 bg-indigo-50 shadow-sm rounded-xl transi
 variant="ghost"
 size="sm"
 onClick={() => {
-if (category.name && window.confirm(`Delete category '${displayName}'?`)) {
-deleteCategoryMutation.mutate(category.name);
-}
+if (!category.name) return;
+setCategoryToDelete({
+  category,
+  displayName,
+  subCount,
+});
+setCategoryDeleteOpen(true);
 }}
 disabled={deleteCategoryMutation.isPending || !category.name}
 className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-8 w-8"
@@ -3270,6 +3370,82 @@ title="Delete Category"
 </Card>
 </motion.div>
 </TabsContent>
+
+{/* Category Delete Confirmation Dialog */}
+<Dialog open={categoryDeleteOpen} onOpenChange={(open) => {
+  setCategoryDeleteOpen(open);
+  if (!open) setCategoryToDelete(null);
+}}>
+  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white">
+    <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+      <DialogHeader>
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+            <Trash2 className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <DialogTitle className="text-xl font-bold tracking-tight text-white">
+              Delete Category
+            </DialogTitle>
+            <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+          </div>
+        </div>
+      </DialogHeader>
+    </div>
+
+    <div className="px-6 py-5">
+      {categoryToDelete?.subCount > 0 ? (
+        <>
+          <p className="text-gray-700 text-sm leading-relaxed mb-4">
+            The category <span className="font-semibold text-gray-900">"{categoryToDelete?.displayName}"</span> is linked to <span className="font-semibold text-gray-900">{categoryToDelete?.subCount}</span> subscription(s).
+          </p>
+          <p className="text-gray-600 text-xs leading-relaxed">
+            You can’t delete it right now. Please reassign the category in those subscriptions and then try again.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="text-gray-700 text-sm leading-relaxed mb-4">
+            Are you sure you want to delete the category <span className="font-semibold text-gray-900">"{categoryToDelete?.displayName}"</span>?
+          </p>
+          <p className="text-gray-600 text-xs leading-relaxed">
+            This will permanently remove this category from your system.
+          </p>
+        </>
+      )}
+    </div>
+
+    <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          setCategoryDeleteOpen(false);
+          setCategoryToDelete(null);
+        }}
+        className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
+      >
+        {categoryToDelete?.subCount > 0 ? 'OK' : 'Cancel'}
+      </Button>
+      {categoryToDelete?.subCount > 0 ? null : (
+        <Button
+          type="button"
+          onClick={() => {
+            const name = categoryToDelete?.category?.name;
+            if (name) {
+              deleteCategoryMutation.mutate(name);
+            }
+            setCategoryDeleteOpen(false);
+            setCategoryToDelete(null);
+          }}
+          className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+        >
+          Delete
+        </Button>
+      )}
+    </div>
+  </DialogContent>
+</Dialog>
 
 <TabsContent value="users" className="mt-6">
 <motion.div

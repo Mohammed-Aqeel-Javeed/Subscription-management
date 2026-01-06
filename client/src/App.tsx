@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserProvider } from "@/context/UserContext";
+import { SidebarSlotProvider } from "@/context/SidebarSlotContext";
 import Sidebar from "@/components/layout/sidebar";
 import Dashboard from "@/pages/dashboard";
 import ComplianceLedger from "@/pages/compliance-ledger";
@@ -104,36 +105,38 @@ function AppWithSidebar() {
   }, [location.pathname, navigate]);
 
   return (
-    <div className="flex h-screen">
-      {hideSidebarPaths.includes(location.pathname) ? null : <Sidebar />}
-      <main className="flex-1 overflow-auto">
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/landing" element={<LandingPage />} />
-          <Route path="/login" element={<AuthPage />} />
-          <Route path="/auth" element={<AuthPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/subscriptions" element={<Subscriptions />} />
-          <Route path="/subscriptions/cancelled" element={<CancelledSubscriptionsPage />} />
-          <Route path="/notifications" element={<Notifications />} />
-          <Route path="/configuration" element={<Configuration />} />
-          <Route path="/reminders" element={<Configuration />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/subscription-history" element={<SubscriptionHistory />} />
-          {/* <Route path="/users" element={<Users />} /> */}
-          <Route path="/compliance-dashboard" element={<ComplianceDashboard />} />
-          <Route path="/compliance" element={<Compliance />} />
-          <Route path="/compliance-ledger" element={<ComplianceLedger />} />
-          <Route path="/government-license" element={<GovernmentLicense />} />
-          <Route path="/company-details" element={<CompanyDetails />} />
-          <Route path="/subscription-user" element={<SubscriptionUserPage />} />
-          <Route path="/calendar-monthly" element={<CalendarMonthly />} />
-          <Route path="/calendar-yearly" element={<CalendarYearly />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </main>
-    </div>
+    <SidebarSlotProvider>
+      <div className="flex h-screen">
+        {hideSidebarPaths.includes(location.pathname) ? null : <Sidebar />}
+        <main className="flex-1 overflow-auto">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/landing" element={<LandingPage />} />
+            <Route path="/login" element={<AuthPage />} />
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/subscriptions" element={<Subscriptions />} />
+            <Route path="/subscriptions/cancelled" element={<CancelledSubscriptionsPage />} />
+            <Route path="/notifications" element={<Notifications />} />
+            <Route path="/configuration" element={<Configuration />} />
+            <Route path="/reminders" element={<Configuration />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/subscription-history" element={<SubscriptionHistory />} />
+            {/* <Route path="/users" element={<Users />} /> */}
+            <Route path="/compliance-dashboard" element={<ComplianceDashboard />} />
+            <Route path="/compliance" element={<Compliance />} />
+            <Route path="/compliance-ledger" element={<ComplianceLedger />} />
+            <Route path="/government-license" element={<GovernmentLicense />} />
+            <Route path="/company-details" element={<CompanyDetails />} />
+            <Route path="/subscription-user" element={<SubscriptionUserPage />} />
+            <Route path="/calendar-monthly" element={<CalendarMonthly />} />
+            <Route path="/calendar-yearly" element={<CalendarYearly />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </main>
+      </div>
+    </SidebarSlotProvider>
   );
 }
 
