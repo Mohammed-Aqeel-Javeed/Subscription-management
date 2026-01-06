@@ -323,6 +323,10 @@ router.post("/api/history", async (req, res) => {
 // Get all history records
 router.get("/api/history/list", async (req, res) => {
   try {
+    const startTime = Date.now();
+    
+    res.setHeader('Cache-Control', 'private, max-age=60'); // 1 minute cache
+    
     const db = await connectToDatabase();
     const collection = db.collection("history");
     
@@ -343,23 +347,51 @@ router.get("/api/history/list", async (req, res) => {
       .toArray();
 
     // Import decryption function
-    const { decryptSubscriptionData } = await import("./encryption.service.js");
+    const { decrypt } = await import("./encryption.service.js");
 
-    // Decrypt and convert all IDs to strings for consistency
-    const processed = items.map(item => ({
-      ...item,
-      _id: item._id?.toString(),
-      subscriptionId: item.subscriptionId?.toString(),
-      data: item.data ? decryptSubscriptionData({
-        ...item.data,
-        _id: item.data._id?.toString()
-      }) : undefined,
-      updatedFields: item.updatedFields ? decryptSubscriptionData({
-        ...item.updatedFields,
-        _id: item.updatedFields._id?.toString()
-      }) : undefined
-    }));
+    // OPTIMIZED: Only decrypt fields shown in UI (serviceName, vendor, amount, owner, status)
+    const processed = items.map(item => {
+      let processedData = item.data;
+      let processedUpdatedFields = item.updatedFields;
+      
+      // Decrypt serviceName, vendor, and amount - shown in history list
+      if (item.data) {
+        processedData = {
+          ...item.data,
+          _id: item.data._id?.toString(),
+          serviceName: item.data.serviceName ? decrypt(item.data.serviceName) : item.data.serviceName,
+          vendor: item.data.vendor ? decrypt(item.data.vendor) : item.data.vendor,
+          amount: item.data.amount ? decrypt(item.data.amount) : item.data.amount,
+          owner: item.data.owner,
+          ownerName: item.data.ownerName,
+          status: item.data.status,
+          // Skip decrypting: description, paymentMethod, notes
+        };
+      }
+      
+      if (item.updatedFields) {
+        processedUpdatedFields = {
+          ...item.updatedFields,
+          _id: item.updatedFields._id?.toString(),
+          serviceName: item.updatedFields.serviceName ? decrypt(item.updatedFields.serviceName) : item.updatedFields.serviceName,
+          vendor: item.updatedFields.vendor ? decrypt(item.updatedFields.vendor) : item.updatedFields.vendor,
+          amount: item.updatedFields.amount ? decrypt(item.updatedFields.amount) : item.updatedFields.amount,
+          owner: item.updatedFields.owner,
+          ownerName: item.updatedFields.ownerName,
+          status: item.updatedFields.status,
+        };
+      }
+      
+      return {
+        ...item,
+        _id: item._id?.toString(),
+        subscriptionId: item.subscriptionId?.toString(),
+        data: processedData,
+        updatedFields: processedUpdatedFields
+      };
+    });
 
+    console.log(`[PERF] /api/history/list: ${items.length} records in ${Date.now() - startTime}ms`);
     res.status(200).json(processed);
   } catch (error: unknown) {
     console.error("History list error:", error);
@@ -371,6 +403,10 @@ router.get("/api/history/list", async (req, res) => {
 // Get history for a specific subscription
 router.get("/api/history/:subscriptionId", async (req, res) => {
   try {
+    const startTime = Date.now();
+    
+    res.setHeader('Cache-Control', 'private, max-age=60');
+    
     const db = await connectToDatabase();
     const collection = db.collection("history");
     const { subscriptionId } = req.params;
@@ -405,23 +441,49 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
       .toArray();
     
     // Import decryption function
-    const { decryptSubscriptionData } = await import("./encryption.service.js");
+    const { decrypt } = await import("./encryption.service.js");
 
-    // Decrypt and convert IDs to strings for the frontend
-    const processedItems = items.map(item => ({
-      ...item,
-      _id: item._id.toString(),
-      subscriptionId: item.subscriptionId?.toString ? item.subscriptionId.toString() : item.subscriptionId,
-      data: item.data ? decryptSubscriptionData({
-        ...item.data,
-        _id: item.data._id?.toString ? item.data._id.toString() : item.data._id
-      }) : undefined,
-      updatedFields: item.updatedFields ? decryptSubscriptionData({
-        ...item.updatedFields,
-        _id: item.updatedFields._id?.toString ? item.updatedFields._id.toString() : item.updatedFields._id
-      }) : undefined
-    }));
+    // OPTIMIZED: Only decrypt serviceName, vendor, and amount - shown in history list
+    const processedItems = items.map(item => {
+      let processedData = item.data;
+      let processedUpdatedFields = item.updatedFields;
+      
+      if (item.data) {
+        processedData = {
+          ...item.data,
+          _id: item.data._id?.toString ? item.data._id.toString() : item.data._id,
+          serviceName: item.data.serviceName ? decrypt(item.data.serviceName) : item.data.serviceName,
+          vendor: item.data.vendor ? decrypt(item.data.vendor) : item.data.vendor,
+          amount: item.data.amount ? decrypt(item.data.amount) : item.data.amount,
+          owner: item.data.owner,
+          ownerName: item.data.ownerName,
+          status: item.data.status,
+        };
+      }
+      
+      if (item.updatedFields) {
+        processedUpdatedFields = {
+          ...item.updatedFields,
+          _id: item.updatedFields._id?.toString ? item.updatedFields._id.toString() : item.updatedFields._id,
+          serviceName: item.updatedFields.serviceName ? decrypt(item.updatedFields.serviceName) : item.updatedFields.serviceName,
+          vendor: item.updatedFields.vendor ? decrypt(item.updatedFields.vendor) : item.updatedFields.vendor,
+          amount: item.updatedFields.amount ? decrypt(item.updatedFields.amount) : item.updatedFields.amount,
+          owner: item.updatedFields.owner,
+          ownerName: item.updatedFields.ownerName,
+          status: item.updatedFields.status,
+        };
+      }
+      
+      return {
+        ...item,
+        _id: item._id.toString(),
+        subscriptionId: item.subscriptionId?.toString ? item.subscriptionId.toString() : item.subscriptionId,
+        data: processedData,
+        updatedFields: processedUpdatedFields
+      };
+    });
 
+    console.log(`[PERF] /api/history/${subscriptionId}: ${items.length} records in ${Date.now() - startTime}ms`);
     res.status(200).json(processedItems);
   } catch (error: unknown) {
     console.error("History fetch error:", error);
@@ -824,10 +886,9 @@ const notificationEvent = {
 // Get all subscriptions
 router.get("/api/subscriptions", async (req, res) => {
   try {
-    // Disable caching for role-based filtering
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    const startTime = Date.now();
+    
+    res.setHeader('Cache-Control', 'private, max-age=30'); // 30 second cache
     
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
@@ -843,7 +904,7 @@ if (!tenantId) {
     const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     
     // Import decryption function
-    const { decryptSubscriptionData } = await import("./encryption.service.js");
+    const { decrypt } = await import("./encryption.service.js");
     
     // Build Mongo filter (avoid in-memory filtering + per-item JSON.parse)
     let filter: any = { tenantId };
@@ -883,20 +944,33 @@ if (!tenantId) {
       }
     }
 
+    // CRITICAL: Fetch all subscriptions but limit to essential fields
     const subscriptions = await collection.find(filter).toArray();
     
-    // Transform MongoDB documents to have consistent id field AND decrypt sensitive data
+    // OPTIMIZED: Only decrypt fields that are displayed in the UI
     const transformedSubscriptions = subscriptions.map(sub => {
-      const decrypted = decryptSubscriptionData(sub);
+      // Decrypt serviceName, amount, vendor, paymentMethod for display
+      const serviceName = sub.serviceName ? decrypt(sub.serviceName) : sub.serviceName;
+      const amount = sub.amount ? decrypt(sub.amount) : sub.amount;
+      const vendor = sub.vendor ? decrypt(sub.vendor) : sub.vendor;
+      const paymentMethod = sub.paymentMethod ? decrypt(sub.paymentMethod) : sub.paymentMethod;
+      
       return {
-        ...decrypted,
-        id: sub._id?.toString(), // Add id field from _id
-        _id: sub._id?.toString()  // Convert _id to string
+        ...sub,
+        serviceName,
+        amount,
+        vendor,
+        paymentMethod,
+        // Don't decrypt description, notes unless needed
+        id: sub._id?.toString(),
+        _id: sub._id?.toString()
       };
     });
     
+    console.log(`[PERF] /api/subscriptions: ${subscriptions.length} records in ${Date.now() - startTime}ms`);
     res.status(200).json(transformedSubscriptions);
   } catch (error) {
+    console.error('[ERROR] /api/subscriptions:', error);
     res.status(500).json({ message: "Failed to fetch subscriptions", error });
   }
 });
@@ -1004,6 +1078,9 @@ router.delete("/api/subtrackerr/:id", async (req, res) => {
 // List all currencies
 router.get("/api/currencies", async (req, res) => {
   try {
+    // Cache for 5 minutes - currencies rarely change
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    
     const db = await connectToDatabase();
     const collection = db.collection("currencies");
     // Multi-tenancy: filter by tenantId
@@ -1019,6 +1096,52 @@ router.get("/api/currencies", async (req, res) => {
 });
 
 // --- Exchange Rates API ---
+// OPTIMIZED: Batch get latest exchange rates for all currencies
+router.get("/api/exchange-rates/batch/latest", async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minutes
+    
+    const db = await connectToDatabase();
+    const collection = db.collection("exchange_rates");
+    const tenantId = req.user?.tenantId;
+
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    // Use aggregation to get the latest rate for each currency code
+    const latestRates = await collection.aggregate([
+      { $match: { tenantId } },
+      { $sort: { code: 1, date: -1, createdAt: -1 } },
+      { $group: {
+        _id: "$code",
+        latestRate: { $first: "$$ROOT" }
+      }},
+      { $replaceRoot: { newRoot: "$latestRate" } },
+      { $project: {
+        code: 1,
+        rate: 1,
+        relRate: 1,
+        date: 1
+      }}
+    ]).toArray();
+
+    // Convert to map for easy lookup
+    const ratesMap: Record<string, any> = {};
+    latestRates.forEach((r: any) => {
+      ratesMap[r.code] = {
+        rate: String(r.rate || r.relRate || '-'),
+        date: typeof r.date === 'string' ? r.date : (r.date?.toISOString?.().slice(0, 10) || '')
+      };
+    });
+
+    res.status(200).json(ratesMap);
+  } catch (error) {
+    console.error("Error fetching batch exchange rates:", error);
+    res.status(500).json({ message: "Failed to fetch exchange rates", error });
+  }
+});
+
 // Get exchange rates for a currency code (for current tenant)
 router.get("/api/exchange-rates/:code", async (req, res) => {
   try {
@@ -1619,27 +1742,63 @@ router.post("/api/subscriptions/draft", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
 
-    // Prepare draft subscription document
+    const draftSessionId = typeof req.body?.draftSessionId === "string" ? req.body.draftSessionId : null;
+
+    // If the client provides a draftSessionId, make draft saving idempotent by upserting
+    // the same draft doc instead of inserting duplicates.
+    if (draftSessionId) {
+      const now = new Date();
+      const update = {
+        $set: {
+          ...req.body,
+          tenantId,
+          draftSessionId,
+          isDraft: true,
+          status: "Draft",
+          updatedAt: now,
+        },
+        $setOnInsert: {
+          createdAt: now,
+        },
+      };
+
+      const result = await collection.findOneAndUpdate(
+        { tenantId, isDraft: true, draftSessionId },
+        update,
+        { upsert: true, returnDocument: "after" }
+      );
+
+      const createdDraft = result;
+      if (!createdDraft?._id) {
+        console.error("Failed to save draft - no _id returned:", createdDraft);
+        return res.status(500).json({ message: "Failed to save draft - no document returned" });
+      }
+
+      return res.status(201).json({
+        message: "Draft saved successfully",
+        _id: createdDraft._id,
+        subscription: createdDraft,
+      });
+    }
+
+    // Legacy behavior (no draftSessionId provided): insert a new draft.
     const draftSubscription = {
       ...req.body,
       tenantId,
       isDraft: true,
       status: "Draft",
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
-    // Create the draft subscription (no reminders or notifications for drafts)
-    const result = await collection.insertOne(draftSubscription);
-    const subscriptionId = result.insertedId;
-
-    // Get the complete draft subscription document
+    const insertResult = await collection.insertOne(draftSubscription);
+    const subscriptionId = insertResult.insertedId;
     const createdDraft = await collection.findOne({ _id: subscriptionId });
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: "Draft saved successfully",
       _id: subscriptionId,
-      subscription: createdDraft 
+      subscription: createdDraft,
     });
   } catch (error: unknown) {
     console.error("Draft creation error:", error);
@@ -1923,13 +2082,45 @@ router.delete("/api/employees/:id", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("employees");
+    const subsCollection = db.collection("subscriptions");
     const { id } = req.params;
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
     let filter;
     try {
-      filter = { _id: new EmployeeObjectId(id) };
+      filter = { _id: new EmployeeObjectId(id), tenantId };
     } catch {
       return res.status(400).json({ message: "Invalid employee id" });
     }
+
+    const employee = await collection.findOne(filter);
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    const empName = String(employee?.name || '').trim();
+    const empEmail = String(employee?.email || '').trim();
+    const empId = String(employee?._id || '').trim();
+
+    const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const ownerEmailRegex = empEmail ? { ownerEmail: { $regex: `^${escapeRegex(empEmail)}$`, $options: 'i' } } : null;
+    const ownerNameRegex = empName ? { owner: { $regex: `^${escapeRegex(empName)}$`, $options: 'i' } } : null;
+    const ownerIdExact = empId ? { ownerId: empId } : null;
+
+    const or: any[] = [ownerEmailRegex, ownerNameRegex, ownerIdExact].filter(Boolean);
+    const linkedCount = or.length
+      ? await subsCollection.countDocuments({ tenantId, $or: or })
+      : 0;
+
+    if (linkedCount > 0) {
+      return res.status(409).json({
+        message: "Please reassign the subscriptions before deleting the employee.",
+        linkedCount,
+      });
+    }
+
     const result = await collection.deleteOne(filter);
     if (result.deletedCount === 1) {
       res.status(200).json({ message: "Employee deleted" });

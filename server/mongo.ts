@@ -78,6 +78,22 @@ export async function ensureSubscriptionIndexes() {
     await db.collection("subscriptions").createIndex({ tenantId: 1, owner: 1 });
     await db.collection("subscriptions").createIndex({ tenantId: 1, departments: 1 });
     await db.collection("subscriptions").createIndex({ tenantId: 1, department: 1 });
+    // For analytics dashboard - count active subscriptions faster
+    await db.collection("subscriptions").createIndex({ tenantId: 1, status: 1 });
+    await db.collection("subscriptions").createIndex({ tenantId: 1, status: 1, nextRenewal: 1 });
+
+    // Prevent duplicate draft creation on repeated clicks / race conditions.
+    // Only applies to draft documents that include a string draftSessionId.
+    await db.collection("subscriptions").createIndex(
+      { tenantId: 1, draftSessionId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { isDraft: true, draftSessionId: { $type: "string" } },
+      }
+    );
+    
+    // Exchange rates batch query optimization
+    await db.collection("exchange_rates").createIndex({ tenantId: 1, code: 1, date: -1, createdAt: -1 });
   } catch (err) {
     // Ignore index creation errors (e.g., permissions or missing collection)
   }

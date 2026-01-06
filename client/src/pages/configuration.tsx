@@ -957,58 +957,48 @@ export default function Configuration() {
 
   // Note: legacy single-sheet import/export helpers were removed (unused).
   
-  const [currencies, setCurrencies] = useState<Currency[]>([]);
-  const [currenciesLoading, setCurrenciesLoading] = useState(true);
+  // OPTIMIZED: Use React Query for currencies
+  const { data: currenciesData = [], isLoading: currenciesLoading } = useQuery({
+    queryKey: ["/api/currencies"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000,
+  });
+  
+  // OPTIMIZED: Fetch latest exchange rates in a single batch call
+  const { data: exchangeRatesMap = {} } = useQuery({
+    queryKey: ["/api/exchange-rates/batch"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/exchange-rates/batch/latest`, { credentials: "include" });
+      if (!res.ok) return {};
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+  
+  // Combine currencies with their latest rates
+  const currencies = Array.isArray(currenciesData) 
+    ? currenciesData.map(currency => ({
+        ...currency,
+        latestRate: exchangeRatesMap[currency.code]?.rate || '-'
+      }))
+    : [];
+  
   const [companyInfo, setCompanyInfo] = useState<{ defaultCurrency?: string }>({});
   
-  // Fetch currencies and company info on mount and when currency/exchange dialogs toggle (refresh after saves)
+  // Fetch company info on mount
   useEffect(() => {
-    fetchCurrencies();
     fetchCompanyInfo();
-  }, [addCurrencyOpen]);
+  }, []);
   
   const fetchCurrencies = async () => {
-    try {
-      setCurrenciesLoading(true);
-      const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
-      const data = await res.json();
-      const currenciesArray = Array.isArray(data) ? data : [];
-      
-      // Fetch latest exchange rates for each currency
-      const currenciesWithRates = await Promise.all(
-        currenciesArray.map(async (currency) => {
-          try {
-            const rateRes = await fetch(`${API_BASE_URL}/api/exchange-rates/${currency.code}`, { credentials: "include" });
-            if (rateRes.ok) {
-              const rates = await rateRes.json();
-              if (Array.isArray(rates) && rates.length > 0) {
-                // Get the most recent rate
-                const latestRate = rates[rates.length - 1];
-                return {
-                  ...currency,
-                  latestRate: latestRate.rate || latestRate.relRate || '-'
-                };
-              }
-            }
-            return { ...currency, latestRate: '-' };
-          } catch {
-            return { ...currency, latestRate: '-' };
-          }
-        })
-      );
-      
-      setCurrencies(currenciesWithRates);
-    } catch (error) {
-      console.error("Error fetching currencies:", error);
-      setCurrencies([]);
-      toast({
-        title: "Error",
-        description: "Failed to load currencies",
-        variant: "destructive",
-      });
-    } finally {
-      setCurrenciesLoading(false);
-    }
+    // Now handled by React Query - just invalidate both currencies and rates
+    queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/exchange-rates/batch"] });
   };
   
   const fetchCompanyInfo = async () => {
@@ -1932,8 +1922,8 @@ export default function Configuration() {
                             if (!open) setCurrencyToDelete(null);
                           }}
                         >
-                          <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white">
-                            <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+                          <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+                            <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
                               <DialogHeader>
                                 <div className="flex items-center gap-3">
                                   <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
@@ -1971,7 +1961,7 @@ export default function Configuration() {
                               )}
                             </div>
 
-                            <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+                            <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
                               <Button
                                 type="button"
                                 variant="outline"
@@ -2641,9 +2631,9 @@ export default function Configuration() {
                     
                     {/* Delete Confirmation Dialog */}
                     <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-                      <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+                      <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
                         {/* Header with Red Gradient Background */}
-                        <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+                        <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
                           <DialogHeader>
                             <div className="flex items-center gap-3">
                               <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
@@ -2660,7 +2650,7 @@ export default function Configuration() {
                         </div>
 
                         {/* Content */}
-                        <div className="px-6 py-5">
+                        <div className="px-6 py-5 bg-white">
                           {(() => {
                             const pmName = String(paymentToDelete?.name || paymentToDelete?.title || '').trim();
                             const inUse = pmName ? getPaymentMethodSubscriptions(pmName).length : 0;
@@ -2690,7 +2680,7 @@ export default function Configuration() {
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+                        <div className="flex justify-end gap-3 px-6 py-4 bg-white rounded-b-2xl border-t border-gray-100">
                           <Button 
                             type="button" 
                             variant="outline" 
@@ -2726,9 +2716,9 @@ export default function Configuration() {
                     
                     {/* Validation Error Dialog */}
                     <Dialog open={validationErrorOpen} onOpenChange={setValidationErrorOpen}>
-                      <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+                      <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
                         {/* Header with Red Gradient Background */}
-                        <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+                        <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
                           <DialogHeader>
                             <div className="flex items-center gap-3">
                               <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
@@ -2752,7 +2742,7 @@ export default function Configuration() {
                         </div>
 
                         {/* Action Button */}
-                        <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+                        <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
                           <Button 
                             type="button"
                             onClick={() => setValidationErrorOpen(false)}

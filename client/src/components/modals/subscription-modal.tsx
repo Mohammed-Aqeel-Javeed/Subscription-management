@@ -391,9 +391,28 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEditing = !!subscription;
+
+  // Prevent duplicate draft creation on slow networks by using a per-modal draft session id
+  // and a synchronous single-flight guard.
+  const draftSessionIdRef = useRef<string | null>(null);
+  const draftSaveInFlightRef = useRef(false);
   
   // Get tenant ID for API calls
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
+
+  useEffect(() => {
+    if (!open) {
+      draftSessionIdRef.current = null;
+      draftSaveInFlightRef.current = false;
+      return;
+    }
+
+    // Only apply draft session id for "new subscription" drafts (not editing existing)
+    if (!isEditing && !draftSessionIdRef.current) {
+      const uuid = (globalThis as any)?.crypto?.randomUUID?.();
+      draftSessionIdRef.current = uuid || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+  }, [open, isEditing]);
   
   // Fetch employees for department head dropdown
   const { data: employeesData = [] } = useQuery<any[]>({
@@ -1390,7 +1409,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Close modal immediately
       onOpenChange(false);
       
-      // Invalidate and refetch with correct tenant key immediately (in background)
+      // Immediately refetch without tenantId to force fresh data
+      queryClient.refetchQueries({ 
+        queryKey: ["/api/subscriptions"],
+        exact: false
+      });
+      
+      // Also invalidate and refetch with tenant key
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions", tenantId] });
       queryClient.refetchQueries({ 
         queryKey: ["/api/subscriptions", tenantId],
@@ -1424,25 +1449,43 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     mutationFn: async (data: FormData) => {
       const { id, createdAt, ...rest } = data as any;
       
+      // Safely convert dates - use null if invalid
+      const startDateValue = data.startDate ? new Date(data.startDate) : null;
+      const nextRenewalValue = data.nextRenewal ? new Date(data.nextRenewal) : null;
+      
+      // Validate dates before sending
+      const startDateISO = startDateValue && !isNaN(startDateValue.getTime()) ? startDateValue.toISOString() : new Date().toISOString();
+      const nextRenewalISO = nextRenewalValue && !isNaN(nextRenewalValue.getTime()) ? nextRenewalValue.toISOString() : new Date().toISOString();
+      
       // Convert departments array to JSON string for storage
-      const draftData: InsertSubscription = {
+      const draftData: any = {
         ...rest,
         department: JSON.stringify(data.departments || []),
-        startDate: new Date(data.startDate ?? "").toISOString(),
-        nextRenewal: new Date(data.nextRenewal ?? "").toISOString(),
+        startDate: startDateISO,
+        nextRenewal: nextRenewalISO,
+        draftSessionId: draftSessionIdRef.current, // Include session ID for idempotent saves
       };
       
       // If editing an existing subscription, use PUT to update, otherwise POST to create
       if (isEditing && subscription?.id) {
         const res = await apiRequest("PUT", `/api/subscriptions/${subscription.id}`, draftData);
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({ message: 'Failed to save draft' }));
+          throw new Error(error.message || 'Failed to save draft');
+        }
         return res.json();
       } else {
         const res = await apiRequest("POST", "/api/subscriptions/draft", draftData);
+        if (!res.ok) {
+          const error = await res.json().catch(() => ({ message: 'Failed to save draft' }));
+          throw new Error(error.message || 'Failed to save draft');
+        }
         return res.json();
       }
     },
     onSuccess: async () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+      // Refetch subscriptions immediately to show the draft
+      queryClient.refetchQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions/drafts"] });
       
       toast({
@@ -1456,9 +1499,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       }, 300);
     },
     onError: (error: any) => {
+      console.error("Draft save error:", error);
       toast({
         title: "Error",
-        description: error?.response?.data?.message || error.message || `Failed to save draft`,
+        description: error?.message || `Failed to save draft`,
         variant: "destructive",
       });
     },
@@ -1466,6 +1510,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
   // Handle save draft function
   const handleSaveDraft = async (options?: { returnResult?: boolean }) => {
+    if (draftSaveInFlightRef.current || draftMutation.isPending) {
+      return;
+    }
+
     const currentValues = form.getValues();
     
     // Basic validation for required fields
@@ -1478,6 +1526,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       return;
     }
 
+    draftSaveInFlightRef.current = true;
     try {
       const amountNum = typeof currentValues.amount === 'string' ? parseFloat(currentValues.amount) : currentValues.amount ?? 0;
       const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
@@ -1492,20 +1541,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         departments: currentValues.departments || [],
         startDate: currentValues.startDate || new Date().toISOString().split('T')[0],
         nextRenewal: currentValues.nextRenewal || new Date().toISOString().split('T')[0],
+        ...(isEditing ? {} : { draftSessionId: draftSessionIdRef.current }),
       };
 
-      if (options?.returnResult) {
-        return await draftMutation.mutateAsync(payload as FormData);
-      }
-
-      draftMutation.mutate(payload as FormData);
-    } catch (error) {
-      console.error("Draft save error:", error);
-      toast({
-        title: "Error",
-        description: "Failed to save draft",
-        variant: "destructive",
-      });
+      // Always use mutateAsync so we can reliably reset the single-flight guard in finally.
+      const result = await draftMutation.mutateAsync(payload as FormData);
+      if (options?.returnResult) return result;
+    } finally {
+      draftSaveInFlightRef.current = false;
     }
   };
   
@@ -2782,7 +2825,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       : [];
                     
                     // Combine and deduplicate
-                    const allCategories = [...new Set([...dbCategories, ...DEFAULT_CATEGORY_SUGGESTIONS])];
+                    const allCategories = Array.from(new Set([...dbCategories, ...DEFAULT_CATEGORY_SUGGESTIONS]));
                     
                     // Filter to show only selected category when value exists, otherwise show all
                     const filtered = field.value 
@@ -3346,6 +3389,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     onChange={e => { 
                       const newInitialDate = e.target.value;
                       
+                      // Validate that First Purchase Date is not in the future
+                      if (newInitialDate && new Date(newInitialDate) > new Date()) {
+                        setValidationErrorMessage("First Purchase Date cannot be in the future");
+                        setValidationErrorOpen(true);
+                        return; // Don't change the date
+                      }
+                      
                       // Validate before changing
                       if (startDate && newInitialDate && new Date(startDate) < new Date(newInitialDate)) {
                         setValidationErrorMessage("Current Cycle Start must be on or after First Purchase Date");
@@ -3356,20 +3406,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       setInitialDate(newInitialDate);
                       savedInitialDateRef.current = newInitialDate; // Save to ref to persist across renewals
                       
-                      // When Initial Date is entered, auto-populate Start Date
-                      if (newInitialDate) {
-                        setStartDate(newInitialDate); 
-                        form.setValue("startDate", newInitialDate);
-                        // Also update next renewal if auto-renewal is on
-                        if (autoRenewal) {
-                          const cycle = form.watch("billingCycle") || billingCycle;
-                          if (cycle) {
-                            const nextDate = calculateEndDate(newInitialDate, cycle);
-                            form.setValue("nextRenewal", nextDate);
-                            setEndDate(nextDate);
-                          }
-                        }
-                      }
+                      // Do NOT auto-populate Start Date - user must enter it manually
                     }} 
                   />
                 </div>
@@ -3388,6 +3425,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             type="date" 
                             className="w-full border-slate-300 rounded-lg p-1 text-base"
                             value={startDate || ''} 
+                            disabled={!initialDate}
                             onChange={(e) => {
                               const newStartDate = e.target.value;
                               
@@ -3615,8 +3653,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   variant="outline" 
                   className="border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() => handleSaveDraft()}
-                  disabled={draftMutation.isPending || subscriptionCreated || form.watch('status') === 'Active'}
+                  disabled={draftMutation.isPending || subscriptionCreated || form.watch('status') === 'Active' || isEditing}
                   title={
+                    isEditing ? "Draft is not available when editing existing subscriptions" :
                     subscriptionCreated ? "Draft is not available after subscription is created" : 
                     form.watch('status') === 'Active' ? "Draft is not available for active subscriptions" : 
                     undefined
@@ -3816,6 +3855,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   const validId = getValidObjectId(subscription.id);
                   if (validId) {
                     apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' })
+                      .then(() => {
+                        // Refetch immediately after successful update
+                        queryClient.refetchQueries({ queryKey: ["/api/subscriptions"] });
+                        queryClient.refetchQueries({ queryKey: ["/api/analytics/dashboard"] });
+                      })
                       .catch((e: any) => {
                         // Revert cache on error and show error
                         queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
@@ -3824,8 +3868,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       });
                   }
                 } else {
-                  queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
-                  queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+                  queryClient.refetchQueries({ queryKey: ["/api/subscriptions"] });
+                  queryClient.refetchQueries({ queryKey: ["/api/analytics/dashboard"] });
                 }
               }}
               className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
@@ -3895,6 +3939,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 setSaveDraftRequiredDialog({ show: false });
                 await handleSaveDraft({ returnResult: true });
               }}
+              disabled={draftMutation.isPending}
               className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md px-6 py-2"
             >
               Save Draft
@@ -4178,20 +4223,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
       {/* Category Creation Modal */}
       <AlertDialog open={categoryModal.show} onOpenChange={(open) => !open && setCategoryModal({ show: false })}>
-        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl font-inter">
-          <AlertDialogHeader className="bg-indigo-600 text-white p-6 rounded-t-lg -m-6 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 p-2 rounded-lg">
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3 7a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 13a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                </svg>
+        <AlertDialogContent className="sm:max-w-[460px] rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+          <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-5">
+            <AlertDialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 p-2 rounded-lg">
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3 7a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 13a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <AlertDialogTitle className="text-xl font-bold tracking-tight text-white">
+                  Add New Category
+                </AlertDialogTitle>
               </div>
-              <AlertDialogTitle className="text-xl font-semibold text-white">
-                Add New Category
-              </AlertDialogTitle>
-            </div>
-          </AlertDialogHeader>
-          <div className="space-y-4">
+            </AlertDialogHeader>
+          </div>
+
+          <div className="px-6 py-5 bg-white">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category Name</label>
               <Input
@@ -4207,21 +4255,22 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               />
             </div>
           </div>
-          <AlertDialogFooter className="flex gap-2 mt-6">
+
+          <AlertDialogFooter className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
             <Button
               variant="outline"
               onClick={() => {
                 setCategoryModal({ show: false });
                 setNewCategoryName('');
               }}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+              className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
             >
               Cancel
             </Button>
             <Button 
               onClick={handleAddCategory}
               disabled={!newCategoryName.trim()}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
+              className="h-9 px-5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200 disabled:opacity-60 disabled:hover:from-indigo-600 disabled:hover:to-blue-600"
             >
               Add Category
             </Button>

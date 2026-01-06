@@ -78,7 +78,7 @@ export default function Subscriptions() {
   const [subscriptionToDelete, setSubscriptionToDelete] = useState<SubscriptionWithExtras | null>(null);
   
   // Sorting state
-  const [sortField, setSortField] = useState<"serviceName" | "amount" | null>(null);
+  const [sortField, setSortField] = useState<"serviceName" | "vendor" | "amount" | "billingCycle" | "nextRenewal" | "status" | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   
   React.useEffect(() => {
@@ -96,11 +96,12 @@ export default function Subscriptions() {
   const { data: subscriptions, isLoading } = useQuery<SubscriptionWithExtras[]>({
     queryKey: ["/api/subscriptions", tenantId],
     enabled: !!tenantId,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false, // Don't refetch on every tab switch
     refetchOnReconnect: true,
     refetchInterval: false, // Disable auto-refresh, rely on invalidation
-    staleTime: 30 * 1000,
+    staleTime: 60 * 1000, // Increase to 1 minute
     gcTime: 10 * 60 * 1000,
+    placeholderData: (previousData) => previousData, // Show previous data instantly
   });
   
   // Handle URL parameter to open specific subscription modal (placed after subscriptions declaration)
@@ -401,6 +402,14 @@ export default function Subscriptions() {
         : bVal.localeCompare(aVal);
     }
     
+    if (sortField === "vendor") {
+      const aVal = (a.vendor || "").toLowerCase();
+      const bVal = (b.vendor || "").toLowerCase();
+      return sortDirection === "asc" 
+        ? aVal.localeCompare(bVal)
+        : bVal.localeCompare(aVal);
+    }
+    
     if (sortField === "amount") {
       const aVal = parseFloat(String(a.amount)) || 0;
       const bVal = parseFloat(String(b.amount)) || 0;
@@ -409,11 +418,35 @@ export default function Subscriptions() {
         : bVal - aVal;
     }
     
+    if (sortField === "billingCycle") {
+      const aVal = (a.billingCycle || "").toLowerCase();
+      const bVal = (b.billingCycle || "").toLowerCase();
+      return sortDirection === "asc" 
+        ? aVal.localeCompare(bVal)
+        : bVal.localeCompare(aVal);
+    }
+    
+    if (sortField === "nextRenewal") {
+      const aVal = new Date(a.nextRenewal || 0).getTime();
+      const bVal = new Date(b.nextRenewal || 0).getTime();
+      return sortDirection === "asc" 
+        ? aVal - bVal
+        : bVal - aVal;
+    }
+    
+    if (sortField === "status") {
+      const aVal = (a.status || "").toLowerCase();
+      const bVal = (b.status || "").toLowerCase();
+      return sortDirection === "asc" 
+        ? aVal.localeCompare(bVal)
+        : bVal.localeCompare(aVal);
+    }
+    
     return 0;
   }) : [];
   
   // Toggle sort function
-  const handleSort = (field: "serviceName" | "amount") => {
+  const handleSort = (field: "serviceName" | "vendor" | "amount" | "billingCycle" | "nextRenewal" | "status") => {
     if (sortField === field) {
       // Toggle direction or clear sort
       if (sortDirection === "asc") {
@@ -429,7 +462,7 @@ export default function Subscriptions() {
   };
   
   // Get sort icon
-  const getSortIcon = (field: "serviceName" | "amount") => {
+  const getSortIcon = (field: "serviceName" | "vendor" | "amount" | "billingCycle" | "nextRenewal" | "status") => {
     if (sortField !== field) {
       return <ArrowUpDown className="h-3 w-3 ml-1 inline-block opacity-40" />;
     }
@@ -1024,7 +1057,13 @@ export default function Subscriptions() {
                     </button>
                   </TableHead>
                   <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Vendor
+                    <button 
+                      onClick={() => handleSort("vendor")}
+                      className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      Vendor
+                      {getSortIcon("vendor")}
+                    </button>
                   </TableHead>
                   <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
@@ -1036,13 +1075,31 @@ export default function Subscriptions() {
                     </button>
                   </TableHead>
                   <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Billing
+                    <button 
+                      onClick={() => handleSort("billingCycle")}
+                      className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      Billing
+                      {getSortIcon("billingCycle")}
+                    </button>
                   </TableHead>
                   <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Next Renewal
+                    <button 
+                      onClick={() => handleSort("nextRenewal")}
+                      className="flex items-center justify-center w-full hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      Next Renewal
+                      {getSortIcon("nextRenewal")}
+                    </button>
                   </TableHead>
                   <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Status
+                    <button 
+                      onClick={() => handleSort("status")}
+                      className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      Status
+                      {getSortIcon("status")}
+                    </button>
                   </TableHead>
                   <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     Department
@@ -1206,9 +1263,9 @@ export default function Subscriptions() {
       
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+        <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
           {/* Header with Red Gradient Background */}
-          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
             <DialogHeader>
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
@@ -1235,7 +1292,7 @@ export default function Subscriptions() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+          <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
             <Button 
               type="button" 
               variant="outline" 

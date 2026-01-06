@@ -120,10 +120,10 @@ export default function SubscriptionHistory() {
       return result;
     },
     retry: 1, // Reduce retries
-    refetchOnMount: "always",
-    refetchOnWindowFocus: "always",
+    refetchOnMount: false, // Only fetch on first mount, then rely on events
+    refetchOnWindowFocus: false, // Don't refetch on every tab switch
     refetchOnReconnect: true,
-    staleTime: 0,
+    staleTime: 2 * 60 * 1000, // 2 minutes - history is static
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     placeholderData: (previous) => previous
   });
