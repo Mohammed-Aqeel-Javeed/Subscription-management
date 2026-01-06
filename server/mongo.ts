@@ -78,13 +78,6 @@ export async function ensureSubscriptionIndexes() {
     await db.collection("subscriptions").createIndex({ tenantId: 1, owner: 1 });
     await db.collection("subscriptions").createIndex({ tenantId: 1, departments: 1 });
     await db.collection("subscriptions").createIndex({ tenantId: 1, department: 1 });
-    await db.collection("subscriptions").createIndex(
-      { tenantId: 1, clientDraftKey: 1 },
-      {
-        unique: true,
-        partialFilterExpression: { clientDraftKey: { $type: "string" } },
-      }
-    );
   } catch (err) {
     // Ignore index creation errors (e.g., permissions or missing collection)
   }

@@ -1523,41 +1523,27 @@ router.post("/api/subscriptions/draft", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
 
-    const now = new Date();
-    const clientDraftKey = typeof req.body?.clientDraftKey === 'string' ? req.body.clientDraftKey : null;
-
     // Prepare draft subscription document
     const draftSubscription = {
       ...req.body,
       tenantId,
       isDraft: true,
       status: "Draft",
-      updatedAt: now
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
 
-    // Idempotent behavior: if clientDraftKey is present, upsert instead of insert
-    if (clientDraftKey) {
-      await collection.updateOne(
-        { tenantId, clientDraftKey },
-        { $set: draftSubscription, $setOnInsert: { createdAt: now } },
-        { upsert: true }
-      );
+    // Create the draft subscription (no reminders or notifications for drafts)
+    const result = await collection.insertOne(draftSubscription);
+    const subscriptionId = result.insertedId;
 
-      const createdDraft = await collection.findOne({ tenantId, clientDraftKey });
-      return res.status(201).json({
-        message: "Draft saved successfully",
-        _id: createdDraft?._id,
-        subscription: createdDraft
-      });
-    }
+    // Get the complete draft subscription document
+    const createdDraft = await collection.findOne({ _id: subscriptionId });
 
-    // Fallback: legacy behavior (may create duplicates if called multiple times)
-    const result = await collection.insertOne({ ...draftSubscription, createdAt: now });
-    const createdDraft = await collection.findOne({ _id: result.insertedId });
-    return res.status(201).json({
+    res.status(201).json({ 
       message: "Draft saved successfully",
-      _id: result.insertedId,
-      subscription: createdDraft
+      _id: subscriptionId,
+      subscription: createdDraft 
     });
   } catch (error: unknown) {
     console.error("Draft creation error:", error);

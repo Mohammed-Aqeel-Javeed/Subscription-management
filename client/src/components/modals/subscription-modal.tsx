@@ -1464,20 +1464,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     },
   });
 
-  const draftSubmitLockRef = useRef(false);
-  const clientDraftKeyRef = useRef<string | null>(null);
-
   // Handle save draft function
-  const handleSaveDraft = async () => {
-    // Extra guard: prevent rapid multi-clicks before isPending disables the button
-    if (draftSubmitLockRef.current || draftMutation.isPending) return;
-    draftSubmitLockRef.current = true;
-
+  const handleSaveDraft = async (options?: { returnResult?: boolean }) => {
     const currentValues = form.getValues();
     
     // Basic validation for required fields
     if (!currentValues.serviceName?.trim()) {
-      draftSubmitLockRef.current = false;
       toast({
         title: "Validation Error",
         description: "Service name is required to save as draft",
@@ -1489,14 +1481,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     try {
       const amountNum = typeof currentValues.amount === 'string' ? parseFloat(currentValues.amount) : currentValues.amount ?? 0;
       const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
-
-      if (!clientDraftKeyRef.current) {
-        try {
-          clientDraftKeyRef.current = window.crypto?.randomUUID?.() || `draft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        } catch {
-          clientDraftKeyRef.current = `draft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        }
-      }
       
       const payload = {
         ...currentValues,
@@ -1505,19 +1489,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         amount: amountNum,
         initialDate: new Date(currentValues.startDate ?? ""), // Set initialDate to startDate
         tenantId,
-        clientDraftKey: clientDraftKeyRef.current,
         departments: currentValues.departments || [],
         startDate: currentValues.startDate || new Date().toISOString().split('T')[0],
         nextRenewal: currentValues.nextRenewal || new Date().toISOString().split('T')[0],
       };
 
-      draftMutation.mutate(payload as FormData, {
-        onSettled: () => {
-          draftSubmitLockRef.current = false;
-        }
-      });
+      if (options?.returnResult) {
+        return await draftMutation.mutateAsync(payload as FormData);
+      }
+
+      draftMutation.mutate(payload as FormData);
     } catch (error) {
-      draftSubmitLockRef.current = false;
       console.error("Draft save error:", error);
       toast({
         title: "Error",
@@ -3911,7 +3893,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             <AlertDialogAction 
               onClick={async () => {
                 setSaveDraftRequiredDialog({ show: false });
-                await handleSaveDraft();
+                await handleSaveDraft({ returnResult: true });
               }}
               className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md px-6 py-2"
             >
