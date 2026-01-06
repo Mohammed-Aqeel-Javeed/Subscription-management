@@ -7,6 +7,7 @@ import CompanySwitcher from "./company-switcher";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Can } from "@/components/Can";
+import { useSidebarSlot } from "@/context/SidebarSlotContext";
 
 type Company = {
   tenantId: string;
@@ -197,6 +198,7 @@ export default function Sidebar() {
   const queryClient = useQueryClient();
   const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
   const [showCompanySwitcherDialog, setShowCompanySwitcherDialog] = useState(false);
+  const { active: pageSlotActive, replaceNav: pageSlotReplaceNav } = useSidebarSlot();
 
   // Fetch current user data
   const { data: currentUser } = useQuery({
@@ -272,8 +274,11 @@ export default function Sidebar() {
         />
       )}
       <nav className="flex-1 p-4 overflow-y-auto">
-        <ul className="space-y-1.5">
-          {navItems.map((item) => {
+        {/* Default navigation (hidden when a page wants to fully use the sidebar) */}
+        {pageSlotActive && pageSlotReplaceNav ? null : (
+          <>
+            <ul className="space-y-1.5">
+              {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             
@@ -354,12 +359,20 @@ export default function Sidebar() {
               </li>
             );
           })}
-        </ul>
-        
-        {/* Import/Export Button in Navigation */}
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <UnifiedImportExport />
-        </div>
+            </ul>
+            
+            {/* Import/Export Button in Navigation */}
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <UnifiedImportExport />
+            </div>
+          </>
+        )}
+
+        {/* Always keep slot container mounted for portals */}
+        <div
+          id="page-sidebar-slot"
+          className={pageSlotActive && pageSlotReplaceNav ? "h-full" : "hidden"}
+        />
       </nav>
       
       <div className="p-3 border-t border-gray-200/50 bg-white/60 backdrop-blur-sm">

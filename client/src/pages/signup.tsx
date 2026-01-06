@@ -562,6 +562,11 @@ export default function SignupPage() {
                         <button
                           key={curr.code}
                           type="button"
+                          onPointerDown={(e) => {
+                            // Select before the input's onBlur closes the dropdown.
+                            e.preventDefault();
+                            handleCurrencySelect(curr);
+                          }}
                           onClick={() => handleCurrencySelect(curr)}
                           style={{
                             width: "100%",
