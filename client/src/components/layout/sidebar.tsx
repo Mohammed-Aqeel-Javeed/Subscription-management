@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, FileSpreadsheet } from "lucide-react";
+import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, FileSpreadsheet, PanelLeft } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api";
 import { UnifiedImportExport } from "../unified-import-export";
@@ -191,7 +191,7 @@ const navItems = [
   // ...removed User Management link...
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean; onToggle?: () => void }) {
   // Get current location for active state
   const location = useLocation();
   const navigate = useNavigate();
@@ -233,19 +233,162 @@ export default function Sidebar() {
     // Navigate to login and replace history to prevent back navigation
     navigate("/login", { replace: true });
   };
+  
+  // Collapsed sidebar view (icon-only)
+  if (!isOpen) {
+    return (
+      <div className="flex flex-col h-full w-16 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-r border-gray-200/50 shadow-lg">
+        {/* Collapsed Header */}
+        <div className="flex flex-col items-center gap-1 px-2 pt-3 pb-2 bg-white/40 backdrop-blur-sm border-b border-gray-200/50">
+          <button
+            onClick={onToggle}
+            className="h-10 w-10 flex items-center justify-center rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all duration-200 hover:scale-105"
+            title="Open Sidebar"
+          >
+            <PanelLeft className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Collapsed Navigation Icons */}
+        <nav className="flex-1 p-2 overflow-y-auto">
+          <ul className="space-y-2">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path;
+              
+              // Protect Settings and Company Details based on role
+              if (item.path === "/reminders" || item.path === "/company-details") {
+                return (
+                  <Can I="manage" a="Settings" key={item.path} fallback={null}>
+                    <li>
+                      <Link
+                        to={item.path}
+                        className={`
+                          flex items-center justify-center w-12 h-12 rounded-xl
+                          transition-all duration-200
+                          ${isActive 
+                            ? 'bg-gradient-to-r ' + item.gradient + ' shadow-xl' 
+                            : 'hover:bg-white/60 hover:shadow-md'
+                          }
+                        `}
+                        title={item.label}
+                      >
+                        <div className={`
+                          relative flex items-center justify-center w-9 h-9 rounded-lg
+                          transition-all duration-200
+                          ${isActive 
+                            ? 'bg-white/25 backdrop-blur-md border border-white/40 shadow-inner' 
+                            : 'bg-gradient-to-br ' + item.gradient + ' shadow-lg border border-white/20'
+                          }
+                        `}
+                        style={{
+                          boxShadow: isActive 
+                            ? 'inset 0 2px 8px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
+                            : `0 6px 20px ${item.shadow}, inset 0 1px 0 rgba(255,255,255,0.3)`
+                        }}>
+                          <div className={`absolute inset-0 rounded-lg ${!isActive ? 'bg-gradient-to-b from-white/30 to-transparent' : ''}`} style={{ height: '50%' }} />
+                          <Icon className="text-white relative z-10" size={16} />
+                        </div>
+                      </Link>
+                    </li>
+                  </Can>
+                );
+              }
+
+              return (
+                <li key={item.path}>
+                  <Link
+                    to={item.path}
+                    className={`
+                      flex items-center justify-center w-12 h-12 rounded-xl
+                      transition-all duration-200
+                      ${isActive 
+                        ? 'bg-gradient-to-r ' + item.gradient + ' shadow-xl' 
+                        : 'hover:bg-white/60 hover:shadow-md'
+                      }
+                    `}
+                    title={item.label}
+                  >
+                    <div className={`
+                      relative flex items-center justify-center w-9 h-9 rounded-lg
+                      transition-all duration-200
+                      ${isActive 
+                        ? 'bg-white/25 backdrop-blur-md border border-white/40 shadow-inner' 
+                        : 'bg-gradient-to-br ' + item.gradient + ' shadow-lg border border-white/20'
+                      }
+                    `}
+                    style={{
+                      boxShadow: isActive 
+                        ? 'inset 0 2px 8px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
+                        : `0 6px 20px ${item.shadow}, inset 0 1px 0 rgba(255,255,255,0.3)`
+                    }}>
+                      <div className={`absolute inset-0 rounded-lg ${!isActive ? 'bg-gradient-to-b from-white/30 to-transparent' : ''}`} style={{ height: '50%' }} />
+                      <Icon className="text-white relative z-10" size={16} />
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {/* Collapsed Footer with User Avatar */}
+        <div className="p-2 border-t border-gray-200/50 bg-white/60 backdrop-blur-sm space-y-2">
+          <div className="flex items-center justify-center">
+            <div 
+              className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg border border-white/20 cursor-pointer hover:scale-105 transition-transform"
+              style={{
+                boxShadow: '0 6px 20px rgba(59, 130, 246, 0.5), inset 0 1px 0 rgba(255,255,255,0.3)'
+              }}
+              title={currentUser?.fullName || currentUser?.email || "User"}
+            >
+              <div className="absolute inset-0 rounded-lg bg-gradient-to-b from-white/30 to-transparent" style={{ height: '50%' }} />
+              <User className="text-white relative z-10" size={16} />
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-center">
+            <button
+              onClick={handleLogout}
+              className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 border border-white/20"
+              style={{
+                boxShadow: '0 6px 20px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.3)'
+              }}
+              title="Logout"
+            >
+              <div className="absolute inset-0 rounded-lg bg-gradient-to-b from-white/30 to-transparent" style={{ height: '50%' }} />
+              <LogOut size={16} className="relative z-10" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-r border-gray-200/50 shadow-lg">
       <div className="flex flex-col items-start gap-1 px-4 pt-3 pb-2 bg-white/40 backdrop-blur-sm border-b border-gray-200/50">
-        <div className="flex items-center gap-2">
-          <img 
-            src="/assets/logo.png"
-            alt="Trackla Logo" 
-            className="w-20 h-20 object-contain drop-shadow-xl"
-            style={{ imageRendering: 'crisp-edges' }}
-          />
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-            Trackla
-          </h1>
+        <div className="flex items-center gap-2 justify-between w-full">
+          <div className="flex items-center gap-2">
+            <img 
+              src="/assets/logo.png"
+              alt="Trackla Logo" 
+              className="w-20 h-20 object-contain drop-shadow-xl"
+              style={{ imageRendering: 'crisp-edges' }}
+            />
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+              Trackla
+            </h1>
+          </div>
+          {onToggle && (
+            <button
+              onClick={onToggle}
+              className="h-9 w-9 flex items-center justify-center rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all duration-200 hover:scale-105"
+              title="Close Sidebar"
+            >
+              <PanelLeft className="h-5 w-5" />
+            </button>
+          )}
         </div>
         {currentUser?.companyName && (
           <div className="flex items-center gap-2 pl-2 pr-2">

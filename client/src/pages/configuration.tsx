@@ -30,7 +30,9 @@ export default function Configuration() {
       const res = await fetch(`${API_BASE_URL}/api/employees`, { credentials: 'include' });
       const data = await res.json();
       return Array.isArray(data) ? data : [];
-    }
+    },
+    staleTime: 0,
+    refetchOnMount: true,
   });
   
   // Handle tab switching from URL parameters
@@ -222,7 +224,9 @@ export default function Configuration() {
       const data = await res.json();
       console.log('Fetched payment methods:', data);
       return Array.isArray(data) ? data : [];
-    }
+    },
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Fetch subscriptions to count payment method usage
@@ -232,7 +236,9 @@ export default function Configuration() {
       const res = await fetch("/api/subscriptions", { credentials: 'include' });
       const data = await res.json();
       return Array.isArray(data) ? data : [];
-    }
+    },
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Payment method subscription modal state
@@ -964,8 +970,9 @@ export default function Configuration() {
       const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
       return res.json();
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 0, // Always fetch fresh data
     gcTime: 10 * 60 * 1000,
+    refetchOnMount: true, // Always refetch when component mounts
   });
   
   // OPTIMIZED: Fetch latest exchange rates in a single batch call
@@ -976,8 +983,9 @@ export default function Configuration() {
       if (!res.ok) return {};
       return res.json();
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     gcTime: 10 * 60 * 1000,
+    refetchOnMount: true,
   });
   
   // Combine currencies with their latest rates
@@ -1591,7 +1599,7 @@ export default function Configuration() {
 
   
   return (
-    <div className="min-h-screen bg-white">
+    <div className="h-screen overflow-hidden bg-white">
       <div className="max-w-[1400px] mx-auto px-6 py-8">
         {/* Modern Professional Header */}
         <div className="mb-8">
@@ -1645,7 +1653,7 @@ export default function Configuration() {
 
         <div>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-            <TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6 font-inter gap-2">
+            <TabsList className="sticky top-0 z-10 flex w-full bg-white rounded-lg p-1 shadow-sm mb-6 font-inter gap-2">
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
                 <TabsTrigger
                   value="currency"
@@ -1716,7 +1724,7 @@ export default function Configuration() {
                       transition={{ duration: 0.3 }}
                     >
                       <Card className="p-6 bg-white">
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="sticky top-[72px] z-10 bg-white pb-6 -mt-6 pt-6 flex justify-between items-center mb-6 border-b border-gray-200">
                           <div className="flex gap-2 items-center">
                             <DollarSign className="w-5 h-5" />
                             <h3 className="text-xl font-semibold">Currency Management</h3>
@@ -1997,17 +2005,17 @@ export default function Configuration() {
                           </div>
                         ) : (
                           <div className="space-y-6">
-                          <div className="rounded-md border shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden">
+                          <div className="max-h-[calc(100vh-350px)] overflow-y-auto rounded-md border shadow-lg hover:shadow-xl transition-shadow duration-300">
                             <table className="w-full">
-                              <thead className="bg-gray-50">
+                              <thead className="bg-gray-50 sticky top-0 z-[5]">
                                 <tr>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">CURRENCY</th>
-                                  <th className={`py-3 px-4 text-left text-sm font-semibold ${isUpdateMode ? 'text-blue-600 bg-blue-50' : 'text-gray-900'}`}>
+                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900 bg-gray-50">CURRENCY</th>
+                                  <th className={`py-3 px-4 text-left text-sm font-semibold ${isUpdateMode ? 'text-blue-600 bg-blue-50' : 'text-gray-900 bg-gray-50'}`}>
                                     Exch.Rate against 1 LCY {isUpdateMode && <span className="text-xs">(Editable)</span>}
                                   </th>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">CREATED</th>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">LAST UPDATED</th>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900">ACTIONS</th>
+                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900 bg-gray-50">CREATED</th>
+                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900 bg-gray-50">LAST UPDATED</th>
+                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900 bg-gray-50">ACTIONS</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-200 bg-white">
@@ -2018,7 +2026,7 @@ export default function Configuration() {
                                     </td>
                                   </tr>
                                 ) : (
-                                  currencies.map((currency) => (
+                                  [...currencies].reverse().map((currency) => (
                                   <tr key={currency.code}>
                                     <td className="py-3 px-4 text-sm text-gray-900">
                                       {currency.symbol} {currency.name} ({currency.code})
@@ -2114,7 +2122,7 @@ export default function Configuration() {
                   transition={{ duration: 0.3 }}
                 >
                   <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <div className="sticky top-[72px] z-10 bg-white pb-6 -mt-6 pt-6 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-gray-200">
                       <div className="relative flex-1 max-w-md">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                         <Input
@@ -2135,8 +2143,9 @@ export default function Configuration() {
                       </motion.div>
                     </div>
                     {/* Payment Methods List */}
-                    <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {paymentMethods
+                    <div className="max-h-[calc(100vh-350px)] overflow-y-auto mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {[...paymentMethods]
+                        .reverse()
                         .filter(method => 
                           method.name.toLowerCase().includes(paymentSearchTerm.toLowerCase()) ||
                           method.type.toLowerCase().includes(paymentSearchTerm.toLowerCase())

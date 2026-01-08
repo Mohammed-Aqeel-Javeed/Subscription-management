@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Download, Upload, X } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Download, Upload, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -257,6 +257,7 @@ export default function Compliance() {
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [showSubmissionDetails, setShowSubmissionDetails] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const departmentDropdownRef = useRef<HTMLDivElement>(null);
   
   const [form, setForm] = useState({
     filingName: "",
@@ -437,14 +438,13 @@ export default function Compliance() {
   
   // Handle department selection
   const handleDepartmentChange = (departmentName: string, checked: boolean) => {
-    // If Company Level is selected, select all departments
+    // If Company Level is selected, show only Company Level
     if (departmentName === 'Company Level' && checked) {
-      const allDepts = ['Company Level', ...(departments?.filter(d => d.visible).map(d => d.name) || [])];
-      setSelectedDepartments(allDepts);
+      setSelectedDepartments(['Company Level']);
       setForm(prev => ({
         ...prev,
-        departments: allDepts,
-        department: JSON.stringify(allDepts)
+        departments: ['Company Level'],
+        department: JSON.stringify(['Company Level'])
       }));
       return;
     }
@@ -460,8 +460,14 @@ export default function Compliance() {
       return;
     }
     
-    // Cannot uncheck individual departments when Company Level is selected
-    if (selectedDepartments.includes('Company Level') && !checked) {
+    // When selecting other departments, remove Company Level if it exists
+    if (checked && selectedDepartments.includes('Company Level')) {
+      setSelectedDepartments([departmentName]);
+      setForm(prev => ({
+        ...prev,
+        departments: [departmentName],
+        department: JSON.stringify([departmentName])
+      }));
       return;
     }
     
@@ -539,6 +545,10 @@ export default function Compliance() {
   
   // State for filing name validation
   const [filingNameError, setFilingNameError] = useState<string>("");
+  
+  // State for sorting
+  const [sortField, setSortField] = useState<string>("");
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   // State for date validation errors
   const [dateErrors, setDateErrors] = useState<{
@@ -669,16 +679,17 @@ export default function Compliance() {
   };
   
   const handleFormChange = (field: string, value: string) => {
-    // Auto-capitalize Filing Name
-    if (field === "filingName") {
-      value = value
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
-      // Validate uniqueness
-      validateFilingName(value);
+    // Capitalize first letter of each word for filingName (like subscription modal service name)
+    if (field === "filingName" && value.length > 0) {
+      // If user is typing all caps (2+ consecutive uppercase), keep as is
+      const isTypingAllCaps = /[A-Z]{2,}/.test(value);
+      if (!isTypingAllCaps) {
+        value = value
+          .split(' ')
+          .map(word => word.length === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+      }
     }
-    
     setForm((prev) => {
       const newState = { ...prev, [field]: value };
       if (field === "filingStartDate" || field === "filingFrequency") {
@@ -689,7 +700,6 @@ export default function Compliance() {
       }
       return newState;
     });
-    
     // Validate dates after form update
     setTimeout(() => validateDateLogic(), 0);
   };
@@ -706,12 +716,8 @@ export default function Compliance() {
       if (!response.ok) throw new Error("Failed to fetch compliance filings");
       return response.json();
     },
-    refetchInterval: false,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    staleTime: 2 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    placeholderData: (previousData) => previousData,
+    staleTime: 0,
+    refetchOnMount: true,
   });
   
   useEffect(() => {
@@ -727,6 +733,20 @@ export default function Compliance() {
       window.removeEventListener("login", invalidateCompliance);
     };
   }, [queryClient]);
+
+  // Close department dropdown when clicking outside
+  useEffect(() => {
+    if (!departmentSelectOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (departmentDropdownRef.current && !departmentDropdownRef.current.contains(event.target as Node)) {
+        setDepartmentSelectOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [departmentSelectOpen]);
   
   // Extract existing filing names for validation (excluding current item if editing)
   const existingFilingNames = complianceItems
@@ -900,12 +920,48 @@ export default function Compliance() {
   };
 
   const uniqueCategories = Array.from(new Set(complianceItems.map((item: ComplianceItem) => item.category))).filter(Boolean);
-  const filteredItems = complianceItems.filter((item: ComplianceItem) => {
+  
+  // Sorting handler
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+  
+  // Filter and sort items
+  let filteredItems = complianceItems.filter((item: ComplianceItem) => {
     const matchesSearch = item.policy?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
     const matchesStatus = statusFilter === "all" || mapStatus(item.status) === statusFilter;
     return matchesSearch && matchesCategory && matchesStatus;
   });
+  
+  // Apply sorting
+  if (sortField) {
+    filteredItems = [...filteredItems].sort((a: any, b: any) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+      
+      // Handle date fields
+      if (sortField === 'endDate' || sortField === 'submissionDeadline' || sortField === 'filingSubmissionDate') {
+        aVal = aVal ? new Date(aVal).getTime() : 0;
+        bVal = bVal ? new Date(bVal).getTime() : 0;
+      }
+      
+      // Handle string fields
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal?.toLowerCase() || '';
+      }
+      
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
   
   // Status badge component
   const StatusBadge = ({ status }: { status: string }) => {
@@ -1004,66 +1060,6 @@ export default function Compliance() {
             </div>
           </div>
 
-          {/* Key Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-blue-100">Total Filings</p>
-                  <p className="text-2xl font-bold text-white mt-1">{total}</p>
-                </div>
-                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <FileText className="h-5 w-5 text-white" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-amber-100">Pending</p>
-                  <p className="text-2xl font-bold text-white mt-1">{pending}</p>
-                </div>
-                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <AlertCircle className="h-5 w-5 text-white" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-purple-100">Data Management</p>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleExport}
-                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
-                    >
-                      <Download className="h-3 w-3 mr-1" />
-                      Export
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={triggerImport}
-                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 font-medium text-xs px-3 py-1 h-7"
-                    >
-                      <Upload className="h-3 w-3 mr-1" />
-                      Import
-                    </Button>
-                  </div>
-                </div>
-                <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <Download className="h-5 w-5 text-white" />
-                </div>
-              </div>
-            </div>
-
-            {/* Removed duplicate inline search and category filter to avoid duplication */}
-          </div>
-
           {/* Search and Filters Row */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
@@ -1094,42 +1090,85 @@ export default function Compliance() {
           </div>
         </div>
         
-        {/* Professional Data Table */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
-                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
-                    Policy
+        {/* Professional Data Table with Frozen Headers */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+            <Table className="w-full">
+              <TableHeader className="sticky top-0 z-20">
+                <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100">
+                  <TableHead
+                    className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('policy')}
+                  >
+                    <div className="flex items-center gap-2">
+                      Policy
+                      {sortField === 'policy' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                      ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
+                    </div>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Category
+                  <TableHead
+                    className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('category')}
+                  >
+                    <div className="flex items-center gap-2">
+                      Category
+                      {sortField === 'category' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                      ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
+                    </div>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Status
+                  <TableHead
+                    className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('status')}
+                  >
+                    <div className="flex items-center gap-2">
+                      Status
+                      {sortField === 'status' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                      ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
+                    </div>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Due Date
+                  <TableHead
+                    className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('endDate')}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      Due Date
+                      {sortField === 'endDate' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                      ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
+                    </div>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Submitted Date
+                  <TableHead
+                    className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('filingSubmissionDate')}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      Submitted Date
+                      {sortField === 'filingSubmissionDate' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                      ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
+                    </div>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
                     Submission
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
                     Actions
                   </TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {isLoading ? (
-                  <div className="space-y-2 p-6">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
-                    ))}
-                  </div>
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i} className="border-b border-gray-100">
+                      <TableCell colSpan={7} className="px-6 py-4">
+                        <Skeleton className="h-10 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ))
                 ) : filteredItems.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-gray-500">
@@ -1143,8 +1182,46 @@ export default function Compliance() {
                 ) : (
                   filteredItems.map((item: ComplianceItem) => (
                     <TableRow key={item._id || item.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100">
-                      <TableCell className="px-4 py-4 font-medium text-gray-900">
-                        {item.policy}
+                      <TableCell className="px-4 py-4">
+                        <button
+                          onClick={() => {
+                            const index = (complianceItems as ComplianceItem[]).findIndex(
+                              (ci: ComplianceItem) => (ci._id || ci.id) === (item._id || item.id)
+                            );
+                            setEditIndex(index);
+                            setShowSubmissionDetails(false);
+                            setModalOpen(true);
+                            const currentItem = complianceItems[index] as ComplianceItem;
+                            const depts = parseDepartments(currentItem.department);
+                            setSelectedDepartments(depts);
+                            setForm({
+                              filingName: currentItem.policy,
+                              filingFrequency: currentItem.frequency || "Monthly",
+                              filingComplianceCategory: currentItem.category,
+                              filingGoverningAuthority: currentItem.governingAuthority || "",
+                              filingStartDate: currentItem.lastAudit || "",
+                              filingEndDate: currentItem.endDate || "",
+                              filingSubmissionDeadline: currentItem.submissionDeadline || "",
+                              filingSubmissionStatus: mapStatus(currentItem.status),
+                              filingRecurringFrequency: currentItem.recurringFrequency || "",
+                              filingRemarks: currentItem.remarks || "",
+                              submissionNotes: "",
+                              filingSubmissionDate: "",
+                              reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
+                              reminderPolicy: currentItem.reminderPolicy || "One time",
+                              submittedBy: currentItem.submittedBy || "",
+                              amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
+                              paymentDate: currentItem.paymentDate || "",
+                              submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
+                              paymentMethod: currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null ? String(currentItem.paymentMethod) : "",
+                              department: currentItem.department || "",
+                              departments: depts,
+                            });
+                          }}
+                          className="text-sm font-medium text-gray-900 hover:text-blue-600 underline hover:no-underline transition-all duration-200 cursor-pointer text-left whitespace-normal break-words"
+                        >
+                          {item.policy}
+                        </button>
                       </TableCell>
                       <TableCell className="px-4 py-4">
                         <Badge variant="secondary" className="bg-blue-100 text-blue-700 font-medium border-blue-200">
@@ -1188,49 +1265,52 @@ export default function Compliance() {
                           <span className="text-sm">{formatDate(item.filingSubmissionDate)}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-4 text-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          title="Submit now"
-                          onClick={() => {
-                            const index = (complianceItems as ComplianceItem[]).findIndex(
-                              (ci: ComplianceItem) => (ci._id || ci.id) === (item._id || item.id)
-                            );
-                            setEditIndex(index);
-                            setShowSubmissionDetails(true);
-                            setModalOpen(true);
-                            const currentItem = complianceItems[index] as ComplianceItem;
-                            const depts = parseDepartments(currentItem.department);
-                            setSelectedDepartments(depts);
-                            setForm({
-                              filingName: currentItem.policy,
-                              filingFrequency: currentItem.frequency || "Monthly",
-                              filingComplianceCategory: currentItem.category,
-                              filingGoverningAuthority: currentItem.governingAuthority || "",
-                              filingStartDate: currentItem.lastAudit || "",
-                              filingEndDate: currentItem.endDate || "",
-                              filingSubmissionDeadline: currentItem.submissionDeadline || "",
-                              filingSubmissionStatus: mapStatus(currentItem.status),
-                              filingRecurringFrequency: currentItem.recurringFrequency || "",
-                              filingRemarks: currentItem.remarks || "",
-                              submissionNotes: "",
-                              filingSubmissionDate: "",
-                              reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
-                              reminderPolicy: currentItem.reminderPolicy || "One time",
-                              submittedBy: currentItem.submittedBy || "",
-                              amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
-                              paymentDate: currentItem.paymentDate || "",
-                              submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
-                              paymentMethod: currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null ? String(currentItem.paymentMethod) : "",
-                              department: currentItem.department || "",
-                              departments: depts,
-                            });
-                          }}
-                          className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
-                        >
-                          Submit now
-                        </Button>
+                      <TableCell className="px-4 py-4">
+                        <div className="flex items-center justify-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            title="Submit now"
+                            onClick={() => {
+                              const index = (complianceItems as ComplianceItem[]).findIndex(
+                                (ci: ComplianceItem) => (ci._id || ci.id) === (item._id || item.id)
+                              );
+                              setEditIndex(index);
+                              setShowSubmissionDetails(true);
+                              setModalOpen(true);
+                              setFilingNameError(""); // Clear any previous errors
+                              const currentItem = complianceItems[index] as ComplianceItem;
+                              const depts = parseDepartments(currentItem.department);
+                              setSelectedDepartments(depts);
+                              setForm({
+                                filingName: currentItem.policy,
+                                filingFrequency: currentItem.frequency || "Monthly",
+                                filingComplianceCategory: currentItem.category,
+                                filingGoverningAuthority: currentItem.governingAuthority || "",
+                                filingStartDate: currentItem.lastAudit || "",
+                                filingEndDate: currentItem.endDate || "",
+                                filingSubmissionDeadline: currentItem.submissionDeadline || "",
+                                filingSubmissionStatus: mapStatus(currentItem.status),
+                                filingRecurringFrequency: currentItem.recurringFrequency || "",
+                                filingRemarks: currentItem.remarks || "",
+                                submissionNotes: "",
+                                filingSubmissionDate: "",
+                                reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
+                                reminderPolicy: currentItem.reminderPolicy || "One time",
+                                submittedBy: currentItem.submittedBy || "",
+                                amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
+                                paymentDate: currentItem.paymentDate || "",
+                                submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
+                                paymentMethod: currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null ? String(currentItem.paymentMethod) : "",
+                                department: currentItem.department || "",
+                                departments: depts,
+                              });
+                            }}
+                            className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
+                          >
+                            Submit now
+                          </Button>
+                        </div>
                       </TableCell>
                       <TableCell className="px-4 py-4 text-right">
                         <div className="flex items-center justify-end space-x-2">
@@ -1481,24 +1561,8 @@ export default function Compliance() {
                 <Input 
                   className={`w-full border-slate-300 rounded-lg p-2 text-base ${filingNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                   value={form.filingName}
-                  onChange={e => {
-                    const inputValue = e.target.value;
-                    // Use same logic as Service Name field
-                    const isTypingAllCaps = /[A-Z]{2,}/.test(inputValue);
-                    let finalValue;
-                    if (isTypingAllCaps) {
-                      finalValue = inputValue;
-                    } else {
-                      finalValue = inputValue
-                        .split(' ')
-                        .map(word => {
-                          if (word.length === 0) return word;
-                          return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-                        })
-                        .join(' ');
-                    }
-                    handleFormChange("filingName", finalValue);
-                  }}
+                  onChange={e => handleFormChange("filingName", e.target.value)}
+                  onBlur={() => validateFilingName(form.filingName)}
                 />
                 {filingNameError && (
                   <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
@@ -1618,41 +1682,51 @@ export default function Compliance() {
                 </div>
               </div>
               
-              {/* Department field with dropdown */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Department</label>
-                <Select
-                  open={departmentSelectOpen}
-                  onOpenChange={setDepartmentSelectOpen}
-                  value={selectedDepartments.length > 0 ? selectedDepartments.join(',') : ''}
-                  onValueChange={() => {}}
-                  disabled={departmentsLoading}
-                >
-                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden">
-                    <div className="w-full overflow-hidden">
-                      {selectedDepartments.length > 0 ? (
-                        <div className="flex flex-wrap gap-1 w-full">
-                          {selectedDepartments.map((dept) => (
-                            <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
-                              <span className="truncate max-w-[80px]">{dept}</span>
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); removeDepartment(dept); }}
-                                className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
-                                tabIndex={-1}
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">Select departments</span>
-                      )}
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {/* Company Level option - always first */}
+              {/* Department field with dropdown - matching subscription modal exactly */}
+              <div className="space-y-2 relative" ref={departmentDropdownRef}>
+                <label className="block text-sm font-medium text-slate-700">Departments</label>
+                <div className="relative">
+                  <div
+                    className="w-full border border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200"
+                    onClick={() => setDepartmentSelectOpen(true)}
+                    tabIndex={0}
+                    onFocus={() => setDepartmentSelectOpen(true)}
+                  >
+                    {selectedDepartments.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 w-full">
+                        {selectedDepartments.map((dept) => (
+                          <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
+                            <span className="truncate max-w-[80px]">{dept}</span>
+                            <button
+                              type="button"
+                              data-remove-dept="true"
+                              onClick={(e) => { 
+                                e.preventDefault();
+                                e.stopPropagation(); 
+                                removeDepartment(dept); 
+                              }}
+                              className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
+                              tabIndex={-1}
+                            >
+                              <X className="h-3 w-3" data-remove-dept="true" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">Select departments</span>
+                    )}
+                    <ChevronDown
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); setDepartmentSelectOpen(!departmentSelectOpen); }}
+                    />
+                  </div>
+                </div>
+                {selectedDepartments.includes('Company Level') && (
+                  <p className="mt-1 text-xs text-slate-500">All departments are selected</p>
+                )}
+                {departmentSelectOpen && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
                     <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
                       <Checkbox
                         id="dept-company-level"
@@ -1667,39 +1741,38 @@ export default function Compliance() {
                         Company Level
                       </label>
                     </div>
-                    {departments && departments.length > 0 ? (
-                      departments.map(dept => (
-                        <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
-                          <Checkbox
-                            id={`dept-${dept.name}`}
-                            checked={selectedDepartments.includes(dept.name)}
-                            onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
-                            disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
-                          />
-                          <label
-                            htmlFor={`dept-${dept.name}`}
-                            className="text-sm font-medium cursor-pointer flex-1 ml-2"
-                          >
-                            {dept.name}
-                          </label>
-                        </div>
-                      ))
+                    {Array.isArray(departments) && departments.length > 0 ? (
+                      departments
+                        .filter(dept => dept.visible)
+                        .map(dept => (
+                          <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                            <Checkbox
+                              id={`dept-${dept.name}`}
+                              checked={selectedDepartments.includes(dept.name)}
+                              onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
+                              disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
+                            />
+                            <label
+                              htmlFor={`dept-${dept.name}`}
+                              className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                            >
+                              {dept.name}
+                            </label>
+                          </div>
+                        ))
                     ) : null}
-                    {/* Add Department option */}
                     <div
-                      className="font-medium border-t border-gray-200 mt-1 pt-2 text-black cursor-pointer px-2 py-2 hover:bg-slate-100 rounded-md"
-                      onClick={() => {
-                        setDepartmentSelectOpen(false);
-                        setDepartmentModal({ show: true });
-                      }}
+                      className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                      style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                      onClick={() => setDepartmentModal({ show: true })}
                     >
                       + New
                     </div>
-                    {departments && departments.length === 0 && (
-                      <SelectItem value="no-department" disabled>No departments available</SelectItem>
+                    {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
+                      <div className="dropdown-item disabled text-gray-400">No departments found</div>
                     )}
-                  </SelectContent>
-                </Select>
+                  </div>
+                )}
               </div>
               
               {/* Added date range & deadline fields moved from previous Submission Details section */}
@@ -1871,7 +1944,11 @@ export default function Compliance() {
                 type="button" 
                 variant="outline" 
                 className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
-                onClick={() => setModalOpen(false)}
+                onClick={() => {
+                  setModalOpen(false);
+                  setFilingNameError("");
+                  setEditIndex(null);
+                }}
               >
                 Exit
               </Button>
