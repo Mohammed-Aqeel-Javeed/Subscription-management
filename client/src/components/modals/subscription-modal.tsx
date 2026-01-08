@@ -626,8 +626,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const existingServiceNames = existingSubscriptions
     .filter((sub: any) => {
       if (!subscription) return true;
-      const subId = sub._id || sub.id;
-      const subscriptionId = (subscription as any)._id || (subscription as any).id;
+      // Get both possible ID formats and compare
+      const subId = (sub._id?.toString() || sub.id?.toString() || '').trim();
+      const subscriptionId = ((subscription as any)._id?.toString() || (subscription as any).id?.toString() || '').trim();
+      // Exclude the current subscription being edited
       return subId !== subscriptionId;
     })
     .map((sub: any) => sub.serviceName?.toLowerCase().trim())
@@ -713,6 +715,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     }
     
     const normalizedName = name.toLowerCase().trim();
+    
+    // If editing, check if the name is the same as the original subscription name
+    if (subscription?.serviceName) {
+      const originalName = subscription.serviceName.toLowerCase().trim();
+      if (normalizedName === originalName) {
+        // Same as original, no error
+        setServiceNameError("");
+        return true;
+      }
+    }
+    
     const isDuplicate = existingServiceNames.includes(normalizedName);
     
     if (isDuplicate) {
@@ -727,13 +740,22 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Re-validate service name when existing subscriptions change or modal opens
   useEffect(() => {
     const currentServiceName = form.getValues("serviceName");
+    // Only validate if we have a service name and the modal is open
     if (currentServiceName && open) {
       validateServiceName(currentServiceName);
+    } else if (!open) {
+      // Clear error when modal closes
+      setServiceNameError("");
     }
   }, [existingSubscriptions, open]);
   
   const [categoryOpen, setCategoryOpen] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  const [categorySearch, setCategorySearch] = useState('');
+
+  const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
+  const paymentMethodDropdownRef = useRef<HTMLDivElement>(null);
+  const [paymentMethodSearch, setPaymentMethodSearch] = useState('');
   
   // Validation error dialog state
   const [validationErrorOpen, setValidationErrorOpen] = useState(false);
@@ -787,7 +809,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Removed unused isPopoverOpen state
   const [isRenewing, setIsRenewing] = useState(false);
   const [lcyAmount, setLcyAmount] = useState<string>('');
-  const [totalAmount, setTotalAmount] = useState<string>('');
+  const [totalAmount, setTotalAmount] = useState<string>(''); // excl tax
+  const [taxAmount, setTaxAmount] = useState<string>('');
+  const [totalAmountInclTax, setTotalAmountInclTax] = useState<string>('');
   const [originalTotalAmount, setOriginalTotalAmount] = useState<number>(0);
   const [effectiveDate, setEffectiveDate] = useState<string>('');
   const [effectiveDateDialog, setEffectiveDateDialog] = useState<{show: boolean}>({show: false});
@@ -963,6 +987,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     const handleClickOutside = (event: MouseEvent) => {
       if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
         setCategoryOpen(false);
+        setCategorySearch('');
       }
     };
 
@@ -973,6 +998,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [categoryOpen]);
+
+  // Close payment method dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (paymentMethodDropdownRef.current && !paymentMethodDropdownRef.current.contains(event.target as Node)) {
+        setPaymentMethodOpen(false);
+        setPaymentMethodSearch('');
+      }
+    };
+
+    if (paymentMethodOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [paymentMethodOpen]);
 
   // Payment Method modal Owner/Managed-by dropdowns: close on outside click
   useEffect(() => {
@@ -1026,9 +1068,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setServiceNameError("");
       setLcyAmount('');
       setTotalAmount('');
+      setTaxAmount('');
+      setTotalAmountInclTax('');
       setDocuments([]);
       setIsEditingWebsite(false);
       setNotes([]);
+      setSubscriptionCreated(false); // Reset subscription created flag
+      setInitialDate(''); // Reset First Purchase Date
+      savedInitialDateRef.current = ''; // Reset saved initial date ref
       
       // Reset form
       form.reset({
@@ -1102,6 +1149,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Set totalAmount state for display
       const totalAmtValue = subscription.totalAmount !== undefined && subscription.totalAmount !== null ? Number(subscription.totalAmount).toFixed(2) : "";
       setTotalAmount(totalAmtValue);
+      
+      // Set taxAmount and totalAmountInclTax state
+      const taxAmtValue = (subscription as any)?.taxAmount !== undefined && (subscription as any)?.taxAmount !== null ? Number((subscription as any).taxAmount).toFixed(2) : "";
+      const totalInclTaxValue = (subscription as any)?.totalAmountInclTax !== undefined && (subscription as any)?.totalAmountInclTax !== null ? Number((subscription as any).totalAmountInclTax).toFixed(2) : "";
+      setTaxAmount(taxAmtValue);
+      setTotalAmountInclTax(totalInclTaxValue);
       
       form.reset({
         serviceName: subscription.serviceName || "",
@@ -1188,9 +1241,19 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
       // Reset LCY amount for new subscriptions
       setLcyAmount('');
+      setTaxAmount('');
+      setTotalAmountInclTax('');
     }
   }, [subscription, form, companyInfo?.defaultCurrency, currencies]);
   
+  // Update Total Amount Incl Tax when totalAmount or taxAmount changes
+  useEffect(() => {
+    const excl = parseFloat(totalAmount) || 0;
+    const tax = parseFloat(taxAmount) || 0;
+    const incl = excl + tax;
+    setTotalAmountInclTax(incl > 0 ? incl.toFixed(2) : '');
+  }, [totalAmount, taxAmount]);
+
   useEffect(() => {
     if (startDate && billingCycle) {
       const calculatedEndDate = calculateEndDate(startDate, billingCycle);
@@ -1483,22 +1546,76 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         return res.json();
       }
     },
-    onSuccess: async () => {
-      // Refetch subscriptions immediately to show the draft
-      queryClient.refetchQueries({ queryKey: ["/api/subscriptions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions/drafts"] });
+    onMutate: async (newData) => {
+      const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
       
+      // Cancel any outgoing refetches for this tenant
+      await queryClient.cancelQueries({ queryKey: ["/api/subscriptions", tenantId] });
+      
+      // Snapshot the previous value
+      const previousSubscriptions = queryClient.getQueryData(["/api/subscriptions", tenantId]);
+      
+      // Optimistically update the cache
+      if (isEditing && subscription?.id) {
+        // Update existing draft subscription
+        queryClient.setQueryData(["/api/subscriptions", tenantId], (old: any) => {
+          if (!old) return old;
+          return old.map((sub: any) => 
+            (sub.id === subscription.id || sub._id === subscription.id) 
+              ? { ...sub, ...newData, updatedAt: new Date().toISOString() }
+              : sub
+          );
+        });
+      } else {
+        // Add new draft subscription
+        queryClient.setQueryData(["/api/subscriptions", tenantId], (old: any) => {
+          const optimisticDraft = {
+            ...newData,
+            _id: 'temp-draft-' + Date.now(),
+            id: 'temp-draft-' + Date.now(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            tenantId: tenantId,
+            status: 'Draft',
+          };
+          return old ? [optimisticDraft, ...old] : [optimisticDraft];
+        });
+      }
+      
+      // Return a context object with the snapshotted value
+      return { previousSubscriptions, tenantId };
+    },
+    onSuccess: async (result, variables, context) => {
+      const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
+      
+      // Show success message based on whether editing or creating
       toast({
-        title: "Draft Saved",
-        description: "Subscription saved as draft successfully",
+        title: isEditing ? "Draft Updated" : "Draft Saved",
+        description: isEditing ? "Draft subscription updated successfully" : "Subscription saved as draft successfully",
         variant: "success",
       });
+      
+      // Close modal
       onOpenChange(false);
+      
+      // Invalidate and refetch to replace optimistic data with real data
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions/drafts"] });
+      
+      // Reset form after a short delay
       setTimeout(() => {
         form.reset();
       }, 300);
     },
-    onError: (error: any) => {
+    onError: (error: any, newData, context: any) => {
+      const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
+      
+      // Rollback to the previous value on error
+      if (context?.previousSubscriptions) {
+        queryClient.setQueryData(["/api/subscriptions", tenantId], context.previousSubscriptions);
+      }
+      
       console.error("Draft save error:", error);
       toast({
         title: "Error",
@@ -1529,6 +1646,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     draftSaveInFlightRef.current = true;
     try {
       const amountNum = typeof currentValues.amount === 'string' ? parseFloat(currentValues.amount) : currentValues.amount ?? 0;
+      const taxAmountNum = taxAmount !== "" ? parseFloat(taxAmount) : 0;
+      const totalAmountInclTaxNum = totalAmountInclTax !== "" ? parseFloat(totalAmountInclTax) : 0;
       const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       
       const payload = {
@@ -1536,6 +1655,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         status: 'Draft', // Always save as draft
         autoRenewal: autoRenewal, // Add auto renewal from state
         amount: amountNum,
+        taxAmount: isNaN(taxAmountNum) ? 0 : taxAmountNum,
+        totalAmountInclTax: isNaN(totalAmountInclTaxNum) ? 0 : totalAmountInclTaxNum,
         initialDate: new Date(currentValues.startDate ?? ""), // Set initialDate to startDate
         tenantId,
         departments: currentValues.departments || [],
@@ -1585,6 +1706,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const amountNum = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount ?? 0;
       const totalAmountNum = typeof data.totalAmount === 'string' ? parseFloat(data.totalAmount) : data.totalAmount ?? 0;
       const qtyNum = typeof data.qty === 'string' ? parseFloat(data.qty) : data.qty ?? 0;
+      const taxAmountNum = taxAmount !== "" ? parseFloat(taxAmount) : 0;
+      const totalAmountInclTaxNum = totalAmountInclTax !== "" ? parseFloat(totalAmountInclTax) : 0;
       // Get tenantId from context, state, or user info
   const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
@@ -1595,6 +1718,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         totalAmount: isNaN(totalAmountNum) ? 0 : totalAmountNum,
         qty: isNaN(qtyNum) ? 0 : qtyNum,
         lcyAmount: lcyAmount !== "" ? Number(lcyAmount) : undefined,
+        taxAmount: isNaN(taxAmountNum) ? 0 : taxAmountNum,
+        totalAmountInclTax: isNaN(totalAmountInclTaxNum) ? 0 : totalAmountInclTaxNum,
         departments: selectedDepartments,
         department: JSON.stringify(selectedDepartments),
         startDate: new Date(data.startDate ?? ""),
@@ -1664,6 +1789,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     const amountNum = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount ?? 0;
     const totalAmountNum = typeof data.totalAmount === 'string' ? parseFloat(data.totalAmount) : data.totalAmount ?? 0;
     const qtyNum = typeof data.qty === 'string' ? parseFloat(data.qty) : data.qty ?? 0;
+    const taxAmountNum = taxAmount !== "" ? parseFloat(taxAmount) : 0;
+    const totalAmountInclTaxNum = totalAmountInclTax !== "" ? parseFloat(totalAmountInclTax) : 0;
     const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
     
     const payload = {
@@ -1674,6 +1801,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       totalAmount: isNaN(totalAmountNum) ? 0 : totalAmountNum,
       qty: isNaN(qtyNum) ? 0 : qtyNum,
       lcyAmount: lcyAmount !== "" ? Number(lcyAmount) : undefined,
+      taxAmount: isNaN(taxAmountNum) ? 0 : taxAmountNum,
+      totalAmountInclTax: isNaN(totalAmountInclTaxNum) ? 0 : totalAmountInclTaxNum,
       departments: selectedDepartments,
       department: JSON.stringify(selectedDepartments),
       startDate: new Date(data.startDate ?? ""),
@@ -1820,6 +1949,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const originalInitialDate = savedInitialDateRef.current || initialDate;
       // Always get tenantId from context or user info
       const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
+      const taxAmountNum = taxAmount !== "" ? parseFloat(taxAmount) : 0;
+      const totalAmountInclTaxNum = totalAmountInclTax !== "" ? parseFloat(totalAmountInclTax) : 0;
       const payload = {
         ...formValues,
         initialDate: originalInitialDate,
@@ -1837,6 +1968,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             ? Number(formValues.qty)
             : undefined,
         lcyAmount: lcyAmount !== "" ? Number(lcyAmount) : undefined,
+        taxAmount: isNaN(taxAmountNum) ? 0 : taxAmountNum,
+        totalAmountInclTax: isNaN(totalAmountInclTaxNum) ? 0 : totalAmountInclTaxNum,
         tenantId,
       };
       
@@ -2416,12 +2549,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="vendor"
                   render={({ field }) => {
                     const [vendorOpen, setVendorOpen] = useState(false);
+                    const [vendorSearch, setVendorSearch] = useState('');
                     const vendorDropdownRef = useRef<HTMLDivElement>(null);
                     useEffect(() => {
                       if (!vendorOpen) return;
                       function handleClickOutside(event: MouseEvent) {
                         if (vendorDropdownRef.current && !vendorDropdownRef.current.contains(event.target as Node)) {
                           setVendorOpen(false);
+                          setVendorSearch('');
                         }
                       }
                       document.addEventListener('mousedown', handleClickOutside);
@@ -2429,8 +2564,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         document.removeEventListener('mousedown', handleClickOutside);
                       };
                     }, [vendorOpen]);
-                    
-                    const filteredVendors = field.value ? VENDOR_LIST.filter(v => v === field.value) : VENDOR_LIST;
+
+                    const normalizedVendorSearch = vendorSearch.trim().toLowerCase();
+                    const filteredVendors = normalizedVendorSearch
+                      ? VENDOR_LIST.filter(v => v.toLowerCase().includes(normalizedVendorSearch))
+                      : VENDOR_LIST;
                     
                     return (
                       <FormItem className="relative" ref={vendorDropdownRef}>
@@ -2439,14 +2577,27 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           <div className="relative">
                             <Input 
                               className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer" 
-                              value={field.value || ''}
-                              readOnly
-                              onFocus={() => setVendorOpen(true)}
-                              onClick={() => setVendorOpen(true)}
+                              value={vendorOpen ? vendorSearch : (field.value || '')}
+                              onChange={(e) => {
+                                setVendorSearch(e.target.value);
+                                if (!vendorOpen) setVendorOpen(true);
+                              }}
+                              onFocus={() => {
+                                setVendorSearch(field.value || '');
+                                setVendorOpen(true);
+                              }}
+                              onClick={() => {
+                                setVendorSearch(field.value || '');
+                                setVendorOpen(true);
+                              }}
                             />
                             <ChevronDown
                               className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                              onClick={() => setVendorOpen(!vendorOpen)}
+                              onClick={() => {
+                                if (!vendorOpen) setVendorSearch(field.value || '');
+                                setVendorOpen(!vendorOpen);
+                                if (vendorOpen) setVendorSearch('');
+                              }}
                             />
                             {vendorOpen && (
                               <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
@@ -2459,10 +2610,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                       if (field.value === vendor) {
                                         field.onChange('');
                                         setVendorOpen(false);
+                                        setVendorSearch('');
                                         return;
                                       }
                                       field.onChange(vendor);
                                       setVendorOpen(false);
+                                      setVendorSearch('');
                                     }}
                                   >
                                     <Check
@@ -2485,12 +2638,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="currency"
                   render={({ field }) => {
                     const [currencyOpen, setCurrencyOpen] = useState(false);
+                    const [currencySearch, setCurrencySearch] = useState('');
                     const currencyDropdownRef = useRef<HTMLDivElement>(null);
                     useEffect(() => {
                       if (!currencyOpen) return;
                       function handleClickOutside(event: MouseEvent) {
                         if (currencyDropdownRef.current && !currencyDropdownRef.current.contains(event.target as Node)) {
                           setCurrencyOpen(false);
+                          setCurrencySearch('');
                         }
                       }
                       document.addEventListener('mousedown', handleClickOutside);
@@ -2499,23 +2654,38 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       };
                     }, [currencyOpen]);
                     const allCurrencies = currencies && currencies.length > 0 ? currencies : [];
-                    const filtered = field.value 
-                      ? allCurrencies.filter((curr: any) => curr.code === field.value)
+
+                    const normalizedCurrencySearch = currencySearch.trim().toLowerCase();
+                    const filtered = normalizedCurrencySearch
+                      ? allCurrencies.filter((curr: any) => curr.code?.toLowerCase().includes(normalizedCurrencySearch))
                       : allCurrencies;
                     return (
                       <FormItem className="relative" ref={currencyDropdownRef}>
                         <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Currency</FormLabel>
                         <div className="relative">
                           <Input
-                            value={field.value || ''}
+                            value={currencyOpen ? currencySearch : (field.value || '')}
                             className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer"
-                            readOnly
-                            onFocus={() => setCurrencyOpen(true)}
-                            onClick={() => setCurrencyOpen(true)}
+                            onChange={(e) => {
+                              setCurrencySearch(e.target.value);
+                              if (!currencyOpen) setCurrencyOpen(true);
+                            }}
+                            onFocus={() => {
+                              setCurrencySearch(field.value || '');
+                              setCurrencyOpen(true);
+                            }}
+                            onClick={() => {
+                              setCurrencySearch(field.value || '');
+                              setCurrencyOpen(true);
+                            }}
                           />
                           <ChevronDown
                             className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                            onClick={() => setCurrencyOpen(!currencyOpen)}
+                            onClick={() => {
+                              if (!currencyOpen) setCurrencySearch(field.value || '');
+                              setCurrencyOpen(!currencyOpen);
+                              if (currencyOpen) setCurrencySearch('');
+                            }}
                           />
                         </div>
                         {currencyOpen && (
@@ -2530,10 +2700,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                     if (field.value === curr.code) {
                                       field.onChange('');
                                       setCurrencyOpen(false);
+                                      setCurrencySearch('');
                                       return;
                                     }
                                     field.onChange(curr.code);
                                     setCurrencyOpen(false);
+                                    setCurrencySearch('');
                                   }}
                                 >
                                   <Check
@@ -2654,15 +2826,57 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     </FormItem>
                   )}
                 />
-                {/* Total Amount Field - Read-only calculated field */}
+                {/* Total Amount excl Tax */}
                 <div className="form-item">
                   <label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">
-                    Total Amount
+                    Total Amount excl Tax
                   </label>
                   <div className="relative">
                     <Input 
                       type="text"
                       value={totalAmount}
+                      readOnly
+                      className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-gray-50 text-gray-600 shadow-sm"
+                      placeholder=""
+                    />
+                  </div>
+                </div>
+                {/* Tax Amount */}
+                <div className="form-item">
+                  <label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">
+                    Tax Amount
+                  </label>
+                  <div className="relative">
+                    <Input 
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={taxAmount}
+                      onKeyDown={e => {
+                        // Prevent 'e', 'E', '+', '-', '.' keys
+                        if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-' || e.key === '.') {
+                          e.preventDefault();
+                        }
+                      }}
+                      onChange={e => {
+                        // Only allow integer values
+                        let val = e.target.value.replace(/[^0-9]/g, '');
+                        setTaxAmount(val);
+                      }}
+                      className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                      placeholder=""
+                    />
+                  </div>
+                </div>
+                {/* Total Amount Incl Tax */}
+                <div className="form-item">
+                  <label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">
+                    Total Amount Incl Tax
+                  </label>
+                  <div className="relative">
+                    <Input 
+                      type="text"
+                      value={totalAmountInclTax}
                       readOnly
                       className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-gray-50 text-gray-600 shadow-sm"
                       placeholder=""
@@ -2694,12 +2908,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="billingCycle"
                   render={({ field }) => {
                     const [cycleOpen, setCycleOpen] = useState(false);
+                    const [cycleSearch, setCycleSearch] = useState('');
                     const cycleDropdownRef = useRef<HTMLDivElement>(null);
                     useEffect(() => {
                       if (!cycleOpen) return;
                       function handleClickOutside(event: MouseEvent) {
                         if (cycleDropdownRef.current && !cycleDropdownRef.current.contains(event.target as Node)) {
                           setCycleOpen(false);
+                          setCycleSearch('');
                         }
                       }
                       document.addEventListener('mousedown', handleClickOutside);
@@ -2715,25 +2931,43 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       { value: 'trial', label: 'Trial' },
                       { value: 'pay-as-you-go', label: 'Pay-as-you-go' },
                     ];
+
+                    const normalizedCycleSearch = cycleSearch.trim().toLowerCase();
+                    const filteredOptions = normalizedCycleSearch
+                      ? options.filter(opt => opt.label.toLowerCase().includes(normalizedCycleSearch) || opt.value.toLowerCase().includes(normalizedCycleSearch))
+                      : options;
                     return (
                       <FormItem className="relative" ref={cycleDropdownRef}>
                         <FormLabel className="block text-sm font-medium text-slate-700">Commitment cycle</FormLabel>
                         <div className="relative">
                           <Input
-                            value={field.value || ''}
+                            value={cycleOpen ? cycleSearch : (field.value || '')}
                             className="w-full border-slate-300 rounded-lg p-2 text-base cursor-pointer"
-                            readOnly
-                            onFocus={() => setCycleOpen(true)}
-                            onClick={() => setCycleOpen(true)}
+                            onChange={(e) => {
+                              setCycleSearch(e.target.value);
+                              if (!cycleOpen) setCycleOpen(true);
+                            }}
+                            onFocus={() => {
+                              setCycleSearch(field.value || '');
+                              setCycleOpen(true);
+                            }}
+                            onClick={() => {
+                              setCycleSearch(field.value || '');
+                              setCycleOpen(true);
+                            }}
                           />
                           <ChevronDown
                             className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                            onClick={() => setCycleOpen(!cycleOpen)}
+                            onClick={() => {
+                              if (!cycleOpen) setCycleSearch(field.value || '');
+                              setCycleOpen(!cycleOpen);
+                              if (cycleOpen) setCycleSearch('');
+                            }}
                           />
                         </div>
                         {cycleOpen && (
                           <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
-                            {options.map(opt => (
+                            {filteredOptions.map(opt => (
                               <div
                                 key={opt.value}
                                 className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
@@ -2741,6 +2975,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                   setBillingCycle(opt.value);
                                   field.onChange(opt.value);
                                   setCycleOpen(false);
+                                  setCycleSearch('');
                                   if (autoRenewal) {
                                     const s = form.watch("startDate");
                                     if (s) {
@@ -2826,10 +3061,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     
                     // Combine and deduplicate
                     const allCategories = Array.from(new Set([...dbCategories, ...DEFAULT_CATEGORY_SUGGESTIONS]));
-                    
-                    // Filter to show only selected category when value exists, otherwise show all
-                    const filtered = field.value 
-                      ? allCategories.filter(cat => cat === field.value)
+
+                    const normalizedSearch = categorySearch.trim().toLowerCase();
+                    const filtered = normalizedSearch
+                      ? allCategories.filter(cat => cat.toLowerCase().includes(normalizedSearch))
                       : allCategories;
                     
                     const shouldShowDropdown = categoryOpen && filtered.length > 0;
@@ -2840,17 +3075,30 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormLabel className="block text-sm font-medium text-slate-700">Category</FormLabel>
                         <div className="relative">
                           <Input
-                            value={field.value || ''}
+                            value={categoryOpen ? categorySearch : (field.value || '')}
                             className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
                             disabled={categoriesLoading}
-                            readOnly
-                            onFocus={() => setCategoryOpen(true)}
-                            onClick={() => setCategoryOpen(true)}
+                            onChange={(e) => {
+                              setCategorySearch(e.target.value);
+                              if (!categoryOpen) setCategoryOpen(true);
+                            }}
+                            onFocus={() => {
+                              setCategorySearch(field.value || '');
+                              setCategoryOpen(true);
+                            }}
+                            onClick={() => {
+                              setCategorySearch(field.value || '');
+                              setCategoryOpen(true);
+                            }}
                             autoComplete="off"
                           />
                           <ChevronDown
                             className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                            onClick={() => setCategoryOpen(!categoryOpen)}
+                            onClick={() => {
+                              if (!categoryOpen) setCategorySearch(field.value || '');
+                              setCategoryOpen(!categoryOpen);
+                              if (categoryOpen) setCategorySearch('');
+                            }}
                           />
                         </div>
                         {shouldShowDropdown && (
@@ -2864,10 +3112,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                   if (field.value === catName) {
                                     field.onChange('');
                                     setCategoryOpen(false);
+                                    setCategorySearch('');
                                     return;
                                   }
                                   field.onChange(catName);
                                   setCategoryOpen(false);
+                                  setCategorySearch('');
                                 }}
                               >
                                 <Check
@@ -2882,6 +3132,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               onClick={() => {
                                 setCategoryModal({ show: true });
                                 setCategoryOpen(false);
+                                setCategorySearch('');
                               }}
                             >
                               + New
@@ -3015,44 +3266,45 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     const allPaymentMethods = Array.isArray(paymentMethods)
                       ? paymentMethods.map(pm => pm.name)
                       : [];
-                    const filtered = field.value 
-                      ? allPaymentMethods.filter(pm => pm === field.value)
+
+                    const normalizedSearch = paymentMethodSearch.trim().toLowerCase();
+                    const filtered = normalizedSearch
+                      ? allPaymentMethods.filter(pm => pm.toLowerCase().includes(normalizedSearch))
                       : allPaymentMethods;
-                    const [dropdownOpen, setDropdownOpen] = useState(false);
-                    const dropdownRef = useRef<HTMLDivElement>(null);
-                    useEffect(() => {
-                      if (!dropdownOpen) return;
-                      function handleClickOutside(event: MouseEvent) {
-                        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                          setDropdownOpen(false);
-                        }
-                      }
-                      document.addEventListener('mousedown', handleClickOutside);
-                      return () => {
-                        document.removeEventListener('mousedown', handleClickOutside);
-                      };
-                    }, [dropdownOpen]);
                     return (
-                      <FormItem className="relative">
+                      <FormItem className="relative" ref={paymentMethodDropdownRef}>
                         <FormLabel className="block text-sm font-medium text-slate-700">
                           Payment Method <span className="text-red-500">*</span>
                         </FormLabel>
                         <div className="relative">
                           <Input
-                            value={field.value || ''}
+                            value={paymentMethodOpen ? paymentMethodSearch : (field.value || '')}
                             className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
                             disabled={paymentMethodsLoading}
-                            readOnly
-                            onFocus={() => setDropdownOpen(true)}
-                            onClick={() => setDropdownOpen(true)}
+                            onChange={(e) => {
+                              setPaymentMethodSearch(e.target.value);
+                              if (!paymentMethodOpen) setPaymentMethodOpen(true);
+                            }}
+                            onFocus={() => {
+                              setPaymentMethodSearch(field.value || '');
+                              setPaymentMethodOpen(true);
+                            }}
+                            onClick={() => {
+                              setPaymentMethodSearch(field.value || '');
+                              setPaymentMethodOpen(true);
+                            }}
                           />
                           <ChevronDown
                             className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                            onClick={() => setDropdownOpen(!dropdownOpen)}
+                            onClick={() => {
+                              if (!paymentMethodOpen) setPaymentMethodSearch(field.value || '');
+                              setPaymentMethodOpen(!paymentMethodOpen);
+                              if (paymentMethodOpen) setPaymentMethodSearch('');
+                            }}
                           />
                         </div>
-                        {dropdownOpen && filtered.length > 0 && (
-                          <div ref={dropdownRef} className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
+                        {paymentMethodOpen && filtered.length > 0 && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
                             {filtered.map(pmName => (
                               <div
                                 key={pmName}
@@ -3061,11 +3313,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                   // If already selected, clear it
                                   if (field.value === pmName) {
                                     field.onChange('');
-                                    setDropdownOpen(false);
+                                    setPaymentMethodOpen(false);
+                                    setPaymentMethodSearch('');
                                     return;
                                   }
                                   field.onChange(pmName);
-                                  setDropdownOpen(false);
+                                  setPaymentMethodOpen(false);
+                                  setPaymentMethodSearch('');
                                 }}
                               >
                                 <Check
@@ -3079,7 +3333,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
                               onClick={() => {
                                 setPaymentMethodModal({ show: true });
-                                setDropdownOpen(false);
+                                setPaymentMethodOpen(false);
+                                setPaymentMethodSearch('');
                               }}
                             >
                               + New
@@ -3098,12 +3353,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="owner"
                   render={({ field }) => {
                     const [ownerOpen, setOwnerOpen] = useState(false);
+                    const [ownerSearch, setOwnerSearch] = useState('');
                     const ownerDropdownRef = useRef<HTMLDivElement>(null);
                     useEffect(() => {
                       if (!ownerOpen) return;
                       function handleClickOutside(event: MouseEvent) {
                         if (ownerDropdownRef.current && !ownerDropdownRef.current.contains(event.target as Node)) {
                           setOwnerOpen(false);
+                          setOwnerSearch('');
                         }
                       }
                       document.addEventListener('mousedown', handleClickOutside);
@@ -3123,24 +3380,38 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           return { displayName, uniqueValue, name: emp.name, email: emp.email };
                         })
                       : [];
-                    // Filter to show only selected owner when value exists, otherwise show all
-                    const filtered = field.value 
-                      ? ownerOptions.filter(opt => opt.uniqueValue === field.value || opt.name === field.value)
+
+                    const normalizedOwnerSearch = ownerSearch.trim().toLowerCase();
+                    const filtered = normalizedOwnerSearch
+                      ? ownerOptions.filter(opt => (opt.displayName || '').toLowerCase().includes(normalizedOwnerSearch))
                       : ownerOptions;
                     return (
                       <FormItem className="relative" ref={ownerDropdownRef}>
                         <FormLabel className="block text-sm font-medium text-slate-700">Owner</FormLabel>
                         <div className="relative">
                           <Input
-                            value={field.value || ''}
+                            value={ownerOpen ? ownerSearch : (field.value || '')}
                             className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base cursor-pointer"
-                            readOnly
-                            onFocus={() => setOwnerOpen(true)}
-                            onClick={() => setOwnerOpen(true)}
+                            onChange={(e) => {
+                              setOwnerSearch(e.target.value);
+                              if (!ownerOpen) setOwnerOpen(true);
+                            }}
+                            onFocus={() => {
+                              setOwnerSearch(field.value || '');
+                              setOwnerOpen(true);
+                            }}
+                            onClick={() => {
+                              setOwnerSearch(field.value || '');
+                              setOwnerOpen(true);
+                            }}
                           />
                           <ChevronDown
                             className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                            onClick={() => setOwnerOpen(!ownerOpen)}
+                            onClick={() => {
+                              if (!ownerOpen) setOwnerSearch(field.value || '');
+                              setOwnerOpen(!ownerOpen);
+                              if (ownerOpen) setOwnerSearch('');
+                            }}
                           />
                         </div>
                         {ownerOpen && (
@@ -3160,6 +3431,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                         field.onChange('');
                                         form.setValue('ownerEmail', '');
                                         setOwnerOpen(false);
+                                        setOwnerSearch('');
                                         return;
                                       }
                                       
@@ -3177,6 +3449,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                       }
                                     }
                                     setOwnerOpen(false);
+                                    setOwnerSearch('');
                                   }}
                                 >
                                   <Check
@@ -3194,6 +3467,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               onClick={() => {
                                 setOwnerModal({ show: true });
                                 setOwnerOpen(false);
+                                setOwnerSearch('');
                               }}
                             >
                               + New
@@ -3388,26 +3662,30 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     value={initialDate}
                     onChange={e => { 
                       const newInitialDate = e.target.value;
-                      
                       // Validate that First Purchase Date is not in the future
                       if (newInitialDate && new Date(newInitialDate) > new Date()) {
                         setValidationErrorMessage("First Purchase Date cannot be in the future");
                         setValidationErrorOpen(true);
                         return; // Don't change the date
                       }
-                      
                       // Validate before changing
                       if (startDate && newInitialDate && new Date(startDate) < new Date(newInitialDate)) {
                         setValidationErrorMessage("Current Cycle Start must be on or after First Purchase Date");
                         setValidationErrorOpen(true);
                         return; // Don't change the date
                       }
-                      
                       setInitialDate(newInitialDate);
                       savedInitialDateRef.current = newInitialDate; // Save to ref to persist across renewals
-                      
-                      // Do NOT auto-populate Start Date - user must enter it manually
-                    }} 
+                      // Do NOT auto-populate Start Date here; wait for blur
+                    }}
+                    onBlur={e => {
+                      const blurDate = e.target.value;
+                      // Only update Current Cycle Start if a valid date is entered
+                      if (blurDate) {
+                        setStartDate(blurDate);
+                        form.setValue("startDate", blurDate);
+                      }
+                    }}
                   />
                 </div>
                 {/* Start Date */}
@@ -3653,15 +3931,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   variant="outline" 
                   className="border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() => handleSaveDraft()}
-                  disabled={draftMutation.isPending || subscriptionCreated || form.watch('status') === 'Active' || isEditing}
+                  disabled={
+                    draftMutation.isPending || 
+                    subscriptionCreated || 
+                    form.watch('status') === 'Active' || 
+                    (isEditing && form.watch('status') !== 'Draft')
+                  }
                   title={
-                    isEditing ? "Draft is not available when editing existing subscriptions" :
+                    (isEditing && form.watch('status') !== 'Draft') ? "Draft is only available for draft subscriptions" :
                     subscriptionCreated ? "Draft is not available after subscription is created" : 
                     form.watch('status') === 'Active' ? "Draft is not available for active subscriptions" : 
                     undefined
                   }
                 >
-                  {draftMutation.isPending ? 'Saving Draft...' : 'Save Draft'}
+                  {draftMutation.isPending ? (isEditing && form.watch('status') === 'Draft' ? 'Updating Draft...' : 'Saving Draft...') : (isEditing && form.watch('status') === 'Draft' ? 'Update Draft' : 'Save Draft')}
                 </Button>
                 <Button 
                   type="submit" 
@@ -3833,6 +4116,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 setCancelRenewalConfirmDialog({ show: false });
                 // Close modal immediately for fast UX
                 setStatus('Cancelled');
+                // Clear Current Cycle Start and Next Payment Date
+                setStartDate('');
+                setEndDate('');
+                form.setValue('startDate', '');
+                form.setValue('nextRenewal', '');
                 onOpenChange(false);
                 toast({ title: 'Subscription cancelled', description: 'The subscription was marked as Cancelled.', variant: 'destructive' });
                 // Update cache immediately for instant table refresh
@@ -3840,7 +4128,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
                     if (!oldData) return oldData;
                     return oldData.map((sub: any) => 
-                      sub.id === subscription.id ? { ...sub, status: 'Cancelled' } : sub
+                      sub.id === subscription.id ? { ...sub, status: 'Cancelled', startDate: null, nextRenewal: null } : sub
                     );
                   });
                   // Update analytics cache immediately
@@ -3854,7 +4142,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   // Update backend asynchronously
                   const validId = getValidObjectId(subscription.id);
                   if (validId) {
-                    apiRequest("PUT", `/api/subscriptions/${validId}`, { status: 'Cancelled' })
+                    apiRequest("PUT", `/api/subscriptions/${validId}`, { 
+                      status: 'Cancelled',
+                      startDate: null,
+                      nextRenewal: null
+                    })
                       .then(() => {
                         // Refetch immediately after successful update
                         queryClient.refetchQueries({ queryKey: ["/api/subscriptions"] });

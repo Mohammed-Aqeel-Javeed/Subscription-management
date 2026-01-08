@@ -54,11 +54,20 @@ export default function CompanySwitcher() {
         throw new Error("Failed to switch company");
       }
 
-      // Invalidate all queries to refetch with new tenantId
+      // Clear all caches completely
       queryClient.clear();
+      queryClient.removeQueries();
       
-      // Reload the page to ensure all components use the new tenantId
-      window.location.reload();
+      // Clear any persisted state
+      try {
+        localStorage.removeItem('REACT_QUERY_OFFLINE_CACHE');
+        sessionStorage.clear();
+      } catch (e) {
+        console.error('Failed to clear storage:', e);
+      }
+      
+      // Force reload to ensure all components use the new tenantId
+      window.location.href = window.location.pathname;
       
       toast({
         title: "Company Switched",

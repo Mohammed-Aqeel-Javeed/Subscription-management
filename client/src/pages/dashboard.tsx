@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CalendarDays, TrendingUp, RefreshCw, Bell, Plus, Edit, BellRing, Users, Clock, LogOut } from "lucide-react";
+import { CalendarDays, TrendingUp, RefreshCw, Bell, Plus, Edit, BellRing, Users, Clock, LogOut, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import TrendsChart from "@/components/charts/trends-chart";
 import CategoryChart from "@/components/charts/category-chart";
@@ -404,7 +404,16 @@ export default function Dashboard() {
         <Dialog open={activeSubscriptionsModalOpen} onOpenChange={setActiveSubscriptionsModalOpen}>
     <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
             <DialogHeader>
-              <DialogTitle>Active Subscriptions ({filteredSubscriptions.length})</DialogTitle>
+              <div className="flex items-center justify-between">
+                <DialogTitle>Active Subscriptions ({filteredSubscriptions.length})</DialogTitle>
+                <button
+                  onClick={() => setActiveSubscriptionsModalOpen(false)}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
             </DialogHeader>
             <div className="overflow-x-auto">
               <Table>
@@ -445,7 +454,16 @@ export default function Dashboard() {
         <Dialog open={upcomingRenewalsModalOpen} onOpenChange={setUpcomingRenewalsModalOpen}>
     <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
             <DialogHeader>
-              <DialogTitle>Upcoming Renewals - Next 30 Days ({upcomingRenewals.length})</DialogTitle>
+              <div className="flex items-center justify-between">
+                <DialogTitle>Upcoming Renewals - Next 30 Days ({upcomingRenewals.length})</DialogTitle>
+                <button
+                  onClick={() => setUpcomingRenewalsModalOpen(false)}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
             </DialogHeader>
             <div className="overflow-x-auto">
               <Table>

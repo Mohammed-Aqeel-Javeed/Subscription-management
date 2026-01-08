@@ -33,6 +33,8 @@ export const subscriptions = pgTable("subscriptions", {
   reminderPolicy: text("reminder_policy").notNull().default("One time"), // One time, Two times, Until Renewal
   notes: text("notes"),
   isActive: boolean("is_active").notNull().default(true),
+  taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }),
+  totalAmountInclTax: decimal("total_amount_incl_tax", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedBy: text("updated_by"), // username who last updated
 });
@@ -61,6 +63,8 @@ export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
   departments: z.array(z.string()),
   startDate: z.preprocess((val) => new Date(val as string), z.date()),
   nextRenewal: z.preprocess((val) => new Date(val as string), z.date()),
+  taxAmount: z.number().optional(),
+  totalAmountInclTax: z.number().optional(),
 });
 
 export const insertReminderSchema = createInsertSchema(reminders).omit({

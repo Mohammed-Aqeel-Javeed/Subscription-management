@@ -92,16 +92,10 @@ export default function Subscriptions() {
   const queryClient = useQueryClient();
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   
-  const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
   const { data: subscriptions, isLoading } = useQuery<SubscriptionWithExtras[]>({
-    queryKey: ["/api/subscriptions", tenantId],
-    enabled: !!tenantId,
-    refetchOnWindowFocus: false, // Don't refetch on every tab switch
-    refetchOnReconnect: true,
-    refetchInterval: false, // Disable auto-refresh, rely on invalidation
-    staleTime: 60 * 1000, // Increase to 1 minute
-    gcTime: 10 * 60 * 1000,
-    placeholderData: (previousData) => previousData, // Show previous data instantly
+    queryKey: ["/api/subscriptions"],
+    staleTime: 0,
+    refetchOnMount: true,
   });
   
   // Handle URL parameter to open specific subscription modal (placed after subscriptions declaration)
@@ -126,9 +120,8 @@ export default function Subscriptions() {
   // Listen for login/logout/account change events and trigger immediate refetch
   React.useEffect(() => {
     function triggerImmediateRefresh() {
-      if (!tenantId) return;
-      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions", tenantId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard", tenantId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"], exact: false });
     }
       // Listen for subscription-renewed event and refetch subscriptions
     function handleSubscriptionRenewed() { triggerImmediateRefresh(); }
@@ -143,7 +136,7 @@ export default function Subscriptions() {
       events.forEach(ev => window.removeEventListener(ev, triggerImmediateRefresh));
       window.removeEventListener('subscription-renewed', handleSubscriptionRenewed);
     };
-  }, [queryClient, tenantId]);
+  }, [queryClient]);
   // Listen for new subscription created from modal
   React.useEffect(() => {
     function handleCreated(e: any) {
@@ -331,8 +324,6 @@ export default function Subscriptions() {
   };
 
   const filteredSubscriptions = Array.isArray(subscriptions) ? subscriptions.filter(sub => {
-    // Only show subscriptions for current tenant
-    if (tenantId && sub.tenantId !== tenantId) return false;
     const q = searchTerm.trim().toLowerCase();
     const ownerVal = String((sub as any)?.owner || (sub as any)?.ownerEmail || '').trim();
     const effectiveStatus = (String(sub.billingCycle || '').toLowerCase() === 'trial')
@@ -392,7 +383,12 @@ export default function Subscriptions() {
     );
   }).sort((a, b) => {
     // Apply sorting if a field is selected
-    if (!sortField) return 0;
+    if (!sortField) {
+      // Default: Sort by latest saved first (using createdAt or updatedAt if available)
+      const aTime = new Date((a as any).updatedAt || (a as any).createdAt || 0).getTime();
+      const bTime = new Date((b as any).updatedAt || (b as any).createdAt || 0).getTime();
+      return bTime - aTime; // Descending (newest first)
+    }
     
     if (sortField === "serviceName") {
       const aVal = (a.serviceName || "").toLowerCase();
@@ -850,8 +846,8 @@ export default function Subscriptions() {
   
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-slate-50 to-indigo-100 p-4 md:p-6 relative">
-        <div className="max-w-7xl mx-auto">
+      <div className="h-full bg-gradient-to-br from-indigo-50 via-slate-50 to-indigo-100 p-4 md:p-6 relative">
+        <div className="h-full w-full flex flex-col min-h-0">
           {/* Header Section */}
           <div className="bg-white rounded-2xl shadow-xl p-4 mb-6 border border-slate-200">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -903,11 +899,11 @@ export default function Subscriptions() {
   }
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
+    <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
+      <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
         {filtersOpen && sidebarSlotEl ? createPortal(<FiltersSidebarPanel />, sidebarSlotEl) : null}
         {/* Header Section */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 shrink-0">
           <div className="flex items-center space-x-4">
             <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center shadow-md border border-gray-200">
               <Layers className="h-6 w-6 text-blue-600" />
@@ -1018,7 +1014,7 @@ export default function Subscriptions() {
         </div>
 
         {/* Search + Filter By */}
-        <div className="mb-6 bg-white border border-gray-200 rounded-2xl shadow-sm p-4">
+        <div className="mb-6 bg-white border border-gray-200 rounded-2xl shadow-sm p-4 shrink-0">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -1041,13 +1037,12 @@ export default function Subscriptions() {
         </div>
 
         {/* Professional Data Table */}
-        <div className="min-w-0">
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden">
-              <div className="overflow-x-auto">
-                <Table>
+        <div className="min-w-0 flex-1 min-h-0">
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden h-full flex flex-col min-h-0">
+            <Table containerClassName="flex-1 min-h-0 overflow-auto">
               <TableHeader>
                 <TableRow className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
-                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
+                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("serviceName")}
                       className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
@@ -1056,7 +1051,7 @@ export default function Subscriptions() {
                       {getSortIcon("serviceName")}
                     </button>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("vendor")}
                       className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
@@ -1065,7 +1060,7 @@ export default function Subscriptions() {
                       {getSortIcon("vendor")}
                     </button>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("amount")}
                       className="flex items-center justify-end w-full hover:text-blue-600 transition-colors cursor-pointer"
@@ -1074,7 +1069,7 @@ export default function Subscriptions() {
                       {getSortIcon("amount")}
                     </button>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("billingCycle")}
                       className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
@@ -1083,7 +1078,7 @@ export default function Subscriptions() {
                       {getSortIcon("billingCycle")}
                     </button>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("nextRenewal")}
                       className="flex items-center justify-center w-full hover:text-blue-600 transition-colors cursor-pointer"
@@ -1092,7 +1087,7 @@ export default function Subscriptions() {
                       {getSortIcon("nextRenewal")}
                     </button>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("status")}
                       className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
@@ -1101,13 +1096,13 @@ export default function Subscriptions() {
                       {getSortIcon("status")}
                     </button>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     Department
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     Category
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
                     Actions
                   </TableHead>
                 </TableRow>
@@ -1115,8 +1110,8 @@ export default function Subscriptions() {
               <TableBody>
                 {filteredSubscriptions && filteredSubscriptions.length > 0 ? (
                   filteredSubscriptions.map((subscription, index) => (
-                    <TableRow 
-                      key={subscription._id || subscription.id} 
+                    <TableRow
+                      key={subscription._id || subscription.id}
                       className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
                         index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
                       }`}
@@ -1248,12 +1243,10 @@ export default function Subscriptions() {
                   </TableRow>
                 )}
               </TableBody>
-                </Table>
-            </div>
+            </Table>
           </div>
-
         </div>
-      </div>
+
       
       <SubscriptionModal
         open={modalOpen}
@@ -1323,6 +1316,7 @@ export default function Subscriptions() {
         onChange={handleImport}
         className="hidden"
       />
+      </div>
     </div>
   );
 }

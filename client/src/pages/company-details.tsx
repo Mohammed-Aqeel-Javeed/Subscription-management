@@ -563,9 +563,9 @@ return (
 initial={{ opacity: 0, y: 20 }}
 animate={{ opacity: 1, y: 0 }}
 transition={{ duration: 0.5 }}
-className="space-y-6"
+className="h-[calc(100vh-240px)] flex flex-col gap-6"
 >
-<div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-gray-200">
+<div className="shrink-0 bg-white pb-6 pt-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-gray-200">
 <div className="flex items-center gap-4">
 <motion.div
 whileHover={{ scale: 1.05 }}
@@ -813,24 +813,25 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 initial={{ opacity: 0, y: 20 }}
 animate={{ opacity: 1, y: 0 }}
 transition={{ duration: 0.5, delay: 0.3 }}
+className="flex-1 min-h-0"
 >
-<Card className="shadow-lg border-0 overflow-hidden bg-white rounded-xl">
-<CardContent className="p-0">
-<div className="overflow-x-auto">
-<Table className="min-w-full divide-y divide-gray-200">
-<TableHeader className="bg-gray-50">
-<TableRow>
-<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Employee</TableHead>
-<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Role</TableHead>
-<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Department</TableHead>
-<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Email</TableHead>
-<TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">Subscriptions</TableHead>
-<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Status</TableHead>
-<TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">Actions</TableHead>
-</TableRow>
-</TableHeader>
-<TableBody className="bg-white divide-y divide-gray-200">
-{filteredEmployees.map((employee, index) => {
+<Card className="shadow-lg border-0 overflow-hidden bg-white rounded-xl h-full flex flex-col">
+<CardContent className="p-0 flex-1 min-h-0 flex flex-col">
+<div className="flex-1 overflow-auto">
+<table className="min-w-full divide-y divide-gray-200">
+<thead>
+<tr>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Employee</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Role</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Department</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Email</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Subscriptions</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Status</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Actions</th>
+</tr>
+</thead>
+<tbody className="bg-white divide-y divide-gray-200">
+{[...filteredEmployees].reverse().map((employee, index) => {
   // Count subscriptions owned by this employee
   const subscriptionCount = subscriptions.filter((sub: any) => 
     sub.owner?.toLowerCase() === employee.name?.toLowerCase() ||
@@ -845,17 +846,23 @@ transition={{ duration: 0.5, delay: 0.3 }}
   transition={{ duration: 0.3, delay: index * 0.05 }}
   className="hover:bg-gray-50 transition-colors"
 >
-  <TableCell className="py-3 px-4">
-    <div className="font-medium text-gray-900 text-sm">{employee.name}</div>
-  </TableCell>
-  <TableCell className="py-3 px-4 text-gray-900 text-sm">{employee.role}</TableCell>
-  <TableCell className="py-3 px-4">
+  <td className="py-3 px-4">
+    <button
+      type="button"
+      onClick={() => handleEdit(employee)}
+      className="text-sm font-medium text-gray-900 hover:text-blue-600 underline hover:no-underline transition-all duration-200 cursor-pointer text-left"
+    >
+      {employee.name}
+    </button>
+  </td>
+  <td className="py-3 px-4 text-gray-900 text-sm">{employee.role}</td>
+  <td className="py-3 px-4">
     <Badge className="bg-indigo-100 text-indigo-800 rounded-full px-3 py-1 text-xs">
       {employee.department}
     </Badge>
-  </TableCell>
-  <TableCell className="py-3 px-4 text-gray-900 text-sm">{employee.email}</TableCell>
-  <TableCell className="py-3 px-4 text-center">
+  </td>
+  <td className="py-3 px-4 text-gray-900 text-sm">{employee.email}</td>
+  <td className="py-3 px-4 text-center">
     <button
       onClick={() => {
         const employeeSubs = subscriptions.filter((sub: any) => 
@@ -872,9 +879,9 @@ transition={{ duration: 0.5, delay: 0.3 }}
     >
       {subscriptionCount}
     </button>
-  </TableCell>
-  <TableCell className="py-3 px-4">{getStatusBadge(employee.status)}</TableCell>
-  <TableCell className="py-3 px-4">
+  </td>
+  <td className="py-3 px-4">{getStatusBadge(employee.status)}</td>
+  <td className="py-3 px-4">
     <div className="flex justify-end space-x-2">
       <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
         <Button
@@ -898,22 +905,22 @@ transition={{ duration: 0.5, delay: 0.3 }}
         </Button>
       </motion.div>
     </div>
-  </TableCell>
+  </td>
 </motion.tr>
   );
 })}
 {filteredEmployees.length === 0 && (
-<TableRow>
-  <TableCell colSpan={6} className="text-center py-6">
+<tr>
+  <td colSpan={7} className="text-center py-6">
     <div className="flex flex-col items-center justify-center gap-2">
       <Users className="w-8 h-8 text-gray-400" />
       <p className="text-sm text-gray-500">No employees found</p>
     </div>
-  </TableCell>
-</TableRow>
+  </td>
+</tr>
 )}
-</TableBody>
-</Table>
+</tbody>
+</table>
 </div>
 </CardContent>
 </Card>
@@ -1317,9 +1324,9 @@ return (
 initial={{ opacity: 0, y: 20 }}
 animate={{ opacity: 1, y: 0 }}
 transition={{ duration: 0.5 }}
-className="space-y-6"
+className="h-[calc(100vh-240px)] flex flex-col gap-6"
 >
-<div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-200">
+<div className="shrink-0 bg-white pb-4 pt-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200">
 <div className="flex items-center gap-3">
 <motion.div
 whileHover={{ scale: 1.05 }}
@@ -1589,23 +1596,24 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 initial={{ opacity: 0, y: 20 }}
 animate={{ opacity: 1, y: 0 }}
 transition={{ duration: 0.5, delay: 0.2 }}
+className="flex-1 min-h-0"
 >
-<Card className="shadow-lg border-0 overflow-hidden bg-white rounded-xl">
-<CardContent className="p-0">
-<div className="overflow-x-auto">
-<Table className="min-w-full divide-y divide-gray-200">
-<TableHeader className="bg-gray-50">
-<TableRow>
-<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">User</TableHead>
-<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Email</TableHead>
-<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Role</TableHead>
-<TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Status</TableHead>
-<TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">Actions</TableHead>
-</TableRow>
-</TableHeader>
-<TableBody className="bg-white divide-y divide-gray-200">
+<Card className="shadow-lg border-0 overflow-hidden bg-white rounded-xl h-full flex flex-col">
+<CardContent className="p-0 flex-1 min-h-0 flex flex-col">
+<div className="flex-1 overflow-auto">
+<table className="min-w-full divide-y divide-gray-200">
+<thead>
+<tr>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">User</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Email</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Role</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Status</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Actions</th>
+</tr>
+</thead>
+<tbody className="bg-white divide-y divide-gray-200">
 {filteredUsers.length > 0 ? (
-filteredUsers.map((user, index) => (
+[...filteredUsers].reverse().map((user, index) => (
 <motion.tr
 key={user.id}
 initial={{ opacity: 0, y: 10 }}
@@ -1613,20 +1621,26 @@ animate={{ opacity: 1, y: 0 }}
 transition={{ duration: 0.3, delay: index * 0.05 }}
 className="hover:bg-gray-50 transition-colors"
 >
-<TableCell className="py-3 px-4">
+<td className="py-3 px-4">
 <div className="flex items-center space-x-3">
 <div className="w-10 h-10 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center shadow-sm">
 <User className="text-indigo-600" size={18} />
 </div>
 <div>
-<div className="font-medium text-gray-900 text-sm">{user.name}</div>
+  <button
+    type="button"
+    onClick={() => handleEdit(user)}
+    className="text-sm font-medium text-gray-900 hover:text-blue-600 underline hover:no-underline transition-all duration-200 cursor-pointer text-left"
+  >
+    {user.name}
+  </button>
 </div>
 </div>
-</TableCell>
-<TableCell className="py-3 px-4 text-gray-900 text-sm">{user.email}</TableCell>
-<TableCell className="py-3 px-4">{getRoleBadge(user.role)}</TableCell>
-<TableCell className="py-3 px-4">{getStatusBadge(user.status)}</TableCell>
-<TableCell className="py-3 px-4">
+</td>
+<td className="py-3 px-4 text-gray-900 text-sm">{user.email}</td>
+<td className="py-3 px-4">{getRoleBadge(user.role)}</td>
+<td className="py-3 px-4">{getStatusBadge(user.status)}</td>
+<td className="py-3 px-4">
 <div className="flex justify-end space-x-2">
 <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
 <Button
@@ -1650,22 +1664,22 @@ disabled={deleteMutation.isPending}
 </Button>
 </motion.div>
 </div>
-</TableCell>
+</td>
 </motion.tr>
 ))
 ) : (
-<TableRow>
-<TableCell colSpan={5} className="text-center py-8">
+<tr>
+<td colSpan={5} className="text-center py-8">
 <div className="flex flex-col items-center justify-center">
 <UsersIcon className="w-12 h-12 text-gray-400 mb-3" />
 <p className="text-base font-medium text-gray-900">No users found</p>
 <p className="text-gray-500 mt-1 text-sm">Try adjusting your search or add a new user</p>
 </div>
-</TableCell>
-</TableRow>
+</td>
+</tr>
 )}
-</TableBody>
-</Table>
+</tbody>
+</table>
 </div>
 </CardContent>
 </Card>
@@ -1868,7 +1882,17 @@ isLoading: departmentsLoading,
 refetch: refetchDepartments
 } = useQuery<Department[]>({
 queryKey: ["/api/company/departments"],
-initialData: [],
+queryFn: async () => {
+  const res = await fetch(`${API_BASE_URL}/api/company/departments`, { credentials: 'include' });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({} as any));
+    const msg = (json as any)?.message || 'Failed to fetch departments';
+    throw new Error(msg);
+  }
+  const data = await res.json().catch(() => []);
+  return Array.isArray(data) ? data : [];
+},
+placeholderData: [],
 refetchOnWindowFocus: false,
 refetchOnMount: false,
 staleTime: 5 * 60 * 1000,
@@ -2448,7 +2472,7 @@ else if (tabParam === "subscription-category" || tabParam === "subscription") in
 const [activeTab, setActiveTab] = useState(initialTab);
 
 return (
-  <div className="min-h-screen bg-white font-inter">
+  <div className="h-screen overflow-hidden bg-white font-inter">
     <div className="max-w-[1400px] mx-auto px-6 py-8">
       {/* Modern Professional Header */}
       <div className="mb-8">
@@ -2568,16 +2592,17 @@ text-gray-600 hover:text-gray-900 hover:bg-gray-100"
 </TabsList>
 
 <AnimatePresence mode="wait">
-<TabsContent value="company" className="mt-6">
+<TabsContent value="company" className="mt-6 h-[calc(100vh-240px)] overflow-hidden">
 <motion.div
 initial={{ opacity: 0, y: 20 }}
 animate={{ opacity: 1, y: 0 }}
 exit={{ opacity: 0, y: -20 }}
 transition={{ duration: 0.3 }}
+className="h-full"
 >
-<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden">
+<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden h-full flex flex-col">
 {/* Professional Header with Gradient */}
-<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-4">
+<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-4 flex-shrink-0">
   <div className="flex items-center gap-4">
     <motion.div
       whileHover={{ scale: 1.05 }}
@@ -2592,10 +2617,11 @@ transition={{ duration: 0.3 }}
   </div>
 </div>
 
-{/* Form Content */}
+{/* Form Content - Scrollable */}
+<div className="flex-1 overflow-y-auto">
 <form onSubmit={handleSubmit} className="p-8 bg-gradient-to-br from-gray-50 to-white">
-  {/* Professional Section Header */}
-  <div className="mb-8">
+  {/* Professional Section Header - Sticky */}
+  <div className="sticky top-0 z-10 bg-gradient-to-br from-gray-50 to-white pb-4 mb-4 -mx-8 px-8 pt-0">
     <h2 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">Basic Information</h2>
     <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
   </div>
@@ -2792,20 +2818,22 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
                     </motion.div>
                   </div>
                 </form>
+                </div>
               </Card>
 </motion.div>
 </TabsContent>
 
-<TabsContent value="department" className="mt-6">
+<TabsContent value="department" className="mt-6 h-[calc(100vh-240px)] overflow-hidden">
 <motion.div
 initial={{ opacity: 0, y: 20 }}
 animate={{ opacity: 1, y: 0 }}
 exit={{ opacity: 0, y: -20 }}
 transition={{ duration: 0.3 }}
+className="h-full"
 >
-<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden">
+<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden h-full flex flex-col">
 {/* Professional Header with Gradient */}
-<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-4">
+<div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-4 flex-shrink-0">
   <div className="flex items-center gap-4">
     <motion.div
       whileHover={{ scale: 1.05 }}
@@ -2820,10 +2848,10 @@ transition={{ duration: 0.3 }}
   </div>
 </div>
 
-{/* Content */}
-<div className="p-8 bg-gradient-to-br from-gray-50 to-white">
-{/* Search and Add Department */}
-<div className="flex items-center justify-between space-x-4 p-4 bg-gray-50 rounded-xl mb-6">
+{/* Content - Scrollable */}
+<div className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-50 to-white">
+{/* Search and Add Department - Sticky */}
+<div className="sticky top-0 z-10 bg-white shadow-sm -mx-0 px-8 py-6 flex items-center justify-between space-x-4 mb-6 border-b border-gray-200">
 <div className="relative flex-1 max-w-sm">
   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
   <Input
@@ -3038,13 +3066,13 @@ transition={{ duration: 0.3 }}
 </div>
 
 {/* Department List */}
-<div className="space-y-4">
-<h3 className="text-base font-semibold text-gray-900">Available Departments</h3>
+<div className="px-8 pb-8 space-y-4">
+<h3 className="text-base font-semibold text-gray-900 mb-4">Available Departments</h3>
 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 {departmentsLoading ? (
 <div className="text-gray-500">Loading departments...</div>
 ) : (
-filteredDepartments.map((department, idx) => {
+[...filteredDepartments].reverse().map((department, idx) => {
 const displayName = typeof department.name === "string" && department.name.trim() ? department.name : `Unnamed Department ${idx + 1}`;
 const empCount = getEmployeeCount(department.name);
 const subCount = getSubscriptionCount(department.name);
