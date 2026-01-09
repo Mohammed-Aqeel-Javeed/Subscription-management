@@ -97,37 +97,64 @@ const validateEmail = (email: string): { valid: boolean; error?: string } => {
   if (!domain.includes('.')) {
     return { valid: false, error: 'Email domain must contain a dot' };
   }
-
-  // Rule 10: Valid TLD - ≥ 2 characters and only letters
+  
+  // Rule 9.5: Check for suspicious patterns like double TLDs (e.g., .com.com, .org.net)
   const domainParts = domain.split('.');
+  if (domainParts.length > 2) {
+    // Check if any part before the last one looks like a TLD
+    const commonTLDs = ['com', 'org', 'net', 'edu', 'gov', 'mil', 'int', 'co', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'jp', 'cn', 'in', 'br', 'ru', 'io', 'ai'];
+    for (let i = 0; i < domainParts.length - 1; i++) {
+      if (commonTLDs.includes(domainParts[i].toLowerCase())) {
+        return { valid: false, error: 'Email domain has invalid format (duplicate domain extension detected)' };
+      }
+    }
+  }
+
+  // Rule 10: Valid TLD - ≥ 2 characters and ≤ 6 characters, only letters
   const tld = domainParts[domainParts.length - 1];
   if (tld.length < 2) {
     return { valid: false, error: 'Email domain extension must be at least 2 characters' };
+  }
+  if (tld.length > 6) {
+    return { valid: false, error: 'Email domain extension must be 6 characters or less' };
   }
   // TLD should only contain letters
   if (!/^[a-zA-Z]+$/.test(tld)) {
     return { valid: false, error: 'Email domain extension must contain only letters' };
   }
+  
+  // Rule 11: Additional check - Validate against common TLDs for better accuracy
+  const commonTLDs = [
+    'com', 'org', 'net', 'edu', 'gov', 'mil', 'int',
+    'co', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'jp', 'cn', 'in', 'br', 'ru',
+    'io', 'ai', 'app', 'dev', 'tech', 'info', 'biz', 'name', 'pro',
+    'email', 'online', 'site', 'store', 'cloud', 'digital', 'global',
+    'xyz', 'top', 'vip', 'club', 'shop', 'live', 'today', 'world'
+  ];
+  
+  if (!commonTLDs.includes(tld.toLowerCase())) {
+    return { valid: false, error: 'Please enter a valid email domain extension (e.g., .com, .org, .net)' };
+  }
 
-  // Rule 11: Valid characters - Only allowed chars
+  // Rule 12: Valid characters in local part - Only allowed chars
   const validLocalRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
   if (!validLocalRegex.test(localPart)) {
     return { valid: false, error: 'Email username contains invalid characters' };
   }
 
-  // Domain parts (except TLD) can contain letters, numbers, and hyphens
+  // Rule 13: Domain parts (except TLD) can contain letters, numbers, and hyphens
   for (let i = 0; i < domainParts.length - 1; i++) {
     if (!/^[a-zA-Z0-9-]+$/.test(domainParts[i])) {
       return { valid: false, error: 'Email domain contains invalid characters' };
     }
   }
 
-  // Rule 12: Domain format - No - or . at edges
+  // Rule 14: Domain format - No - or . at edges
   if (domain.startsWith('-') || domain.startsWith('.') || domain.endsWith('-') || domain.endsWith('.')) {
     return { valid: false, error: 'Email domain cannot start or end with a hyphen or dot' };
   }
 
-  // Check each domain part doesn't start/end with hyphen
+  // Rule 15: Check each domain part doesn't start/end with hyphen
   for (const part of domainParts) {
     if (part.startsWith('-') || part.endsWith('-')) {
       return { valid: false, error: 'Email domain parts cannot start or end with a hyphen' };
@@ -135,6 +162,69 @@ const validateEmail = (email: string): { valid: boolean; error?: string } => {
     if (part.length === 0) {
       return { valid: false, error: 'Email domain cannot have empty parts' };
     }
+  }
+  
+  // Rule 16: Check for repeated characters in domain name (suspicious pattern)
+  const domainName = domainParts[domainParts.length - 2]; // Get the part before TLD (e.g., "gmail" from "gmail.com")
+  if (domainName) {
+    // Check for 4+ consecutive repeated characters (e.g., "gmaillll")
+    if (/(.)\1{3,}/.test(domainName)) {
+      return { valid: false, error: 'Email domain contains suspicious repeated characters' };
+    }
+  }
+  
+  // Rule 17: Validate common email providers with correct spelling
+  const knownProviders = {
+    'gmail': 'gmail.com',
+    'yahoo': 'yahoo.com',
+    'outlook': 'outlook.com',
+    'hotmail': 'hotmail.com',
+    'icloud': 'icloud.com',
+    'protonmail': 'protonmail.com',
+    'aol': 'aol.com',
+    'zoho': 'zoho.com'
+  };
+  
+  const fullDomain = domain.toLowerCase();
+  for (const [provider, correctDomain] of Object.entries(knownProviders)) {
+    // Check if domain starts with provider name but isn't exactly correct
+    if (fullDomain.startsWith(provider) && fullDomain !== correctDomain) {
+      // Allow subdomains like mail.google.com, but not gmaillll.com
+      const afterProvider = fullDomain.substring(provider.length);
+      if (!afterProvider.startsWith('.') && afterProvider.length > 0) {
+        return { valid: false, error: `Did you mean ${correctDomain}? Please check the spelling` };
+      }
+    }
+  }
+  
+  // Rule 18: Check minimum domain name length (before TLD)
+  if (domainName && domainName.length < 2) {
+    return { valid: false, error: 'Email domain name must be at least 2 characters' };
+  }
+  
+  // Rule 19: No special characters at start/end of local part
+  if (/^[^a-zA-Z0-9]/.test(localPart) || /[^a-zA-Z0-9]$/.test(localPart)) {
+    return { valid: false, error: 'Email username must start and end with a letter or number' };
+  }
+  
+  // Rule 20: Check for common typos in TLD
+  const typoTLDs: { [key: string]: string } = {
+    'con': 'com',
+    'cmo': 'com',
+    'ocm': 'com',
+    'comm': 'com',
+    'cim': 'com',
+    'vom': 'com',
+    'xom': 'com',
+    'cm': 'com',
+    'om': 'com',
+    'orgg': 'org',
+    'nte': 'net',
+    'met': 'net'
+  };
+  
+  if (typoTLDs[tld.toLowerCase()]) {
+    return { valid: false, error: `Did you mean .${typoTLDs[tld.toLowerCase()]}? Please check the domain extension` };
   }
 
   return { valid: true };
@@ -1900,6 +1990,13 @@ gcTime: 10 * 60 * 1000,
 });
 const addDepartmentMutation = useMutation({
 mutationFn: async (newDepartment: { name: string; departmentHead: string; email: string }) => {
+  const normalizedNewName = newDepartment.name.trim().toLowerCase();
+  const exists = (Array.isArray(departments) ? departments : []).some(
+    (d: any) => String(d?.name || '').trim().toLowerCase() === normalizedNewName
+  );
+  if (exists) {
+    throw new Error("Department already exists");
+  }
 return await apiRequest("POST", "/api/company/departments", {
   ...newDepartment,
   visible: true

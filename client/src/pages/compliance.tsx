@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Download, Upload, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Upload, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Check } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,6 +26,9 @@ import Papa from 'papaparse';
 import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
 
+const AMOUNT_MAX_10CR = 100000000;
+const REMINDER_DAYS_MAX = 1000;
+
 // Predefined Governing Authorities
 const GOVERNING_AUTHORITIES = [
   "IRAS",
@@ -41,8 +44,15 @@ interface Department {
   visible: boolean;
 }
 
+const validateEmail = (email: string): { valid: boolean; error?: string } => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isValid = emailRegex.test(email.trim());
+  return { valid: isValid, error: isValid ? undefined : "Invalid email address" };
+};
+
 // Helper functions remain the same
 const mapStatus = (status: string): string => {
+  void status;
   return "Pending";
 };
 const calculateEndDate = (start: string, freq: string): string => {
@@ -117,57 +127,30 @@ const formatDate = (dateStr?: string): string => {
   const yyyy = String(d.getFullYear());
   return `${dd}/${mm}/${yyyy}`;
 };
-function getNextPeriodDates(startDate: string, endDate: string, frequency: string): { nextStartDate: string; nextEndDate: string } {
-  const start = new Date(endDate);
-  let nextStart = new Date(start);
-  let nextEnd = new Date(start);
-  
-  nextStart.setDate(start.getDate() + 1);
-  
-  if (frequency === "Monthly") {
-    nextEnd.setMonth(nextStart.getMonth() + 1);
-    nextEnd.setDate(nextEnd.getDate() - 1);
-  } else if (frequency === "Quarterly") {
-    nextEnd.setMonth(nextStart.getMonth() + 3);
-    nextEnd.setDate(nextEnd.getDate() - 1);
-  } else if (frequency === "Yearly") {
-    nextEnd.setFullYear(nextStart.getFullYear() + 1);
-    nextEnd.setDate(nextEnd.getDate() - 1);
-  }
-  
-  const format = (d: Date): string =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  
-  return { nextStartDate: format(nextStart), nextEndDate: format(nextEnd) };
-}
 export default function Compliance() {
   // --- Dynamic Compliance Fields ---
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
   const [isLoadingComplianceFields, setIsLoadingComplianceFields] = useState(true);
   
   // State for categories and governing authorities
-  const [categories, setCategories] = useState<string[]>([]);
+  const [, setCategories] = useState<string[]>([]);
   const [governingAuthorities, setGoverningAuthorities] = useState<string[]>([]);
-  const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(true);
+  const [, setIsLoadingDropdowns] = useState(true);
   
   // Fullscreen toggle state
   const [isFullscreen, setIsFullscreen] = useState(false);
   
-  // Dropdown open state for governing authority
-  const [isGoverningAuthorityOpen, setIsGoverningAuthorityOpen] = useState(false);
+  // Delete confirmation dialog state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [complianceToDelete, setComplianceToDelete] = useState<ComplianceItem | null>(null);
   
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      if (isGoverningAuthorityOpen && !target.closest('.governing-authority-dropdown')) {
-        setIsGoverningAuthorityOpen(false);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isGoverningAuthorityOpen]);
+  // Exit confirmation dialog state
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+  
+  // Governing Authority dropdown (match other searchable dropdowns)
+  const [governingAuthorityOpen, setGoverningAuthorityOpen] = useState(false);
+  const [governingAuthoritySearch, setGoverningAuthoritySearch] = useState('');
+  const governingAuthorityDropdownRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
     const fetchComplianceFields = () => {
@@ -241,6 +224,7 @@ export default function Compliance() {
     reminderDays?: string | number;
     reminderPolicy?: string;
     submittedBy?: string;
+    owner?: string;
     amount?: string | number;
     isDraft?: boolean;
     paymentDate?: string;
@@ -252,14 +236,48 @@ export default function Compliance() {
   
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [showSubmissionDetails, setShowSubmissionDetails] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const departmentDropdownRef = useRef<HTMLDivElement>(null);
+  const [submissionDocuments, setSubmissionDocuments] = useState<Array<{ name: string; url: string }>>([]);
+
+  const [submittedByOpen, setSubmittedByOpen] = useState(false);
+  const [submittedBySearch, setSubmittedBySearch] = useState('');
+  const submittedByDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [ownerOpen, setOwnerOpen] = useState(false);
+  const [ownerSearch, setOwnerSearch] = useState('');
+  const ownerDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Payment Method dropdown + modal (matching subscription modal logic)
+  const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
+  const [paymentMethodSearch, setPaymentMethodSearch] = useState('');
+  const paymentMethodDropdownRef = useRef<HTMLDivElement>(null);
+  const [paymentMethodModal, setPaymentMethodModal] = useState<{ show: boolean }>({ show: false });
+  const [newPaymentMethodName, setNewPaymentMethodName] = useState<string>('');
+  const [newPaymentMethodType, setNewPaymentMethodType] = useState<string>('');
+  const [newPaymentMethodOwner, setNewPaymentMethodOwner] = useState<string>('');
+  const [newPaymentMethodManagedBy, setNewPaymentMethodManagedBy] = useState<string>('');
+  const [pmOwnerOpen, setPmOwnerOpen] = useState(false);
+  const [pmOwnerSearch, setPmOwnerSearch] = useState('');
+  const pmOwnerDropdownRef = useRef<HTMLDivElement>(null);
+  const [pmManagedOpen, setPmManagedOpen] = useState(false);
+  const [pmManagedSearch, setPmManagedSearch] = useState('');
+  const pmManagedDropdownRef = useRef<HTMLDivElement>(null);
+  const [newPaymentMethodFinancialInstitution, setNewPaymentMethodFinancialInstitution] = useState<string>('');
+  const [newPaymentMethodLast4Digits, setNewPaymentMethodLast4Digits] = useState<string>('');
+  const [newPaymentMethodExpiresAt, setNewPaymentMethodExpiresAt] = useState<string>('');
+  const [newPaymentMethodCardImage, setNewPaymentMethodCardImage] = useState<string>('visa');
+  const [isCreatingPaymentMethod, setIsCreatingPaymentMethod] = useState<boolean>(false);
+
+  // Validation error dialog (used by Payment Method modal like subscription modal)
+  const [validationErrorOpen, setValidationErrorOpen] = useState(false);
+  const [validationErrorMessage, setValidationErrorMessage] = useState("");
   
-  const [form, setForm] = useState({
+  const createEmptyForm = () => ({
     filingName: "",
     filingFrequency: "Monthly",
     filingComplianceCategory: "",
@@ -275,6 +293,7 @@ export default function Compliance() {
     reminderDays: "7",
     reminderPolicy: "One time",
     submittedBy: "",
+    owner: "",
     amount: "",
     paymentDate: "",
     submissionAmount: "",
@@ -282,6 +301,8 @@ export default function Compliance() {
     department: "",
     departments: [] as string[],
   });
+
+  const [form, setForm] = useState(createEmptyForm);
   
   // Department management state
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
@@ -289,7 +310,12 @@ export default function Compliance() {
   const [departmentSelectOpen, setDepartmentSelectOpen] = useState(false);
   const [newDepartmentName, setNewDepartmentName] = useState<string>('');
   const [newDepartmentHead, setNewDepartmentHead] = useState<string>('');
+  const [deptHeadOpen, setDeptHeadOpen] = useState(false);
+  const [deptHeadSearch, setDeptHeadSearch] = useState('');
+  const deptHeadDropdownRef = useRef<HTMLDivElement>(null);
   const [newDepartmentEmail, setNewDepartmentEmail] = useState<string>('');
+  const [newDepartmentEmailError, setNewDepartmentEmailError] = useState<string>('');
+  const [isDepartmentEmailLocked, setIsDepartmentEmailLocked] = useState<boolean>(false);
   
   // Notes management state (card-based like subscription modal)
   const [notes, setNotes] = useState<Array<{id: string, text: string, createdAt: string, createdBy: string}>>([]);
@@ -300,6 +326,114 @@ export default function Compliance() {
   
   // Get current user name for notes (same logic as subscription modal)
   const [currentUserName, setCurrentUserName] = useState<string>('');
+
+  const handleSubmissionDocumentUpload = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    // Allowed file types: PDF (preferred), Word, Excel, and images
+    input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png';
+    input.onchange = async (e: any) => {
+      const file = e.target?.files?.[0] as File | undefined;
+      if (!file) return;
+
+      const fileName = file.name.toLowerCase();
+      const fileExt = fileName.substring(fileName.lastIndexOf('.'));
+
+      const blockedExtensions = [
+        '.exe', '.msi', '.bat', '.cmd', '.sh', '.apk',
+        '.js', '.php', '.html', '.py', '.xml',
+        '.zip', '.rar', '.7z', '.tar',
+        '.env', '.sql', '.db', '.ini', '.csv'
+      ];
+      const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'];
+
+      if (blockedExtensions.includes(fileExt)) {
+        toast({
+          title: 'File Type Not Allowed',
+          description: `${fileExt} files are not permitted for security reasons`,
+          variant: 'destructive',
+          duration: 3000,
+        });
+        return;
+      }
+
+      if (!allowedExtensions.includes(fileExt)) {
+        toast({
+          title: 'Invalid File Type',
+          description: 'Only PDF, Word, Excel, and image files are allowed',
+          variant: 'destructive',
+          duration: 3000,
+        });
+        return;
+      }
+
+      const validateFileType = async (uploadFile: File): Promise<boolean> => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = (ev) => {
+            if (!ev.target?.result) {
+              resolve(false);
+              return;
+            }
+
+            const arr = new Uint8Array(ev.target.result as ArrayBuffer).subarray(0, 8);
+            let header = '';
+            for (let i = 0; i < arr.length; i++) {
+              header += arr[i].toString(16).padStart(2, '0');
+            }
+
+            const signatures: { [key: string]: string[] } = {
+              pdf: ['25504446'],
+              jpg: ['ffd8ffe0', 'ffd8ffe1', 'ffd8ffe2', 'ffd8ffe3', 'ffd8ffe8'],
+              png: ['89504e47'],
+              doc: ['d0cf11e0'],
+              docx: ['504b0304'],
+              xlsx: ['504b0304'],
+              xls: ['d0cf11e0'],
+            };
+
+            const isValid = Object.values(signatures).some((sigs) => sigs.some((sig) => header.startsWith(sig)));
+            resolve(isValid);
+          };
+          reader.readAsArrayBuffer(uploadFile.slice(0, 8));
+        });
+      };
+
+      const isValidFile = await validateFileType(file);
+      if (!isValidFile) {
+        toast({
+          title: 'Invalid File',
+          description: 'File content does not match the extension. Please upload a valid document.',
+          variant: 'destructive',
+          duration: 4000,
+        });
+        return;
+      }
+
+      try {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64String = reader.result as string;
+          // Single document only (replace any existing)
+          setSubmissionDocuments([{ name: file.name, url: base64String }]);
+          toast({
+            title: 'Success',
+            description: `${file.name} uploaded successfully`,
+            duration: 2000,
+            variant: 'success',
+          });
+        };
+        reader.readAsDataURL(file);
+      } catch (error) {
+        toast({
+          title: 'Error',
+          description: 'Failed to process document',
+          variant: 'destructive',
+        });
+      }
+    };
+    input.click();
+  };
   
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -415,6 +549,18 @@ export default function Compliance() {
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Keep naming aligned with subscription modal logic
+  const employeesData = employees;
+
+  const getEmployeeId = (emp: any) => String(emp?._id || emp?.id || emp?.email || emp?.name || '');
+  const getEmployeeName = (emp: any) => String(emp?.name || '').trim();
+  const getEmployeeEmail = (emp: any) => String(emp?.email || '').trim();
+
+  const selectedSubmittedByEmployee = (Array.isArray(employeesData) ? employeesData : []).find(
+    (emp: any) => getEmployeeId(emp) === String(form.submittedBy || '')
+  );
+  const submittedByDisplayValue = selectedSubmittedByEmployee ? getEmployeeName(selectedSubmittedByEmployee) : '';
   
   // Query for departments
   const { data: departments, isLoading: departmentsLoading } = useQuery<Department[]>({
@@ -423,6 +569,18 @@ export default function Compliance() {
       const res = await fetch(`${API_BASE_URL}/api/company/departments`, { credentials: "include" });
       return res.json();
     }
+  });
+
+  // Fetch payment methods for dynamic dropdown (same source as subscription modal)
+  const { data: paymentMethods = [], isLoading: paymentMethodsLoading } = useQuery<any[]>({
+    queryKey: ['/api/payment'],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/payment`, { credentials: 'include' });
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
   
   // Parse departments from compliance if it exists
@@ -513,6 +671,36 @@ export default function Compliance() {
   // Handle adding new department
   const handleAddDepartment = async () => {
     if (!newDepartmentName.trim()) return;
+
+    // Prevent duplicates (case-insensitive)
+    const normalizedNewName = newDepartmentName.trim().toLowerCase();
+    const exists = (Array.isArray(departments) ? departments : []).some(
+      (d: any) => String(d?.name || '').trim().toLowerCase() === normalizedNewName
+    );
+    if (exists) {
+      toast({
+        title: "Department already exists",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate department head
+    if (!newDepartmentHead.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Department head is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate email
+    const emailValidation = validateEmail(newDepartmentEmail);
+    if (!emailValidation.valid) {
+      setNewDepartmentEmailError(emailValidation.error || 'Invalid email');
+      return;
+    }
     
     try {
       await apiRequest(
@@ -535,11 +723,185 @@ export default function Compliance() {
       setNewDepartmentName('');
       setNewDepartmentHead('');
       setNewDepartmentEmail('');
+      setNewDepartmentEmailError('');
+      setDeptHeadSearch('');
+      setDeptHeadOpen(false);
+      setIsDepartmentEmailLocked(false);
       setDepartmentModal({ show: false });
       toast({ title: "Department added successfully" });
     } catch (error) {
       console.error('Error adding department:', error);
       toast({ title: "Failed to add department", variant: "destructive" });
+    }
+  };
+
+  // Auto-fill and lock department email when head is selected (same as subscription modal)
+  useEffect(() => {
+    if (newDepartmentHead && employeesData && employeesData.length > 0) {
+      const selectedEmp = employeesData.find((emp: any) => emp.name === newDepartmentHead);
+      if (selectedEmp && selectedEmp.email) {
+        setNewDepartmentEmail(selectedEmp.email);
+        setIsDepartmentEmailLocked(true);
+        setNewDepartmentEmailError('');
+      } else {
+        setIsDepartmentEmailLocked(false);
+      }
+    } else {
+      setIsDepartmentEmailLocked(false);
+    }
+  }, [newDepartmentHead, employeesData]);
+
+  // Department Head dropdown: close on outside click
+  useEffect(() => {
+    if (!deptHeadOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (deptHeadDropdownRef.current && !deptHeadDropdownRef.current.contains(event.target as Node)) {
+        setDeptHeadOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [deptHeadOpen]);
+
+  // Keep Department Head input text in sync when opening the modal
+  useEffect(() => {
+    if (departmentModal.show) {
+      setDeptHeadSearch(newDepartmentHead || '');
+    }
+  }, [departmentModal.show]);
+
+  // Close payment method dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (paymentMethodDropdownRef.current && !paymentMethodDropdownRef.current.contains(event.target as Node)) {
+        setPaymentMethodOpen(false);
+        setPaymentMethodSearch('');
+      }
+    };
+
+    if (paymentMethodOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [paymentMethodOpen]);
+
+  // Close governing authority dropdown when clicking outside
+  useEffect(() => {
+    if (!governingAuthorityOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (governingAuthorityDropdownRef.current && !governingAuthorityDropdownRef.current.contains(event.target as Node)) {
+        setGoverningAuthorityOpen(false);
+        setGoverningAuthoritySearch('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [governingAuthorityOpen]);
+
+  // Payment Method modal Owner/Managed-by dropdowns: close on outside click
+  useEffect(() => {
+    if (!pmOwnerOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (pmOwnerDropdownRef.current && !pmOwnerDropdownRef.current.contains(event.target as Node)) {
+        setPmOwnerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [pmOwnerOpen]);
+
+  useEffect(() => {
+    if (!pmManagedOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (pmManagedDropdownRef.current && !pmManagedDropdownRef.current.contains(event.target as Node)) {
+        setPmManagedOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [pmManagedOpen]);
+
+  // Keep input text in sync when opening the payment method modal
+  useEffect(() => {
+    if (paymentMethodModal.show) {
+      setPmOwnerSearch(newPaymentMethodOwner || '');
+      setPmManagedSearch(newPaymentMethodManagedBy || '');
+    }
+  }, [paymentMethodModal.show, newPaymentMethodOwner, newPaymentMethodManagedBy]);
+
+  // Handle adding new payment method (copied behaviour from subscription modal)
+  const handleAddPaymentMethod = async () => {
+    if (!newPaymentMethodName.trim()) return;
+    if (isCreatingPaymentMethod) return;
+
+    const duplicateName = (Array.isArray(paymentMethods) ? paymentMethods : []).find(
+      (method: any) =>
+        String(method?.name || '').toLowerCase().trim() === newPaymentMethodName.toLowerCase().trim() ||
+        String(method?.title || '').toLowerCase().trim() === newPaymentMethodName.toLowerCase().trim()
+    );
+
+    if (duplicateName) {
+      setValidationErrorMessage(`A payment method with the name "${newPaymentMethodName.trim()}" already exists. Please use a different name.`);
+      setValidationErrorOpen(true);
+      return;
+    }
+
+    if (newPaymentMethodExpiresAt) {
+      const [year, month] = newPaymentMethodExpiresAt.split('-');
+      const expiryDate = new Date(parseInt(year), parseInt(month) - 1);
+      const today = new Date();
+      today.setDate(1);
+      today.setHours(0, 0, 0, 0);
+      if (expiryDate < today) {
+        setValidationErrorMessage('Card expiry date cannot be in the past');
+        setValidationErrorOpen(true);
+        return;
+      }
+    }
+
+    setIsCreatingPaymentMethod(true);
+    try {
+      const paymentData = {
+        name: newPaymentMethodName.trim(),
+        title: newPaymentMethodName.trim(),
+        type: newPaymentMethodType,
+        owner: newPaymentMethodOwner.trim(),
+        manager: newPaymentMethodManagedBy.trim(),
+        financialInstitution: newPaymentMethodFinancialInstitution.trim(),
+        lastFourDigits: newPaymentMethodLast4Digits.trim(),
+        expiresAt: newPaymentMethodExpiresAt,
+        icon: newPaymentMethodCardImage,
+      };
+
+      await apiRequest('POST', '/api/payment', paymentData);
+      await queryClient.invalidateQueries({ queryKey: ['/api/payment'] });
+
+      handleFormChange('paymentMethod', newPaymentMethodName.trim());
+      setPaymentMethodModal({ show: false });
+
+      setNewPaymentMethodName('');
+      setNewPaymentMethodType('');
+      setNewPaymentMethodOwner('');
+      setNewPaymentMethodManagedBy('');
+      setNewPaymentMethodFinancialInstitution('');
+      setNewPaymentMethodLast4Digits('');
+      setNewPaymentMethodExpiresAt('');
+      setNewPaymentMethodCardImage('visa');
+      setPmOwnerSearch('');
+      setPmManagedSearch('');
+      setPmOwnerOpen(false);
+      setPmManagedOpen(false);
+    } catch (error: any) {
+      console.error('Error adding payment method:', error);
+      toast({
+        title: 'Failed to create payment method',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreatingPaymentMethod(false);
     }
   };
   
@@ -607,7 +969,6 @@ export default function Compliance() {
     const endDate = form.filingEndDate ? new Date(form.filingEndDate) : null;
     const submissionDeadline = form.filingSubmissionDeadline ? new Date(form.filingSubmissionDeadline) : null;
     const submissionDate = form.filingSubmissionDate ? new Date(form.filingSubmissionDate) : null;
-    const paymentDate = form.paymentDate ? new Date(form.paymentDate) : null;
     
     // Validate individual dates
     const startDateError = validateDate(form.filingStartDate, "Start Date", true);
@@ -747,6 +1108,32 @@ export default function Compliance() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [departmentSelectOpen]);
+
+  // Close Submitted By dropdown when clicking outside
+  useEffect(() => {
+    if (!submittedByOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (submittedByDropdownRef.current && !submittedByDropdownRef.current.contains(event.target as Node)) {
+        setSubmittedByOpen(false);
+        setSubmittedBySearch('');
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [submittedByOpen]);
+
+  // Close Owner dropdown when clicking outside
+  useEffect(() => {
+    if (!ownerOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (ownerDropdownRef.current && !ownerDropdownRef.current.contains(event.target as Node)) {
+        setOwnerOpen(false);
+        setOwnerSearch('');
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [ownerOpen]);
   
   // Extract existing filing names for validation (excluding current item if editing)
   const existingFilingNames = complianceItems
@@ -802,8 +1189,86 @@ export default function Compliance() {
         oldData ? oldData.filter(item => item._id !== deletedId) : []
       );
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
+      toast({
+        title: "Success",
+        description: "Compliance item deleted successfully",
+        variant: "destructive",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete compliance item",
+        variant: "destructive",
+      });
     }
   });
+  
+  const confirmDelete = () => {
+    if (complianceToDelete) {
+      deleteMutation.mutate(complianceToDelete._id as string);
+      setDeleteConfirmOpen(false);
+      setComplianceToDelete(null);
+    }
+  };
+  
+  const hasMeaningfulFormData = () => {
+    const hasText = (value: unknown) => String(value ?? '').trim().length > 0;
+
+    const hasNonDefault =
+      form.filingFrequency !== 'Monthly' ||
+      form.filingSubmissionStatus !== 'Pending' ||
+      String(form.reminderDays ?? '') !== '7' ||
+      form.reminderPolicy !== 'One time';
+
+    const hasAny =
+      hasText(form.filingName) ||
+      hasText(form.filingComplianceCategory) ||
+      hasText(form.filingGoverningAuthority) ||
+      hasText(form.filingStartDate) ||
+      hasText(form.filingEndDate) ||
+      hasText(form.filingSubmissionDeadline) ||
+      hasText(form.filingRecurringFrequency) ||
+      hasText(form.filingRemarks) ||
+      hasText(form.submissionNotes) ||
+      hasText(form.filingSubmissionDate) ||
+      hasText(form.submittedBy) ||
+      hasText(form.owner) ||
+      hasText(form.amount) ||
+      hasText(form.paymentDate) ||
+      hasText(form.submissionAmount) ||
+      hasText(form.paymentMethod) ||
+      hasText(form.department) ||
+      (Array.isArray(selectedDepartments) && selectedDepartments.length > 0) ||
+      (Array.isArray(form.departments) && form.departments.length > 0) ||
+      (Array.isArray(notes) && notes.length > 0) ||
+      (Array.isArray(submissionDocuments) && submissionDocuments.length > 0) ||
+      Object.values(dynamicFieldValues || {}).some(v => String(v ?? '').trim().length > 0);
+
+    return hasNonDefault || hasAny;
+  };
+
+  const handleExitConfirm = () => {
+    setModalOpen(false);
+    setExitConfirmOpen(false);
+
+    setTimeout(() => {
+      setFilingNameError("");
+      setEditIndex(null);
+      setShowSubmissionDetails(false);
+      setForm(createEmptyForm());
+      setSelectedDepartments([]);
+      setDynamicFieldValues({});
+      setNotes([]);
+      setSubmissionDocuments([]);
+      setPaymentMethodSearch('');
+      setPaymentMethodOpen(false);
+      setSubmittedBySearch('');
+      setSubmittedByOpen(false);
+      setOwnerSearch('');
+      setOwnerOpen(false);
+    }, 250);
+  };
   
   const editMutation = useMutation({
     mutationFn: async ({ _id, data }: { _id: string; data: any }) => {
@@ -825,44 +1290,6 @@ export default function Compliance() {
     }
   });
   
-  // EXPORT current (filtered) compliance items to CSV
-  const handleExport = () => {
-    if (!filteredItems.length) {
-      toast({ title: 'No data', description: 'There are no compliance items to export', variant: 'destructive'});
-      return;
-    }
-    const rows = filteredItems.map((item: ComplianceItem) => ({
-      Policy: item.policy,
-      Category: item.category,
-      Status: item.status,
-      GoverningAuthority: item.governingAuthority || '',
-      StartDate: item.lastAudit ? new Date(item.lastAudit).toISOString().split('T')[0] : '',
-      EndDate: item.endDate ? new Date(item.endDate).toISOString().split('T')[0] : '',
-      SubmissionDeadline: item.submissionDeadline ? new Date(item.submissionDeadline).toISOString().split('T')[0] : '',
-      Frequency: item.frequency || '',
-      SubmissionDate: item.filingSubmissionDate ? new Date(item.filingSubmissionDate).toISOString().split('T')[0] : '',
-      SubmittedBy: item.submittedBy || '',
-      Amount: item.amount || '',
-      PaymentDate: item.paymentDate ? new Date(item.paymentDate).toISOString().split('T')[0] : '',
-      ReminderDays: item.reminderDays || '',
-      ReminderPolicy: item.reminderPolicy || '',
-      Remarks: item.remarks || ''
-    }));
-    const csv = Papa.unparse(rows);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `compliance_export_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast({ title: 'Exported', description: 'Compliance data exported to CSV' });
-  };
-
-  const triggerImport = () => fileInputRef.current?.click();
-
   // IMPORT from CSV -> create compliance items
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -961,42 +1388,16 @@ export default function Compliance() {
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
+  } else {
+    // Default: Show latest created/edited items first (reverse order)
+    filteredItems = [...filteredItems].reverse();
   }
   
-  // Status badge component
-  const StatusBadge = ({ status }: { status: string }) => {
-    const statusConfig = {
-      "Pending": { 
-        variant: "outline", 
-        icon: <AlertCircle className="h-3 w-3 mr-1" />, 
-        color: "bg-amber-50 text-amber-700 border-amber-200" 
-      },
-      "default": { 
-        variant: "outline", 
-        icon: <AlertCircle className="h-3 w-3 mr-1" />, 
-        color: "bg-gray-100 text-gray-700 border-gray-200" 
-      }
-    };
-    
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.default;
-    
-    return (
-      <Badge className={`${config.color} flex items-center font-medium`} variant={config.variant as any}>
-        {config.icon}
-        {status}
-      </Badge>
-    );
-  };
-  
-  // --- Summary Stats Section ---
-  const total = complianceItems.length;
-  const pending = complianceItems.filter((item: ComplianceItem) => mapStatus(item.status) === "Pending").length;
-  
   return (
-    <div className="min-h-screen bg-white">
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
+    <div className="h-full bg-white flex flex-col overflow-hidden">
+      <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
         {/* Modern Professional Header */}
-        <div className="mb-8">
+        <div className="mb-6 shrink-0">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
               <div className="h-12 w-12 bg-white/30 backdrop-blur-md rounded-xl flex items-center justify-center shadow-lg border border-white/20">
@@ -1042,6 +1443,7 @@ export default function Compliance() {
                       reminderDays: "7",
                       reminderPolicy: "One time",
                       submittedBy: "",
+                      owner: "",
                       amount: "",
                       paymentDate: "",
                       submissionAmount: "",
@@ -1089,15 +1491,15 @@ export default function Compliance() {
             </div>
           </div>
         </div>
-        
-        {/* Professional Data Table with Frozen Headers */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
-            <Table className="w-full">
-              <TableHeader className="sticky top-0 z-20">
+
+        <div className="min-w-0 flex-1 min-h-0">
+          {/* Professional Data Table with Frozen Headers */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden h-full flex flex-col min-h-0">
+            <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full">
+              <TableHeader>
                 <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100">
                   <TableHead
-                    className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    className="sticky top-0 z-20 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('policy')}
                   >
                     <div className="flex items-center gap-2">
@@ -1108,7 +1510,7 @@ export default function Compliance() {
                     </div>
                   </TableHead>
                   <TableHead
-                    className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    className="sticky top-0 z-20 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('category')}
                   >
                     <div className="flex items-center gap-2">
@@ -1119,7 +1521,7 @@ export default function Compliance() {
                     </div>
                   </TableHead>
                   <TableHead
-                    className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    className="sticky top-0 z-20 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('status')}
                   >
                     <div className="flex items-center gap-2">
@@ -1130,7 +1532,7 @@ export default function Compliance() {
                     </div>
                   </TableHead>
                   <TableHead
-                    className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    className="sticky top-0 z-20 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('endDate')}
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -1141,7 +1543,7 @@ export default function Compliance() {
                     </div>
                   </TableHead>
                   <TableHead
-                    className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
+                    className="sticky top-0 z-20 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('filingSubmissionDate')}
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -1151,10 +1553,10 @@ export default function Compliance() {
                       ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
                     </div>
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
+                  <TableHead className="sticky top-0 z-20 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
                     Submission
                   </TableHead>
-                  <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
+                  <TableHead className="sticky top-0 z-20 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
                     Actions
                   </TableHead>
                 </TableRow>
@@ -1210,6 +1612,7 @@ export default function Compliance() {
                               reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
                               reminderPolicy: currentItem.reminderPolicy || "One time",
                               submittedBy: currentItem.submittedBy || "",
+                              owner: currentItem.owner || "",
                               amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
                               paymentDate: currentItem.paymentDate || "",
                               submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
@@ -1298,6 +1701,7 @@ export default function Compliance() {
                                 reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
                                 reminderPolicy: currentItem.reminderPolicy || "One time",
                                 submittedBy: currentItem.submittedBy || "",
+                                owner: currentItem.owner || "",
                                 amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
                                 paymentDate: currentItem.paymentDate || "",
                                 submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
@@ -1344,6 +1748,7 @@ export default function Compliance() {
                                 reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
                                 reminderPolicy: currentItem.reminderPolicy || "One time",
                                 submittedBy: currentItem.submittedBy || "",
+                                owner: currentItem.owner || "",
                                 amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
                                 paymentDate: currentItem.paymentDate || "",
                                 submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
@@ -1362,9 +1767,8 @@ export default function Compliance() {
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              if (window.confirm("Do you want to delete this compliance item?")) {
-                                deleteMutation.mutate(item._id as string);
-                              }
+                              setComplianceToDelete(item);
+                              setDeleteConfirmOpen(true);
                             }}
                             className="text-red-600 hover:text-red-800 hover:bg-red-50 transition-colors p-2"
                           >
@@ -1384,10 +1788,10 @@ export default function Compliance() {
       
       {/* Modal */}
       <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setModalOpen(v); }}>
-        <DialogContent className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
+        <DialogContent className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300 flex flex-col overflow-hidden`}>
           {/* Local keyframes for the sheen animation */}
           <style>{`@keyframes sheen { 0% { transform: translateX(-60%); } 100% { transform: translateX(180%); } }`}</style>
-          <DialogHeader className={`bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'p-4 md:p-5' : 'p-5'} rounded-t-2xl`}>
+          <DialogHeader className={`sticky top-0 z-50 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'p-4 md:p-5' : 'p-5'} rounded-t-2xl`}>
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-3">
                 <DialogTitle className="text-xl font-bold flex items-center gap-3">
@@ -1396,6 +1800,16 @@ export default function Compliance() {
                 </DialogTitle>
                 {/* Dynamic Status Badge - hidden when in Submission view */}
                 {!showSubmissionDetails && (() => {
+                  // Check if it's a draft first
+                  const isDraft = editIndex !== null && (complianceItems[editIndex]?.isDraft || complianceItems[editIndex]?.status === "Draft");
+                  if (isDraft) {
+                    return (
+                      <span className="px-4 py-2 rounded-full text-sm font-medium text-amber-800 bg-amber-100 transition-all duration-300">
+                        Draft
+                      </span>
+                    );
+                  }
+                  
                   const statusInfo = getComplianceStatus(form.filingEndDate, form.filingSubmissionDeadline);
                   const isLate = statusInfo.status === "Late";
                   return (
@@ -1453,12 +1867,13 @@ export default function Compliance() {
               </div>
             </div>
           </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
           <form className={`${isFullscreen ? 'p-4 md:p-6 lg:p-8' : 'p-6'}`}>
             {/* Show Submission Details when showSubmissionDetails is true */}
             {showSubmissionDetails && (
               <>
                 {/* Submission Details heading removed as requested */}
-                <div className={`grid gap-6 mb-8 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2'}`}>
+                <div className={`grid gap-6 mb-8 grid-cols-1 md:grid-cols-2`}>
                   {/* Submission Date and Submitted By fields */}
                   <div className="space-y-3">
                     <label className="block text-sm font-medium text-slate-700">Submission Date</label>
@@ -1466,8 +1881,7 @@ export default function Compliance() {
                       className={`w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 ${dateErrors.submissionDate ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                       type="date" 
                       value={form.filingSubmissionDate} 
-                      onChange={e => handleFormChange("filingSubmissionDate", e.target.value)} 
-                      disabled={editIndex === null}
+                      onChange={e => handleFormChange("filingSubmissionDate", e.target.value)}
                     />
                     {dateErrors.submissionDate && (
                       <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
@@ -1478,28 +1892,101 @@ export default function Compliance() {
                   </div>
                   <div className="space-y-3">
                     <label className="block text-sm font-medium text-slate-700">Submitted By</label>
-                    <Select 
-                      value={form.submittedBy || ''} 
-                      onValueChange={(val: string) => handleFormChange("submittedBy", val)}
-                      disabled={editIndex === null}
-                    >
-                      <SelectTrigger className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                        {isLoadingEmployees ? (
-                          <SelectItem value="loading" disabled className="text-slate-500">Loading employees...</SelectItem>
-                        ) : employees.length > 0 ? (
-                          employees.map((emp: any) => (
-                            <SelectItem key={emp._id || emp.id} value={emp._id || emp.id} className="text-slate-900 hover:bg-indigo-50">
-                              {emp.name}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="no-employees" disabled className="text-slate-500">No employees available</SelectItem>
+                    <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                      <div className="relative flex-1" ref={submittedByDropdownRef}>
+                        <div className="relative">
+                          <Input
+                            value={submittedByOpen ? submittedBySearch : submittedByDisplayValue}
+                            placeholder="Select employee"
+                            className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 pr-10"
+                            onFocus={() => {
+                              setSubmittedBySearch(submittedByDisplayValue);
+                              setSubmittedByOpen(true);
+                            }}
+                            onClick={() => {
+                              setSubmittedBySearch(submittedByDisplayValue);
+                              setSubmittedByOpen(true);
+                            }}
+                            onChange={(e) => {
+                              setSubmittedBySearch(e.target.value);
+                              if (!submittedByOpen) setSubmittedByOpen(true);
+                            }}
+                            autoComplete="off"
+                          />
+                          <ChevronDown
+                            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                            onClick={() => {
+                              setSubmittedByOpen((v) => !v);
+                              setSubmittedBySearch('');
+                            }}
+                          />
+                        </div>
+
+                        {submittedByOpen && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                            {isLoadingEmployees ? (
+                              <div className="px-3 py-2.5 text-sm text-slate-500">Loading employees...</div>
+                            ) : (
+                              (Array.isArray(employeesData) ? employeesData : [])
+                                .filter((emp: any) => {
+                                  const q = submittedBySearch.trim().toLowerCase();
+                                  if (!q) return true;
+                                  return (
+                                    getEmployeeName(emp).toLowerCase().includes(q) ||
+                                    getEmployeeEmail(emp).toLowerCase().includes(q)
+                                  );
+                                })
+                                .map((emp: any) => {
+                                  const id = getEmployeeId(emp);
+                                  const selected = String(form.submittedBy || '') === id;
+                                  return (
+                                    <div
+                                      key={id}
+                                      className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                        selected ? 'bg-blue-50 text-blue-700' : ''
+                                      }`}
+                                      onClick={() => {
+                                        handleFormChange('submittedBy', selected ? '' : id);
+                                        setSubmittedByOpen(false);
+                                        setSubmittedBySearch('');
+                                      }}
+                                    >
+                                      <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                      <span className="font-normal">{getEmployeeName(emp) || getEmployeeEmail(emp) || 'Employee'}</span>
+                                    </div>
+                                  );
+                                })
+                            )}
+
+                            {!isLoadingEmployees && (Array.isArray(employeesData) ? employeesData : []).length === 0 && (
+                              <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                            )}
+                          </div>
                         )}
-                      </SelectContent>
-                    </Select>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleSubmissionDocumentUpload}
+                        className="gap-2 border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 rounded-lg"
+                      >
+                        <Upload className="h-4 w-4" />
+                        UploadDocument
+                      </Button>
+                    </div>
+                    {submissionDocuments[0]?.name ? (
+                      <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
+                        <span className="truncate">{submissionDocuments[0].name}</span>
+                        <button
+                          type="button"
+                          className="text-red-600 hover:underline flex-shrink-0"
+                          onClick={() => setSubmissionDocuments([])}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -1507,21 +1994,83 @@ export default function Compliance() {
                 <div className="grid gap-6 mb-8 grid-cols-1 md:grid-cols-2">
                   <div className="space-y-3">
                     <label className="block text-sm font-medium text-slate-700">Payment Method</label>
-                    <Select
-                      value={form.paymentMethod || ''}
-                      onValueChange={(val: string) => handleFormChange("paymentMethod", val)}
-                    >
-                      <SelectTrigger className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                        {/* Add your payment method options here */}
-                        <SelectItem value="Cash" className="text-slate-900 hover:bg-indigo-50">Cash</SelectItem>
-                        <SelectItem value="Bank Transfer" className="text-slate-900 hover:bg-indigo-50">Bank Transfer</SelectItem>
-                        <SelectItem value="Credit Card" className="text-slate-900 hover:bg-indigo-50">Credit Card</SelectItem>
-                        <SelectItem value="Other" className="text-slate-900 hover:bg-indigo-50">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    {(() => {
+                      const allPaymentMethods = Array.isArray(paymentMethods)
+                        ? paymentMethods.map((pm: any) => String(pm?.name || pm?.title || '')).filter(Boolean)
+                        : [];
+                      const normalizedSearch = paymentMethodSearch.trim().toLowerCase();
+                      const filtered = normalizedSearch
+                        ? allPaymentMethods.filter((pm: string) => pm.toLowerCase().includes(normalizedSearch))
+                        : allPaymentMethods;
+                      return (
+                        <div className="relative" ref={paymentMethodDropdownRef}>
+                          <div className="relative">
+                            <Input
+                              value={paymentMethodOpen ? paymentMethodSearch : (form.paymentMethod || '')}
+                              className="w-full border-slate-300 rounded-lg p-3 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
+                              disabled={paymentMethodsLoading}
+                              onChange={(e) => {
+                                setPaymentMethodSearch(e.target.value);
+                                if (!paymentMethodOpen) setPaymentMethodOpen(true);
+                              }}
+                              onFocus={() => {
+                                setPaymentMethodSearch(form.paymentMethod || '');
+                                setPaymentMethodOpen(true);
+                              }}
+                              onClick={() => {
+                                setPaymentMethodSearch(form.paymentMethod || '');
+                                setPaymentMethodOpen(true);
+                              }}
+                            />
+                            <ChevronDown
+                              className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                              onClick={() => {
+                                if (!paymentMethodOpen) setPaymentMethodSearch(form.paymentMethod || '');
+                                setPaymentMethodOpen(!paymentMethodOpen);
+                                if (paymentMethodOpen) setPaymentMethodSearch('');
+                              }}
+                            />
+                          </div>
+                          {paymentMethodOpen && filtered.length > 0 && (
+                            <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
+                              {filtered.map((pmName: string) => (
+                                <div
+                                  key={pmName}
+                                  className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                                  onClick={() => {
+                                    if ((form.paymentMethod || '') === pmName) {
+                                      handleFormChange('paymentMethod', '');
+                                      setPaymentMethodOpen(false);
+                                      setPaymentMethodSearch('');
+                                      return;
+                                    }
+                                    handleFormChange('paymentMethod', pmName);
+                                    setPaymentMethodOpen(false);
+                                    setPaymentMethodSearch('');
+                                  }}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 text-blue-600 ${(form.paymentMethod || '') === pmName ? 'opacity-100' : 'opacity-0'}`}
+                                  />
+                                  <span className="font-normal">{pmName}</span>
+                                </div>
+                              ))}
+                              <div
+                                className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                                style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                                onClick={() => {
+                                  setPaymentMethodModal({ show: true });
+                                  setPaymentMethodOpen(false);
+                                  setPaymentMethodSearch('');
+                                }}
+                              >
+                                + New
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="space-y-3">
                     <label className="block text-sm font-medium text-slate-700">Amount</label>
@@ -1530,8 +2079,25 @@ export default function Compliance() {
                       type="number"
                       min="0"
                       step="0.01"
+                      max={AMOUNT_MAX_10CR}
                       value={form.submissionAmount || ""}
-                      onChange={e => handleFormChange("submissionAmount", e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') {
+                          e.preventDefault();
+                        }
+                      }}
+                      onChange={e => {
+                        let val = e.target.value;
+                        if (val && val.includes('.')) {
+                          const [intPart, decPart] = val.split('.');
+                          val = intPart + '.' + decPart.slice(0, 2);
+                        }
+                        const numVal = parseFloat(val);
+                        if (!isNaN(numVal) && numVal > AMOUNT_MAX_10CR) {
+                          val = String(AMOUNT_MAX_10CR);
+                        }
+                        handleFormChange("submissionAmount", val);
+                      }}
                     />
                   </div>
                 </div>
@@ -1604,82 +2170,78 @@ export default function Compliance() {
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Governing Authority</label>
-                <div className="relative governing-authority-dropdown">
-                  <div className="relative">
-                    <Input
-                      className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                      placeholder="Enter or select authority"
-                      value={form.filingGoverningAuthority || ''}
-                      onChange={(e) => {
-                        handleFormChange('filingGoverningAuthority', e.target.value);
-                        // Show dropdown when user starts typing
-                        if (e.target.value && !isGoverningAuthorityOpen) {
-                          setIsGoverningAuthorityOpen(true);
-                        }
-                      }}
-                      onFocus={() => {
-                        // Show dropdown on focus if there's text
-                        if (form.filingGoverningAuthority) {
-                          setIsGoverningAuthorityOpen(true);
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 right-0 flex items-center pr-3"
-                      onClick={() => setIsGoverningAuthorityOpen(!isGoverningAuthorityOpen)}
-                    >
-                      <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                  </div>
-                  {isGoverningAuthorityOpen && (() => {
-                    // Filter authorities based on input text
-                    const filteredAuthorities = GOVERNING_AUTHORITIES.filter(authority =>
-                      authority.toLowerCase().includes((form.filingGoverningAuthority || "").toLowerCase())
-                    );
-                    
-                    return (
-                      <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-[200px] overflow-hidden">
-                        <div className="max-h-[180px] overflow-y-auto p-1">
-                          <div className="text-xs font-semibold tracking-wide text-slate-500 px-2 py-1 uppercase">Authorities</div>
-                          {filteredAuthorities.length > 0 ? (
-                            filteredAuthorities.map(authority => (
-                              <div
-                                key={authority}
-                                className="px-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer rounded"
-                                onClick={() => {
-                                  handleFormChange('filingGoverningAuthority', authority);
-                                  setIsGoverningAuthorityOpen(false);
-                                }}
-                              >
-                                {authority}
-                              </div>
-                            ))
-                          ) : form.filingGoverningAuthority ? (
-                            <div className="px-3 py-2 text-sm text-slate-500">
-                              No matching authorities found
-                            </div>
+                {(() => {
+                  const authorities = (Array.isArray(governingAuthorities) && governingAuthorities.length > 0)
+                    ? governingAuthorities
+                    : GOVERNING_AUTHORITIES;
+
+                  const normalizedSearch = governingAuthoritySearch.trim().toLowerCase();
+                  const filtered = normalizedSearch
+                    ? authorities.filter(a => String(a || '').toLowerCase().includes(normalizedSearch))
+                    : authorities;
+
+                  return (
+                    <div className="relative" ref={governingAuthorityDropdownRef}>
+                      <div className="relative">
+                        <Input
+                          value={governingAuthorityOpen ? governingAuthoritySearch : (form.filingGoverningAuthority || '')}
+                          placeholder="Select authority"
+                          className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          onFocus={() => {
+                            setGoverningAuthoritySearch(form.filingGoverningAuthority || '');
+                            setGoverningAuthorityOpen(true);
+                          }}
+                          onClick={() => {
+                            setGoverningAuthoritySearch(form.filingGoverningAuthority || '');
+                            setGoverningAuthorityOpen(true);
+                          }}
+                          onChange={(e) => {
+                            setGoverningAuthoritySearch(e.target.value);
+                            handleFormChange('filingGoverningAuthority', e.target.value);
+                            if (!governingAuthorityOpen) setGoverningAuthorityOpen(true);
+                          }}
+                          autoComplete="off"
+                        />
+                        <ChevronDown
+                          className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                          onClick={() => {
+                            if (!governingAuthorityOpen) setGoverningAuthoritySearch(form.filingGoverningAuthority || '');
+                            setGoverningAuthorityOpen(!governingAuthorityOpen);
+                            if (governingAuthorityOpen) setGoverningAuthoritySearch('');
+                          }}
+                        />
+                      </div>
+
+                      {governingAuthorityOpen && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                          {filtered.length > 0 ? (
+                            filtered.map((authority) => {
+                              const selected = (form.filingGoverningAuthority || '') === authority;
+                              return (
+                                <div
+                                  key={authority}
+                                  className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                    selected ? 'bg-blue-50 text-blue-700' : ''
+                                  }`}
+                                  onClick={() => {
+                                    handleFormChange('filingGoverningAuthority', selected ? '' : authority);
+                                    setGoverningAuthorityOpen(false);
+                                    setGoverningAuthoritySearch('');
+                                  }}
+                                >
+                                  <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                  <span className="font-normal">{authority}</span>
+                                </div>
+                              );
+                            })
                           ) : (
-                            GOVERNING_AUTHORITIES.map(authority => (
-                              <div
-                                key={authority}
-                                className="px-3 py-2 text-sm hover:bg-indigo-50 cursor-pointer rounded"
-                                onClick={() => {
-                                  handleFormChange('filingGoverningAuthority', authority);
-                                  setIsGoverningAuthorityOpen(false);
-                                }}
-                              >
-                                {authority}
-                              </div>
-                            ))
+                            <div className="px-3 py-2.5 text-sm text-slate-500">No authorities found</div>
                           )}
                         </div>
-                      </div>
-                    );
-                  })()}
-                </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               
               {/* Department field with dropdown - matching subscription modal exactly */}
@@ -1774,6 +2336,81 @@ export default function Compliance() {
                   </div>
                 )}
               </div>
+
+              {/* Owner field after department - copy subscription modal dropdown style/logic */}
+              <div className="space-y-2 relative" ref={ownerDropdownRef}>
+                <label className="block text-sm font-medium text-slate-700">Owner</label>
+                <div className="relative">
+                  <Input
+                    value={ownerOpen ? ownerSearch : (form.owner || '')}
+                    placeholder="Select employee"
+                    className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 pr-10"
+                    onFocus={() => {
+                      setOwnerSearch(form.owner || '');
+                      setOwnerOpen(true);
+                    }}
+                    onClick={() => {
+                      setOwnerSearch(form.owner || '');
+                      setOwnerOpen(true);
+                    }}
+                    onChange={(e) => {
+                      setOwnerSearch(e.target.value);
+                      if (!ownerOpen) setOwnerOpen(true);
+                    }}
+                    autoComplete="off"
+                  />
+                  <ChevronDown
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                    onClick={() => {
+                      setOwnerOpen((v) => !v);
+                      setOwnerSearch('');
+                    }}
+                  />
+                </div>
+
+                {ownerOpen && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                    {isLoadingEmployees ? (
+                      <div className="px-3 py-2.5 text-sm text-slate-500">Loading employees...</div>
+                    ) : (
+                      (Array.isArray(employeesData) ? employeesData : [])
+                        .filter((emp: any) => {
+                          const q = ownerSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            getEmployeeName(emp).toLowerCase().includes(q) ||
+                            getEmployeeEmail(emp).toLowerCase().includes(q)
+                          );
+                        })
+                        .map((emp: any) => {
+                          const name = getEmployeeName(emp);
+                          const email = getEmployeeEmail(emp);
+                          const selected = String(form.owner || '') === name;
+                          return (
+                            <div
+                              key={getEmployeeId(emp)}
+                              className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                selected ? 'bg-blue-50 text-blue-700' : ''
+                              }`}
+                              onClick={() => {
+                                handleFormChange('owner', selected ? '' : name);
+                                setOwnerOpen(false);
+                                setOwnerSearch('');
+                              }}
+                            >
+                              <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                              <span className="font-normal">{name || email || 'Employee'}</span>
+                            </div>
+                          );
+                        })
+                    )}
+
+                    {!isLoadingEmployees && (Array.isArray(employeesData) ? employeesData : []).length === 0 && (
+                      <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                    )}
+                  </div>
+                )}
+              </div>
               
               {/* Added date range & deadline fields moved from previous Submission Details section */}
               <div className="space-y-2">
@@ -1831,8 +2468,26 @@ export default function Compliance() {
                 <Input 
                   className="w-full border-slate-300 rounded-lg p-2 text-base" 
                   type="number" 
+                  min={1}
+                  max={REMINDER_DAYS_MAX}
                   value={form.reminderDays} 
-                  onChange={e => handleFormChange("reminderDays", e.target.value)} 
+                  onKeyDown={(e) => {
+                    if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-' || e.key === '.') {
+                      e.preventDefault();
+                    }
+                  }}
+                  onChange={e => {
+                    const value = e.target.value;
+                    if (value === '') {
+                      handleFormChange('reminderDays', '');
+                      return;
+                    }
+                    const numValue = Number(value);
+                    if (!Number.isNaN(numValue)) {
+                      const clamped = Math.min(REMINDER_DAYS_MAX, Math.max(1, numValue));
+                      handleFormChange('reminderDays', String(clamped));
+                    }
+                  }} 
                 />
               </div>
               <div className="space-y-2">
@@ -1945,13 +2600,21 @@ export default function Compliance() {
                 variant="outline" 
                 className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
                 onClick={() => {
-                  setModalOpen(false);
-                  setFilingNameError("");
-                  setEditIndex(null);
+                  if (showSubmissionDetails) {
+                    setShowSubmissionDetails(false);
+                    return;
+                  }
+                  // Match SubscriptionModal logic: show exit confirmation only if any data is filled
+                  if (hasMeaningfulFormData()) {
+                    setExitConfirmOpen(true);
+                  } else {
+                    handleExitConfirm();
+                  }
                 }}
               >
                 Exit
               </Button>
+              {!showSubmissionDetails && (
               <Button 
                 type="button" 
                 variant="outline" 
@@ -2004,6 +2667,7 @@ export default function Compliance() {
                     reminderDays: form.reminderDays,
                     reminderPolicy: form.reminderPolicy,
                     submittedBy: form.submittedBy,
+                    owner: form.owner,
                     amount: form.amount,
                     paymentDate: form.paymentDate,
                     department: form.department,
@@ -2044,6 +2708,7 @@ export default function Compliance() {
                       reminderDays: "7",
                       reminderPolicy: "One time",
                       submittedBy: "",
+                      owner: "",
                       amount: "",
                       paymentDate: "",
                       submissionAmount: "",
@@ -2063,10 +2728,38 @@ export default function Compliance() {
               >
                 Save Draft
               </Button>
+              )}
               <Button 
                 type="button" 
                 className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-6 py-2 shadow-md hover:shadow-lg"
                 onClick={async () => {
+                  if (showSubmissionDetails) {
+                    if (!form.filingSubmissionDate) {
+                      toast({
+                        title: 'Validation Error',
+                        description: 'Submission Date is required',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    if (!form.submittedBy) {
+                      toast({
+                        title: 'Validation Error',
+                        description: 'Submitted By is required',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    if (submissionDocuments.length === 0) {
+                      toast({
+                        title: 'Validation Error',
+                        description: 'Please upload a document before submitting',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                  }
+
                   // Check for filing name validation errors
                   if (filingNameError) {
                     toast({
@@ -2124,9 +2817,11 @@ export default function Compliance() {
                     reminderDays: form.reminderDays,
                     reminderPolicy: form.reminderPolicy,
                     submittedBy: form.submittedBy,
+                    owner: form.owner,
                     department: form.department,
                     departments: selectedDepartments,
-                    complianceFieldValues: dynamicFieldValues // <--- store dynamic field values
+                    complianceFieldValues: dynamicFieldValues, // <--- store dynamic field values
+                    isDraft: false // Explicitly mark as not draft when saving
                   };
                   // Get complianceId for ledger entry if editing
                   let complianceId = null;
@@ -2194,7 +2889,8 @@ export default function Compliance() {
                         ...form,
                         // Use submissionNotes for ledger remarks
                         filingRemarks: form.submissionNotes,
-                        complianceId: complianceId
+                        complianceId: complianceId,
+                        documents: submissionDocuments.length > 0 ? submissionDocuments : undefined,
                       };
                       const res = await fetch('/api/ledger/insert', {
                         method: 'POST',
@@ -2223,14 +2919,20 @@ export default function Compliance() {
                     paymentDate: ""
                   }));
                   setDynamicFieldValues({});
+                  setSubmissionDocuments([]);
+                  if (showSubmissionDetails) {
+                    setShowSubmissionDetails(false);
+                    return;
+                  }
                   setModalOpen(false);
                   setEditIndex(null);
                 }}
               >
-                Save Compliance
+                {showSubmissionDetails ? 'Submit' : 'Save Compliance'}
               </Button>
             </div>
           </form>
+          </div>
         </DialogContent>
       </Dialog>
       
@@ -2275,17 +2977,67 @@ export default function Compliance() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Department Head</label>
-              <Input
-                placeholder=""
-                value={newDepartmentHead}
-                onChange={(e) => setNewDepartmentHead(e.target.value)}
-                className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddDepartment();
-                  }
-                }}
-              />
+              <div className="relative" ref={deptHeadDropdownRef}>
+                <div className="relative">
+                  <Input
+                    value={deptHeadSearch}
+                    placeholder="Select employee"
+                    className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10"
+                    onFocus={() => setDeptHeadOpen(true)}
+                    onClick={() => setDeptHeadOpen(true)}
+                    onChange={(e) => {
+                      setDeptHeadSearch(e.target.value);
+                      setDeptHeadOpen(true);
+                      setNewDepartmentHead('');
+                      setNewDepartmentEmail('');
+                      setNewDepartmentEmailError('');
+                      setIsDepartmentEmailLocked(false);
+                    }}
+                    autoComplete="off"
+                  />
+                  <ChevronDown
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                    onClick={() => setDeptHeadOpen(!deptHeadOpen)}
+                  />
+                </div>
+
+                {deptHeadOpen && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                    {(Array.isArray(employeesData) ? employeesData : [])
+                      .filter((emp: any) => {
+                        const q = deptHeadSearch.trim().toLowerCase();
+                        if (!q) return true;
+                        return (
+                          String(emp?.name || '').toLowerCase().includes(q) ||
+                          String(emp?.email || '').toLowerCase().includes(q)
+                        );
+                      })
+                      .map((emp: any) => {
+                        const selected = newDepartmentHead === emp.name;
+                        return (
+                          <div
+                            key={emp._id || emp.id || emp.email}
+                            className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                              selected ? 'bg-blue-50 text-blue-700' : ''
+                            }`}
+                            onClick={() => {
+                              setNewDepartmentHead(String(emp.name || '').trim());
+                              setDeptHeadSearch(String(emp.name || '').trim());
+                              setDeptHeadOpen(false);
+                            }}
+                          >
+                            <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                            <span className="font-normal">{emp.name}</span>
+                          </div>
+                        );
+                      })}
+
+                    {(Array.isArray(employeesData) ? employeesData : []).length === 0 && (
+                      <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
@@ -2293,14 +3045,33 @@ export default function Compliance() {
                 type="email"
                 placeholder=""
                 value={newDepartmentEmail}
-                onChange={(e) => setNewDepartmentEmail(e.target.value)}
-                className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                onChange={(e) => {
+                  if (!isDepartmentEmailLocked) {
+                    setNewDepartmentEmail(e.target.value);
+                    setNewDepartmentEmailError('');
+                  }
+                }}
+                onBlur={() => {
+                  if (!isDepartmentEmailLocked) {
+                    const validation = validateEmail(newDepartmentEmail);
+                    if (!validation.valid) {
+                      setNewDepartmentEmailError(validation.error || 'Invalid email');
+                    }
+                  }
+                }}
+                className={`w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+                  newDepartmentEmailError ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
+                } ${isDepartmentEmailLocked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     handleAddDepartment();
                   }
                 }}
+                readOnly={isDepartmentEmailLocked}
               />
+              {newDepartmentEmailError && (
+                <p className="text-red-600 text-sm mt-1">{newDepartmentEmailError}</p>
+              )}
             </div>
           </div>
           <AlertDialogFooter className="flex gap-2 mt-6">
@@ -2310,7 +3081,11 @@ export default function Compliance() {
                 setDepartmentModal({ show: false });
                 setNewDepartmentName('');
                 setNewDepartmentHead('');
+                setDeptHeadSearch('');
+                setDeptHeadOpen(false);
                 setNewDepartmentEmail('');
+                setNewDepartmentEmailError('');
+                setIsDepartmentEmailLocked(false);
               }}
               className="bg-gray-100 hover:bg-gray-200 text-gray-700"
             >
@@ -2318,10 +3093,354 @@ export default function Compliance() {
             </Button>
             <Button 
               onClick={handleAddDepartment}
-              disabled={!newDepartmentName.trim()}
+              disabled={!newDepartmentName.trim() || !newDepartmentHead.trim() || !newDepartmentEmail.trim() || !!newDepartmentEmailError}
               className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
             >
               Add Department
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Payment Method Creation Modal */}
+      <AlertDialog open={paymentMethodModal.show} onOpenChange={(open) => !open && setPaymentMethodModal({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-white border border-gray-200 shadow-2xl font-inter">
+          <AlertDialogHeader className="bg-blue-600 text-white p-6 rounded-t-lg -m-6 mb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 p-2 rounded-lg">
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z" />
+                  </svg>
+                </div>
+                <AlertDialogTitle className="text-xl font-semibold text-white">
+                  Create Payment Method
+                </AlertDialogTitle>
+              </div>
+            </div>
+          </AlertDialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  placeholder=""
+                  value={newPaymentMethodName}
+                  onChange={(e) => setNewPaymentMethodName(e.target.value)}
+                  onBlur={() => {
+                    if (newPaymentMethodName.trim()) {
+                      const duplicateName = (Array.isArray(paymentMethods) ? paymentMethods : []).find(
+                        (method: any) =>
+                          String(method?.name || '').toLowerCase().trim() === newPaymentMethodName.toLowerCase().trim() ||
+                          String(method?.title || '').toLowerCase().trim() === newPaymentMethodName.toLowerCase().trim()
+                      );
+
+                      if (duplicateName) {
+                        setValidationErrorMessage(`A payment method with the name "${newPaymentMethodName.trim()}" already exists. Please use a different name.`);
+                        setValidationErrorOpen(true);
+                      }
+                    }
+                  }}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddPaymentMethod();
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Type <span className="text-red-500">*</span>
+                </label>
+                <Select value={newPaymentMethodType} onValueChange={setNewPaymentMethodType}>
+                  <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter text-sm">
+                    <SelectValue placeholder="Select payment type" className="font-inter text-sm" />
+                  </SelectTrigger>
+                  <SelectContent className="font-inter text-sm">
+                    <SelectItem value="Credit" className="font-inter text-sm">Credit Card</SelectItem>
+                    <SelectItem value="Debit" className="font-inter text-sm">Debit Card</SelectItem>
+                    <SelectItem value="Cash" className="font-inter text-sm">Cash</SelectItem>
+                    <SelectItem value="Bank Transfer" className="font-inter text-sm">Bank Transfer</SelectItem>
+                    <SelectItem value="Digital Wallet" className="font-inter text-sm">Digital Wallet</SelectItem>
+                    <SelectItem value="Other" className="font-inter text-sm">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Owner</label>
+                <div className="relative" ref={pmOwnerDropdownRef}>
+                  <div className="relative">
+                    <Input
+                      value={pmOwnerSearch}
+                      placeholder="Select employee"
+                      className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10"
+                      onFocus={() => setPmOwnerOpen(true)}
+                      onClick={() => setPmOwnerOpen(true)}
+                      onChange={(e) => {
+                        setPmOwnerSearch(e.target.value);
+                        setPmOwnerOpen(true);
+                      }}
+                      autoComplete="off"
+                    />
+                    <ChevronDown
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                      onClick={() => setPmOwnerOpen(!pmOwnerOpen)}
+                    />
+                  </div>
+
+                  {pmOwnerOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                      {(Array.isArray(employeesData) ? employeesData : [])
+                        .filter((emp: any) => {
+                          const q = pmOwnerSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            String(emp?.name || '').toLowerCase().includes(q) ||
+                            String(emp?.email || '').toLowerCase().includes(q)
+                          );
+                        })
+                        .map((emp: any) => {
+                          const duplicateNames = (Array.isArray(employeesData) ? employeesData : []).filter((e: any) => e.name === emp.name);
+                          const displayName = duplicateNames.length > 1 ? `${emp.name} (${emp.email})` : emp.name;
+                          const selected = newPaymentMethodOwner === emp.name;
+                          return (
+                            <div
+                              key={emp._id || emp.id || emp.email}
+                              className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                selected ? 'bg-blue-50 text-blue-700' : ''
+                              }`}
+                              onClick={() => {
+                                if (newPaymentMethodOwner === emp.name) {
+                                  setNewPaymentMethodOwner('');
+                                  setPmOwnerSearch('');
+                                  setPmOwnerOpen(false);
+                                  return;
+                                }
+                                setNewPaymentMethodOwner(String(emp.name || '').trim());
+                                setPmOwnerSearch(String(emp.name || '').trim());
+                                setPmOwnerOpen(false);
+                              }}
+                            >
+                              <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                              <span className="font-normal">{displayName}</span>
+                            </div>
+                          );
+                        })}
+                      {(Array.isArray(employeesData) ? employeesData : []).length === 0 && (
+                        <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Managed by</label>
+                <div className="relative" ref={pmManagedDropdownRef}>
+                  <div className="relative">
+                    <Input
+                      value={pmManagedSearch}
+                      placeholder="Select employee"
+                      className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10"
+                      onFocus={() => setPmManagedOpen(true)}
+                      onClick={() => setPmManagedOpen(true)}
+                      onChange={(e) => {
+                        setPmManagedSearch(e.target.value);
+                        setPmManagedOpen(true);
+                      }}
+                      autoComplete="off"
+                    />
+                    <ChevronDown
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                      onClick={() => setPmManagedOpen(!pmManagedOpen)}
+                    />
+                  </div>
+
+                  {pmManagedOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                      {(Array.isArray(employeesData) ? employeesData : [])
+                        .filter((emp: any) => {
+                          const q = pmManagedSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            String(emp?.name || '').toLowerCase().includes(q) ||
+                            String(emp?.email || '').toLowerCase().includes(q)
+                          );
+                        })
+                        .map((emp: any) => {
+                          const duplicateNames = (Array.isArray(employeesData) ? employeesData : []).filter((e: any) => e.name === emp.name);
+                          const displayName = duplicateNames.length > 1 ? `${emp.name} (${emp.email})` : emp.name;
+                          const selected = newPaymentMethodManagedBy === emp.name;
+                          return (
+                            <div
+                              key={emp._id || emp.id || emp.email}
+                              className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                selected ? 'bg-blue-50 text-blue-700' : ''
+                              }`}
+                              onClick={() => {
+                                if (newPaymentMethodManagedBy === emp.name) {
+                                  setNewPaymentMethodManagedBy('');
+                                  setPmManagedSearch('');
+                                  setPmManagedOpen(false);
+                                  return;
+                                }
+                                setNewPaymentMethodManagedBy(String(emp.name || '').trim());
+                                setPmManagedSearch(String(emp.name || '').trim());
+                                setPmManagedOpen(false);
+                              }}
+                            >
+                              <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                              <span className="font-normal">{displayName}</span>
+                            </div>
+                          );
+                        })}
+                      {(Array.isArray(employeesData) ? employeesData : []).length === 0 && (
+                        <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {newPaymentMethodType !== 'Cash' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Financial Institution</label>
+                  <Input
+                    placeholder=""
+                    value={newPaymentMethodFinancialInstitution}
+                    onChange={(e) => setNewPaymentMethodFinancialInstitution(e.target.value)}
+                    className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last 4 Digits</label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder=""
+                    value={newPaymentMethodLast4Digits}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      setNewPaymentMethodLast4Digits(value);
+                    }}
+                    maxLength={4}
+                    className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newPaymentMethodType !== 'Cash' && (
+              <div className="w-1/2 pr-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Expires at</label>
+                <div className="relative">
+                  <Input
+                    type="month"
+                    placeholder="MM/YYYY"
+                    value={newPaymentMethodExpiresAt}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setNewPaymentMethodExpiresAt(newValue);
+
+                      if (newValue) {
+                        const [year, month] = newValue.split('-');
+                        const expiryDate = new Date(parseInt(year), parseInt(month) - 1);
+                        const today = new Date();
+                        today.setDate(1);
+                        today.setHours(0, 0, 0, 0);
+
+                        if (expiryDate < today) {
+                          setValidationErrorMessage('Card expiry date cannot be in the past');
+                          setValidationErrorOpen(true);
+                          setNewPaymentMethodExpiresAt('');
+                        }
+                      }
+                    }}
+                    className="w-full pr-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newPaymentMethodExpiresAt) {
+                          const [year, month] = newPaymentMethodExpiresAt.split('-');
+                          const newYear = parseInt(year) + 1;
+                          setNewPaymentMethodExpiresAt(`${newYear}-${month}`);
+                        } else {
+                          const now = new Date();
+                          setNewPaymentMethodExpiresAt(`${now.getFullYear() + 1}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+                        }
+                      }}
+                      className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+                      title="Next year"
+                    >
+                      <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newPaymentMethodExpiresAt) {
+                          const [year, month] = newPaymentMethodExpiresAt.split('-');
+                          const newYear = parseInt(year) - 1;
+                          setNewPaymentMethodExpiresAt(`${newYear}-${month}`);
+                        } else {
+                          const now = new Date();
+                          setNewPaymentMethodExpiresAt(`${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+                        }
+                      }}
+                      className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+                      title="Previous year"
+                    >
+                      <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <AlertDialogFooter className="flex gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPaymentMethodModal({ show: false });
+                setNewPaymentMethodName('');
+                setNewPaymentMethodType('');
+                setNewPaymentMethodOwner('');
+                setNewPaymentMethodManagedBy('');
+                setNewPaymentMethodFinancialInstitution('');
+                setNewPaymentMethodLast4Digits('');
+                setNewPaymentMethodExpiresAt('');
+                setNewPaymentMethodCardImage('visa');
+                setPmOwnerSearch('');
+                setPmManagedSearch('');
+                setPmOwnerOpen(false);
+                setPmManagedOpen(false);
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddPaymentMethod}
+              disabled={!newPaymentMethodName.trim() || !newPaymentMethodType || isCreatingPaymentMethod}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
+            >
+              {isCreatingPaymentMethod ? 'Creating...' : 'Create Payment Method'}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2439,6 +3558,126 @@ export default function Compliance() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+          {/* Header with Red Gradient Background */}
+          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Trash2 className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                    Delete Compliance
+                  </DialogTitle>
+                  <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-5">
+            <p className="text-gray-700 text-sm leading-relaxed mb-4">
+              Are you sure you want to delete the compliance item <span className="font-semibold text-gray-900">"{complianceToDelete?.policy}"</span>?
+            </p>
+            <p className="text-gray-600 text-xs leading-relaxed">
+              This will permanently remove this compliance item and all its associated data from your system.
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+                setComplianceToDelete(null);
+              }}
+              className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="button"
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+              className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Exit Confirmation Dialog (match SubscriptionModal) */}
+      <AlertDialog open={exitConfirmOpen} onOpenChange={(open) => !open && setExitConfirmOpen(false)}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              Confirm Exit
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              All filled data will be deleted if you exit. Do you want to cancel or exit?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setExitConfirmOpen(false)}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setExitConfirmOpen(false);
+                handleExitConfirm();
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+            >
+              Exit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Validation Error Dialog */}
+      <Dialog open={validationErrorOpen} onOpenChange={setValidationErrorOpen}>
+        <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <AlertCircle className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold tracking-tight text-white">Validation Error</DialogTitle>
+                  <p className="text-red-100 mt-0.5 text-sm font-medium">Please correct the error</p>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+
+          <div className="px-6 py-5">
+            <p className="text-gray-700 text-sm leading-relaxed">{validationErrorMessage}</p>
+          </div>
+
+          <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100">
+            <Button
+              type="button"
+              onClick={() => setValidationErrorOpen(false)}
+              className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+            >
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
