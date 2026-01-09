@@ -1508,9 +1508,12 @@ router.post("/api/company/departments", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    
-    // Prevent duplicate department names within the same tenant
-    const exists = await collection.findOne({ name, tenantId });
+
+    const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const deptNameRegex = `^${escapeRegex(name)}$`;
+
+    // Prevent duplicate department names within the same tenant (case-insensitive)
+    const exists = await collection.findOne({ tenantId, name: { $regex: deptNameRegex, $options: "i" } });
     if (exists) {
       return res.status(409).json({ message: "Department already exists" });
     }
@@ -1550,13 +1553,28 @@ router.put("/api/company/departments/:id", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
+
+    const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const trimmedName = name.trim();
+    const deptNameRegex = `^${escapeRegex(trimmedName)}$`;
+    const ObjectId = new (require('mongodb').ObjectId)(id);
+
+    // Prevent renaming to a name that already exists in this tenant (case-insensitive)
+    const duplicate = await collection.findOne({
+      tenantId,
+      name: { $regex: deptNameRegex, $options: "i" },
+      _id: { $ne: ObjectId },
+    });
+    if (duplicate) {
+      return res.status(409).json({ message: "Department already exists" });
+    }
     
     // Get the old department data to check if email/head changed
-    const oldDepartment = await collection.findOne({ _id: new (require('mongodb').ObjectId)(id), tenantId });
+    const oldDepartment = await collection.findOne({ _id: ObjectId, tenantId });
     
     const result = await collection.updateOne(
-      { _id: new (require('mongodb').ObjectId)(id), tenantId },
-      { $set: { name: name.trim(), departmentHead: validDepartmentHead, email: validEmail } }
+      { _id: ObjectId, tenantId },
+      { $set: { name: trimmedName, departmentHead: validDepartmentHead, email: validEmail } }
     );
     
     if (result.matchedCount === 0) {
@@ -1579,7 +1597,23 @@ router.patch("/api/company/departments/:name", async (req, res) => {
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Department name required" });
     }
-    const result = await collection.updateOne({ name }, { $set: { visible } });
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    if (typeof visible !== "boolean") {
+      return res.status(400).json({ message: "Invalid visible flag" });
+    }
+
+    const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const trimmed = name.trim();
+    const deptNameRegex = `^${escapeRegex(trimmed)}$`;
+
+    const result = await collection.updateOne(
+      { tenantId, name: { $regex: deptNameRegex, $options: "i" } },
+      { $set: { visible } }
+    );
     if (result.matchedCount === 0) {
       return res.status(404).json({ message: "Department not found" });
     }

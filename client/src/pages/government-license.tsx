@@ -380,6 +380,19 @@ export default function GovernmentLicense() {
   // Handle adding new department
   const handleAddDepartment = async () => {
     if (!newDepartmentName.trim()) return;
+
+    // Prevent duplicates (case-insensitive)
+    const normalizedNewName = newDepartmentName.trim().toLowerCase();
+    const exists = (Array.isArray(departments) ? departments : []).some(
+      (d: any) => String(d?.name || '').trim().toLowerCase() === normalizedNewName
+    );
+    if (exists) {
+      toast({
+        title: "Department already exists",
+        variant: "destructive",
+      });
+      return;
+    }
     
     try {
       await apiRequest(

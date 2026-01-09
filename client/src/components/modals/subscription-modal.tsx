@@ -13,7 +13,6 @@ interface SubscriptionField {
 // start date is (even if it is in the past). This prevents the off-by-one month
 // difference users saw (e.g. 19 vs 18) when toggling Auto Renewal.
 // ...existing code...
-import { cardImages } from "@/assets/card-icons/cardImages";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,14 +30,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import axios from "axios";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 // Removed unused insertSubscriptionSchema import
@@ -57,13 +53,7 @@ type SubscriptionModalData = Partial<Subscription> & {
   name?: string;
 };
 import { z } from "zod";
-import { CreditCard, X, History, RefreshCw, Maximize2, Minimize2, AlertCircle, ChevronDown } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { X, History, RefreshCw, Maximize2, Minimize2, AlertCircle, ChevronDown } from "lucide-react";
 // Define the Category interface
 interface Category {
   name: string;
@@ -636,7 +626,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     .filter(Boolean);
   
   // Fetch payment methods for dynamic dropdown
-  const { data: paymentMethods = [], isLoading: paymentMethodsLoading, refetch: refetchPaymentMethods } = useQuery({
+  const { data: paymentMethods = [], isLoading: paymentMethodsLoading } = useQuery({
     queryKey: ['/api/payment'],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/api/payment`, { credentials: 'include' });
@@ -896,13 +886,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [documents, setDocuments] = useState<Array<{name: string, url: string}>>([]);
   const [showDocumentDialog, setShowDocumentDialog] = useState<boolean>(false);
   
-  // Vendor autocomplete state
-  const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
-  const [vendorSuggestions, setVendorSuggestions] = useState<string[]>([]);
-  
   // Logo state
   const [companyLogo, setCompanyLogo] = useState<string>('');
-  const [logoLoading, setLogoLoading] = useState<boolean>(false);
+  const [, setLogoLoading] = useState<boolean>(false);
   
   // Website editing state
   const [isEditingWebsite, setIsEditingWebsite] = useState<boolean>(false);
@@ -1439,7 +1425,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Return a context object with the snapshotted value
       return { previousSubscriptions, tenantId };
     },
-  onSuccess: (result, variables, context) => {
+    onSuccess: (result, variables, context) => {
+      void variables;
       const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
       
       // Mark subscription as created to disable draft button
@@ -1491,6 +1478,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
     },
     onError: (error: any, newData, context: any) => {
+      void newData;
       const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
       
       // Rollback to the previous value on error
@@ -1586,6 +1574,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       return { previousSubscriptions, tenantId };
     },
     onSuccess: async (result, variables, context) => {
+      void result;
+      void variables;
       const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
       
       // Show success message based on whether editing or creating
@@ -1609,6 +1599,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       }, 300);
     },
     onError: (error: any, newData, context: any) => {
+      void newData;
       const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
       
       // Rollback to the previous value on error
@@ -2018,6 +2009,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Handle adding new department
   const handleAddDepartment = async () => {
     if (!newDepartmentName.trim()) return;
+
+    // Prevent duplicates (case-insensitive)
+    const normalizedNewName = newDepartmentName.trim().toLowerCase();
+    const exists = (Array.isArray(departments) ? departments : []).some(
+      (d: any) => String(d?.name || '').trim().toLowerCase() === normalizedNewName
+    );
+    if (exists) {
+      toast({
+        title: "Error",
+        description: "Department already exists",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Validate department head
     if (!newDepartmentHead.trim()) {
@@ -2388,8 +2393,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     <>
       <style>{animationStyles}</style>
       <Dialog open={open} onOpenChange={(v) => { if (!v) setIsFullscreen(false); onOpenChange(v); }}>
-        <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter`}> 
-          <DialogHeader className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white p-6 rounded-t-2xl flex flex-row items-center shadow-sm">
+        <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'} rounded-2xl border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter flex flex-col overflow-hidden`}> 
+          <DialogHeader className="sticky top-0 z-50 bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white p-6 rounded-t-2xl flex flex-row items-center shadow-sm">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               {companyLogo && (
                 <img 
@@ -2480,6 +2485,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               </Button>
             </div>
           </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="p-8 bg-white/60 backdrop-blur-sm">
               {/* Professional Section Header */}
@@ -2744,6 +2750,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             type="number" 
                             step="0.01" 
                             min="0"
+                            max="100000000"
                             className="w-full border-gray-300 rounded-lg p-3 text-base text-right font-semibold bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200" 
                             value={field.value}
                             onKeyDown={(e) => {
@@ -2759,6 +2766,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                 const [intPart, decPart] = val.split('.');
                                 val = intPart + '.' + decPart.slice(0,2);
                               }
+
+                              // Clamp to max 10Cr
+                              const numVal = parseFloat(val);
+                              if (!isNaN(numVal) && numVal > 100000000) {
+                                val = String(100000000);
+                              }
                               field.onChange(val);
                               
                               // Calculate total amount = qty * amount
@@ -2771,8 +2784,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             }}
                             onBlur={e => {
                               // Format to 2 decimal places on blur
-                              const value = parseFloat(e.target.value);
+                              let value = parseFloat(e.target.value);
                               if (!isNaN(value)) {
+                                // Clamp to max 10Cr
+                                value = Math.min(100000000, Math.max(0, value));
                                 field.onChange(value.toFixed(2));
                                 
                                 // Recalculate total amount
@@ -3435,7 +3450,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                         return;
                                       }
                                       
-                                      const empId = value.includes('|') ? value.split('|')[0] : value;
                                       const emp = employeesRaw.find((e: any) => {
                                         if (value.includes('|')) {
                                           const [name, email] = value.split('|');
@@ -3693,7 +3707,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   <FormField
                     control={form.control}
                     name="startDate"
-                    render={({ field }) => (
+                    render={() => (
                       <FormItem>
                         <FormLabel className="block text-sm font-medium text-slate-700">
                           Current Cycle Start <span className="text-red-500">*</span>
@@ -3739,7 +3753,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   <FormField
                     control={form.control}
                     name="nextRenewal"
-                    render={({ field }) => (
+                    render={() => (
                       <FormItem>
                         <FormLabel className="block text-sm font-medium text-slate-700">
                           Next Payment Date <span className="text-red-500">*</span>
@@ -3770,7 +3784,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           <Input 
                             type="number" 
                             min="1"
-                            max="365"
+                            max="1000"
                             disabled={autoRenewal}
                             className="w-full border-slate-300 rounded-lg p-1 text-base" 
                             value={field.value || ""}
@@ -3783,7 +3797,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               }
                               // Convert to number and validate
                               const numValue = Number(value);
-                              if (!isNaN(numValue) && numValue >= 1 && numValue <= 365) {
+                              if (!isNaN(numValue) && numValue >= 1 && numValue <= 1000) {
                                 field.onChange(numValue);
                               }
                             }}
@@ -3956,6 +3970,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               </div>
             </form>
           </Form>
+          </div>
         </DialogContent>
       </Dialog>
       

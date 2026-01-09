@@ -1,9 +1,8 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, FileSpreadsheet, PanelLeft } from "lucide-react";
+import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api";
 import { UnifiedImportExport } from "../unified-import-export";
-import CompanySwitcher from "./company-switcher";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Can } from "@/components/Can";
@@ -196,7 +195,6 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showCompanySwitcher, setShowCompanySwitcher] = useState(false);
   const [showCompanySwitcherDialog, setShowCompanySwitcherDialog] = useState(false);
   const { active: pageSlotActive, replaceNav: pageSlotReplaceNav } = useSidebarSlot();
 
@@ -242,10 +240,21 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         <div className="flex flex-col items-center gap-1 px-2 pt-3 pb-2 bg-white/40 backdrop-blur-sm border-b border-gray-200/50">
           <button
             onClick={onToggle}
-            className="h-10 w-10 flex items-center justify-center rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all duration-200 hover:scale-105"
-            title="Open Sidebar"
+            className="relative group h-11 w-11 flex items-center justify-center rounded-xl bg-white/70 hover:bg-white/90 border border-gray-200/50 shadow-sm transition-all duration-200 hover:scale-105"
+            aria-label="Open Sidebar"
           >
-            <PanelLeft className="h-5 w-5" />
+            <img
+              src="/assets/logo.png"
+              alt="Trackla Logo"
+              className="w-9 h-9 object-contain drop-shadow transition-opacity duration-150 group-hover:opacity-0"
+              style={{ imageRendering: 'crisp-edges' }}
+            />
+
+            {/* On hover: swap small logo to the "open sidebar" icon */}
+            <PanelLeft
+              size={20}
+              className="absolute text-indigo-700 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+            />
           </button>
         </div>
 
