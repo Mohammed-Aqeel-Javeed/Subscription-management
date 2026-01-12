@@ -378,7 +378,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
     <div className="flex flex-col h-full bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-r border-gray-200/50 shadow-lg">
       <div className="flex flex-col items-start gap-1 px-4 pt-3 pb-2 bg-white/40 backdrop-blur-sm border-b border-gray-200/50">
         <div className="flex items-center gap-2 justify-between w-full">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0">
             <img 
               src="/assets/logo.png"
               alt="Trackla Logo" 

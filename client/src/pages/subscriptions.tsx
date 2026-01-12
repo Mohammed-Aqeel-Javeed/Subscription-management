@@ -1045,65 +1045,65 @@ export default function Subscriptions() {
                   <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("serviceName")}
-                      className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
-                      Service
+                      SERVICE
                       {getSortIcon("serviceName")}
                     </button>
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("vendor")}
-                      className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
-                      Vendor
+                      VENDOR
                       {getSortIcon("vendor")}
                     </button>
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("amount")}
-                      className="flex items-center justify-end w-full hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center justify-end w-full font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
-                      Amount
+                      AMOUNT
                       {getSortIcon("amount")}
                     </button>
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("billingCycle")}
-                      className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
-                      Billing
+                      BILLING
                       {getSortIcon("billingCycle")}
                     </button>
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("nextRenewal")}
-                      className="flex items-center justify-center w-full hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center justify-center w-full font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
-                      Next Renewal
+                      NEXT RENEWAL
                       {getSortIcon("nextRenewal")}
                     </button>
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("status")}
-                      className="flex items-center hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
-                      Status
+                      STATUS
                       {getSortIcon("status")}
                     </button>
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Department
+                    DEPARTMENT
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Category
+                    CATEGORY
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    Actions
+                    ACTIONS
                   </TableHead>
                 </TableRow>
               </TableHeader>

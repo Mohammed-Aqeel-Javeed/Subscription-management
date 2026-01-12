@@ -240,9 +240,11 @@ export default function Compliance() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [showSubmissionDetails, setShowSubmissionDetails] = useState(false);
+  const [submissionOpenedFromTable, setSubmissionOpenedFromTable] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const departmentDropdownRef = useRef<HTMLDivElement>(null);
   const [submissionDocuments, setSubmissionDocuments] = useState<Array<{ name: string; url: string }>>([]);
+  const [showSubmissionDocumentDialog, setShowSubmissionDocumentDialog] = useState(false);
 
   const [submittedByOpen, setSubmittedByOpen] = useState(false);
   const [submittedBySearch, setSubmittedBySearch] = useState('');
@@ -414,8 +416,7 @@ export default function Compliance() {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64String = reader.result as string;
-          // Single document only (replace any existing)
-          setSubmissionDocuments([{ name: file.name, url: base64String }]);
+          setSubmissionDocuments((prev) => [...(Array.isArray(prev) ? prev : []), { name: file.name, url: base64String }]);
           toast({
             title: 'Success',
             description: `${file.name} uploaded successfully`,
@@ -1256,6 +1257,7 @@ export default function Compliance() {
       setFilingNameError("");
       setEditIndex(null);
       setShowSubmissionDetails(false);
+      setSubmissionOpenedFromTable(false);
       setForm(createEmptyForm());
       setSelectedDepartments([]);
       setDynamicFieldValues({});
@@ -1359,8 +1361,15 @@ export default function Compliance() {
   };
   
   // Filter and sort items
+  const normalizedSearch = searchTerm.trim().toLowerCase();
   let filteredItems = complianceItems.filter((item: ComplianceItem) => {
-    const matchesSearch = item.policy?.toLowerCase().includes(searchTerm.toLowerCase());
+    // Search only by Policy name
+    const matchesSearch =
+      !normalizedSearch ||
+      String(item.policy ?? "")
+        .toLowerCase()
+        .includes(normalizedSearch);
+
     const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
     const matchesStatus = statusFilter === "all" || mapStatus(item.status) === statusFilter;
     return matchesSearch && matchesCategory && matchesStatus;
@@ -1389,8 +1398,26 @@ export default function Compliance() {
       return 0;
     });
   } else {
-    // Default: Show latest created/edited items first (reverse order)
-    filteredItems = [...filteredItems].reverse();
+    if (normalizedSearch) {
+      // When searching, rank by relevance: startsWith > contains, then earlier match position.
+      filteredItems = [...filteredItems].sort((a: ComplianceItem, b: ComplianceItem) => {
+        const aPolicy = String(a.policy ?? "").toLowerCase();
+        const bPolicy = String(b.policy ?? "").toLowerCase();
+
+        const aIdx = aPolicy.indexOf(normalizedSearch);
+        const bIdx = bPolicy.indexOf(normalizedSearch);
+
+        const aScore = aIdx === 0 ? 0 : aIdx > 0 ? 1 : 2;
+        const bScore = bIdx === 0 ? 0 : bIdx > 0 ? 1 : 2;
+
+        if (aScore !== bScore) return aScore - bScore;
+        if (aIdx !== bIdx) return aIdx - bIdx;
+        return aPolicy.localeCompare(bPolicy);
+      });
+    } else {
+      // Default: Show latest created/edited items first (reverse order)
+      filteredItems = [...filteredItems].reverse();
+    }
   }
   
   return (
@@ -1680,6 +1707,7 @@ export default function Compliance() {
                               );
                               setEditIndex(index);
                               setShowSubmissionDetails(true);
+                              setSubmissionOpenedFromTable(true);
                               setModalOpen(true);
                               setFilingNameError(""); // Clear any previous errors
                               const currentItem = complianceItems[index] as ComplianceItem;
@@ -1728,6 +1756,7 @@ export default function Compliance() {
                               );
                               setEditIndex(index);
                               setShowSubmissionDetails(false);
+                              setSubmissionOpenedFromTable(false);
                               setModalOpen(true);
                               const currentItem = complianceItems[index] as ComplianceItem;
                               const depts = parseDepartments(currentItem.department);
@@ -1832,7 +1861,10 @@ export default function Compliance() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowSubmissionDetails(!showSubmissionDetails)}
+                    onClick={() => {
+                      setSubmissionOpenedFromTable(false);
+                      setShowSubmissionDetails(!showSubmissionDetails);
+                    }}
                     className={`relative overflow-hidden px-3 py-1 text-sm rounded-lg font-semibold transition-all duration-300
                       bg-gradient-to-r from-emerald-500/70 to-green-600/70 text-white border border-emerald-300/60 hover:from-emerald-500 hover:to-green-600 hover:shadow-[0_8px_16px_rgba(16,185,129,0.25)]
                     `}
@@ -1968,25 +2000,13 @@ export default function Compliance() {
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={handleSubmissionDocumentUpload}
+                        onClick={() => setShowSubmissionDocumentDialog(true)}
                         className="gap-2 border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 rounded-lg"
                       >
                         <Upload className="h-4 w-4" />
                         UploadDocument
                       </Button>
                     </div>
-                    {submissionDocuments[0]?.name ? (
-                      <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
-                        <span className="truncate">{submissionDocuments[0].name}</span>
-                        <button
-                          type="button"
-                          className="text-red-600 hover:underline flex-shrink-0"
-                          onClick={() => setSubmissionDocuments([])}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
 
@@ -2601,6 +2621,10 @@ export default function Compliance() {
                 className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
                 onClick={() => {
                   if (showSubmissionDetails) {
+                    if (submissionOpenedFromTable) {
+                      handleExitConfirm();
+                      return;
+                    }
                     setShowSubmissionDetails(false);
                     return;
                   }
@@ -3610,6 +3634,209 @@ export default function Compliance() {
             >
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Document Management Dialog (match SubscriptionModal upload UX) */}
+      <Dialog open={showSubmissionDocumentDialog} onOpenChange={setShowSubmissionDocumentDialog}>
+        <DialogContent className="sm:max-w-4xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
+          <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
+            <div className="flex items-start justify-between">
+              <div>
+                <DialogTitle className="text-lg font-semibold text-gray-900">Documents</DialogTitle>
+                <p className="text-sm text-gray-600 mt-1">Submission documents</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSubmissionDocumentUpload}
+                  className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Upload
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto py-4 bg-white">
+            {Array.isArray(submissionDocuments) && submissionDocuments.length > 0 ? (
+              <div className="space-y-2 pr-2">
+                {submissionDocuments.map((doc, index) => (
+                  <div
+                    key={`${doc.name}-${index}`}
+                    className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all duration-200"
+                  >
+                    <div className="grid grid-cols-12 gap-4 items-center">
+                      <div className="col-span-4 flex items-center gap-2">
+                        <div className="h-9 w-9 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
+                        </div>
+                      </div>
+
+                      <div className="col-span-3 flex items-center gap-1.5">
+                        <div className="h-5 w-5 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <svg className="h-3 w-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] text-gray-500">Uploaded by</p>
+                          <p className="text-xs font-medium text-gray-900 truncate">{currentUserName || 'User'}</p>
+                        </div>
+                      </div>
+
+                      <div className="col-span-3 flex items-center gap-1.5">
+                        <svg className="h-4 w-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] text-gray-500">Uploaded date</p>
+                          <p className="text-xs font-medium text-gray-900 truncate">
+                            {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="col-span-2 flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            try {
+                              const newWindow = window.open('', '_blank');
+                              if (newWindow) {
+                                if (doc.url.startsWith('data:application/pdf')) {
+                                  newWindow.document.write(`
+                                  <html>
+                                    <head><title>${doc.name}</title></head>
+                                    <body style="margin:0">
+                                      <iframe src="${doc.url}" style="width:100%;height:100vh;border:none;"></iframe>
+                                    </body>
+                                  </html>
+                                `);
+                                } else if (doc.url.startsWith('data:image')) {
+                                  newWindow.document.write(`
+                                  <html>
+                                    <head><title>${doc.name}</title></head>
+                                    <body style="margin:0;display:flex;justify-content:center;align-items:center;background:#000;">
+                                      <img src="${doc.url}" style="max-width:100%;max-height:100vh;"/>
+                                    </body>
+                                  </html>
+                                `);
+                                }
+                              }
+                            } catch (error) {
+                              toast({
+                                title: 'Error',
+                                description: 'Failed to view document',
+                                variant: 'destructive',
+                              });
+                            }
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors flex items-center gap-1"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          View
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            try {
+                              const link = document.createElement('a');
+                              link.href = doc.url;
+                              link.download = doc.name;
+                              link.click();
+                              toast({
+                                title: 'Download Started',
+                                description: `Downloading ${doc.name}`,
+                                duration: 2000,
+                                variant: 'success',
+                              });
+                            } catch (error) {
+                              toast({
+                                title: 'Error',
+                                description: 'Failed to download document',
+                                variant: 'destructive',
+                              });
+                            }
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors flex items-center gap-1"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          Download
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSubmissionDocuments((prev) => (Array.isArray(prev) ? prev.filter((_, i) => i !== index) : []));
+                            toast({
+                              title: 'Document Removed',
+                              description: `${doc.name} has been removed`,
+                              duration: 2000,
+                              variant: 'destructive',
+                            });
+                          }}
+                          className="px-2 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-600 hover:bg-red-50 rounded-md transition-colors flex items-center gap-1"
+                          title="Remove document"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                </div>
+                <p className="text-gray-500 text-sm">No documents uploaded yet</p>
+                <p className="text-gray-400 text-xs mt-1">Click the Upload button above to add documents</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-between items-center gap-3 pt-3 border-t border-gray-200 bg-gray-50 -mx-6 px-6 -mb-6 pb-4 rounded-b-lg">
+            <span className="text-xs text-gray-600">
+              {(Array.isArray(submissionDocuments) ? submissionDocuments.length : 0)} document
+              {(Array.isArray(submissionDocuments) && submissionDocuments.length !== 1) ? 's' : ''}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowSubmissionDocumentDialog(false)}
+                className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 text-sm px-4 py-1.5"
+              >
+                Close
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setShowSubmissionDocumentDialog(false)}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5"
+              >
+                Done
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
