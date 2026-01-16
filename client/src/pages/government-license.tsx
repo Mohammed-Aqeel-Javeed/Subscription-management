@@ -7,7 +7,7 @@ import { Can } from "@/components/Can";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown } from "lucide-react";
+import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
 import { useForm } from "react-hook-form";
@@ -15,6 +15,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "../hooks/use-toast";
 import { z } from "zod";
 import { API_BASE_URL } from "@/lib/config";
+import { Badge } from "../components/ui/badge";
+import { Checkbox } from "../components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,10 +45,14 @@ const ISSUING_AUTHORITIES = [
 // License interface
 type RenewalAttachment = { name: string; url: string; uploadedBy?: string; uploadedAt?: string };
 
+interface Department {
+  name: string;
+  visible: boolean;
+}
+
 interface License {
   id: string;
   licenseName: string;
-  licenseNo?: string;
   issuingAuthorityName: string;
   startDate: string;
   endDate: string;
@@ -55,19 +61,19 @@ interface License {
   renewalCycleTime?: string;
   renewalLeadTimeEstimated?: string;
   responsiblePerson: string;
+  secondaryPerson?: string;
+  department?: string;
+  departments?: string[];
   status: 'Active' | 'Expired' | 'Cancelled';
   issuingAuthorityEmail: string;
   issuingAuthorityPhone: string;
   reminderDays?: number | string;
   reminderPolicy?: string;
-  // New submission fields
   renewalStatus?: string;
-  renewalSubmittedDate?: string;
+  // renewalSubmittedDate removed
   expectedCompletedDate?: string;
-  applicationReferenceNo?: string;
   renewalInitiatedDate?: string;
   submittedBy?: string;
-  paymentReferenceNo?: string;
   renewalAmount?: number;
   renewalStatusReason?: string;
   renewalAttachments?: RenewalAttachment[] | string[];
@@ -75,11 +81,192 @@ interface License {
   updatedAt?: string;
 }
 
+// Comprehensive Email Validation Function
+const validateEmail = (email: string): { valid: boolean; error?: string } => {
+  // Rule 1: Required - Not empty
+  if (!email || email.trim() === '') {
+    return { valid: false, error: 'Email is required' };
+  }
+
+  const trimmedEmail = email.trim();
+
+  // Rule 2: Max length ≤ 254 characters
+  if (trimmedEmail.length > 254) {
+    return { valid: false, error: 'Email must be 254 characters or less' };
+  }
+
+  // Rule 3: No spaces
+  if (/\s/.test(trimmedEmail)) {
+    return { valid: false, error: 'Email cannot contain spaces' };
+  }
+
+  // Rule 4: One @ only
+  const atCount = (trimmedEmail.match(/@/g) || []).length;
+  if (atCount !== 1) {
+    return { valid: false, error: 'Email must contain exactly one @ symbol' };
+  }
+
+  const [localPart, domain] = trimmedEmail.split('@');
+
+  // Rule 5: Local part limit - Before @ ≤ 64 chars
+  if (localPart.length > 64) {
+    return { valid: false, error: 'Email username must be 64 characters or less' };
+  }
+
+  // Rule 6: Domain exists - After @ not empty
+  if (!domain || domain.length === 0) {
+    return { valid: false, error: 'Email domain is required' };
+  }
+
+  // Rule 7: No consecutive dots
+  if (/\.\./.test(trimmedEmail)) {
+    return { valid: false, error: 'Email cannot contain consecutive dots' };
+  }
+
+  // Rule 8: No leading/trailing dots in local part
+  if (localPart.startsWith('.') || localPart.endsWith('.')) {
+    return { valid: false, error: 'Email username cannot start or end with a dot' };
+  }
+
+  // Rule 9: Domain has dot - At least one . in domain
+  if (!domain.includes('.')) {
+    return { valid: false, error: 'Email domain must contain a dot' };
+  }
+  
+  // Rule 9.5: Check for suspicious patterns like double TLDs (e.g., .com.com, .org.net)
+  const domainParts = domain.split('.');
+  if (domainParts.length > 2) {
+    // Check if any part before the last one looks like a TLD
+    const commonTLDs = ['com', 'org', 'net', 'edu', 'gov', 'mil', 'int', 'co', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'jp', 'cn', 'in', 'br', 'ru', 'io', 'ai'];
+    for (let i = 0; i < domainParts.length - 1; i++) {
+      if (commonTLDs.includes(domainParts[i].toLowerCase())) {
+        return { valid: false, error: 'Email domain has invalid format (duplicate domain extension detected)' };
+      }
+    }
+  }
+
+  // Rule 10: Valid TLD - ≥ 2 characters and ≤ 6 characters, only letters
+  const tld = domainParts[domainParts.length - 1];
+  if (tld.length < 2) {
+    return { valid: false, error: 'Email domain extension must be at least 2 characters' };
+  }
+  if (tld.length > 6) {
+    return { valid: false, error: 'Email domain extension must be 6 characters or less' };
+  }
+  // TLD should only contain letters
+  if (!/^[a-zA-Z]+$/.test(tld)) {
+    return { valid: false, error: 'Email domain extension must contain only letters' };
+  }
+  
+  // Rule 11: Additional check - Validate against common TLDs for better accuracy
+  const commonTLDs = [
+    'com', 'org', 'net', 'edu', 'gov', 'mil', 'int',
+    'co', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'jp', 'cn', 'in', 'br', 'ru',
+    'io', 'ai', 'app', 'dev', 'tech', 'info', 'biz', 'name', 'pro',
+    'email', 'online', 'site', 'store', 'cloud', 'digital', 'global',
+    'xyz', 'top', 'vip', 'club', 'shop', 'live', 'today', 'world'
+  ];
+  
+  if (!commonTLDs.includes(tld.toLowerCase())) {
+    return { valid: false, error: 'Please enter a valid email domain extension (e.g., .com, .org, .net)' };
+  }
+
+  // Rule 12: Valid characters in local part - Only allowed chars
+  const validLocalRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+  if (!validLocalRegex.test(localPart)) {
+    return { valid: false, error: 'Email username contains invalid characters' };
+  }
+
+  // Rule 13: Domain parts (except TLD) can contain letters, numbers, and hyphens
+  for (let i = 0; i < domainParts.length - 1; i++) {
+    if (!/^[a-zA-Z0-9-]+$/.test(domainParts[i])) {
+      return { valid: false, error: 'Email domain contains invalid characters' };
+    }
+  }
+
+  // Rule 14: Domain format - No - or . at edges
+  if (domain.startsWith('-') || domain.startsWith('.') || domain.endsWith('-') || domain.endsWith('.')) {
+    return { valid: false, error: 'Email domain cannot start or end with a hyphen or dot' };
+  }
+
+  // Rule 15: Check each domain part doesn't start/end with hyphen
+  for (const part of domainParts) {
+    if (part.startsWith('-') || part.endsWith('-')) {
+      return { valid: false, error: 'Email domain parts cannot start or end with a hyphen' };
+    }
+    if (part.length === 0) {
+      return { valid: false, error: 'Email domain cannot have empty parts' };
+    }
+  }
+  
+  // Rule 16: Check for repeated characters in domain name (suspicious pattern)
+  const domainName = domainParts[domainParts.length - 2]; // Get the part before TLD (e.g., "gmail" from "gmail.com")
+  if (domainName) {
+    // Check for 4+ consecutive repeated characters (e.g., "gmaillll")
+    if (/(.)\1{3,}/.test(domainName)) {
+      return { valid: false, error: 'Email domain contains suspicious repeated characters' };
+    }
+  }
+  
+  // Rule 17: Validate common email providers with correct spelling
+  const knownProviders = {
+    'gmail': 'gmail.com',
+    'yahoo': 'yahoo.com',
+    'outlook': 'outlook.com',
+    'hotmail': 'hotmail.com',
+    'icloud': 'icloud.com',
+    'protonmail': 'protonmail.com',
+    'aol': 'aol.com',
+    'zoho': 'zoho.com'
+  };
+  
+  const fullDomain = domain.toLowerCase();
+  for (const [provider, correctDomain] of Object.entries(knownProviders)) {
+    // Check if domain starts with provider name but isn't exactly correct
+    if (fullDomain.startsWith(provider) && fullDomain !== correctDomain) {
+      // Allow subdomains like mail.google.com, but not gmaillll.com
+      const afterProvider = fullDomain.substring(provider.length);
+      if (!afterProvider.startsWith('.') && afterProvider.length > 0) {
+        return { valid: false, error: `Did you mean ${correctDomain}? Please check the spelling` };
+      }
+    }
+  }
+  
+  // Rule 18: Check minimum domain name length (before TLD)
+  if (domainName && domainName.length < 2) {
+    return { valid: false, error: 'Email domain name must be at least 2 characters' };
+  }
+  
+  // Rule 19: No special characters at start/end of local part
+  if (/^[^a-zA-Z0-9]/.test(localPart) || /[^a-zA-Z0-9]$/.test(localPart)) {
+    return { valid: false, error: 'Email username must start and end with a letter or number' };
+  }
+  
+  // Rule 20: Check for common typos in TLD
+  const typoTLDs: { [key: string]: string } = {
+    'con': 'com',
+    'cmo': 'com',
+    'ocm': 'com',
+    'comm': 'com',
+    'comn': 'com',
+    'rog': 'org',
+    'ogr': 'org',
+    'nte': 'net',
+    'ent': 'net'
+  };
+  
+  if (typoTLDs[tld.toLowerCase()]) {
+    return { valid: false, error: `Did you mean .${typoTLDs[tld.toLowerCase()]}? Please check the spelling` };
+  }
+
+  return { valid: true };
+};
+
 // Form schema (all fields optional - no mandatory validation)
 const licenseSchema = z
   .object({
   licenseName: z.string().optional(),
-  licenseNo: z.string().optional(),
+  // licenseNo removed
   issuingAuthorityName: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
@@ -96,16 +283,19 @@ const licenseSchema = z
     return s ? s : undefined;
   }, z.string().optional()),
   responsiblePerson: z.string().optional(),
+  secondaryPerson: z.string().optional(),
+  department: z.string().optional(),
+  departments: z.array(z.string()).optional(),
   status: z.enum(['Active', 'Expired', 'Cancelled']).optional(),
   renewalStatus: z.enum(['Under Processing', 'Canceled', 'Rejected', 'Resubmitted', 'Approved']).optional(),
   issuingAuthorityEmail: z.string().optional(),
   issuingAuthorityPhone: z.string().optional(),
-  renewalSubmittedDate: z.string().optional(),
+  // renewalSubmittedDate removed
   expectedCompletedDate: z.string().optional(),
-  applicationReferenceNo: z.string().optional(),
+  // applicationReferenceNo removed
   renewalInitiatedDate: z.string().optional(),
   submittedBy: z.string().optional(),
-  paymentReferenceNo: z.string().optional(),
+  // paymentReferenceNo removed
   renewalAmount: z.preprocess((val) => {
     if (val === '' || val === null || val === undefined) return undefined;
     const num = typeof val === 'string' ? parseFloat(val) : val;
@@ -138,22 +328,36 @@ function EmployeeSearchDropdown(props: {
   value: string;
   onChange: (value: string) => void;
   employees: Array<{ name?: string; email?: string }>;
+  onAddNew?: () => void;
 }) {
-  const { value, onChange, employees } = props;
+  const { value, onChange, employees, onAddNew } = props;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
+
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setOpen(false);
         setSearch('');
       }
     }
+
+    const dialogEl = dropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
+    function handleDialogScroll() {
+      setOpen(false);
+      setSearch('');
+    }
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    dialogEl?.addEventListener('scroll', handleDialogScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      dialogEl?.removeEventListener('scroll', handleDialogScroll);
+    };
   }, [open]);
 
   const options = employees.length > 0
@@ -203,7 +407,11 @@ function EmployeeSearchDropdown(props: {
         }}
       />
       {open && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
+        <div
+          className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-auto overscroll-contain custom-scrollbar"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           {filtered.length > 0 ? (
             filtered.map((opt) => (
               <div
@@ -237,6 +445,20 @@ function EmployeeSearchDropdown(props: {
             ))
           ) : (
             <div className="px-3 py-2 text-sm text-slate-500">No employees found</div>
+          )}
+
+          {onAddNew && (
+            <div
+              className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+              style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+              onClick={() => {
+                setOpen(false);
+                setSearch('');
+                onAddNew();
+              }}
+            >
+              + New
+            </div>
           )}
         </div>
       )}
@@ -357,7 +579,7 @@ export default function GovernmentLicense() {
     resolver: zodResolver(licenseSchema),
     defaultValues: {
       licenseName: "",
-      licenseNo: "",
+      // licenseNo removed
       issuingAuthorityName: "",
       startDate: "",
       endDate: "",
@@ -365,16 +587,19 @@ export default function GovernmentLicense() {
       renewalFee: undefined, // Show empty by default
       renewalLeadTimeEstimated: undefined,
       responsiblePerson: "",
+      secondaryPerson: "",
+      department: "",
+      departments: [],
       status: "Active",
       issuingAuthorityEmail: "",
       issuingAuthorityPhone: "",
       renewalStatus: undefined,
-      renewalSubmittedDate: "",
+      // renewalSubmittedDate removed
       expectedCompletedDate: "",
-      applicationReferenceNo: "",
+      // applicationReferenceNo removed
       renewalInitiatedDate: "",
       submittedBy: "",
-      paymentReferenceNo: "",
+      // paymentReferenceNo removed
       renewalAmount: undefined,
       renewalStatusReason: "",
       renewalAttachments: [],
@@ -391,11 +616,11 @@ export default function GovernmentLicense() {
     if (lastResubmittedClearRef.current) return;
     lastResubmittedClearRef.current = true;
 
-    form.setValue('applicationReferenceNo', '', { shouldDirty: true });
+    // applicationReferenceNo removed
     form.setValue('renewalInitiatedDate', '', { shouldDirty: true });
     form.setValue('expectedCompletedDate', '', { shouldDirty: true });
     form.setValue('submittedBy', '', { shouldDirty: true });
-    form.setValue('paymentReferenceNo', '', { shouldDirty: true });
+    // paymentReferenceNo removed
     form.setValue('renewalAmount', undefined, { shouldDirty: true });
     form.setValue('renewalAttachments', [], { shouldDirty: true });
     form.setValue('renewalStatusReason', '', { shouldDirty: true });
@@ -645,7 +870,7 @@ export default function GovernmentLicense() {
   });
 
   // Query for employees (owners)
-  const { data: employeesRaw = [] } = useQuery({
+  const { data: employeesRaw = [], refetch: refetchEmployees } = useQuery({
     queryKey: ["/api/employees"],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/api/employees`, { credentials: "include" });
@@ -654,6 +879,270 @@ export default function GovernmentLicense() {
       return Array.isArray(data) ? data : [];
     }
   });
+
+  // Employee creation modal (match Subscription modal Owner creation)
+  const [employeeModal, setEmployeeModal] = useState<{ show: boolean; target?: 'responsiblePerson' | 'secondaryPerson' | 'submittedBy' }>({ show: false });
+  const [newEmployeeName, setNewEmployeeName] = useState<string>('');
+  const [newEmployeeEmail, setNewEmployeeEmail] = useState<string>('');
+  const [newEmployeeEmailError, setNewEmployeeEmailError] = useState<string>('');
+  const [newEmployeeRole, setNewEmployeeRole] = useState<string>('');
+  const [newEmployeeStatus, setNewEmployeeStatus] = useState<string>('active');
+  const [newEmployeeDepartment, setNewEmployeeDepartment] = useState<string>('');
+
+  const [employeeDeptOpen, setEmployeeDeptOpen] = useState(false);
+  const [employeeDeptSearch, setEmployeeDeptSearch] = useState('');
+  const employeeDeptDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!employeeDeptOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (employeeDeptDropdownRef.current && !employeeDeptDropdownRef.current.contains(event.target as Node)) {
+        setEmployeeDeptOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [employeeDeptOpen]);
+
+  useEffect(() => {
+    if (employeeModal.show) {
+      setEmployeeDeptSearch(newEmployeeDepartment || '');
+    }
+  }, [employeeModal.show, newEmployeeDepartment]);
+
+  const handleAddEmployee = async () => {
+    if (!newEmployeeName.trim() || !newEmployeeEmail.trim()) return;
+
+    const emailValidation = validateEmail(newEmployeeEmail.trim());
+    if (!emailValidation.valid) {
+      setNewEmployeeEmailError(emailValidation.error || 'Invalid email address');
+      toast({
+        title: 'Invalid Email',
+        description: emailValidation.error || 'Please enter a valid email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!newEmployeeDepartment) {
+      toast({
+        title: 'Department Required',
+        description: 'Please select a department',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const nameExists = (employeesRaw as any[]).some((emp: any) =>
+      String(emp?.name || '').toLowerCase().trim() === newEmployeeName.trim().toLowerCase()
+    );
+    if (nameExists) {
+      toast({ title: 'Error', description: 'An employee with this name already exists', variant: 'destructive' });
+      return;
+    }
+
+    const emailExists = (employeesRaw as any[]).some((emp: any) =>
+      String(emp?.email || '').toLowerCase() === newEmployeeEmail.trim().toLowerCase()
+    );
+    if (emailExists) {
+      toast({ title: 'Error', description: 'An employee with this email already exists', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      await apiRequest('POST', '/api/employees', {
+        name: newEmployeeName.trim(),
+        email: newEmployeeEmail.trim(),
+        role: newEmployeeRole,
+        status: newEmployeeStatus,
+        department: newEmployeeDepartment,
+      });
+
+      await refetchEmployees();
+
+      if (employeeModal.target === 'responsiblePerson') {
+        form.setValue('responsiblePerson', newEmployeeName.trim(), { shouldDirty: true });
+      }
+      if (employeeModal.target === 'secondaryPerson') {
+        form.setValue('secondaryPerson', newEmployeeName.trim(), { shouldDirty: true });
+      }
+      if (employeeModal.target === 'submittedBy') {
+        form.setValue('submittedBy', newEmployeeName.trim(), { shouldDirty: true });
+      }
+
+      setNewEmployeeName('');
+      setNewEmployeeEmail('');
+      setNewEmployeeEmailError('');
+      setNewEmployeeRole('');
+      setNewEmployeeStatus('active');
+      setNewEmployeeDepartment('');
+      setEmployeeModal({ show: false });
+
+      toast({ title: 'Success', description: 'Employee added successfully', variant: 'success' });
+    } catch (error) {
+      console.error('Error adding employee:', error);
+      toast({ title: 'Error', description: 'Failed to add employee. Please try again.', variant: 'destructive' });
+    }
+  };
+
+  // Query for company departments (same endpoint used by Subscription modal)
+  const { data: departments = [], isLoading: departmentsLoading } = useQuery<Department[]>({
+    queryKey: ["/api/company/departments"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/company/departments`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch departments");
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+  });
+
+  // Parse departments from stored value (stringified array, array, or single string)
+  const parseDepartments = (deptValue?: any) => {
+    if (!deptValue) return [] as string[];
+    if (Array.isArray(deptValue)) return deptValue.map(String).filter(Boolean);
+    const s = String(deptValue);
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch {
+      // not json
+    }
+    return s ? [s] : [];
+  };
+
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+
+  const handleDepartmentChange = (departmentName: string, checked: boolean) => {
+    if (departmentName === 'Company Level' && checked) {
+      setSelectedDepartments(['Company Level']);
+      form.setValue('departments', ['Company Level'], { shouldDirty: true });
+      return;
+    }
+
+    if (departmentName === 'Company Level' && !checked) {
+      setSelectedDepartments([]);
+      form.setValue('departments', [], { shouldDirty: true });
+      return;
+    }
+
+    if (checked && selectedDepartments.includes('Company Level')) {
+      setSelectedDepartments([departmentName]);
+      form.setValue('departments', [departmentName], { shouldDirty: true });
+      return;
+    }
+
+    const next = checked
+      ? [...selectedDepartments, departmentName]
+      : selectedDepartments.filter((d) => d !== departmentName);
+    setSelectedDepartments(next);
+    form.setValue('departments', next, { shouldDirty: true });
+  };
+
+  const removeDepartment = (departmentName: string) => {
+    const next = selectedDepartments.filter((d) => d !== departmentName);
+    setSelectedDepartments(next);
+    form.setValue('departments', next, { shouldDirty: true });
+  };
+
+  // Department modal state (match Subscription modal)
+  const [departmentModal, setDepartmentModal] = useState<{ show: boolean }>({ show: false });
+  const [newDepartmentName, setNewDepartmentName] = useState<string>('');
+  const [newDepartmentHead, setNewDepartmentHead] = useState<string>('');
+  const [newDepartmentEmail, setNewDepartmentEmail] = useState<string>('');
+  const [newDepartmentEmailError, setNewDepartmentEmailError] = useState<string>('');
+  const [isDepartmentEmailLocked, setIsDepartmentEmailLocked] = useState<boolean>(false);
+
+  const [deptHeadOpen, setDeptHeadOpen] = useState(false);
+  const [deptHeadSearch, setDeptHeadSearch] = useState('');
+  const deptHeadDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Auto-fill department head email
+  useEffect(() => {
+    if (newDepartmentHead && employeesRaw && (employeesRaw as any[]).length > 0) {
+      const selectedEmp = (employeesRaw as any[]).find((emp: any) => emp?.name === newDepartmentHead);
+      const email = String(selectedEmp?.email || '').trim();
+      if (email) {
+        setNewDepartmentEmail(email);
+        setNewDepartmentEmailError('');
+        setIsDepartmentEmailLocked(true);
+        return;
+      }
+    }
+    setIsDepartmentEmailLocked(false);
+  }, [newDepartmentHead, employeesRaw]);
+
+  // Department Head dropdown: close on outside click
+  useEffect(() => {
+    if (!deptHeadOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (deptHeadDropdownRef.current && !deptHeadDropdownRef.current.contains(event.target as Node)) {
+        setDeptHeadOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [deptHeadOpen]);
+
+  // Keep Department Head input text in sync when opening the modal
+  useEffect(() => {
+    if (departmentModal.show) {
+      setDeptHeadSearch(newDepartmentHead || '');
+    }
+  }, [departmentModal.show, newDepartmentHead]);
+
+  const handleAddDepartment = async () => {
+    if (!newDepartmentName.trim()) {
+      toast({ title: 'Required', description: 'Department name is required', variant: 'destructive' });
+      return;
+    }
+
+    if (!newDepartmentHead.trim()) {
+      toast({ title: 'Required', description: 'Department head is required', variant: 'destructive' });
+      return;
+    }
+
+    if (!newDepartmentEmail.trim()) {
+      toast({ title: 'Required', description: 'Email address is required', variant: 'destructive' });
+      return;
+    }
+
+    const validation = validateEmail(newDepartmentEmail);
+    if (!validation.valid) {
+      setNewDepartmentEmailError(validation.error || 'Invalid email');
+      return;
+    }
+
+    try {
+      await apiRequest('POST', '/api/company/departments', {
+        name: newDepartmentName.trim(),
+        visible: true,
+        departmentHead: newDepartmentHead.trim(),
+        email: newDepartmentEmail.trim(),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["/api/company/departments"] });
+
+      // auto-select the newly created department
+      if (!selectedDepartments.includes('Company Level')) {
+        const next = selectedDepartments.includes(newDepartmentName.trim())
+          ? selectedDepartments
+          : [...selectedDepartments, newDepartmentName.trim()];
+        setSelectedDepartments(next);
+        form.setValue('departments', next, { shouldDirty: true });
+      }
+
+      setDepartmentModal({ show: false });
+      setNewDepartmentName('');
+      setNewDepartmentHead('');
+      setDeptHeadSearch('');
+      setDeptHeadOpen(false);
+      setNewDepartmentEmail('');
+      setNewDepartmentEmailError('');
+
+      toast({ title: 'Added', description: 'Department added successfully', variant: 'success' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Failed to add department', variant: 'destructive' });
+    }
+  };
 
   // State for license name validation
   const [licenseNameError, setLicenseNameError] = useState<string>("");
@@ -757,8 +1246,8 @@ export default function GovernmentLicense() {
       return;
     }
     const rows = filteredLicenses.map(license => ({
-      LicenceType: license.licenseName,
-      LicenceNo: String(license.licenseNo || ''),
+      LicenseType: license.licenseName,
+      // LicenseNo removed
       IssuingAuthority: license.issuingAuthorityName,
       StartDate: license.startDate ? new Date(license.startDate).toISOString().split('T')[0] : '',
       EndDate: license.endDate ? new Date(license.endDate).toISOString().split('T')[0] : '',
@@ -802,8 +1291,8 @@ export default function GovernmentLicense() {
         for (const row of rows) {
           try {
             const payload: any = {
-              licenseName: row.LicenceType || row.LicenseName || row.licenseName || '',
-              licenseNo: row.LicenceNo || row.LicenseNo || row.licenseNo || '',
+              licenseName: row.LicenseType || row.LicenseName || row.licenseName || '',
+              // licenseNo removed
               issuingAuthorityName: row.IssuingAuthority || row.issuingAuthorityName || '',
               startDate: row.StartDate || row.startDate || new Date().toISOString().split('T')[0],
               endDate: row.EndDate || row.endDate || new Date().toISOString().split('T')[0],
@@ -848,7 +1337,9 @@ export default function GovernmentLicense() {
     const matchesSearch = 
       (license.licenseName || "").toLowerCase().includes(q) ||
       (license.issuingAuthorityName || "").toLowerCase().includes(q) ||
-      (license.responsiblePerson || "").toLowerCase().includes(q);
+      (license.responsiblePerson || "").toLowerCase().includes(q) ||
+      (String((license as any).department || "").toLowerCase().includes(q)) ||
+      (String((license as any).secondaryPerson || "").toLowerCase().includes(q));
 
     const derivedStatus = getDerivedStatus({ endDate: license.endDate, status: license.status });
     const matchesStatus = statusFilter === "all" || derivedStatus === statusFilter;
@@ -888,6 +1379,8 @@ export default function GovernmentLicense() {
     const payload: LicenseFormData = {
       ...data,
       status: derivedStatus,
+      departments: selectedDepartments,
+      department: JSON.stringify(selectedDepartments),
     };
     form.setValue('status', derivedStatus);
     licenseMutation.mutate(payload);
@@ -897,9 +1390,12 @@ export default function GovernmentLicense() {
   const handleEdit = (license: License) => {
     setEditingLicense(license);
     const normalizedStatus = getDerivedStatus({ endDate: license.endDate, status: license.status });
+
+    const depts = parseDepartments((license as any).department);
+    setSelectedDepartments(depts);
+
     form.reset({
       licenseName: license.licenseName || "",
-      licenseNo: license.licenseNo || "",
       issuingAuthorityName: license.issuingAuthorityName || "",
       startDate: license.startDate || "",
       endDate: license.endDate || "",
@@ -908,18 +1404,19 @@ export default function GovernmentLicense() {
       renewalCycleTime: license.renewalCycleTime || "",
       renewalLeadTimeEstimated: typeof license.renewalLeadTimeEstimated === 'string' ? license.renewalLeadTimeEstimated : undefined,
       responsiblePerson: license.responsiblePerson || "",
+      secondaryPerson: (license as any).secondaryPerson || "",
+      departments: depts,
+      department: JSON.stringify(depts),
       status: normalizedStatus,
       issuingAuthorityEmail: license.issuingAuthorityEmail || "",
       issuingAuthorityPhone: license.issuingAuthorityPhone || "",
       reminderDays: license.reminderDays || "",
       reminderPolicy: license.reminderPolicy || "",
       renewalStatus: (license.renewalStatus as "Under Processing" | "Canceled" | "Rejected" | "Resubmitted" | "Approved" | undefined) || undefined,
-      renewalSubmittedDate: license.renewalSubmittedDate || "",
+      // renewalSubmittedDate removed
       expectedCompletedDate: license.expectedCompletedDate || "",
-      applicationReferenceNo: license.applicationReferenceNo || "",
       renewalInitiatedDate: license.renewalInitiatedDate || "",
       submittedBy: license.submittedBy || "",
-      paymentReferenceNo: license.paymentReferenceNo || "",
       renewalAmount: typeof license.renewalAmount === 'number' ? license.renewalAmount : undefined,
       renewalStatusReason: (license as any).renewalStatusReason || "",
       renewalAttachments: (() => {
@@ -938,6 +1435,7 @@ export default function GovernmentLicense() {
   // Handle add new
   const handleAddNew = () => {
   setEditingLicense(null);
+  setSelectedDepartments([]);
   form.reset();
   setIsModalOpen(true);
   };
@@ -1091,7 +1589,7 @@ export default function GovernmentLicense() {
                   <Table className="w-full">
                     <TableHeader className="bg-gray-50">
                       <TableRow>
-                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Licence Type</TableHead>
+                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">License Type</TableHead>
                         <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Issuing Authority</TableHead>
                         <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Issue Date</TableHead>
                         <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Expiry Date</TableHead>
@@ -1242,14 +1740,7 @@ export default function GovernmentLicense() {
                     Submission
                   </Button>
                 )}
-                {showSubmissionDetails && (
-                  <div className="hidden sm:flex items-center gap-2 text-sm text-white/90">
-                    <span className="opacity-80">License No.</span>
-                    <span className="font-semibold text-white">
-                      {String(form.watch('licenseNo') || editingLicense?.licenseNo || editingLicense?.id || '').trim() || '-'}
-                    </span>
-                  </div>
-                )}
+                {/* License No. display removed */}
                 <Button
                   type="button"
                   variant="outline"
@@ -1268,17 +1759,45 @@ export default function GovernmentLicense() {
                 {showSubmissionDetails && (
                   <>
                     <div className={`grid gap-6 mb-8 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2'}`}>
-                        <FormField
+                        {/* Application Reference no. field removed */}
+
+                         <FormField
                           control={form.control}
-                          name="applicationReferenceNo"
+                          name="renewalStatus"
                           render={({ field }) => (
                             <FormItem className="md:col-span-2">
                               <FormLabel className="block text-sm font-medium text-slate-700">
-                                Application Reference no.:
+                                Renewal Status:
                                 <span className="text-red-500"> *</span>
                               </FormLabel>
                               <FormControl>
-                                <Input className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" {...field} />
+                                <Select
+                                  value={field.value}
+                                  onValueChange={(val) => {
+                                    const prev = String(field.value || '');
+                                    setPreviousRenewalStatus(prev);
+
+                                    if (val === 'Canceled' || val === 'Rejected') {
+                                      setPendingRenewalStatus(val);
+                                      setReasonModalTitle(val === 'Canceled' ? 'Cancellation Reason' : 'Rejection Reason');
+                                      setRenewalStatusReasonDraft(String(form.getValues('renewalStatusReason') || ''));
+                                      setShowRenewalStatusReasonModal(true);
+                                    }
+
+                                    field.onChange(val);
+                                  }}
+                                >
+                                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
+                                    <SelectItem value="Under Processing" className="text-slate-900 hover:bg-blue-50">Under Processing</SelectItem>
+                                    <SelectItem value="Approved" className="text-slate-900 hover:bg-blue-50">Approved</SelectItem>
+                                    <SelectItem value="Rejected" className="text-slate-900 hover:bg-blue-50">Rejected</SelectItem>
+                                    <SelectItem value="Resubmitted" className="text-slate-900 hover:bg-blue-50">Resubmitted</SelectItem>
+                                    <SelectItem value="Canceled" className="text-slate-900 hover:bg-blue-50">Canceled</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -1333,6 +1852,7 @@ export default function GovernmentLicense() {
                                   value={String(field.value || '')}
                                   onChange={field.onChange}
                                   employees={employeesRaw as any}
+                                  onAddNew={() => setEmployeeModal({ show: true, target: 'submittedBy' })}
                                 />
                               </FormControl>
                               <FormMessage className="text-red-500" />
@@ -1340,22 +1860,7 @@ export default function GovernmentLicense() {
                           )}
                         />
 
-                        <FormField
-                          control={form.control}
-                          name="paymentReferenceNo"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="block text-sm font-medium text-slate-700">
-                                Payment Reference no.:
-                                <span className="text-red-500"> *</span>
-                              </FormLabel>
-                              <FormControl>
-                                <Input className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                        {/* Payment Reference no. field removed */}
 
                         <FormField
                           control={form.control}
@@ -1415,62 +1920,9 @@ export default function GovernmentLicense() {
                           )}
                         />
 
-                        <FormField
-                          control={form.control}
-                          name="renewalStatus"
-                          render={({ field }) => (
-                            <FormItem className="md:col-span-2">
-                              <FormLabel className="block text-sm font-medium text-slate-700">
-                                Renewal Status:
-                                <span className="text-red-500"> *</span>
-                              </FormLabel>
-                              <FormControl>
-                                <Select
-                                  value={field.value}
-                                  onValueChange={(val) => {
-                                    const prev = String(field.value || '');
-                                    setPreviousRenewalStatus(prev);
+                       
 
-                                    if (val === 'Canceled' || val === 'Rejected') {
-                                      setPendingRenewalStatus(val);
-                                      setReasonModalTitle(val === 'Canceled' ? 'Cancellation Reason' : 'Rejection Reason');
-                                      setRenewalStatusReasonDraft(String(form.getValues('renewalStatusReason') || ''));
-                                      setShowRenewalStatusReasonModal(true);
-                                    }
-
-                                    field.onChange(val);
-                                  }}
-                                >
-                                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                                    <SelectItem value="Under Processing" className="text-slate-900 hover:bg-blue-50">Under Processing</SelectItem>
-                                    <SelectItem value="Approved" className="text-slate-900 hover:bg-blue-50">Approved</SelectItem>
-                                    <SelectItem value="Rejected" className="text-slate-900 hover:bg-blue-50">Rejected</SelectItem>
-                                    <SelectItem value="Resubmitted" className="text-slate-900 hover:bg-blue-50">Resubmitted</SelectItem>
-                                    <SelectItem value="Canceled" className="text-slate-900 hover:bg-blue-50">Canceled</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="renewalSubmittedDate"
-                          render={({ field }) => (
-                            <FormItem className="md:col-span-2">
-                              <FormLabel className="block text-sm font-medium text-slate-700">Renewal Submitted date</FormLabel>
-                              <FormControl>
-                                <Input className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" type="date" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                        {/* Renewal Submitted date field removed */}
                     </div>
                   </>
                 )}
@@ -1483,9 +1935,9 @@ export default function GovernmentLicense() {
                     <h3 className="text-base font-semibold text-slate-800 px-6 py-4 border-b border-gray-200 bg-gray-50">General Info</h3>
                     <div className="p-6">
                     <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-4' : 'grid-cols-2'}`}>
-                      {/* Licence Type */}
+                      {/* License Type */}
                       <div className="space-y-2">
-                        <label className="block text-sm font-medium text-slate-700">Licence Title/Type</label>
+                        <label className="block text-sm font-medium text-slate-700">License Title/Type</label>
                         <Input
                           className={`w-full border-slate-300 rounded-lg p-2.5 text-base ${licenseNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                           value={form.watch('licenseName') || ''}
@@ -1508,19 +1960,9 @@ export default function GovernmentLicense() {
                         )}
                       </div>
 
-                      {/* Licence No. */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-slate-700">Licence No.</label>
-                        <Input
-                          type="text"
-                          inputMode="text"
-                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                          value={form.watch('licenseNo') || ''}
-                          onChange={(e) => form.setValue('licenseNo', e.target.value)}
-                        />
-                      </div>
+                      {/* License No. field removed */}
 
-                      {/* Responsible Person - exact dropdown pattern from SubscriptionModal Owner */}
+                      {/* Responsible Person - exact dropdown pattern from SubscriptionModal Owner (with + New) */}
                       <FormField
                         control={form.control}
                         name="responsiblePerson"
@@ -1539,9 +1981,17 @@ export default function GovernmentLicense() {
                                 setResponsiblePersonSearch('');
                               }
                             }
+
+                            const dialogEl = responsiblePersonDropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
+                            function handleDialogScroll() {
+                              setResponsiblePersonOpen(false);
+                              setResponsiblePersonSearch('');
+                            }
                             document.addEventListener('mousedown', handleClickOutside);
+                            dialogEl?.addEventListener('scroll', handleDialogScroll, { passive: true });
                             return () => {
                               document.removeEventListener('mousedown', handleClickOutside);
+                              dialogEl?.removeEventListener('scroll', handleDialogScroll);
                             };
                           }, [responsiblePersonOpen]);
 
@@ -1594,7 +2044,11 @@ export default function GovernmentLicense() {
                                 />
                               </div>
                               {responsiblePersonOpen && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
+                                <div
+                                  className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-auto overscroll-contain custom-scrollbar"
+                                  onWheel={(e) => e.stopPropagation()}
+                                  onTouchMove={(e) => e.stopPropagation()}
+                                >
                                   {filtered.length > 0 ? (
                                     filtered.map(opt => (
                                       <div
@@ -1631,6 +2085,273 @@ export default function GovernmentLicense() {
                                   ) : (
                                     <div className="dropdown-item disabled text-gray-400">No employees found</div>
                                   )}
+
+                                  <div
+                                    className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                                    style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                                    onClick={() => {
+                                      setEmployeeModal({ show: true, target: 'responsiblePerson' });
+                                      setResponsiblePersonOpen(false);
+                                      setResponsiblePersonSearch('');
+                                    }}
+                                  >
+                                    + New
+                                  </div>
+                                </div>
+                              )}
+                              <FormMessage className="text-red-500" />
+                            </FormItem>
+                          );
+                        }}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="departments"
+                        render={() => {
+                          const [deptOpen, setDeptOpen] = useState(false);
+                          const deptDropdownRef = useRef<HTMLDivElement>(null);
+                          useEffect(() => {
+                            if (!deptOpen) return;
+                            function handleClickOutside(event: MouseEvent) {
+                              if (deptDropdownRef.current && !deptDropdownRef.current.contains(event.target as Node)) {
+                                setDeptOpen(false);
+                              }
+                            }
+                            document.addEventListener('mousedown', handleClickOutside);
+                            return () => {
+                              document.removeEventListener('mousedown', handleClickOutside);
+                            };
+                          }, [deptOpen]);
+                          return (
+                            <FormItem className="relative" ref={deptDropdownRef}>
+                              <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
+                              <div className="relative">
+                                <div
+                                  className="w-full border border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200"
+                                  onClick={() => setDeptOpen(true)}
+                                  tabIndex={0}
+                                  onFocus={() => setDeptOpen(true)}
+                                >
+                                  {selectedDepartments.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 w-full">
+                                      {selectedDepartments.map((dept) => (
+                                        <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
+                                          <span className="truncate max-w-[80px]">{dept}</span>
+                                          <button
+                                            type="button"
+                                            data-remove-dept="true"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              removeDepartment(dept);
+                                            }}
+                                            className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
+                                            tabIndex={-1}
+                                          >
+                                            <X className="h-3 w-3" data-remove-dept="true" />
+                                          </button>
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-400">Select departments</span>
+                                  )}
+                                  <ChevronDown
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeptOpen(!deptOpen);
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                              {selectedDepartments.includes('Company Level') && (
+                                <p className="mt-1 text-xs text-slate-500">All departments are selected</p>
+                              )}
+                              {deptOpen && (
+                                <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
+                                  <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
+                                    <Checkbox
+                                      id="dept-company-level"
+                                      checked={selectedDepartments.includes('Company Level')}
+                                      onCheckedChange={(checked: boolean) => handleDepartmentChange('Company Level', checked)}
+                                      disabled={departmentsLoading}
+                                    />
+                                    <label
+                                      htmlFor="dept-company-level"
+                                      className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
+                                    >
+                                      Company Level
+                                    </label>
+                                  </div>
+                                  {Array.isArray(departments) && departments.length > 0
+                                    ? departments
+                                        .filter(dept => dept.visible)
+                                        .map(dept => (
+                                          <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                                            <Checkbox
+                                              id={`dept-${dept.name}`}
+                                              checked={selectedDepartments.includes(dept.name)}
+                                              onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
+                                              disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
+                                            />
+                                            <label
+                                              htmlFor={`dept-${dept.name}`}
+                                              className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                                            >
+                                              {dept.name}
+                                            </label>
+                                          </div>
+                                        ))
+                                    : null}
+                                  <div
+                                    className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                                    style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                                    onClick={() => setDepartmentModal({ show: true })}
+                                  >
+                                    + New
+                                  </div>
+                                  {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
+                                    <div className="dropdown-item disabled text-gray-400">No departments found</div>
+                                  )}
+                                </div>
+                              )}
+                              <FormMessage className="text-red-500" />
+                            </FormItem>
+                          );
+                        }}
+                      />
+
+                      {/* Secondary Person - match SubscriptionModal Owner dropdown (with + New) */}
+                      <FormField
+                        control={form.control}
+                        name="secondaryPerson"
+                        render={({ field }) => {
+                          const [secondaryOpen, setSecondaryOpen] = useState(false);
+                          const [secondarySearch, setSecondarySearch] = useState('');
+                          const secondaryDropdownRef = useRef<HTMLDivElement>(null);
+                          useEffect(() => {
+                            if (!secondaryOpen) return;
+                            function handleClickOutside(event: MouseEvent) {
+                              if (secondaryDropdownRef.current && !secondaryDropdownRef.current.contains(event.target as Node)) {
+                                setSecondaryOpen(false);
+                                setSecondarySearch('');
+                              }
+                            }
+
+                            const dialogEl = secondaryDropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
+                            function handleDialogScroll() {
+                              setSecondaryOpen(false);
+                              setSecondarySearch('');
+                            }
+                            document.addEventListener('mousedown', handleClickOutside);
+                            dialogEl?.addEventListener('scroll', handleDialogScroll, { passive: true });
+                            return () => {
+                              document.removeEventListener('mousedown', handleClickOutside);
+                              dialogEl?.removeEventListener('scroll', handleDialogScroll);
+                            };
+                          }, [secondaryOpen]);
+
+                          const options = employeesRaw.length > 0
+                            ? employeesRaw.map((emp: any) => {
+                                const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
+                                const displayName = duplicateNames.length > 1
+                                  ? `${emp.name} (${emp.email})`
+                                  : emp.name;
+                                const uniqueValue = duplicateNames.length > 1
+                                  ? `${emp.name}|${emp.email}`
+                                  : emp.name;
+                                return { displayName, uniqueValue, name: emp.name, email: emp.email };
+                              })
+                            : [];
+
+                          const normalizedSearch = secondarySearch.trim().toLowerCase();
+                          const filtered = normalizedSearch
+                            ? options.filter(opt => (opt.displayName || '').toLowerCase().includes(normalizedSearch))
+                            : options;
+
+                          return (
+                            <FormItem className="relative" ref={secondaryDropdownRef}>
+                              <FormLabel className="block text-sm font-medium text-slate-700">Secondary Person</FormLabel>
+                              <div className="relative">
+                                <Input
+                                  value={secondaryOpen ? secondarySearch : (field.value || '')}
+                                  className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base cursor-pointer"
+                                  onChange={(e) => {
+                                    setSecondarySearch(e.target.value);
+                                    if (!secondaryOpen) setSecondaryOpen(true);
+                                  }}
+                                  onFocus={() => {
+                                    setSecondarySearch(field.value || '');
+                                    setSecondaryOpen(true);
+                                  }}
+                                  onClick={() => {
+                                    setSecondarySearch(field.value || '');
+                                    setSecondaryOpen(true);
+                                  }}
+                                />
+                                <ChevronDown
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                                  onClick={() => {
+                                    if (!secondaryOpen) setSecondarySearch(field.value || '');
+                                    setSecondaryOpen(!secondaryOpen);
+                                    if (secondaryOpen) setSecondarySearch('');
+                                  }}
+                                />
+                              </div>
+                              {secondaryOpen && (
+                                <div
+                                  className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-auto overscroll-contain custom-scrollbar"
+                                  onWheel={(e) => e.stopPropagation()}
+                                  onTouchMove={(e) => e.stopPropagation()}
+                                >
+                                  {filtered.length > 0 ? (
+                                    filtered.map(opt => (
+                                      <div
+                                        key={opt.uniqueValue}
+                                        className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                                        onClick={() => {
+                                          const value = opt.uniqueValue;
+                                          if (field.value === opt.uniqueValue || field.value === opt.name) {
+                                            field.onChange('');
+                                            setSecondaryOpen(false);
+                                            setSecondarySearch('');
+                                            return;
+                                          }
+
+                                          const emp = employeesRaw.find((e: any) => {
+                                            if (value.includes('|')) {
+                                              const [name, email] = value.split('|');
+                                              return e.name === name && e.email === email;
+                                            }
+                                            return e.name === value;
+                                          });
+                                          field.onChange(emp?.name || value);
+                                          setSecondaryOpen(false);
+                                          setSecondarySearch('');
+                                        }}
+                                      >
+                                        <Check
+                                          className={`mr-2 h-4 w-4 text-blue-600 ${field.value === opt.uniqueValue ? "opacity-100" : "opacity-0"}`}
+                                        />
+                                        <span className="font-normal">{opt.displayName}</span>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="dropdown-item disabled text-gray-400">No employees found</div>
+                                  )}
+                                  <div
+                                    className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                                    style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                                    onClick={() => {
+                                      setEmployeeModal({ show: true, target: 'secondaryPerson' });
+                                      setSecondaryOpen(false);
+                                      setSecondarySearch('');
+                                    }}
+                                  >
+                                    + New
+                                  </div>
                                 </div>
                               )}
                               <FormMessage className="text-red-500" />
@@ -1760,15 +2481,7 @@ export default function GovernmentLicense() {
                       {/* Renewel freq */}
                      
 
-                      {/* Remarks */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-slate-700">Remarks</label>
-                        <Input
-                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                          value={form.watch('details') || ''}
-                          onChange={(e) => form.setValue('details', e.target.value)}
-                        />
-                      </div>
+                      {/* Remarks field removed */}
                     </div>
                     </div>
                   </div>
@@ -2308,6 +3021,353 @@ export default function GovernmentLicense() {
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Department Creation Modal (match Subscription modal) */}
+            <AlertDialog open={departmentModal.show} onOpenChange={(open) => !open && setDepartmentModal({ show: false })}>
+              <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl font-inter">
+                <AlertDialogHeader className="bg-indigo-600 text-white p-6 rounded-t-lg -m-6 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white/20 p-2 rounded-lg">
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm2 6a2 2 0 104 0 2 2 0 00-4 0zm6 0a2 2 0 104 0 2 2 0 00-4 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <AlertDialogTitle className="text-xl font-semibold text-white">Add New Department</AlertDialogTitle>
+                  </div>
+                </AlertDialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Department Name</label>
+                    <Input
+                      placeholder=""
+                      value={newDepartmentName}
+                      onChange={(e) => setNewDepartmentName(e.target.value)}
+                      className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddDepartment();
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Department Head</label>
+                    <div className="relative" ref={deptHeadDropdownRef}>
+                      <div className="relative">
+                        <Input
+                          value={deptHeadSearch}
+                          placeholder="Select employee"
+                          className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10"
+                          onFocus={() => setDeptHeadOpen(true)}
+                          onClick={() => setDeptHeadOpen(true)}
+                          onChange={(e) => {
+                            setDeptHeadSearch(e.target.value);
+                            setDeptHeadOpen(true);
+                            setNewDepartmentHead('');
+                            setNewDepartmentEmail('');
+                            setNewDepartmentEmailError('');
+                            setIsDepartmentEmailLocked(false);
+                          }}
+                          autoComplete="off"
+                        />
+                        <ChevronDown
+                          className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                          onClick={() => setDeptHeadOpen(!deptHeadOpen)}
+                        />
+                      </div>
+
+                      {deptHeadOpen && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                          {(Array.isArray(employeesRaw) ? (employeesRaw as any[]) : [])
+                            .filter((emp: any) => {
+                              const q = deptHeadSearch.trim().toLowerCase();
+                              if (!q) return true;
+                              return (
+                                String(emp?.name || '').toLowerCase().includes(q) ||
+                                String(emp?.email || '').toLowerCase().includes(q)
+                              );
+                            })
+                            .map((emp: any) => {
+                              const selected = newDepartmentHead === emp.name;
+                              return (
+                                <div
+                                  key={emp._id || emp.id || emp.email}
+                                  className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                    selected ? 'bg-blue-50 text-blue-700' : ''
+                                  }`}
+                                  onClick={() => {
+                                    setNewDepartmentHead(String(emp.name || '').trim());
+                                    setDeptHeadSearch(String(emp.name || '').trim());
+                                    setDeptHeadOpen(false);
+                                  }}
+                                >
+                                  <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                  <span className="font-normal">{emp.name}</span>
+                                </div>
+                              );
+                            })}
+
+                          {(Array.isArray(employeesRaw) ? (employeesRaw as any[]) : []).length === 0 && (
+                            <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                    <Input
+                      type="email"
+                      placeholder=""
+                      value={newDepartmentEmail}
+                      onChange={(e) => {
+                        if (!isDepartmentEmailLocked) {
+                          setNewDepartmentEmail(e.target.value);
+                          setNewDepartmentEmailError('');
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!isDepartmentEmailLocked) {
+                          const validation = validateEmail(newDepartmentEmail);
+                          if (!validation.valid) {
+                            setNewDepartmentEmailError(validation.error || 'Invalid email');
+                          }
+                        }
+                      }}
+                      className={`w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+                        newDepartmentEmailError ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
+                      } ${isDepartmentEmailLocked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddDepartment();
+                        }
+                      }}
+                      readOnly={isDepartmentEmailLocked}
+                    />
+                    {newDepartmentEmailError && (
+                      <p className="text-red-600 text-sm mt-1">{newDepartmentEmailError}</p>
+                    )}
+                  </div>
+                </div>
+                <AlertDialogFooter className="flex gap-2 mt-6">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setDepartmentModal({ show: false });
+                      setNewDepartmentName('');
+                      setNewDepartmentHead('');
+                      setDeptHeadSearch('');
+                      setDeptHeadOpen(false);
+                      setNewDepartmentEmail('');
+                      setNewDepartmentEmailError('');
+                    }}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleAddDepartment}
+                    disabled={!newDepartmentName.trim() || !newDepartmentHead.trim() || !newDepartmentEmail.trim() || !!newDepartmentEmailError}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
+                  >
+                    Add Department
+                  </Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Employee Creation Modal (match Subscription modal Owner Creation) */}
+            <AlertDialog open={employeeModal.show} onOpenChange={(open) => !open && setEmployeeModal({ show: false })}>
+              <AlertDialogContent className="sm:max-w-[500px] bg-white border border-gray-200 shadow-2xl font-inter">
+                <AlertDialogHeader className="bg-indigo-600 text-white p-6 rounded-t-lg -m-6 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white/20 p-2 rounded-lg">
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <AlertDialogTitle className="text-xl font-semibold text-white">Add Employee</AlertDialogTitle>
+                  </div>
+                </AlertDialogHeader>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                      <Input
+                        placeholder=""
+                        value={newEmployeeName}
+                        onChange={(e) => setNewEmployeeName(e.target.value)}
+                        className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleAddEmployee();
+                          }
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                      <Input
+                        type="email"
+                        placeholder=""
+                        value={newEmployeeEmail}
+                        onChange={(e) => {
+                          setNewEmployeeEmail(e.target.value);
+                          setNewEmployeeEmailError('');
+                        }}
+                        onBlur={() => {
+                          if (newEmployeeEmail) {
+                            const result = validateEmail(newEmployeeEmail);
+                            if (!result.valid) {
+                              setNewEmployeeEmailError(result.error || 'Invalid email address');
+                            }
+                          }
+                        }}
+                        className={`w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+                          newEmployeeEmailError ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
+                        }`}
+                      />
+                      {newEmployeeEmailError && (
+                        <p className="text-red-600 text-sm font-medium mt-1">{newEmployeeEmailError}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                      <div className="relative" ref={employeeDeptDropdownRef}>
+                        <div className="relative">
+                          <Input
+                            value={employeeDeptSearch}
+                            placeholder="Select department"
+                            className={`w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10 cursor-pointer ${
+                              !newEmployeeDepartment ? 'border-red-300' : ''
+                            }`}
+                            onFocus={() => setEmployeeDeptOpen(true)}
+                            onClick={() => setEmployeeDeptOpen(true)}
+                            onChange={(e) => {
+                              setEmployeeDeptSearch(e.target.value);
+                              setEmployeeDeptOpen(true);
+                              setNewEmployeeDepartment('');
+                            }}
+                            autoComplete="off"
+                          />
+                          <ChevronDown
+                            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                            onClick={() => setEmployeeDeptOpen(!employeeDeptOpen)}
+                          />
+                        </div>
+
+                        {employeeDeptOpen && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                            {(Array.isArray(departments) ? departments : [])
+                              .filter((dept) => Boolean((dept as any)?.visible))
+                              .filter((dept) => {
+                                const q = employeeDeptSearch.trim().toLowerCase();
+                                if (!q) return true;
+                                return String((dept as any)?.name || '').toLowerCase().includes(q);
+                              })
+                              .map((dept) => {
+                                const selected = newEmployeeDepartment === (dept as any).name;
+                                return (
+                                  <div
+                                    key={(dept as any).name}
+                                    className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                      selected ? 'bg-blue-50 text-blue-700' : ''
+                                    }`}
+                                    onClick={() => {
+                                      setNewEmployeeDepartment(String((dept as any).name || '').trim());
+                                      setEmployeeDeptSearch(String((dept as any).name || '').trim());
+                                      setEmployeeDeptOpen(false);
+                                    }}
+                                  >
+                                    <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                    <span className="font-normal">{(dept as any).name}</span>
+                                  </div>
+                                );
+                              })}
+
+                            {Array.isArray(departments) && departments.filter((d: any) => d?.visible).length === 0 && (
+                              <div className="px-3 py-2.5 text-sm text-slate-500">No departments found</div>
+                            )}
+
+                            <div
+                              className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                              style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                              onClick={() => {
+                                setDepartmentModal({ show: true });
+                                setEmployeeDeptOpen(false);
+                              }}
+                            >
+                              + New
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {!newEmployeeDepartment && newEmployeeName && (
+                        <p className="text-red-600 text-sm font-medium mt-1">Department is required</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                      <Input
+                        placeholder=""
+                        value={newEmployeeRole}
+                        onChange={(e) => setNewEmployeeRole(e.target.value)}
+                        className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                      <Select value={newEmployeeStatus} onValueChange={setNewEmployeeStatus}>
+                        <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+                <AlertDialogFooter className="flex gap-2 mt-6">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEmployeeModal({ show: false });
+                      setNewEmployeeName('');
+                      setNewEmployeeEmail('');
+                      setNewEmployeeRole('');
+                      setNewEmployeeStatus('active');
+                      setNewEmployeeDepartment('');
+                      setNewEmployeeEmailError('');
+                      setEmployeeDeptSearch('');
+                      setEmployeeDeptOpen(false);
+                    }}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleAddEmployee}
+                    disabled={!newEmployeeName.trim() || !newEmployeeEmail.trim() || !newEmployeeDepartment || newEmployeeEmailError !== ''}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                    </svg>
+                    Create User
+                  </Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </DialogContent>
         </Dialog>
         

@@ -44,10 +44,185 @@ interface Department {
   visible: boolean;
 }
 
+// Comprehensive Email Validation Function
 const validateEmail = (email: string): { valid: boolean; error?: string } => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const isValid = emailRegex.test(email.trim());
-  return { valid: isValid, error: isValid ? undefined : "Invalid email address" };
+  // Rule 1: Required - Not empty
+  if (!email || email.trim() === '') {
+    return { valid: false, error: 'Email is required' };
+  }
+
+  const trimmedEmail = email.trim();
+
+  // Rule 2: Max length ≤ 254 characters
+  if (trimmedEmail.length > 254) {
+    return { valid: false, error: 'Email must be 254 characters or less' };
+  }
+
+  // Rule 3: No spaces
+  if (/\s/.test(trimmedEmail)) {
+    return { valid: false, error: 'Email cannot contain spaces' };
+  }
+
+  // Rule 4: One @ only
+  const atCount = (trimmedEmail.match(/@/g) || []).length;
+  if (atCount !== 1) {
+    return { valid: false, error: 'Email must contain exactly one @ symbol' };
+  }
+
+  const [localPart, domain] = trimmedEmail.split('@');
+
+  // Rule 5: Local part limit - Before @ ≤ 64 chars
+  if (localPart.length > 64) {
+    return { valid: false, error: 'Email username must be 64 characters or less' };
+  }
+
+  // Rule 6: Domain exists - After @ not empty
+  if (!domain || domain.length === 0) {
+    return { valid: false, error: 'Email domain is required' };
+  }
+
+  // Rule 7: No consecutive dots
+  if (/\.\./.test(trimmedEmail)) {
+    return { valid: false, error: 'Email cannot contain consecutive dots' };
+  }
+
+  // Rule 8: No leading/trailing dots in local part
+  if (localPart.startsWith('.') || localPart.endsWith('.')) {
+    return { valid: false, error: 'Email username cannot start or end with a dot' };
+  }
+
+  // Rule 9: Domain has dot - At least one . in domain
+  if (!domain.includes('.')) {
+    return { valid: false, error: 'Email domain must contain a dot' };
+  }
+  
+  // Rule 9.5: Check for suspicious patterns like double TLDs (e.g., .com.com, .org.net)
+  const domainParts = domain.split('.');
+  if (domainParts.length > 2) {
+    // Check if any part before the last one looks like a TLD
+    const commonTLDs = ['com', 'org', 'net', 'edu', 'gov', 'mil', 'int', 'co', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'jp', 'cn', 'in', 'br', 'ru', 'io', 'ai'];
+    for (let i = 0; i < domainParts.length - 1; i++) {
+      if (commonTLDs.includes(domainParts[i].toLowerCase())) {
+        return { valid: false, error: 'Email domain has invalid format (duplicate domain extension detected)' };
+      }
+    }
+  }
+
+  // Rule 10: Valid TLD - ≥ 2 characters and ≤ 6 characters, only letters
+  const tld = domainParts[domainParts.length - 1];
+  if (tld.length < 2) {
+    return { valid: false, error: 'Email domain extension must be at least 2 characters' };
+  }
+  if (tld.length > 6) {
+    return { valid: false, error: 'Email domain extension must be 6 characters or less' };
+  }
+  // TLD should only contain letters
+  if (!/^[a-zA-Z]+$/.test(tld)) {
+    return { valid: false, error: 'Email domain extension must contain only letters' };
+  }
+  
+  // Rule 11: Additional check - Validate against common TLDs for better accuracy
+  const commonTLDs = [
+    'com', 'org', 'net', 'edu', 'gov', 'mil', 'int',
+    'co', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'jp', 'cn', 'in', 'br', 'ru',
+    'io', 'ai', 'app', 'dev', 'tech', 'info', 'biz', 'name', 'pro',
+    'email', 'online', 'site', 'store', 'cloud', 'digital', 'global',
+    'xyz', 'top', 'vip', 'club', 'shop', 'live', 'today', 'world'
+  ];
+  
+  if (!commonTLDs.includes(tld.toLowerCase())) {
+    return { valid: false, error: 'Please enter a valid email domain extension (e.g., .com, .org, .net)' };
+  }
+
+  // Rule 12: Valid characters in local part - Only allowed chars
+  const validLocalRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+  if (!validLocalRegex.test(localPart)) {
+    return { valid: false, error: 'Email username contains invalid characters' };
+  }
+
+  // Rule 13: Domain parts (except TLD) can contain letters, numbers, and hyphens
+  for (let i = 0; i < domainParts.length - 1; i++) {
+    if (!/^[a-zA-Z0-9-]+$/.test(domainParts[i])) {
+      return { valid: false, error: 'Email domain contains invalid characters' };
+    }
+  }
+
+  // Rule 14: Domain format - No - or . at edges
+  if (domain.startsWith('-') || domain.startsWith('.') || domain.endsWith('-') || domain.endsWith('.')) {
+    return { valid: false, error: 'Email domain cannot start or end with a hyphen or dot' };
+  }
+
+  // Rule 15: Check each domain part doesn't start/end with hyphen
+  for (const part of domainParts) {
+    if (part.startsWith('-') || part.endsWith('-')) {
+      return { valid: false, error: 'Email domain parts cannot start or end with a hyphen' };
+    }
+    if (part.length === 0) {
+      return { valid: false, error: 'Email domain cannot have empty parts' };
+    }
+  }
+  
+  // Rule 16: Check for repeated characters in domain name (suspicious pattern)
+  const domainName = domainParts[domainParts.length - 2]; // Get the part before TLD (e.g., "gmail" from "gmail.com")
+  if (domainName) {
+    // Check for 4+ consecutive repeated characters (e.g., "gmaillll")
+    if (/(.)\1{3,}/.test(domainName)) {
+      return { valid: false, error: 'Email domain contains suspicious repeated characters' };
+    }
+  }
+  
+  // Rule 17: Validate common email providers with correct spelling
+  const knownProviders = {
+    'gmail': 'gmail.com',
+    'yahoo': 'yahoo.com',
+    'outlook': 'outlook.com',
+    'hotmail': 'hotmail.com',
+    'icloud': 'icloud.com',
+    'protonmail': 'protonmail.com',
+    'aol': 'aol.com',
+    'zoho': 'zoho.com'
+  };
+  
+  const fullDomain = domain.toLowerCase();
+  for (const [provider, correctDomain] of Object.entries(knownProviders)) {
+    // Check if domain starts with provider name but isn't exactly correct
+    if (fullDomain.startsWith(provider) && fullDomain !== correctDomain) {
+      // Allow subdomains like mail.google.com, but not gmaillll.com
+      const afterProvider = fullDomain.substring(provider.length);
+      if (!afterProvider.startsWith('.') && afterProvider.length > 0) {
+        return { valid: false, error: `Did you mean ${correctDomain}? Please check the spelling` };
+      }
+    }
+  }
+  
+  // Rule 18: Check minimum domain name length (before TLD)
+  if (domainName && domainName.length < 2) {
+    return { valid: false, error: 'Email domain name must be at least 2 characters' };
+  }
+  
+  // Rule 19: No special characters at start/end of local part
+  if (/^[^a-zA-Z0-9]/.test(localPart) || /[^a-zA-Z0-9]$/.test(localPart)) {
+    return { valid: false, error: 'Email username must start and end with a letter or number' };
+  }
+  
+  // Rule 20: Check for common typos in TLD
+  const typoTLDs: { [key: string]: string } = {
+    'con': 'com',
+    'cmo': 'com',
+    'ocm': 'com',
+    'comm': 'com',
+    'comn': 'com',
+    'rog': 'org',
+    'ogr': 'org',
+    'nte': 'net',
+    'ent': 'net'
+  };
+  
+  if (typoTLDs[tld.toLowerCase()]) {
+    return { valid: false, error: `Did you mean .${typoTLDs[tld.toLowerCase()]}? Please check the spelling` };
+  }
+
+  return { valid: true };
 };
 
 // Helper functions remain the same
@@ -253,6 +428,19 @@ export default function Compliance() {
   const [ownerOpen, setOwnerOpen] = useState(false);
   const [ownerSearch, setOwnerSearch] = useState('');
   const ownerDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Owner '+ New' employee creation modal (match Subscription modal)
+  const [ownerModal, setOwnerModal] = useState<{ show: boolean }>({ show: false });
+  const [newOwnerName, setNewOwnerName] = useState<string>('');
+  const [newOwnerEmail, setNewOwnerEmail] = useState<string>('');
+  const [newOwnerEmailError, setNewOwnerEmailError] = useState<string>('');
+  const [newOwnerRole, setNewOwnerRole] = useState<string>('');
+  const [newOwnerStatus, setNewOwnerStatus] = useState<string>('active');
+  const [newOwnerDepartment, setNewOwnerDepartment] = useState<string>('');
+
+  const [ownerDeptOpen, setOwnerDeptOpen] = useState(false);
+  const [ownerDeptSearch, setOwnerDeptSearch] = useState('');
+  const ownerDeptDropdownRef = useRef<HTMLDivElement>(null);
 
   // Payment Method dropdown + modal (matching subscription modal logic)
   const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
@@ -534,7 +722,7 @@ export default function Compliance() {
   }, []);
   
   // Fetch employees for the submit by dropdown with auto-refresh
-  const { data: employees = [], isLoading: isLoadingEmployees } = useQuery({
+  const { data: employees = [], isLoading: isLoadingEmployees, refetch: refetchEmployees } = useQuery({
     queryKey: ["/api/employees"],
     queryFn: async () => {
       const response = await fetch("/api/employees");
@@ -733,6 +921,97 @@ export default function Compliance() {
     } catch (error) {
       console.error('Error adding department:', error);
       toast({ title: "Failed to add department", variant: "destructive" });
+    }
+  };
+
+  // Owner modal Department dropdown: close on outside click
+  useEffect(() => {
+    if (!ownerDeptOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (ownerDeptDropdownRef.current && !ownerDeptDropdownRef.current.contains(event.target as Node)) {
+        setOwnerDeptOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [ownerDeptOpen]);
+
+  // Keep Owner modal Department input text in sync when opening the modal
+  useEffect(() => {
+    if (ownerModal.show) {
+      setOwnerDeptSearch(newOwnerDepartment || '');
+    }
+  }, [ownerModal.show, newOwnerDepartment]);
+
+  // Handle adding new owner (employee)
+  const handleAddOwner = async () => {
+    if (!newOwnerName.trim() || !newOwnerEmail.trim()) return;
+
+    const emailValidation = validateEmail(newOwnerEmail.trim());
+    if (!emailValidation.valid) {
+      setNewOwnerEmailError(emailValidation.error || 'Invalid email address');
+      toast({
+        title: 'Invalid Email',
+        description: emailValidation.error || 'Please enter a valid email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!newOwnerDepartment) {
+      toast({
+        title: 'Department Required',
+        description: 'Please select a department',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const nameExists = (Array.isArray(employeesData) ? employeesData : []).some((emp: any) =>
+      getEmployeeName(emp).toLowerCase().trim() === newOwnerName.trim().toLowerCase()
+    );
+    if (nameExists) {
+      toast({ title: 'Error', description: 'An employee with this name already exists', variant: 'destructive' });
+      return;
+    }
+
+    const emailExists = (Array.isArray(employeesData) ? employeesData : []).some((emp: any) =>
+      getEmployeeEmail(emp).toLowerCase() === newOwnerEmail.trim().toLowerCase()
+    );
+    if (emailExists) {
+      toast({ title: 'Error', description: 'An employee with this email already exists', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      await apiRequest('POST', '/api/employees', {
+        name: newOwnerName.trim(),
+        email: newOwnerEmail.trim(),
+        role: newOwnerRole,
+        status: newOwnerStatus,
+        department: newOwnerDepartment,
+      });
+
+      await refetchEmployees();
+
+      setForm((prev: any) => ({ ...prev, owner: newOwnerName.trim() }));
+      setOwnerSearch('');
+      setOwnerOpen(false);
+
+      setNewOwnerName('');
+      setNewOwnerEmail('');
+      setNewOwnerEmailError('');
+      setNewOwnerRole('');
+      setNewOwnerStatus('active');
+      setNewOwnerDepartment('');
+      setOwnerModal({ show: false });
+
+      toast({ title: 'Success', description: 'Employee added successfully', variant: 'success' });
+    } catch (error) {
+      console.error('Error adding owner:', error);
+      toast({ title: 'Error', description: 'Failed to add employee. Please try again.', variant: 'destructive' });
     }
   };
 
@@ -2428,6 +2707,18 @@ export default function Compliance() {
                     {!isLoadingEmployees && (Array.isArray(employeesData) ? employeesData : []).length === 0 && (
                       <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
                     )}
+
+                    <div
+                      className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                      style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                      onClick={() => {
+                        setOwnerModal({ show: true });
+                        setOwnerOpen(false);
+                        setOwnerSearch('');
+                      }}
+                    >
+                      + New
+                    </div>
                   </div>
                 )}
               </div>
@@ -3465,6 +3756,197 @@ export default function Compliance() {
               className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
             >
               {isCreatingPaymentMethod ? 'Creating...' : 'Create Payment Method'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Owner Creation Modal (Add Employee) */}
+      <AlertDialog open={ownerModal.show} onOpenChange={(open) => !open && setOwnerModal({ show: false })}>
+        <AlertDialogContent className="sm:max-w-[500px] bg-white border border-gray-200 shadow-2xl font-inter">
+          <AlertDialogHeader className="bg-indigo-600 text-white p-6 rounded-t-lg -m-6 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-lg">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <AlertDialogTitle className="text-xl font-semibold text-white">Add Employee</AlertDialogTitle>
+            </div>
+          </AlertDialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <Input
+                  placeholder=""
+                  value={newOwnerName}
+                  onChange={(e) => setNewOwnerName(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddOwner();
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                <Input
+                  type="email"
+                  placeholder=""
+                  value={newOwnerEmail}
+                  onChange={(e) => {
+                    setNewOwnerEmail(e.target.value);
+                    setNewOwnerEmailError('');
+                  }}
+                  onBlur={() => {
+                    if (newOwnerEmail) {
+                      const result = validateEmail(newOwnerEmail);
+                      if (!result.valid) {
+                        setNewOwnerEmailError(result.error || 'Invalid email address');
+                      }
+                    }
+                  }}
+                  className={`w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+                    newOwnerEmailError ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
+                  }`}
+                />
+                {newOwnerEmailError && (
+                  <p className="text-red-600 text-sm font-medium mt-1">{newOwnerEmailError}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                <div className="relative" ref={ownerDeptDropdownRef}>
+                  <div className="relative">
+                    <Input
+                      value={ownerDeptSearch}
+                      placeholder="Select department"
+                      className={`w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10 cursor-pointer ${
+                        !newOwnerDepartment ? 'border-red-300' : ''
+                      }`}
+                      onFocus={() => setOwnerDeptOpen(true)}
+                      onClick={() => setOwnerDeptOpen(true)}
+                      onChange={(e) => {
+                        setOwnerDeptSearch(e.target.value);
+                        setOwnerDeptOpen(true);
+                        setNewOwnerDepartment('');
+                      }}
+                      autoComplete="off"
+                    />
+                    <ChevronDown
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                      onClick={() => setOwnerDeptOpen(!ownerDeptOpen)}
+                    />
+                  </div>
+
+                  {ownerDeptOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
+                      {(Array.isArray(departments) ? departments : [])
+                        .filter((dept: any) => Boolean(dept?.visible))
+                        .filter((dept: any) => {
+                          const q = ownerDeptSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return String(dept?.name || '').toLowerCase().includes(q);
+                        })
+                        .map((dept: any) => {
+                          const selected = newOwnerDepartment === dept.name;
+                          return (
+                            <div
+                              key={dept.name}
+                              className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                selected ? 'bg-blue-50 text-blue-700' : ''
+                              }`}
+                              onClick={() => {
+                                setNewOwnerDepartment(dept.name);
+                                setOwnerDeptSearch(dept.name);
+                                setOwnerDeptOpen(false);
+                              }}
+                            >
+                              <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                              <span className="font-normal">{dept.name}</span>
+                            </div>
+                          );
+                        })}
+
+                      {Array.isArray(departments) && departments.filter((d: any) => d?.visible).length === 0 && (
+                        <div className="px-3 py-2.5 text-sm text-slate-500">No departments found</div>
+                      )}
+
+                      <div
+                        className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                        style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                        onClick={() => {
+                          setDepartmentModal({ show: true });
+                          setOwnerDeptOpen(false);
+                        }}
+                      >
+                        + New
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {!newOwnerDepartment && newOwnerName && (
+                  <p className="text-red-600 text-sm font-medium mt-1">Department is required</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <Input
+                  placeholder=""
+                  value={newOwnerRole}
+                  onChange={(e) => setNewOwnerRole(e.target.value)}
+                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <Select value={newOwnerStatus} onValueChange={setNewOwnerStatus}>
+                  <SelectTrigger className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <AlertDialogFooter className="flex gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOwnerModal({ show: false });
+                setNewOwnerName('');
+                setNewOwnerEmail('');
+                setNewOwnerRole('');
+                setNewOwnerStatus('active');
+                setNewOwnerDepartment('');
+                setNewOwnerEmailError('');
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddOwner}
+              disabled={!newOwnerName.trim() || !newOwnerEmail.trim() || !newOwnerDepartment || newOwnerEmailError !== ''}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-gray-300"
+            >
+              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              Create User
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
