@@ -7,7 +7,7 @@ import { Can } from "@/components/Can";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown, X } from "lucide-react";
+import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
 import { useForm } from "react-hook-form";
@@ -22,6 +22,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -287,7 +288,17 @@ const licenseSchema = z
   department: z.string().optional(),
   departments: z.array(z.string()).optional(),
   status: z.enum(['Active', 'Expired', 'Cancelled']).optional(),
-  renewalStatus: z.enum(['Under Processing', 'Canceled', 'Rejected', 'Resubmitted', 'Approved']).optional(),
+  renewalStatus: z
+    .enum([
+      'Renewal Initiated',
+      'Application Submitted',
+      'Amendments/ Appeal Submitted',
+      'Resubmitted',
+      'Rejected',
+      'Cancelled',
+      'Approved',
+    ])
+    .optional(),
   issuingAuthorityEmail: z.string().optional(),
   issuingAuthorityPhone: z.string().optional(),
   // renewalSubmittedDate removed
@@ -309,16 +320,30 @@ const licenseSchema = z
   .superRefine((data, ctx) => {
     const start = String(data.startDate || '').trim();
     const end = String(data.endDate || '').trim();
-    if (!start || !end) return;
-    const startTime = new Date(start).getTime();
-    const endTime = new Date(end).getTime();
-    if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return;
-    if (endTime <= startTime) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['endDate'],
-        message: 'Expiry date must be after issue date',
-      });
+    if (start && end) {
+      const startTime = new Date(start).getTime();
+      const endTime = new Date(end).getTime();
+      if (Number.isFinite(startTime) && Number.isFinite(endTime) && endTime <= startTime) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['endDate'],
+          message: 'Expiry date must be after issue date',
+        });
+      }
+    }
+
+    const initiated = String(data.renewalInitiatedDate || '').trim();
+    const expected = String(data.expectedCompletedDate || '').trim();
+    if (initiated && expected) {
+      const initiatedTime = new Date(initiated).getTime();
+      const expectedTime = new Date(expected).getTime();
+      if (Number.isFinite(initiatedTime) && Number.isFinite(expectedTime) && expectedTime < initiatedTime) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['expectedCompletedDate'],
+          message: 'Expected completion date must be on or after renewal initiated date',
+        });
+      }
     }
   });
 
@@ -477,18 +502,42 @@ export default function GovernmentLicense() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [licenseToDelete, setLicenseToDelete] = useState<License | null>(null);
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   // Submission details view state
   const [showSubmissionDetails, setShowSubmissionDetails] = useState(false);
+  const [submissionOpenedFromTable, setSubmissionOpenedFromTable] = useState(false);
+
+  // Sorting state (match Subscriptions behavior)
+  const [sortField, setSortField] = useState<"licenseName" | "issuingAuthorityName" | "startDate" | "endDate" | "renewalFee" | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  // Snapshot of initial values when modal opens, used to decide whether to show exit confirmation
+  const initialFormSnapshotRef = useRef<LicenseFormData | null>(null);
+  const initialSelectedDepartmentsRef = useRef<string[]>([]);
+
+  const cloneSnapshot = (v: LicenseFormData): LicenseFormData => ({
+    ...v,
+    departments: Array.isArray(v.departments) ? [...v.departments] : [],
+    renewalAttachments: Array.isArray(v.renewalAttachments) ? [...v.renewalAttachments] : [],
+  });
 
   const [showRenewalDocumentsModal, setShowRenewalDocumentsModal] = useState(false);
   const [showRenewalStatusReasonModal, setShowRenewalStatusReasonModal] = useState(false);
   const [renewalStatusReasonDraft, setRenewalStatusReasonDraft] = useState('');
-  const [pendingRenewalStatus, setPendingRenewalStatus] = useState<string>('');
+  const [, setPendingRenewalStatus] = useState<string>('');
   const [previousRenewalStatus, setPreviousRenewalStatus] = useState<string>('');
-  const [reasonModalTitle, setReasonModalTitle] = useState<'Rejection Reason' | 'Cancellation Reason'>('Rejection Reason');
+  const [reasonModalTitle, setReasonModalTitle] = useState<'Rejection Reason' | 'Cancellation Reason' | 'Amendment/Appeal Reason'>('Rejection Reason');
   const lastResubmittedClearRef = useRef(false);
 
+  const [showApprovedExpiryModal, setShowApprovedExpiryModal] = useState(false);
+  const [approvedExpiryDraft, setApprovedExpiryDraft] = useState('');
+  const [approvedIssueDraft, setApprovedIssueDraft] = useState('');
+  const [previousRenewalStatusForExpiry, setPreviousRenewalStatusForExpiry] = useState<string>('');
+
   const [renewalFeeText, setRenewalFeeText] = useState('');
+
+  const [endDateManuallySet, setEndDateManuallySet] = useState(false);
+  const prevAutoCalcInputsRef = useRef<{ renewalFreq: string; issueDate: string } | null>(null);
 
   // Responsible Person dropdown (match SubscriptionModal Owner searchable dropdown)
   // (inline within the field, matching SubscriptionModal Owner pattern)
@@ -575,35 +624,37 @@ export default function GovernmentLicense() {
     fetchCurrentUser();
   }, []);
 
+  const EMPTY_LICENSE_FORM_VALUES: LicenseFormData = {
+    licenseName: "",
+    // licenseNo removed
+    issuingAuthorityName: "",
+    startDate: "",
+    endDate: "",
+    details: "",
+    renewalFee: undefined,
+    renewalLeadTimeEstimated: undefined,
+    responsiblePerson: "",
+    secondaryPerson: "",
+    department: "",
+    departments: [],
+    status: "Active",
+    issuingAuthorityEmail: "",
+    issuingAuthorityPhone: "",
+    renewalStatus: undefined,
+    // renewalSubmittedDate removed
+    expectedCompletedDate: "",
+    // applicationReferenceNo removed
+    renewalInitiatedDate: "",
+    submittedBy: "",
+    // paymentReferenceNo removed
+    renewalAmount: undefined,
+    renewalStatusReason: "",
+    renewalAttachments: [],
+  };
+
   const form = useForm<LicenseFormData>({
     resolver: zodResolver(licenseSchema),
-    defaultValues: {
-      licenseName: "",
-      // licenseNo removed
-      issuingAuthorityName: "",
-      startDate: "",
-      endDate: "",
-      details: "",
-      renewalFee: undefined, // Show empty by default
-      renewalLeadTimeEstimated: undefined,
-      responsiblePerson: "",
-      secondaryPerson: "",
-      department: "",
-      departments: [],
-      status: "Active",
-      issuingAuthorityEmail: "",
-      issuingAuthorityPhone: "",
-      renewalStatus: undefined,
-      // renewalSubmittedDate removed
-      expectedCompletedDate: "",
-      // applicationReferenceNo removed
-      renewalInitiatedDate: "",
-      submittedBy: "",
-      // paymentReferenceNo removed
-      renewalAmount: undefined,
-      renewalStatusReason: "",
-      renewalAttachments: [],
-    },
+    defaultValues: EMPTY_LICENSE_FORM_VALUES,
   });
 
   const renewalStatusValue = form.watch('renewalStatus');
@@ -633,7 +684,7 @@ export default function GovernmentLicense() {
   }, [renewalStatusValue, form, toast]);
 
   useEffect(() => {
-    if (renewalStatusValue !== 'Canceled' && renewalStatusValue !== 'Rejected') {
+    if (renewalStatusValue !== 'Cancelled' && renewalStatusValue !== 'Rejected') {
       if (String(form.getValues('renewalStatusReason') || '')) {
         form.setValue('renewalStatusReason', '', { shouldDirty: true });
       }
@@ -757,13 +808,7 @@ export default function GovernmentLicense() {
     input.click();
   };
 
-  useEffect(() => {
-    if (!showSubmissionDetails) return;
-    const current = String(form.getValues('submittedBy') || '').trim();
-    if (!current && currentUserName) {
-      form.setValue('submittedBy', currentUserName);
-    }
-  }, [showSubmissionDetails, currentUserName, form]);
+  // Keep "Submitted by" empty by default; user must choose it explicitly.
 
   const issueDateValue = form.watch('startDate') || '';
   const expiryDateValue = form.watch('endDate') || '';
@@ -772,6 +817,32 @@ export default function GovernmentLicense() {
   const endDateError = (form.formState.errors as any)?.endDate?.message as string | undefined;
 
   const isExpiryDisabled = renewalFreqValue === 'One-time';
+
+  // One-time licenses do not need the renewal submission workflow.
+  useEffect(() => {
+    if (!isModalOpen) return;
+    if (renewalFreqValue !== 'One-time') return;
+
+    if (showSubmissionDetails) setShowSubmissionDetails(false);
+
+    form.setValue('renewalStatus', undefined, { shouldDirty: true });
+    form.setValue('expectedCompletedDate', '', { shouldDirty: true });
+    form.setValue('renewalInitiatedDate', '', { shouldDirty: true });
+    form.setValue('submittedBy', '', { shouldDirty: true });
+    form.setValue('renewalAmount', undefined, { shouldDirty: true });
+    form.setValue('renewalStatusReason', '', { shouldDirty: true });
+    form.setValue('renewalAttachments', [], { shouldDirty: true });
+
+    form.clearErrors([
+      'renewalStatus',
+      'expectedCompletedDate',
+      'renewalInitiatedDate',
+      'submittedBy',
+      'renewalAmount',
+      'renewalStatusReason',
+      'renewalAttachments',
+    ]);
+  }, [isModalOpen, renewalFreqValue, showSubmissionDetails, form]);
 
   const parseLocalDate = (yyyyMmDd: string) => {
     const s = String(yyyyMmDd || '').trim();
@@ -795,32 +866,78 @@ export default function GovernmentLicense() {
     setRenewalFeeText(typeof fee === 'number' && Number.isFinite(fee) ? fee.toFixed(2) : '');
   }, [isModalOpen, editingLicense]);
 
+  // Initialize auto-calc comparison values on open
+  useEffect(() => {
+    if (!isModalOpen) return;
+    prevAutoCalcInputsRef.current = { renewalFreq: renewalFreqValue, issueDate: issueDateValue };
+  }, [isModalOpen]);
+
   // Auto-calculate expiry date when renewal frequency changes (and issue date changes).
   // Keep expiry input editable by not running this on expiry input changes.
   useEffect(() => {
     if (!isModalOpen) return;
 
-    if (renewalFreqValue === 'One-time') {
-      if (form.getValues('endDate')) form.setValue('endDate', '');
-      form.clearErrors('endDate');
+    const commitInputs = () => {
+      prevAutoCalcInputsRef.current = { renewalFreq: renewalFreqValue, issueDate: issueDateValue };
+    };
+
+    const prev = prevAutoCalcInputsRef.current;
+    const inputsChanged =
+      !prev || prev.renewalFreq !== renewalFreqValue || prev.issueDate !== issueDateValue;
+
+    // If nothing changed (common on edit/reopen), never overwrite an existing endDate.
+    if (!inputsChanged && String(form.getValues('endDate') || '').trim()) {
+      commitInputs();
       return;
     }
 
-    const shouldAutoCalc =
-      renewalFreqValue === 'Annual' || renewalFreqValue === 'Quarterly' || renewalFreqValue === 'Monthly';
-    if (!shouldAutoCalc) return;
+    // If user has manually set an expiry date, don't overwrite it unless they change inputs.
+    if (!inputsChanged && endDateManuallySet && String(form.getValues('endDate') || '').trim()) {
+      commitInputs();
+      return;
+    }
+
+    if (renewalFreqValue === 'One-time') {
+      if (form.getValues('endDate')) form.setValue('endDate', '');
+      form.clearErrors('endDate');
+      commitInputs();
+      return;
+    }
+
+    const monthsToAdd =
+      renewalFreqValue === 'Monthly'
+        ? 1
+        : renewalFreqValue === 'Quarterly'
+          ? 3
+          : renewalFreqValue === '6 months'
+            ? 6
+            : renewalFreqValue === 'Yearly' || renewalFreqValue === 'Annual'
+              ? 12
+              : renewalFreqValue === '2 years'
+                ? 24
+                : renewalFreqValue === '3 years'
+                  ? 36
+                  : null;
+
+    if (!monthsToAdd) {
+      commitInputs();
+      return;
+    }
 
     const start = String(issueDateValue || '').trim();
     if (!start) {
       if (form.getValues('endDate')) form.setValue('endDate', '');
       form.clearErrors('endDate');
+      commitInputs();
       return;
     }
 
     const base = new Date(start);
-    if (!Number.isFinite(base.getTime())) return;
+    if (!Number.isFinite(base.getTime())) {
+      commitInputs();
+      return;
+    }
 
-    const monthsToAdd = renewalFreqValue === 'Annual' ? 12 : renewalFreqValue === 'Quarterly' ? 3 : 1;
     const computed = new Date(base);
     computed.setMonth(computed.getMonth() + monthsToAdd);
     const yyyy = computed.getFullYear();
@@ -829,7 +946,9 @@ export default function GovernmentLicense() {
     const computedStr = `${yyyy}-${mm}-${dd}`;
     form.setValue('endDate', computedStr);
     form.clearErrors('endDate');
-  }, [isModalOpen, renewalFreqValue, issueDateValue, form]);
+
+    commitInputs();
+  }, [isModalOpen, renewalFreqValue, issueDateValue, endDateManuallySet, form]);
 
   // Validate expiry date (for all manual edits too)
   useEffect(() => {
@@ -1347,6 +1466,51 @@ export default function GovernmentLicense() {
     return matchesSearch && matchesStatus;
   });
 
+  const sortedLicenses = (() => {
+    const list = [...filteredLicenses];
+    if (!sortField) return list;
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    const parseDate = (v?: string) => {
+      if (!v) return null;
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    return list.sort((a, b) => {
+      if (sortField === 'licenseName') {
+        return dir * String(a.licenseName || '').toLowerCase().localeCompare(String(b.licenseName || '').toLowerCase());
+      }
+      if (sortField === 'issuingAuthorityName') {
+        return dir * String(a.issuingAuthorityName || '').toLowerCase().localeCompare(String(b.issuingAuthorityName || '').toLowerCase());
+      }
+      if (sortField === 'startDate') {
+        const ad = parseDate(a.startDate);
+        const bd = parseDate(b.startDate);
+        if (!ad && !bd) return 0;
+        if (!ad) return 1;
+        if (!bd) return -1;
+        return dir * (ad.getTime() - bd.getTime());
+      }
+      if (sortField === 'endDate') {
+        const ad = parseDate(a.endDate);
+        const bd = parseDate(b.endDate);
+        if (!ad && !bd) return 0;
+        if (!ad) return 1;
+        if (!bd) return -1;
+        return dir * (ad.getTime() - bd.getTime());
+      }
+      if (sortField === 'renewalFee') {
+        const av = typeof a.renewalFee === 'number' ? a.renewalFee : Number.NaN;
+        const bv = typeof b.renewalFee === 'number' ? b.renewalFee : Number.NaN;
+        if (!Number.isFinite(av) && !Number.isFinite(bv)) return 0;
+        if (!Number.isFinite(av)) return 1;
+        if (!Number.isFinite(bv)) return -1;
+        return dir * (av - bv);
+      }
+      return 0;
+    });
+  })();
+
   // Keep form status in sync with expiry date (unless user explicitly cancelled)
   useEffect(() => {
     if (!isModalOpen) return;
@@ -1389,19 +1553,23 @@ export default function GovernmentLicense() {
   // Handle edit
   const handleEdit = (license: License) => {
     setEditingLicense(license);
+    setSubmissionOpenedFromTable(false);
     const normalizedStatus = getDerivedStatus({ endDate: license.endDate, status: license.status });
 
     const depts = parseDepartments((license as any).department);
     setSelectedDepartments(depts);
 
-    form.reset({
+    const normalizedRenewalCycleTime =
+      String(license.renewalCycleTime || '').trim() === 'Annual' ? 'Yearly' : (license.renewalCycleTime || "");
+
+    const resetValues: LicenseFormData = {
       licenseName: license.licenseName || "",
       issuingAuthorityName: license.issuingAuthorityName || "",
       startDate: license.startDate || "",
       endDate: license.endDate || "",
       details: license.details || "",
       renewalFee: typeof license.renewalFee === 'number' ? license.renewalFee : undefined,
-      renewalCycleTime: license.renewalCycleTime || "",
+      renewalCycleTime: normalizedRenewalCycleTime,
       renewalLeadTimeEstimated: typeof license.renewalLeadTimeEstimated === 'string' ? license.renewalLeadTimeEstimated : undefined,
       responsiblePerson: license.responsiblePerson || "",
       secondaryPerson: (license as any).secondaryPerson || "",
@@ -1412,7 +1580,16 @@ export default function GovernmentLicense() {
       issuingAuthorityPhone: license.issuingAuthorityPhone || "",
       reminderDays: license.reminderDays || "",
       reminderPolicy: license.reminderPolicy || "",
-      renewalStatus: (license.renewalStatus as "Under Processing" | "Canceled" | "Rejected" | "Resubmitted" | "Approved" | undefined) || undefined,
+      renewalStatus:
+        (license.renewalStatus as
+          | 'Renewal Initiated'
+          | 'Application Submitted'
+          | 'Amendments/ Appeal Submitted'
+          | 'Cancelled'
+          | 'Rejected'
+          | 'Resubmitted'
+          | 'Approved'
+          | undefined) || undefined,
       // renewalSubmittedDate removed
       expectedCompletedDate: license.expectedCompletedDate || "",
       renewalInitiatedDate: license.renewalInitiatedDate || "",
@@ -1428,16 +1605,156 @@ export default function GovernmentLicense() {
         }
         return raw as RenewalAttachment[];
       })(),
-    });
+    };
+
+    form.reset(resetValues);
+    initialFormSnapshotRef.current = cloneSnapshot(resetValues);
+    initialSelectedDepartmentsRef.current = [...depts];
+
+    // Respect stored expiry date on edit (do not auto-overwrite on open)
+    setEndDateManuallySet(true);
     setIsModalOpen(true);
   };
 
   // Handle add new
   const handleAddNew = () => {
   setEditingLicense(null);
+  setIsFullscreen(false);
+  setShowSubmissionDetails(false);
+  setSubmissionOpenedFromTable(false);
   setSelectedDepartments([]);
-  form.reset();
+  setRenewalFeeText('');
+  setEndDateManuallySet(false);
+  setShowRenewalDocumentsModal(false);
+  setShowRenewalStatusReasonModal(false);
+  setRenewalStatusReasonDraft('');
+  setPendingRenewalStatus('');
+  setPreviousRenewalStatus('');
+  setShowApprovedExpiryModal(false);
+  setApprovedExpiryDraft('');
+  setApprovedIssueDraft('');
+  setPreviousRenewalStatusForExpiry('');
+  // Important: reset to explicit empty defaults (because form.reset(editValues) changes reset defaults)
+  form.reset({ ...EMPTY_LICENSE_FORM_VALUES });
+  initialFormSnapshotRef.current = cloneSnapshot({ ...EMPTY_LICENSE_FORM_VALUES });
+  initialSelectedDepartmentsRef.current = [];
   setIsModalOpen(true);
+  };
+
+  const hasMeaningfulFormData = () => {
+    const baseline = initialFormSnapshotRef.current;
+    const current = form.getValues();
+    if (!baseline) return false;
+
+    const normalize = (v: any) => {
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'string') return v.trim();
+      return v;
+    };
+
+    const arraysEqual = (a: any[], b: any[]) => JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
+    const keys = Array.from(new Set([...Object.keys(baseline as any), ...Object.keys(current as any)]));
+
+    for (const key of keys) {
+      const a = normalize((baseline as any)[key]);
+      const b = normalize((current as any)[key]);
+
+      if (Array.isArray(a) || Array.isArray(b)) {
+        if (!arraysEqual(Array.isArray(a) ? a : [], Array.isArray(b) ? b : [])) return true;
+        continue;
+      }
+
+      // Numbers: only meaningful if they differ
+      if (typeof a === 'number' || typeof b === 'number') {
+        const an = typeof a === 'number' ? a : undefined;
+        const bn = typeof b === 'number' ? b : undefined;
+        if (an !== bn) return true;
+        continue;
+      }
+
+      if (a !== b) return true;
+    }
+
+    // Compare selected departments (payload uses selectedDepartments)
+    if (JSON.stringify(initialSelectedDepartmentsRef.current || []) !== JSON.stringify(selectedDepartments || [])) return true;
+
+    // renewalFeeText is only meaningful when user typed something
+    if (String(renewalFeeText || '').trim().length > 0) return true;
+
+    return false;
+  };
+
+  const handleExitConfirm = () => {
+    setIsModalOpen(false);
+    setExitConfirmOpen(false);
+
+    setTimeout(() => {
+      setIsFullscreen(false);
+      setShowSubmissionDetails(false);
+      setEditingLicense(null);
+      setSelectedDepartments([]);
+      setRenewalFeeText('');
+      setEndDateManuallySet(false);
+      setShowRenewalDocumentsModal(false);
+      setShowRenewalStatusReasonModal(false);
+      setRenewalStatusReasonDraft('');
+      setPendingRenewalStatus('');
+      setPreviousRenewalStatus('');
+      setShowApprovedExpiryModal(false);
+      setApprovedExpiryDraft('');
+      setApprovedIssueDraft('');
+      setPreviousRenewalStatusForExpiry('');
+      setLicenseNameError('');
+      // Important: reset to explicit empty defaults
+      form.reset({ ...EMPTY_LICENSE_FORM_VALUES });
+    }, 150);
+  };
+
+  const requestExit = () => {
+    // If user is in submission view, Exit depends on how submission was opened
+    if (showSubmissionDetails) {
+      // If submission view was opened from table, Exit should close and show the table
+      if (submissionOpenedFromTable) {
+        if (hasMeaningfulFormData()) {
+          setExitConfirmOpen(true);
+        } else {
+          handleExitConfirm();
+        }
+        return;
+      }
+
+      // Otherwise, Exit returns to the main modal page
+      setShowSubmissionDetails(false);
+      return;
+    }
+
+    // Match Compliance behavior: ask confirmation only if anything is filled
+    if (hasMeaningfulFormData()) {
+      setExitConfirmOpen(true);
+    } else {
+      handleExitConfirm();
+    }
+  };
+
+  const handleSort = (field: "licenseName" | "issuingAuthorityName" | "startDate" | "endDate" | "renewalFee") => {
+    if (sortField === field) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else {
+        setSortField(null);
+        setSortDirection('asc');
+      }
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: "licenseName" | "issuingAuthorityName" | "startDate" | "endDate" | "renewalFee") => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 inline-block opacity-40" />;
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-3 w-3 ml-1 inline-block" />
+      : <ArrowDown className="h-3 w-3 ml-1 inline-block" />;
   };
 
   // Handle delete
@@ -1461,22 +1778,28 @@ export default function GovernmentLicense() {
     }
   };
 
+  const truncateText = (value: string | undefined | null, maxChars: number) => {
+    const text = (value ?? '').toString();
+    if (!text) return '';
+    return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars)).trimEnd()}...` : text;
+  };
+
   // (date formatting handled inline where needed)
 
   // (summary cards removed)
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
+    <div className="h-full bg-white">
+      <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
         {/* Modern Professional Header */}
-        <div className="mb-8">
+        <div className="mb-8 shrink-0">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
               <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
                 <ShieldCheck className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Government License Management</h1>
+                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Renewals Management</h1>
               </div>
             </div>
             
@@ -1507,7 +1830,7 @@ export default function GovernmentLicense() {
                   className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add License
+                  Add Renewal
                 </Button>
               </Can>
             </div>
@@ -1516,7 +1839,7 @@ export default function GovernmentLicense() {
         </div>
 
         {/* Filters Section */}
-        <Card className="mb-6 border-slate-200 shadow-md rounded-xl">
+        <Card className="mb-6 border-slate-200 shadow-md rounded-xl shrink-0">
           <CardContent className="p-6">
             <div className="flex flex-col md:flex-row gap-4">
               {/* Search Input */}
@@ -1548,8 +1871,9 @@ export default function GovernmentLicense() {
         </Card>
 
         {/* Main Content */}
-        <Card className="border-slate-200 shadow-lg rounded-2xl overflow-hidden">
-          <CardContent className="p-0">
+        <div className="min-w-0 flex-1 min-h-0">
+          <Card className="border-slate-200 shadow-lg rounded-2xl overflow-hidden h-full flex flex-col min-h-0">
+            <CardContent className="p-0 flex flex-col min-h-0">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20">
                   <motion.div
@@ -1558,7 +1882,7 @@ export default function GovernmentLicense() {
                   >
                     <Shield className="w-12 h-12 text-indigo-500" />
                   </motion.div>
-                  <p className="text-slate-600 mt-4">Loading licenses...</p>
+                  <p className="text-slate-600 mt-4">Loading renewals...</p>
                 </div>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-20">
@@ -1568,40 +1892,79 @@ export default function GovernmentLicense() {
                   <p className="text-rose-500 font-medium text-lg">Failed to load licenses</p>
                   <p className="text-slate-500 mt-2">Please try again later</p>
                 </div>
-              ) : filteredLicenses.length === 0 ? (
+              ) : sortedLicenses.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20">
                   <div className="bg-slate-100 rounded-full p-5 mb-5">
                     <Shield className="w-12 h-12 text-slate-400" />
                   </div>
                   <h3 className="text-xl font-medium text-slate-800 mb-2">
-                    {searchTerm || statusFilter !== "all" ? "No matching licenses found" : "No licenses found"}
+                    {searchTerm || statusFilter !== "all" ? "No matching renewals found" : "No renewals found"}
                   </h3>
                   <p className="text-slate-600 max-w-md text-center">
                     {searchTerm || statusFilter !== "all" 
                       ? "Try adjusting your search or filter criteria" 
-                      : "Get started by adding your first government license"
+                      : "Get started by adding your first renewal"
                     }
                   </p>
                   {/* Add First License button removed as requested */}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table className="w-full">
-                    <TableHeader className="bg-gray-50">
-                      <TableRow>
-                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">License Type</TableHead>
-                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Issuing Authority</TableHead>
-                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Issue Date</TableHead>
-                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Expiry Date</TableHead>
-                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Submission</TableHead>
-                        <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">Renewal Fee</TableHead>
-                        <TableHead className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Status</TableHead>
-                        <TableHead className="h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar" className="w-full table-fixed">
+                  <TableHeader>
+                    <TableRow className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
+                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                        <button
+                          onClick={() => handleSort('licenseName')}
+                          className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                        >
+                          LICENSE TYPE
+                          {getSortIcon('licenseName')}
+                        </button>
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">
+                        <button
+                          onClick={() => handleSort('issuingAuthorityName')}
+                          className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                        >
+                          ISSUING AUTHORITY
+                          {getSortIcon('issuingAuthorityName')}
+                        </button>
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                        <button
+                          onClick={() => handleSort('startDate')}
+                          className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                        >
+                          ISSUE DATE
+                          {getSortIcon('startDate')}
+                        </button>
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                        <button
+                          onClick={() => handleSort('endDate')}
+                          className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                        >
+                          EXPIRY DATE
+                          {getSortIcon('endDate')}
+                        </button>
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Submission</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">
+                        <button
+                          onClick={() => handleSort('renewalFee')}
+                          className="flex items-center justify-end w-full font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                        >
+                          RENEWAL FEE
+                          {getSortIcon('renewalFee')}
+                        </button>
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">Status</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">ACTIONS</TableHead>
+                    </TableRow>
+                  </TableHeader>
                     <TableBody>
                       <AnimatePresence>
-                        {filteredLicenses.map((license, index) => (
+                        {sortedLicenses.map((license, index) => (
                           <motion.tr 
                             key={license.id}
                             className="hover:bg-slate-50 transition-colors"
@@ -1610,40 +1973,44 @@ export default function GovernmentLicense() {
                             exit={{ opacity: 0 }}
                             transition={{ delay: 0.05 * index }}
                           >
-                            <TableCell className="px-4 py-3 font-medium text-gray-800">
+                            <TableCell className="px-3 py-3 font-medium text-gray-800 w-[160px] min-w-0">
                               <button
                                 type="button"
                                 onClick={() => handleEdit(license)}
-                                className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2"
+                                title={license.licenseName}
+                                className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap"
                               >
-                                {license.licenseName}
+                                {truncateText(license.licenseName, 18)}
                               </button>
                             </TableCell>
-                            <TableCell className="px-4 py-3 text-sm text-gray-700">
+                            <TableCell className="px-3 py-3 text-sm text-gray-700 w-[220px] min-w-0">
                               <div>
-                                <div className="font-medium">{license.issuingAuthorityName}</div>
+                                <div className="font-medium block w-full truncate whitespace-nowrap" title={license.issuingAuthorityName}>
+                                  {license.issuingAuthorityName}
+                                </div>
                                 {/* Removed email and phone display as per requirements */}
                               </div>
                             </TableCell>
-                            <TableCell className="px-4 py-3 text-sm text-gray-600">
+                            <TableCell className="px-3 py-3 text-sm text-gray-600 w-[120px]">
                               <div className="flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
                                 {license.startDate ? new Date(license.startDate).toLocaleDateString('en-GB') : ''}
                               </div>
                             </TableCell>
-                            <TableCell className="px-4 py-3 text-sm text-gray-600">
+                            <TableCell className="px-3 py-3 text-sm text-gray-600 w-[120px]">
                               <div className="flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
                                 {license.endDate ? new Date(license.endDate).toLocaleDateString('en-GB') : ''}
                               </div>
                             </TableCell>
-                            <TableCell className="px-4 py-3 text-center">
+                            <TableCell className="px-3 py-3 text-center w-[150px]">
                               <Button
                                 variant="outline"
                                 size="sm"
                                 title="Renewel Submit"
                                 onClick={() => {
                                   handleEdit(license);
+                                  setSubmissionOpenedFromTable(true);
                                   setShowSubmissionDetails(true);
                                 }}
                                 className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
@@ -1651,10 +2018,10 @@ export default function GovernmentLicense() {
                                 Renewel Submit
                               </Button>
                             </TableCell>
-                            <TableCell className="px-4 py-3 text-right text-sm text-gray-700 font-semibold">
+                            <TableCell className="px-3 py-3 text-right text-sm text-gray-700 font-semibold w-[110px]">
                               {typeof license.renewalFee === 'number' ? `$${Math.round(license.renewalFee).toLocaleString()}` : '-'}
                             </TableCell>
-                            <TableCell className="px-4 py-3">
+                            <TableCell className="px-3 py-3 w-[110px]">
                               {(() => {
                                 const derived = getDerivedStatus({ endDate: license.endDate, status: license.status });
                                 return (
@@ -1664,7 +2031,7 @@ export default function GovernmentLicense() {
                                 );
                               })()}
                             </TableCell>
-                            <TableCell className="px-4 py-3 text-right">
+                            <TableCell className="px-3 py-3 text-right w-[110px]">
                               <div className="flex gap-2 justify-end">
                                 <Can I="update" a="License">
                                   <Button
@@ -1692,27 +2059,30 @@ export default function GovernmentLicense() {
                         ))}
                       </AnimatePresence>
                     </TableBody>
-                  </Table>
-                </div>
+                </Table>
               )}
             </CardContent>
           </Card>
+        </div>
 
         {/* Add/Edit License Modal */}
-        <Dialog open={isModalOpen} onOpenChange={(v) => { 
-          if (!v) {
-            setIsFullscreen(false); 
-            setShowSubmissionDetails(false);
-            setEditingLicense(null);
-          } 
-          setIsModalOpen(v); 
-        }}>
+        <Dialog
+          open={isModalOpen}
+          onOpenChange={(v) => {
+            if (v) {
+              setIsModalOpen(true);
+              return;
+            }
+            // Treat X/overlay/Esc like clicking Exit
+            requestExit();
+          }}
+        >
           <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto overflow-x-hidden rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
             <DialogHeader className={`sticky top-0 z-20 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'px-4 py-3 md:px-5 md:py-3' : 'p-5'} rounded-t-2xl flex flex-row items-center justify-between`}>
               <div className="flex items-center gap-4">
                 <ShieldCheck className="h-6 w-6" />
                 <DialogTitle className="text-xl font-bold leading-none">
-                  {showSubmissionDetails ? 'Renewel Submission' : editingLicense ? 'Edit License' : 'License'}
+                  {showSubmissionDetails ? 'Renewal Submission' : editingLicense ? 'Edit Renewal' : 'Renewal'}
                 </DialogTitle>
                 {(() => {
                   const derived = getDerivedStatus({ endDate: expiryDateValue, status: statusValue });
@@ -1729,12 +2099,15 @@ export default function GovernmentLicense() {
               </div>
               <div className="flex gap-4 items-center mr-4">
                 {/* Submission Toggle Button */}
-                {!showSubmissionDetails && (
+                {!showSubmissionDetails && renewalFreqValue !== 'One-time' && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowSubmissionDetails(!showSubmissionDetails)}
+                    onClick={() => {
+                      setSubmissionOpenedFromTable(false);
+                      setShowSubmissionDetails(!showSubmissionDetails);
+                    }}
                     className="relative overflow-hidden px-3 py-1 text-sm rounded-lg font-semibold transition-all duration-300 bg-gradient-to-r from-emerald-500/70 to-green-600/70 text-white border border-emerald-300/60 hover:from-emerald-500 hover:to-green-600 hover:shadow-[0_8px_16px_rgba(16,185,129,0.25)]"
                   >
                     Submission
@@ -1777,9 +2150,20 @@ export default function GovernmentLicense() {
                                     const prev = String(field.value || '');
                                     setPreviousRenewalStatus(prev);
 
-                                    if (val === 'Canceled' || val === 'Rejected') {
+                                    if (val === 'Approved') {
+                                      setPreviousRenewalStatusForExpiry(prev);
+                                      setApprovedIssueDraft(String(form.getValues('startDate') || ''));
+                                      setApprovedExpiryDraft(String(form.getValues('endDate') || ''));
+                                      setShowApprovedExpiryModal(true);
+                                    }
+
+                                    if (val === 'Cancelled' || val === 'Rejected' || val === 'Amendments/ Appeal Submitted') {
                                       setPendingRenewalStatus(val);
-                                      setReasonModalTitle(val === 'Canceled' ? 'Cancellation Reason' : 'Rejection Reason');
+                                      let reasonTitle: 'Cancellation Reason' | 'Rejection Reason' | 'Amendment/Appeal Reason' = 'Cancellation Reason';
+                                      if (val === 'Cancelled') reasonTitle = 'Cancellation Reason';
+                                      else if (val === 'Rejected') reasonTitle = 'Rejection Reason';
+                                      else if (val === 'Amendments/ Appeal Submitted') reasonTitle = 'Amendment/Appeal Reason';
+                                      setReasonModalTitle(reasonTitle);
                                       setRenewalStatusReasonDraft(String(form.getValues('renewalStatusReason') || ''));
                                       setShowRenewalStatusReasonModal(true);
                                     }
@@ -1787,15 +2171,17 @@ export default function GovernmentLicense() {
                                     field.onChange(val);
                                   }}
                                 >
-                                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30">
+                                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-3 text-sm font-inter focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30">
                                     <SelectValue />
                                   </SelectTrigger>
-                                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                                    <SelectItem value="Under Processing" className="text-slate-900 hover:bg-blue-50">Under Processing</SelectItem>
-                                    <SelectItem value="Approved" className="text-slate-900 hover:bg-blue-50">Approved</SelectItem>
-                                    <SelectItem value="Rejected" className="text-slate-900 hover:bg-blue-50">Rejected</SelectItem>
-                                    <SelectItem value="Resubmitted" className="text-slate-900 hover:bg-blue-50">Resubmitted</SelectItem>
-                                    <SelectItem value="Canceled" className="text-slate-900 hover:bg-blue-50">Canceled</SelectItem>
+                                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md font-inter">
+                                    <SelectItem value="Renewal Initiated" className="text-slate-900 hover:bg-blue-50 font-inter">Renewal Initiated</SelectItem>
+                                    <SelectItem value="Application Submitted" className="text-slate-900 hover:bg-blue-50 font-inter">Application Submitted</SelectItem>
+                                    <SelectItem value="Amendments/ Appeal Submitted" className="text-slate-900 hover:bg-blue-50 font-inter">Amendments/ Appeal Submitted</SelectItem>
+                                    <SelectItem value="Approved" className="text-slate-900 hover:bg-blue-50 font-inter">Approved</SelectItem>
+                                    <SelectItem value="Rejected" className="text-slate-900 hover:bg-blue-50 font-inter">Rejected</SelectItem>
+                                    <SelectItem value="Resubmitted" className="text-slate-900 hover:bg-blue-50 font-inter">Resubmitted</SelectItem>
+                                    <SelectItem value="Cancelled" className="text-slate-900 hover:bg-blue-50 font-inter">Cancelled</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </FormControl>
@@ -1814,7 +2200,15 @@ export default function GovernmentLicense() {
                                 <span className="text-red-500"> *</span>
                               </FormLabel>
                               <FormControl>
-                                <Input className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" type="date" {...field} />
+                                <Input
+                                  className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                                  type="date"
+                                  {...field}
+                                  onBlur={() => {
+                                    field.onBlur();
+                                    form.trigger(['renewalInitiatedDate', 'expectedCompletedDate']);
+                                  }}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -1824,16 +2218,30 @@ export default function GovernmentLicense() {
                         <FormField
                           control={form.control}
                           name="expectedCompletedDate"
-                          render={({ field }) => (
+                          render={({ field, fieldState }) => (
                             <FormItem>
                               <FormLabel className="block text-sm font-medium text-slate-700">
                                 Expected completion date:
                                 <span className="text-red-500"> *</span>
                               </FormLabel>
                               <FormControl>
-                                <Input className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30" type="date" {...field} />
+                                <Input
+                                  className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                                  type="date"
+                                  {...field}
+                                  onBlur={() => {
+                                    field.onBlur();
+                                    form.trigger('expectedCompletedDate');
+                                  }}
+                                  onChange={field.onChange}
+                                />
                               </FormControl>
-                              <FormMessage />
+                              {fieldState.error && (
+                                <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                                  <AlertCircle className="h-4 w-4" />
+                                  {fieldState.error.message}
+                                </p>
+                              )}
                             </FormItem>
                           )}
                         />
@@ -1948,8 +2356,12 @@ export default function GovernmentLicense() {
                               .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                               .join(' ');
                             form.setValue('licenseName', capitalizedValue);
-                            // Validate uniqueness
-                            validateLicenseName(capitalizedValue);
+                            // Clear uniqueness error while typing; validate on blur
+                            if (licenseNameError) setLicenseNameError('');
+                          }}
+                          onBlur={(e) => {
+                            // Validate uniqueness only when leaving the field
+                            validateLicenseName(String(e.target.value || ''));
                           }}
                         />
                         {licenseNameError && (
@@ -2367,7 +2779,10 @@ export default function GovernmentLicense() {
                           type="date"
                           className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
                           value={form.watch('startDate') || ''}
-                          onChange={(e) => form.setValue('startDate', e.target.value)}
+                          onChange={(e) => {
+                            setEndDateManuallySet(false);
+                            form.setValue('startDate', e.target.value);
+                          }}
                         />
                       </div>
 
@@ -2375,16 +2790,22 @@ export default function GovernmentLicense() {
                         <label className="block text-sm font-medium text-slate-700">Renewel freq</label>
                         <Select
                           value={form.watch('renewalCycleTime') || ''}
-                          onValueChange={(value) => form.setValue('renewalCycleTime', value)}
+                          onValueChange={(value) => {
+                            setEndDateManuallySet(false);
+                            form.setValue('renewalCycleTime', value);
+                          }}
                         >
                           <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Annual">Annual</SelectItem>
-                            <SelectItem value="Quarterly">Quarterly</SelectItem>
-                            <SelectItem value="Monthly">Monthly</SelectItem>
+                          <SelectContent className="max-h-56 overflow-y-auto custom-scrollbar">
                             <SelectItem value="One-time">One-time</SelectItem>
+                            <SelectItem value="Monthly">Monthly</SelectItem>
+                            <SelectItem value="Quarterly">Quarterly</SelectItem>
+                            <SelectItem value="6 months">6 months</SelectItem>
+                            <SelectItem value="Yearly">Yearly</SelectItem>
+                            <SelectItem value="2 years">2 years</SelectItem>
+                            <SelectItem value="3 years">3 years</SelectItem>
                             <SelectItem value="Ad-hoc">Ad-hoc</SelectItem>
                           </SelectContent>
                         </Select>
@@ -2399,6 +2820,7 @@ export default function GovernmentLicense() {
                           className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
                           value={expiryDateValue}
                           onChange={(e) => {
+                            setEndDateManuallySet(true);
                             form.setValue('endDate', e.target.value);
                           }}
                         />
@@ -2528,8 +2950,25 @@ export default function GovernmentLicense() {
                                   value={authorityOpen ? authoritySearch : (field.value || '')}
                                   className="w-full border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer"
                                   onChange={(e) => {
-                                    setAuthoritySearch(e.target.value);
+                                    const v = e.target.value;
+                                    setAuthoritySearch(v);
+                                    // Allow custom authority names not in the predefined list
+                                    field.onChange(v);
                                     if (!authorityOpen) setAuthorityOpen(true);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      setAuthorityOpen(false);
+                                      setAuthoritySearch('');
+                                      (e.currentTarget as HTMLInputElement).blur();
+                                    }
+                                    if (e.key === 'Escape') {
+                                      e.preventDefault();
+                                      setAuthorityOpen(false);
+                                      setAuthoritySearch('');
+                                      (e.currentTarget as HTMLInputElement).blur();
+                                    }
                                   }}
                                   onFocus={() => {
                                     setAuthoritySearch(field.value || '');
@@ -2707,10 +3146,7 @@ export default function GovernmentLicense() {
                     type="button" 
                     variant="outline" 
                     className="border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
-                    onClick={() => {
-                      setIsModalOpen(false);
-                      setShowSubmissionDetails(false);
-                    }}
+                    onClick={requestExit}
                   >
                     Exit
                   </Button>
@@ -2968,10 +3404,6 @@ export default function GovernmentLicense() {
                 <div className="space-y-4">
                   <div className="text-lg font-semibold text-gray-900">{reasonModalTitle}</div>
                   <div>
-                    <div className="text-sm text-gray-600 mb-2">
-                      Please provide a reason for {pendingRenewalStatus === 'Canceled' ? 'cancellation' : 'rejection'}
-                      <span className="text-red-500"> *</span>
-                    </div>
                     <textarea
                       value={renewalStatusReasonDraft}
                       onChange={(e) => setRenewalStatusReasonDraft(e.target.value)}
@@ -3016,6 +3448,132 @@ export default function GovernmentLicense() {
                       }}
                     >
                       Submit
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Approved - New Issue & Expiry Date Modal */}
+            <Dialog
+              open={showApprovedExpiryModal}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setShowApprovedExpiryModal(false);
+                  setApprovedExpiryDraft('');
+                  setApprovedIssueDraft('');
+                  if (previousRenewalStatusForExpiry) {
+                    form.setValue('renewalStatus', previousRenewalStatusForExpiry as any, { shouldDirty: true });
+                  } else {
+                    form.setValue('renewalStatus', undefined, { shouldDirty: true });
+                  }
+                  setPreviousRenewalStatusForExpiry('');
+                }
+              }}
+            >
+              <DialogContent className="sm:max-w-[520px] bg-white">
+                <div className="space-y-4">
+                  <div className="text-lg font-semibold text-gray-900">Approved Renewal Details</div>
+                  <div className="text-sm text-gray-600">
+                    Renewal is marked as <span className="font-semibold">Approved</span>. Please enter the new issue date and expiry date.
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-slate-700 mb-2">
+                      New Issue Date <span className="text-red-500"> *</span>
+                    </div>
+                    <Input
+                      type="date"
+                      className="w-full border border-gray-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+                      value={approvedIssueDraft}
+                      onChange={(e) => setApprovedIssueDraft(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-slate-700 mb-2">
+                      New Expiry Date <span className="text-red-500"> *</span>
+                    </div>
+                    <Input
+                      type="date"
+                      className="w-full border border-gray-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+                      value={approvedExpiryDraft}
+                      onChange={(e) => setApprovedExpiryDraft(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowApprovedExpiryModal(false);
+                        setApprovedExpiryDraft('');
+                        setApprovedIssueDraft('');
+                        if (previousRenewalStatusForExpiry) {
+                          form.setValue('renewalStatus', previousRenewalStatusForExpiry as any, { shouldDirty: true });
+                        } else {
+                          form.setValue('renewalStatus', undefined, { shouldDirty: true });
+                        }
+                        setPreviousRenewalStatusForExpiry('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => {
+                        const nextStart = String(approvedIssueDraft || '').trim();
+                        const nextEnd = String(approvedExpiryDraft || '').trim();
+                        if (!nextStart || !nextEnd) {
+                          toast({
+                            title: 'Dates required',
+                            description: 'Please select the new issue date and expiry date.',
+                            variant: 'destructive',
+                            duration: 2500,
+                          });
+                          return;
+                        }
+
+                        const startTime = new Date(nextStart).getTime();
+                        const endTime = new Date(nextEnd).getTime();
+                        if (Number.isFinite(startTime) && Number.isFinite(endTime) && endTime <= startTime) {
+                          toast({
+                            title: 'Invalid dates',
+                            description: 'Expiry date must be after issue date.',
+                            variant: 'destructive',
+                            duration: 3000,
+                          });
+                          return;
+                        }
+
+                        // Prevent auto-calc from overwriting the approved expiry.
+                        prevAutoCalcInputsRef.current = {
+                          renewalFreq: String(form.getValues('renewalCycleTime') || ''),
+                          issueDate: nextStart,
+                        };
+
+                        setEndDateManuallySet(true);
+                        form.setValue('startDate', nextStart, { shouldDirty: true });
+                        form.setValue('endDate', nextEnd, { shouldDirty: true });
+                        form.clearErrors('startDate');
+                        form.clearErrors('endDate');
+
+                        toast({
+                          title: 'Dates updated',
+                          description: 'New issue/expiry dates have been applied to the license.',
+                          duration: 2000,
+                          variant: 'success',
+                        });
+
+                        setShowApprovedExpiryModal(false);
+                        setApprovedExpiryDraft('');
+                        setApprovedIssueDraft('');
+                        setPreviousRenewalStatusForExpiry('');
+
+                        // Show the updated expiry date immediately in the main form.
+                        setShowSubmissionDetails(false);
+                      }}
+                    >
+                      Save
                     </Button>
                   </div>
                 </div>
@@ -3378,6 +3936,38 @@ export default function GovernmentLicense() {
           onChange={handleImport}
           className="hidden"
         />
+
+        {/* Exit Confirmation Dialog (match Compliance) */}
+        <AlertDialog open={exitConfirmOpen} onOpenChange={(open) => !open && setExitConfirmOpen(false)}>
+          <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+                Confirm Exit
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-700 font-medium">
+                All filled data will be deleted if you exit. Do you want to cancel or exit?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                onClick={() => setExitConfirmOpen(false)}
+                className="border-gray-300 text-gray-700 hover:bg-gray-100"
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setExitConfirmOpen(false);
+                  handleExitConfirm();
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+              >
+                Exit
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Delete License Dialog */}
         <AlertDialog

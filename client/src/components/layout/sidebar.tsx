@@ -182,7 +182,7 @@ const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: BarChart3, gradient: "from-blue-500 to-indigo-600", shadow: "rgba(59, 130, 246, 0.5)" },
   { path: "/subscriptions", label: "Subscriptions", icon: Layers, gradient: "from-purple-500 to-pink-600", shadow: "rgba(168, 85, 247, 0.5)" },
   { path: "/compliance", label: "Compliance", icon: Award, gradient: "from-amber-500 to-orange-600", shadow: "rgba(245, 158, 11, 0.5)" },
-  { path: "/government-license", label: "Government License", icon: ShieldCheck, gradient: "from-emerald-500 to-teal-600", shadow: "rgba(16, 185, 129, 0.5)" },
+  { path: "/government-license", label: "Renewals", icon: ShieldCheck, gradient: "from-emerald-500 to-teal-600", shadow: "rgba(16, 185, 129, 0.5)" },
   { path: "/notifications", label: "Notifications", icon: BellRing, gradient: "from-rose-500 to-red-600", shadow: "rgba(244, 63, 94, 0.5)" },
   { path: "/reminders", label: "Setup & Configuration", icon: Settings, gradient: "from-cyan-500 to-blue-600", shadow: "rgba(6, 182, 212, 0.5)" },
   { path: "/company-details", label: "Company Details", icon: Building2, gradient: "from-violet-500 to-purple-600", shadow: "rgba(139, 92, 246, 0.5)" },
