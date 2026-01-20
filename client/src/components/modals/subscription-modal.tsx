@@ -2585,8 +2585,25 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer" 
                               value={vendorOpen ? vendorSearch : (field.value || '')}
                               onChange={(e) => {
-                                setVendorSearch(e.target.value);
+                                const v = e.target.value;
+                                setVendorSearch(v);
+                                // Allow custom vendor names not in the predefined list
+                                field.onChange(v);
                                 if (!vendorOpen) setVendorOpen(true);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  setVendorOpen(false);
+                                  setVendorSearch('');
+                                  (e.currentTarget as HTMLInputElement).blur();
+                                }
+                                if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  setVendorOpen(false);
+                                  setVendorSearch('');
+                                  (e.currentTarget as HTMLInputElement).blur();
+                                }
                               }}
                               onFocus={() => {
                                 setVendorSearch(field.value || '');
