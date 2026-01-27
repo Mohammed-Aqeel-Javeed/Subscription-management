@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -7,7 +8,7 @@ import { Can } from "@/components/Can";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown, X, ArrowUpDown, ArrowUp, ArrowDown, History } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
 import { useForm } from "react-hook-form";
@@ -54,11 +55,17 @@ interface Department {
 interface License {
   id: string;
   licenseName: string;
+  entityOwner?: string;
+  category?: string;
+  beneficiaryType?: string;
+  beneficiaryNameNo?: string;
   issuingAuthorityName: string;
   startDate: string;
   endDate: string;
   details: string;
   renewalFee: number;
+  currency?: string;
+  lcyAmount?: number;
   renewalCycleTime?: string;
   renewalLeadTimeEstimated?: string;
   responsiblePerson: string;
@@ -71,7 +78,6 @@ interface License {
   reminderDays?: number | string;
   reminderPolicy?: string;
   renewalStatus?: string;
-  // renewalSubmittedDate removed
   expectedCompletedDate?: string;
   renewalInitiatedDate?: string;
   submittedBy?: string;
@@ -267,12 +273,22 @@ const validateEmail = (email: string): { valid: boolean; error?: string } => {
 const licenseSchema = z
   .object({
   licenseName: z.string().optional(),
+  entityOwner: z.string().optional(),
+  category: z.string().optional(),
+  beneficiaryType: z.string().optional(),
+  beneficiaryNameNo: z.string().optional(),
   // licenseNo removed
   issuingAuthorityName: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   details: z.string().optional(),
   renewalFee: z.preprocess((val) => {
+    if (val === '' || val === null || val === undefined) return undefined;
+    const num = typeof val === 'string' ? parseFloat(val) : val;
+    return isNaN(Number(num)) ? undefined : Number(num);
+  }, z.number().optional()),
+  currency: z.string().optional(),
+  lcyAmount: z.preprocess((val) => {
     if (val === '' || val === null || val === undefined) return undefined;
     const num = typeof val === 'string' ? parseFloat(val) : val;
     return isNaN(Number(num)) ? undefined : Number(num);
@@ -491,9 +507,250 @@ function EmployeeSearchDropdown(props: {
   );
 }
 
+// Generic searchable dropdown for string options
+function SearchableStringDropdown(props: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+  className?: string;
+  onAddNew?: () => void;
+}) {
+  const { value, onChange, options, placeholder, className, onAddNew } = props;
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setSearch('');
+      }
+    }
+
+    const dialogEl = dropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
+    function handleDialogScroll() {
+      setOpen(false);
+      setSearch('');
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    dialogEl?.addEventListener('scroll', handleDialogScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      dialogEl?.removeEventListener('scroll', handleDialogScroll);
+    };
+  }, [open]);
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = normalizedSearch
+    ? options.filter((opt) => opt.toLowerCase().includes(normalizedSearch))
+    : options;
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <Input
+        value={open ? search : (value || '')}
+        placeholder={placeholder}
+        className={className || "w-full border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer"}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          if (!open) setOpen(true);
+        }}
+        onFocus={() => {
+          setSearch(value || '');
+          setOpen(true);
+        }}
+        onClick={() => {
+          setSearch(value || '');
+          setOpen(true);
+        }}
+      />
+      <ChevronDown
+        className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+        onClick={() => {
+          if (!open) setSearch(value || '');
+          setOpen(!open);
+          if (open) setSearch('');
+        }}
+      />
+      {open && (
+        <div
+          className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-auto overscroll-contain custom-scrollbar"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
+          {filtered.length > 0 ? (
+            filtered.map((opt) => (
+              <div
+                key={opt}
+                className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                onClick={() => {
+                  if (value === opt) {
+                    onChange('');
+                  } else {
+                    onChange(opt);
+                  }
+                  setOpen(false);
+                  setSearch('');
+                }}
+              >
+                <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
+                <span className="font-normal">{opt}</span>
+              </div>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-sm text-slate-500">No options found</div>
+          )}
+
+          {onAddNew && (
+            <div
+              className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+              style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+              onClick={() => {
+                setOpen(false);
+                setSearch('');
+                onAddNew();
+              }}
+            >
+              + New
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Multi-select dropdown for departments
+function MultiSelectDepartmentsDropdown(props: {
+  selectedDepartments: string[];
+  onDepartmentChange: (dept: string, checked: boolean) => void;
+  onRemoveDepartment: (dept: string) => void;
+  departments: Department[];
+  departmentsLoading: boolean;
+  onAddNew: () => void;
+}) {
+  const { selectedDepartments, onDepartmentChange, onRemoveDepartment, departments, departmentsLoading, onAddNew } = props;
+  const [deptOpen, setDeptOpen] = useState(false);
+  const deptDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!deptOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (deptDropdownRef.current && !deptDropdownRef.current.contains(event.target as Node)) {
+        setDeptOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [deptOpen]);
+
+  return (
+    <div className="relative" ref={deptDropdownRef}>
+      <div
+        className="w-full border border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200"
+        onClick={() => setDeptOpen(true)}
+        tabIndex={0}
+        onFocus={() => setDeptOpen(true)}
+      >
+        {selectedDepartments.length > 0 ? (
+          <div className="flex flex-wrap gap-1 w-full">
+            {selectedDepartments.map((dept) => (
+              <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
+                <span className="truncate max-w-[80px]">{dept}</span>
+                <button
+                  type="button"
+                  data-remove-dept="true"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onRemoveDepartment(dept);
+                  }}
+                  className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
+                  tabIndex={-1}
+                >
+                  <X className="h-3 w-3" data-remove-dept="true" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-gray-400">Select departments</span>
+        )}
+        <ChevronDown
+          className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDeptOpen(!deptOpen);
+          }}
+        />
+      </div>
+      {selectedDepartments.includes('Company Level') && (
+        <p className="mt-1 text-xs text-slate-500">All departments are selected</p>
+      )}
+      {deptOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
+          <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
+            <Checkbox
+              id="dept-company-level"
+              checked={selectedDepartments.includes('Company Level')}
+              onCheckedChange={(checked: boolean) => onDepartmentChange('Company Level', checked)}
+              disabled={departmentsLoading}
+            />
+            <label
+              htmlFor="dept-company-level"
+              className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
+            >
+              Company Level
+            </label>
+          </div>
+          {Array.isArray(departments) && departments.length > 0
+            ? departments
+                .filter(dept => dept.visible)
+                .map(dept => (
+                  <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                    <Checkbox
+                      id={`dept-${dept.name}`}
+                      checked={selectedDepartments.includes(dept.name)}
+                      onCheckedChange={(checked: boolean) => onDepartmentChange(dept.name, checked)}
+                      disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
+                    />
+                    <label
+                      htmlFor={`dept-${dept.name}`}
+                      className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                    >
+                      {dept.name}
+                    </label>
+                  </div>
+                ))
+            : null}
+          <div
+            className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+            style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+            onClick={() => onAddNew()}
+          >
+            + New
+          </div>
+          {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
+            <div className="dropdown-item disabled text-gray-400">No departments found</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GovernmentLicense() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -535,6 +792,8 @@ export default function GovernmentLicense() {
   const [previousRenewalStatusForExpiry, setPreviousRenewalStatusForExpiry] = useState<string>('');
 
   const [renewalFeeText, setRenewalFeeText] = useState('');
+  const [currency, setCurrency] = useState('');
+  const [lcyAmount, setLcyAmount] = useState('');
 
   const [endDateManuallySet, setEndDateManuallySet] = useState(false);
   const prevAutoCalcInputsRef = useRef<{ renewalFreq: string; issueDate: string } | null>(null);
@@ -626,12 +885,18 @@ export default function GovernmentLicense() {
 
   const EMPTY_LICENSE_FORM_VALUES: LicenseFormData = {
     licenseName: "",
+    entityOwner: "",
+    category: "",
+    beneficiaryType: "",
+    beneficiaryNameNo: "",
     // licenseNo removed
     issuingAuthorityName: "",
     startDate: "",
     endDate: "",
     details: "",
     renewalFee: undefined,
+    currency: "",
+    lcyAmount: undefined,
     renewalLeadTimeEstimated: undefined,
     responsiblePerson: "",
     secondaryPerson: "",
@@ -938,8 +1203,11 @@ export default function GovernmentLicense() {
       return;
     }
 
+    // Calculate the end date as the last day of the period (one day before the next period starts)
     const computed = new Date(base);
     computed.setMonth(computed.getMonth() + monthsToAdd);
+    computed.setDate(computed.getDate() - 1); // Subtract 1 day to get the last day of the period
+    
     const yyyy = computed.getFullYear();
     const mm = String(computed.getMonth() + 1).padStart(2, '0');
     const dd = String(computed.getDate()).padStart(2, '0');
@@ -1000,7 +1268,7 @@ export default function GovernmentLicense() {
   });
 
   // Employee creation modal (match Subscription modal Owner creation)
-  const [employeeModal, setEmployeeModal] = useState<{ show: boolean; target?: 'responsiblePerson' | 'secondaryPerson' | 'submittedBy' }>({ show: false });
+  const [employeeModal, setEmployeeModal] = useState<{ show: boolean; target?: 'responsiblePerson' | 'secondaryPerson' | 'submittedBy' | 'beneficiaryNameNo' }>({ show: false });
   const [newEmployeeName, setNewEmployeeName] = useState<string>('');
   const [newEmployeeEmail, setNewEmployeeEmail] = useState<string>('');
   const [newEmployeeEmailError, setNewEmployeeEmailError] = useState<string>('');
@@ -1088,6 +1356,9 @@ export default function GovernmentLicense() {
       if (employeeModal.target === 'submittedBy') {
         form.setValue('submittedBy', newEmployeeName.trim(), { shouldDirty: true });
       }
+      if (employeeModal.target === 'beneficiaryNameNo') {
+        form.setValue('beneficiaryNameNo', newEmployeeName.trim(), { shouldDirty: true });
+      }
 
       setNewEmployeeName('');
       setNewEmployeeEmail('');
@@ -1114,6 +1385,60 @@ export default function GovernmentLicense() {
       return Array.isArray(data) ? data : [];
     }
   });
+
+  // Query for currencies (for currency dropdown and exchange rate calculations)
+  const { data: currencies = [] } = useQuery({
+    queryKey: ["/api/currencies"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/currencies`, { credentials: "include" });
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
+    refetchOnWindowFocus: true,
+    refetchInterval: 10000, // Refetch every 10 seconds to catch exchange rate updates
+    staleTime: 0 // Consider data stale immediately to ensure fresh exchange rates
+  });
+
+  // Fetch company info for local currency and exchange rate calculations
+  const { data: companyInfo = {} } = useQuery({
+    queryKey: ["/api/company-info"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/company-info`, { credentials: "include" });
+      if (res.ok) {
+        return await res.json();
+      }
+      return {};
+    }
+  });
+
+  // Calculate LCY Amount based on Renewal Cost and Currency (matching subscription modal logic)
+  useEffect(() => {
+    const calculateLcyAmount = () => {
+      const renewalFee = form.watch('renewalFee');
+      const selectedCurrency = currency;
+      const localCurrency = (companyInfo as any)?.defaultCurrency;
+      
+      if (!renewalFee || !selectedCurrency || !localCurrency || selectedCurrency === localCurrency) {
+        setLcyAmount(selectedCurrency === localCurrency ? renewalFee?.toString() || '' : '');
+        return;
+      }
+      
+      // Find the selected currency and its exchange rate
+      const currencyData = currencies.find((curr: any) => curr.code === selectedCurrency);
+      const exchangeRate = currencyData?.exchangeRate ? parseFloat(currencyData.exchangeRate) : null;
+      
+      if (exchangeRate && exchangeRate > 0) {
+        const renewalFeeNum = parseFloat(renewalFee?.toString() || '0');
+        // Invert the exchange rate: LCY Amount = Renewal Cost ÷ Exchange Rate
+        const convertedAmount = renewalFeeNum / exchangeRate;
+        setLcyAmount(convertedAmount.toFixed(2));
+      } else {
+        setLcyAmount('');
+      }
+    };
+    
+    calculateLcyAmount();
+  }, [form.watch('renewalFee'), currency, (companyInfo as any)?.defaultCurrency, currencies]);
 
   // Parse departments from stored value (stringified array, array, or single string)
   const parseDepartments = (deptValue?: any) => {
@@ -1266,6 +1591,10 @@ export default function GovernmentLicense() {
   // State for license name validation
   const [licenseNameError, setLicenseNameError] = useState<string>("");
   
+  // State for renewal lead time validation
+  const [renewalLeadTimeError, setRenewalLeadTimeError] = useState<string>("");
+  const [renewalLeadTimeErrorOpen, setRenewalLeadTimeErrorOpen] = useState<boolean>(false);
+  
   // Extract existing license names for validation (excluding current license if editing)
   const existingLicenseNames = licenses
     .filter((license: License) => editingLicense ? license.id !== editingLicense.id : true)
@@ -1309,10 +1638,142 @@ export default function GovernmentLicense() {
       });
       
       if (!res.ok) throw new Error("Failed to save license");
-      return res.json();
+      const result = await res.json();
+      
+      // Log the action with comprehensive details
+      try {
+        const action = editingLicense ? 'Updated' : 'Created';
+        let changes = '';
+        
+        if (editingLicense) {
+          // Track field-by-field changes
+          const changesList: string[] = [];
+          
+          // Helper function to format field changes
+          const formatChange = (fieldName: string, oldVal: any, newVal: any, alwaysShow = false) => {
+            // Check if old value is empty
+            const oldIsEmpty = oldVal === undefined || oldVal === null || oldVal === '';
+            const newIsEmpty = newVal === undefined || newVal === null || newVal === '';
+            
+            // For special fields like Status Reason, always show if there's a new value
+            if (alwaysShow && !newIsEmpty) {
+              const oldDisplay = oldIsEmpty ? 'Not Set' : oldVal;
+              return `${fieldName}: ${oldDisplay} → ${newVal}`;
+            }
+            
+            // Skip if going from empty to a value (don't log initial fills)
+            if (oldIsEmpty && !newIsEmpty) {
+              return null;
+            }
+            
+            // Skip if both are empty
+            if (oldIsEmpty && newIsEmpty) {
+              return null;
+            }
+            
+            // Only log if both have values and they're different, or if clearing a value
+            if (oldVal !== newVal) {
+              const oldDisplay = oldIsEmpty ? 'Not Set' : oldVal;
+              const newDisplay = newIsEmpty ? 'Not Set' : newVal;
+              return `${fieldName}: ${oldDisplay} → ${newDisplay}`;
+            }
+            
+            return null;
+          };
+          
+          // Check all important fields for changes
+          const fieldChecks = [
+            { name: 'License Name', old: editingLicense.licenseName, new: data.licenseName },
+            { name: 'Entity Owner', old: editingLicense.entityOwner, new: data.entityOwner },
+            { name: 'Category', old: editingLicense.category, new: data.category },
+            { name: 'Beneficiary Type', old: editingLicense.beneficiaryType, new: data.beneficiaryType },
+            { name: 'Beneficiary Name/No', old: editingLicense.beneficiaryNameNo, new: data.beneficiaryNameNo },
+            { name: 'Issuing Authority', old: editingLicense.issuingAuthorityName, new: data.issuingAuthorityName },
+            { name: 'Issue Date', old: editingLicense.startDate, new: data.startDate },
+            { name: 'Expiry Date', old: editingLicense.endDate, new: data.endDate },
+            { name: 'Renewal Fee', old: editingLicense.renewalFee, new: data.renewalFee },
+            { name: 'Currency', old: editingLicense.currency, new: data.currency },
+            { name: 'LCY Amount', old: editingLicense.lcyAmount, new: data.lcyAmount },
+            { name: 'Renewal Cycle', old: editingLicense.renewalCycleTime, new: data.renewalCycleTime },
+            { name: 'Lead Time', old: editingLicense.renewalLeadTimeEstimated, new: data.renewalLeadTimeEstimated },
+            { name: 'Responsible Person', old: editingLicense.responsiblePerson, new: data.responsiblePerson },
+            { name: 'Secondary Person', old: editingLicense.secondaryPerson, new: data.secondaryPerson },
+            { name: 'Department', old: editingLicense.department, new: data.department },
+            { name: 'Status', old: editingLicense.status, new: data.status },
+            { name: 'Renewal Status', old: editingLicense.renewalStatus, new: data.renewalStatus },
+            { name: 'Authority Email', old: editingLicense.issuingAuthorityEmail, new: data.issuingAuthorityEmail },
+            { name: 'Authority Phone', old: editingLicense.issuingAuthorityPhone, new: data.issuingAuthorityPhone },
+            { name: 'Expected Completion', old: editingLicense.expectedCompletedDate, new: data.expectedCompletedDate },
+            { name: 'Renewal Initiated', old: editingLicense.renewalInitiatedDate, new: data.renewalInitiatedDate },
+            { name: 'Submitted By', old: editingLicense.submittedBy, new: data.submittedBy },
+            { name: 'Renewal Amount', old: editingLicense.renewalAmount, new: data.renewalAmount },
+            { name: 'Details/Notes', old: editingLicense.details, new: data.details },
+            { name: 'Reminder Days', old: editingLicense.reminderDays, new: data.reminderDays },
+            { name: 'Reminder Policy', old: editingLicense.reminderPolicy, new: data.reminderPolicy },
+          ];
+          
+          // Check departments array separately
+          const oldDepts = editingLicense.departments || [];
+          const newDepts = data.departments || [];
+          if (JSON.stringify(oldDepts.sort()) !== JSON.stringify(newDepts.sort())) {
+            // Skip if going from empty to having departments
+            if (oldDepts.length === 0 && newDepts.length > 0) {
+              // Don't log initial department assignment
+            } else {
+              const oldDisplay = oldDepts.length > 0 ? oldDepts.join(', ') : 'Not Set';
+              const newDisplay = newDepts.length > 0 ? newDepts.join(', ') : 'Not Set';
+              changesList.push(`Departments: ${oldDisplay} → ${newDisplay}`);
+            }
+          }
+          
+          // Handle Status Reason separately with context-aware label
+          if (data.renewalStatusReason && data.renewalStatusReason !== editingLicense.renewalStatusReason) {
+            let reasonLabel = 'Status Reason';
+            if (data.renewalStatus === 'Cancelled') {
+              reasonLabel = 'Cancellation Reason';
+            } else if (data.renewalStatus === 'Rejected') {
+              reasonLabel = 'Rejection Reason';
+            } else if (data.renewalStatus === 'Amendments/ Appeal Submitted') {
+              reasonLabel = 'Amendment/Appeal Reason';
+            }
+            const change = formatChange(reasonLabel, editingLicense.renewalStatusReason, data.renewalStatusReason, true);
+            if (change) changesList.push(change);
+          }
+          
+          // Process all field checks
+          fieldChecks.forEach(field => {
+            const change = formatChange(field.name, field.old, field.new);
+            if (change) changesList.push(change);
+          });
+          
+          changes = changesList.length > 0 
+            ? changesList.join('\n') 
+            : `Updated license: ${data.licenseName || 'Unnamed'}`;
+        } else {
+          changes = `Created new license: ${data.licenseName || 'Unnamed'}`;
+        }
+        
+        const logData: any = {
+          licenseName: data.licenseName || 'Unnamed License',
+          action,
+          changes,
+        };
+        
+        await fetch(`${API_BASE_URL}/api/logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(logData),
+        });
+      } catch (logError) {
+        console.error('Failed to log action:', logError);
+      }
+      
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
       toast({
         title: "Success",
         description: `License ${editingLicense ? 'updated' : 'created'} successfully`,
@@ -1334,15 +1795,38 @@ export default function GovernmentLicense() {
   // Delete license mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Get the license name before deleting
+      const license = licenses.find(l => l.id === id);
+      const licenseName = license?.licenseName || 'Unknown License';
+      
       const res = await fetch(`${API_BASE_URL}/api/licenses/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to delete license");
-      return res.json();
+      const result = await res.json();
+      
+      // Log the deletion
+      try {
+        await fetch(`${API_BASE_URL}/api/logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            licenseName,
+            action: 'Deleted',
+            changes: `Deleted license: ${licenseName}`,
+          }),
+        });
+      } catch (logError) {
+        console.error('Failed to log deletion:', logError);
+      }
+      
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
       toast({
         title: "Success",
         description: "License deleted successfully",
@@ -1468,7 +1952,19 @@ export default function GovernmentLicense() {
 
   const sortedLicenses = (() => {
     const list = [...filteredLicenses];
-    if (!sortField) return list;
+    
+    // Default sort: latest updated/created first (if no manual sort is applied)
+    if (!sortField) {
+      return list.sort((a, b) => {
+        const aDate = a.updatedAt || a.createdAt;
+        const bDate = b.updatedAt || b.createdAt;
+        if (!aDate && !bDate) return 0;
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return new Date(bDate).getTime() - new Date(aDate).getTime(); // Descending (newest first)
+      });
+    }
+    
     const dir = sortDirection === 'asc' ? 1 : -1;
     const parseDate = (v?: string) => {
       if (!v) return null;
@@ -1540,11 +2036,17 @@ export default function GovernmentLicense() {
     // On normal Save/Update, status is based on expiry date (Active/Expired).
     // Cancelled is only set via the "Cancel License" action.
     const derivedStatus = getDerivedStatus({ endDate: String(data.endDate || ''), status: '' });
+    
+    // Calculate lcyAmount if not already set
+    const lcyAmountValue = lcyAmount ? parseFloat(lcyAmount) : undefined;
+    
     const payload: LicenseFormData = {
       ...data,
       status: derivedStatus,
       departments: selectedDepartments,
       department: JSON.stringify(selectedDepartments),
+      currency: currency || undefined,
+      lcyAmount: lcyAmountValue,
     };
     form.setValue('status', derivedStatus);
     licenseMutation.mutate(payload);
@@ -1564,11 +2066,17 @@ export default function GovernmentLicense() {
 
     const resetValues: LicenseFormData = {
       licenseName: license.licenseName || "",
+      entityOwner: (license as any).entityOwner || "",
+      category: (license as any).category || "",
+      beneficiaryType: (license as any).beneficiaryType || "",
+      beneficiaryNameNo: (license as any).beneficiaryNameNo || "",
       issuingAuthorityName: license.issuingAuthorityName || "",
       startDate: license.startDate || "",
       endDate: license.endDate || "",
       details: license.details || "",
       renewalFee: typeof license.renewalFee === 'number' ? license.renewalFee : undefined,
+      currency: (license as any).currency || "",
+      lcyAmount: typeof (license as any).lcyAmount === 'number' ? (license as any).lcyAmount : undefined,
       renewalCycleTime: normalizedRenewalCycleTime,
       renewalLeadTimeEstimated: typeof license.renewalLeadTimeEstimated === 'string' ? license.renewalLeadTimeEstimated : undefined,
       responsiblePerson: license.responsiblePerson || "",
@@ -1607,6 +2115,14 @@ export default function GovernmentLicense() {
       })(),
     };
 
+    // Set currency state
+    setCurrency((license as any).currency || "");
+
+    // If the license already has Resubmitted status, prevent the clear effect from running
+    if (resetValues.renewalStatus === 'Resubmitted') {
+      lastResubmittedClearRef.current = true;
+    }
+
     form.reset(resetValues);
     initialFormSnapshotRef.current = cloneSnapshot(resetValues);
     initialSelectedDepartmentsRef.current = [...depts];
@@ -1624,6 +2140,8 @@ export default function GovernmentLicense() {
   setSubmissionOpenedFromTable(false);
   setSelectedDepartments([]);
   setRenewalFeeText('');
+  setCurrency('');
+  setLcyAmount('');
   setEndDateManuallySet(false);
   setShowRenewalDocumentsModal(false);
   setShowRenewalStatusReasonModal(false);
@@ -1634,6 +2152,7 @@ export default function GovernmentLicense() {
   setApprovedExpiryDraft('');
   setApprovedIssueDraft('');
   setPreviousRenewalStatusForExpiry('');
+  lastResubmittedClearRef.current = false; // Reset the ref for new license
   // Important: reset to explicit empty defaults (because form.reset(editValues) changes reset defaults)
   form.reset({ ...EMPTY_LICENSE_FORM_VALUES });
   initialFormSnapshotRef.current = cloneSnapshot({ ...EMPTY_LICENSE_FORM_VALUES });
@@ -1705,6 +2224,7 @@ export default function GovernmentLicense() {
       setApprovedIssueDraft('');
       setPreviousRenewalStatusForExpiry('');
       setLicenseNameError('');
+      lastResubmittedClearRef.current = false; // Reset the ref when closing
       // Important: reset to explicit empty defaults
       form.reset({ ...EMPTY_LICENSE_FORM_VALUES });
     }, 150);
@@ -1806,20 +2326,24 @@ export default function GovernmentLicense() {
             <div className="flex items-center space-x-3">
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
                 onClick={handleExport}
-                className="border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+                className="relative backdrop-blur-md bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-400/40 text-emerald-700 hover:from-emerald-500/30 hover:to-teal-500/30 shadow-lg hover:shadow-xl transition-all duration-300 font-medium"
+                style={{
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                }}
               >
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
                 onClick={triggerImport}
-                className="border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+                className="relative backdrop-blur-md bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-400/40 text-purple-700 hover:from-purple-500/30 hover:to-pink-500/30 shadow-lg hover:shadow-xl transition-all duration-300 font-medium"
+                style={{
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                }}
               >
                 <Upload className="h-4 w-4 mr-2" />
                 Import
@@ -1833,6 +2357,18 @@ export default function GovernmentLicense() {
                   Add Renewal
                 </Button>
               </Can>
+              <Button
+                type="button"
+                onClick={() => navigate('/renewal-log')}
+                className="relative backdrop-blur-md bg-gradient-to-r from-orange-500/20 to-amber-500/20 border border-orange-400/40 text-orange-700 hover:from-orange-500/30 hover:to-amber-500/30 shadow-lg hover:shadow-xl transition-all duration-300 font-medium"
+                style={{
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                }}
+              >
+                <History className="h-4 w-4 mr-2" />
+                Log
+              </Button>
             </div>
           </div>
           {/* Key Metrics Cards removed as requested */}
@@ -1917,7 +2453,7 @@ export default function GovernmentLicense() {
                           onClick={() => handleSort('licenseName')}
                           className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
                         >
-                          LICENSE TYPE
+                          TITLE/NAME/NO.
                           {getSortIcon('licenseName')}
                         </button>
                       </TableHead>
@@ -1973,12 +2509,12 @@ export default function GovernmentLicense() {
                             exit={{ opacity: 0 }}
                             transition={{ delay: 0.05 * index }}
                           >
-                            <TableCell className="px-3 py-3 font-medium text-gray-800 w-[160px] min-w-0">
+                            <TableCell className="px-3 py-3 font-medium text-gray-800 w-[160px] min-w-0 text-left">
                               <button
                                 type="button"
                                 onClick={() => handleEdit(license)}
                                 title={license.licenseName}
-                                className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap"
+                                className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap text-left"
                               >
                                 {truncateText(license.licenseName, 18)}
                               </button>
@@ -2131,7 +2667,10 @@ export default function GovernmentLicense() {
                 {/* Show Submission Details when showSubmissionDetails is true */}
                 {showSubmissionDetails && (
                   <>
-                    <div className={`grid gap-6 mb-8 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2'}`}>
+                    {/* Submission Details Section */}
+                    <div className="bg-white border border-gray-200 mb-6 shadow-md">
+                      <div className="p-6">
+                        <div className={`grid gap-6 ${isFullscreen ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2'}`}>
                         {/* Application Reference no. field removed */}
 
                          <FormField
@@ -2331,6 +2870,8 @@ export default function GovernmentLicense() {
                        
 
                         {/* Renewal Submitted date field removed */}
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}
@@ -2339,23 +2880,19 @@ export default function GovernmentLicense() {
                 {!showSubmissionDetails && (
                   <>
                   {/* General Info Section */}
-                  <div className="bg-white rounded-xl border border-gray-200 mb-6 shadow-md">
+                  <div className="bg-white border border-gray-200 mb-6 shadow-md">
                     <h3 className="text-base font-semibold text-slate-800 px-6 py-4 border-b border-gray-200 bg-gray-50">General Info</h3>
                     <div className="p-6">
                     <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-4' : 'grid-cols-2'}`}>
-                      {/* License Type */}
+                      {/* Title/Name/No. */}
                       <div className="space-y-2">
-                        <label className="block text-sm font-medium text-slate-700">License Title/Type</label>
+                        <label className="block text-sm font-medium text-slate-700">Title/Name/No.</label>
                         <Input
                           className={`w-full border-slate-300 rounded-lg p-2.5 text-base ${licenseNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                           value={form.watch('licenseName') || ''}
                           onChange={(e) => {
-                            // Auto-capitalize each word
-                            const capitalizedValue = e.target.value
-                              .split(' ')
-                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                              .join(' ');
-                            form.setValue('licenseName', capitalizedValue);
+                            // Just set the value as-is, no auto-capitalization
+                            form.setValue('licenseName', e.target.value);
                             // Clear uniqueness error while typing; validate on blur
                             if (licenseNameError) setLicenseNameError('');
                           }}
@@ -2372,405 +2909,152 @@ export default function GovernmentLicense() {
                         )}
                       </div>
 
+                      {/* Category */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Category</label>
+                        <Select
+                          value={form.watch('category') || ''}
+                          onValueChange={(value) => {
+                            form.setValue('category', value);
+                          }}
+                        >
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-56 overflow-y-auto custom-scrollbar">
+                            <SelectItem value="Visa">Visa</SelectItem>
+                            <SelectItem value="E-Pass">E-Pass</SelectItem>
+                            <SelectItem value="Govt. License">Govt. License</SelectItem>
+                            <SelectItem value="Insurance">Insurance</SelectItem>
+                            <SelectItem value="Contract">Contract</SelectItem>
+                            <SelectItem value="Agreement">Agreement</SelectItem>
+                            <SelectItem value="Maintenance">Maintenance</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Beneficiary Type */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Beneficiary Type</label>
+                        <Select
+                          value={form.watch('beneficiaryType') || ''}
+                          onValueChange={(value) => {
+                            form.setValue('beneficiaryType', value);
+                            // Clear Beneficiary Name/No when type changes
+                            form.setValue('beneficiaryNameNo', '');
+                          }}
+                        >
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-56 overflow-y-auto custom-scrollbar">
+                            <SelectItem value="Employee">Employee</SelectItem>
+                            <SelectItem value="Company">Company</SelectItem>
+                            <SelectItem value="Vehicle">Vehicle</SelectItem>
+                            <SelectItem value="Customer">Customer</SelectItem>
+                            <SelectItem value="Department">Department</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Beneficiary Name / No - Dynamic field based on Beneficiary Type */}
+                      {form.watch('beneficiaryType') === 'Employee' ? (
+                        <FormField
+                          control={form.control}
+                          name="beneficiaryNameNo"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="block text-sm font-medium text-slate-700">Beneficiary Name / No</FormLabel>
+                              <FormControl>
+                                <EmployeeSearchDropdown
+                                  value={String(field.value || '')}
+                                  onChange={field.onChange}
+                                  employees={employeesRaw as any}
+                                  onAddNew={() => setEmployeeModal({ show: true, target: 'beneficiaryNameNo' })}
+                                />
+                              </FormControl>
+                              <FormMessage className="text-red-500" />
+                            </FormItem>
+                          )}
+                        />
+                      ) : (
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-slate-700">Beneficiary Name / No</label>
+                          <Input
+                            type="text"
+                            className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                            value={form.watch('beneficiaryNameNo') || ''}
+                            onChange={(e) => {
+                              form.setValue('beneficiaryNameNo', e.target.value);
+                            }}
+                          />
+                        </div>
+                      )}
+
                       {/* License No. field removed */}
-
-                      {/* Responsible Person - exact dropdown pattern from SubscriptionModal Owner (with + New) */}
-                      <FormField
-                        control={form.control}
-                        name="responsiblePerson"
-                        render={({ field }) => {
-                          const [responsiblePersonOpen, setResponsiblePersonOpen] = useState(false);
-                          const [responsiblePersonSearch, setResponsiblePersonSearch] = useState('');
-                          const responsiblePersonDropdownRef = useRef<HTMLDivElement>(null);
-                          useEffect(() => {
-                            if (!responsiblePersonOpen) return;
-                            function handleClickOutside(event: MouseEvent) {
-                              if (
-                                responsiblePersonDropdownRef.current &&
-                                !responsiblePersonDropdownRef.current.contains(event.target as Node)
-                              ) {
-                                setResponsiblePersonOpen(false);
-                                setResponsiblePersonSearch('');
-                              }
-                            }
-
-                            const dialogEl = responsiblePersonDropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
-                            function handleDialogScroll() {
-                              setResponsiblePersonOpen(false);
-                              setResponsiblePersonSearch('');
-                            }
-                            document.addEventListener('mousedown', handleClickOutside);
-                            dialogEl?.addEventListener('scroll', handleDialogScroll, { passive: true });
-                            return () => {
-                              document.removeEventListener('mousedown', handleClickOutside);
-                              dialogEl?.removeEventListener('scroll', handleDialogScroll);
-                            };
-                          }, [responsiblePersonOpen]);
-
-                          const options = employeesRaw.length > 0
-                            ? employeesRaw.map((emp: any) => {
-                                const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
-                                const displayName = duplicateNames.length > 1
-                                  ? `${emp.name} (${emp.email})`
-                                  : emp.name;
-                                const uniqueValue = duplicateNames.length > 1
-                                  ? `${emp.name}|${emp.email}`
-                                  : emp.name;
-                                return { displayName, uniqueValue, name: emp.name, email: emp.email };
-                              })
-                            : [];
-
-                          const normalizedSearch = responsiblePersonSearch.trim().toLowerCase();
-                          const filtered = normalizedSearch
-                            ? options.filter(opt => (opt.displayName || '').toLowerCase().includes(normalizedSearch))
-                            : options;
-
-                          return (
-                            <FormItem className="relative" ref={responsiblePersonDropdownRef}>
-                              <FormLabel className="block text-sm font-medium text-slate-700">Responsible Person</FormLabel>
-                              <div className="relative">
-                                <Input
-                                  value={responsiblePersonOpen ? responsiblePersonSearch : (field.value || '')}
-
-                                  className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base cursor-pointer"
-                                  onChange={(e) => {
-                                    setResponsiblePersonSearch(e.target.value);
-                                    if (!responsiblePersonOpen) setResponsiblePersonOpen(true);
-                                  }}
-                                  onFocus={() => {
-                                    setResponsiblePersonSearch(field.value || '');
-                                    setResponsiblePersonOpen(true);
-                                  }}
-                                  onClick={() => {
-                                    setResponsiblePersonSearch(field.value || '');
-                                    setResponsiblePersonOpen(true);
-                                  }}
-                                />
-                                <ChevronDown
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                                  onClick={() => {
-                                    if (!responsiblePersonOpen) setResponsiblePersonSearch(field.value || '');
-                                    setResponsiblePersonOpen(!responsiblePersonOpen);
-                                    if (responsiblePersonOpen) setResponsiblePersonSearch('');
-                                  }}
-                                />
-                              </div>
-                              {responsiblePersonOpen && (
-                                <div
-                                  className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-auto overscroll-contain custom-scrollbar"
-                                  onWheel={(e) => e.stopPropagation()}
-                                  onTouchMove={(e) => e.stopPropagation()}
-                                >
-                                  {filtered.length > 0 ? (
-                                    filtered.map(opt => (
-                                      <div
-                                        key={opt.uniqueValue}
-                                        className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                                        onClick={() => {
-                                          const value = opt.uniqueValue;
-                                          // If clicking on already selected item, clear it
-                                          if (field.value === opt.uniqueValue || field.value === opt.name) {
-                                            field.onChange('');
-                                            setResponsiblePersonOpen(false);
-                                            setResponsiblePersonSearch('');
-                                            return;
-                                          }
-
-                                          const emp = employeesRaw.find((e: any) => {
-                                            if (value.includes('|')) {
-                                              const [name, email] = value.split('|');
-                                              return e.name === name && e.email === email;
-                                            }
-                                            return e.name === value;
-                                          });
-                                          field.onChange(emp?.name || value);
-                                          setResponsiblePersonOpen(false);
-                                          setResponsiblePersonSearch('');
-                                        }}
-                                      >
-                                        <Check
-                                          className={`mr-2 h-4 w-4 text-blue-600 ${field.value === opt.uniqueValue ? "opacity-100" : "opacity-0"}`}
-                                        />
-                                        <span className="font-normal">{opt.displayName}</span>
-                                      </div>
-                                    ))
-                                  ) : (
-                                    <div className="dropdown-item disabled text-gray-400">No employees found</div>
-                                  )}
-
-                                  <div
-                                    className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                                    style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
-                                    onClick={() => {
-                                      setEmployeeModal({ show: true, target: 'responsiblePerson' });
-                                      setResponsiblePersonOpen(false);
-                                      setResponsiblePersonSearch('');
-                                    }}
-                                  >
-                                    + New
-                                  </div>
-                                </div>
-                              )}
-                              <FormMessage className="text-red-500" />
-                            </FormItem>
-                          );
-                        }}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="departments"
-                        render={() => {
-                          const [deptOpen, setDeptOpen] = useState(false);
-                          const deptDropdownRef = useRef<HTMLDivElement>(null);
-                          useEffect(() => {
-                            if (!deptOpen) return;
-                            function handleClickOutside(event: MouseEvent) {
-                              if (deptDropdownRef.current && !deptDropdownRef.current.contains(event.target as Node)) {
-                                setDeptOpen(false);
-                              }
-                            }
-                            document.addEventListener('mousedown', handleClickOutside);
-                            return () => {
-                              document.removeEventListener('mousedown', handleClickOutside);
-                            };
-                          }, [deptOpen]);
-                          return (
-                            <FormItem className="relative" ref={deptDropdownRef}>
-                              <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
-                              <div className="relative">
-                                <div
-                                  className="w-full border border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200"
-                                  onClick={() => setDeptOpen(true)}
-                                  tabIndex={0}
-                                  onFocus={() => setDeptOpen(true)}
-                                >
-                                  {selectedDepartments.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1 w-full">
-                                      {selectedDepartments.map((dept) => (
-                                        <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
-                                          <span className="truncate max-w-[80px]">{dept}</span>
-                                          <button
-                                            type="button"
-                                            data-remove-dept="true"
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              removeDepartment(dept);
-                                            }}
-                                            className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
-                                            tabIndex={-1}
-                                          >
-                                            <X className="h-3 w-3" data-remove-dept="true" />
-                                          </button>
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <span className="text-gray-400">Select departments</span>
-                                  )}
-                                  <ChevronDown
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeptOpen(!deptOpen);
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                              {selectedDepartments.includes('Company Level') && (
-                                <p className="mt-1 text-xs text-slate-500">All departments are selected</p>
-                              )}
-                              {deptOpen && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
-                                  <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
-                                    <Checkbox
-                                      id="dept-company-level"
-                                      checked={selectedDepartments.includes('Company Level')}
-                                      onCheckedChange={(checked: boolean) => handleDepartmentChange('Company Level', checked)}
-                                      disabled={departmentsLoading}
-                                    />
-                                    <label
-                                      htmlFor="dept-company-level"
-                                      className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
-                                    >
-                                      Company Level
-                                    </label>
-                                  </div>
-                                  {Array.isArray(departments) && departments.length > 0
-                                    ? departments
-                                        .filter(dept => dept.visible)
-                                        .map(dept => (
-                                          <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
-                                            <Checkbox
-                                              id={`dept-${dept.name}`}
-                                              checked={selectedDepartments.includes(dept.name)}
-                                              onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
-                                              disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
-                                            />
-                                            <label
-                                              htmlFor={`dept-${dept.name}`}
-                                              className="text-sm font-medium cursor-pointer flex-1 ml-2"
-                                            >
-                                              {dept.name}
-                                            </label>
-                                          </div>
-                                        ))
-                                    : null}
-                                  <div
-                                    className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                                    style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
-                                    onClick={() => setDepartmentModal({ show: true })}
-                                  >
-                                    + New
-                                  </div>
-                                  {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
-                                    <div className="dropdown-item disabled text-gray-400">No departments found</div>
-                                  )}
-                                </div>
-                              )}
-                              <FormMessage className="text-red-500" />
-                            </FormItem>
-                          );
-                        }}
-                      />
 
                       {/* Secondary Person - match SubscriptionModal Owner dropdown (with + New) */}
                       <FormField
                         control={form.control}
                         name="secondaryPerson"
-                        render={({ field }) => {
-                          const [secondaryOpen, setSecondaryOpen] = useState(false);
-                          const [secondarySearch, setSecondarySearch] = useState('');
-                          const secondaryDropdownRef = useRef<HTMLDivElement>(null);
-                          useEffect(() => {
-                            if (!secondaryOpen) return;
-                            function handleClickOutside(event: MouseEvent) {
-                              if (secondaryDropdownRef.current && !secondaryDropdownRef.current.contains(event.target as Node)) {
-                                setSecondaryOpen(false);
-                                setSecondarySearch('');
-                              }
-                            }
-
-                            const dialogEl = secondaryDropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
-                            function handleDialogScroll() {
-                              setSecondaryOpen(false);
-                              setSecondarySearch('');
-                            }
-                            document.addEventListener('mousedown', handleClickOutside);
-                            dialogEl?.addEventListener('scroll', handleDialogScroll, { passive: true });
-                            return () => {
-                              document.removeEventListener('mousedown', handleClickOutside);
-                              dialogEl?.removeEventListener('scroll', handleDialogScroll);
-                            };
-                          }, [secondaryOpen]);
-
-                          const options = employeesRaw.length > 0
-                            ? employeesRaw.map((emp: any) => {
-                                const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
-                                const displayName = duplicateNames.length > 1
-                                  ? `${emp.name} (${emp.email})`
-                                  : emp.name;
-                                const uniqueValue = duplicateNames.length > 1
-                                  ? `${emp.name}|${emp.email}`
-                                  : emp.name;
-                                return { displayName, uniqueValue, name: emp.name, email: emp.email };
-                              })
-                            : [];
-
-                          const normalizedSearch = secondarySearch.trim().toLowerCase();
-                          const filtered = normalizedSearch
-                            ? options.filter(opt => (opt.displayName || '').toLowerCase().includes(normalizedSearch))
-                            : options;
-
-                          return (
-                            <FormItem className="relative" ref={secondaryDropdownRef}>
-                              <FormLabel className="block text-sm font-medium text-slate-700">Secondary Person</FormLabel>
-                              <div className="relative">
-                                <Input
-                                  value={secondaryOpen ? secondarySearch : (field.value || '')}
-                                  className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base cursor-pointer"
-                                  onChange={(e) => {
-                                    setSecondarySearch(e.target.value);
-                                    if (!secondaryOpen) setSecondaryOpen(true);
-                                  }}
-                                  onFocus={() => {
-                                    setSecondarySearch(field.value || '');
-                                    setSecondaryOpen(true);
-                                  }}
-                                  onClick={() => {
-                                    setSecondarySearch(field.value || '');
-                                    setSecondaryOpen(true);
-                                  }}
-                                />
-                                <ChevronDown
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                                  onClick={() => {
-                                    if (!secondaryOpen) setSecondarySearch(field.value || '');
-                                    setSecondaryOpen(!secondaryOpen);
-                                    if (secondaryOpen) setSecondarySearch('');
-                                  }}
-                                />
-                              </div>
-                              {secondaryOpen && (
-                                <div
-                                  className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-auto overscroll-contain custom-scrollbar"
-                                  onWheel={(e) => e.stopPropagation()}
-                                  onTouchMove={(e) => e.stopPropagation()}
-                                >
-                                  {filtered.length > 0 ? (
-                                    filtered.map(opt => (
-                                      <div
-                                        key={opt.uniqueValue}
-                                        className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                                        onClick={() => {
-                                          const value = opt.uniqueValue;
-                                          if (field.value === opt.uniqueValue || field.value === opt.name) {
-                                            field.onChange('');
-                                            setSecondaryOpen(false);
-                                            setSecondarySearch('');
-                                            return;
-                                          }
-
-                                          const emp = employeesRaw.find((e: any) => {
-                                            if (value.includes('|')) {
-                                              const [name, email] = value.split('|');
-                                              return e.name === name && e.email === email;
-                                            }
-                                            return e.name === value;
-                                          });
-                                          field.onChange(emp?.name || value);
-                                          setSecondaryOpen(false);
-                                          setSecondarySearch('');
-                                        }}
-                                      >
-                                        <Check
-                                          className={`mr-2 h-4 w-4 text-blue-600 ${field.value === opt.uniqueValue ? "opacity-100" : "opacity-0"}`}
-                                        />
-                                        <span className="font-normal">{opt.displayName}</span>
-                                      </div>
-                                    ))
-                                  ) : (
-                                    <div className="dropdown-item disabled text-gray-400">No employees found</div>
-                                  )}
-                                  <div
-                                    className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                                    style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
-                                    onClick={() => {
-                                      setEmployeeModal({ show: true, target: 'secondaryPerson' });
-                                      setSecondaryOpen(false);
-                                      setSecondarySearch('');
-                                    }}
-                                  >
-                                    + New
-                                  </div>
-                                </div>
-                              )}
-                              <FormMessage className="text-red-500" />
-                            </FormItem>
-                          );
-                        }}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="block text-sm font-medium text-slate-700">Renewal Person In Charge 1</FormLabel>
+                            <FormControl>
+                              <EmployeeSearchDropdown
+                                value={String(field.value || '')}
+                                onChange={field.onChange}
+                                employees={employeesRaw as any}
+                                onAddNew={() => setEmployeeModal({ show: true, target: 'secondaryPerson' })}
+                              />
+                            </FormControl>
+                            <FormMessage className="text-red-500" />
+                          </FormItem>
+                        )}
                       />
+
+                      {/* Responsible Person - exact dropdown pattern from SubscriptionModal Owner (with + New) */}
+                      <FormField
+                        control={form.control}
+                        name="responsiblePerson"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="block text-sm font-medium text-slate-700">Renewal Person In Charge 2</FormLabel>
+                            <FormControl>
+                              <EmployeeSearchDropdown
+                                value={String(field.value || '')}
+                                onChange={field.onChange}
+                                employees={employeesRaw as any}
+                                onAddNew={() => setEmployeeModal({ show: true, target: 'responsiblePerson' })}
+                              />
+                            </FormControl>
+                            <FormMessage className="text-red-500" />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="departments"
+                        render={() => (
+                          <FormItem>
+                            <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
+                            <FormControl>
+                              <MultiSelectDepartmentsDropdown
+                                selectedDepartments={selectedDepartments}
+                                onDepartmentChange={handleDepartmentChange}
+                                onRemoveDepartment={removeDepartment}
+                                departments={departments}
+                                departmentsLoading={departmentsLoading}
+                                onAddNew={() => setDepartmentModal({ show: true })}
+                              />
+                            </FormControl>
+                            <FormMessage className="text-red-500" />
+                          </FormItem>
+                        )}
+                      />
+
+                      
 
                       {/* Issue Date */}
                       <div className="space-y-2">
@@ -2832,6 +3116,29 @@ export default function GovernmentLicense() {
                         )}
                       </div>
 
+                      {/* Currency */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Currency</label>
+                        <Select
+                          value={currency || ''}
+                          onValueChange={(value) => {
+                            setCurrency(value);
+                            form.setValue('currency', value);
+                          }}
+                        >
+                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
+                            <SelectValue placeholder="Select currency" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-56 overflow-y-auto custom-scrollbar">
+                            {currencies.map((curr: any) => (
+                              <SelectItem key={curr.code} value={curr.code}>
+                                {curr.code}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
                       {/* Renewal Cost */}
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-slate-700">Renewal Cost</label>
@@ -2885,17 +3192,52 @@ export default function GovernmentLicense() {
                         />
                       </div>
 
+                      {/* Renewal Cost LCY - Read-only calculated field */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Renewal Cost LCY</label>
+                        <Input
+                          type="text"
+                          value={lcyAmount}
+                          readOnly
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base bg-slate-50 text-slate-600"
+                          placeholder=""
+                        />
+                        {currency && currency !== (companyInfo as any)?.defaultCurrency && lcyAmount && (
+                          <div className="text-xs text-slate-500 mt-1">
+                            1 {(companyInfo as any)?.defaultCurrency || 'LCY'} = {currencies.find((c: any) => c.code === currency)?.exchangeRate || 'Not set'} {currency}
+                          </div>
+                        )}
+                      </div>
+
                       {/* Renewal Lead Time (Estimated) */}
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-slate-700">Renewal Lead Time (Estimated)</label>
                         <Input
                           type="text"
                           inputMode="text"
-                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          placeholder="e.g., 1D, 2W, 3M, 1Y"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 placeholder:text-gray-400"
                           value={String(form.watch('renewalLeadTimeEstimated') || '')}
                           onChange={(e) => {
-                            const s = e.target.value;
+                            // Just update the value, don't validate while typing
+                            const s = e.target.value.toUpperCase();
                             form.setValue('renewalLeadTimeEstimated', s ? s : undefined);
+                          }}
+                          onBlur={(e) => {
+                            const s = e.target.value.trim().toUpperCase();
+                            if (s) {
+                              // Pattern: number followed by D, WD, W, M, Q, or Y
+                              // D = Day, WD = Working Day, W = Week, M = Month, Q = Quarter, Y = Year
+                              const pattern = /^(\d+)(D|WD|W|M|Q|Y)$/;
+                              if (!pattern.test(s)) {
+                                setRenewalLeadTimeError(
+                                  `Your entry of '${s}' is not an acceptable value for 'Renewal Lead Time'. The format should include a time unit. Time units can be: D, WD, W, M, Q, or Y. Examples: 1D (1 day), 2W (2 weeks), 3M (3 months), 1Y (1 year).`
+                                );
+                                setRenewalLeadTimeErrorOpen(true);
+                                // Clear invalid value
+                                form.setValue('renewalLeadTimeEstimated', undefined);
+                              }
+                            }
                           }}
                         />
                       </div>
@@ -2909,7 +3251,7 @@ export default function GovernmentLicense() {
                   </div>
 
                   {/* Issuing Authority Section */}
-                  <div className="bg-white rounded-xl border border-gray-200 mb-6 shadow-md">
+                  <div className="bg-white border border-gray-200 mb-6 shadow-md">
                     <h3 className="text-base font-semibold text-slate-800 px-6 py-4 border-b border-gray-200 bg-gray-50">Issuing Authority</h3>
                     <div className="p-6">
                     <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-4' : 'grid-cols-2'}`}>
@@ -2917,111 +3259,20 @@ export default function GovernmentLicense() {
                       <FormField
                         control={form.control}
                         name="issuingAuthorityName"
-                        render={({ field }) => {
-                          const [authorityOpen, setAuthorityOpen] = useState(false);
-                          const [authoritySearch, setAuthoritySearch] = useState('');
-                          const authorityDropdownRef = useRef<HTMLDivElement>(null);
-
-                          useEffect(() => {
-                            if (!authorityOpen) return;
-                            function handleClickOutside(event: MouseEvent) {
-                              if (
-                                authorityDropdownRef.current &&
-                                !authorityDropdownRef.current.contains(event.target as Node)
-                              ) {
-                                setAuthorityOpen(false);
-                                setAuthoritySearch('');
-                              }
-                            }
-                            document.addEventListener('mousedown', handleClickOutside);
-                            return () => document.removeEventListener('mousedown', handleClickOutside);
-                          }, [authorityOpen]);
-
-                          const q = authoritySearch.trim().toLowerCase();
-                          const filteredAuthorities = q
-                            ? ISSUING_AUTHORITIES.filter(a => a.toLowerCase().includes(q))
-                            : ISSUING_AUTHORITIES;
-
-                          return (
-                            <FormItem className="relative" ref={authorityDropdownRef}>
-                              <FormLabel className="block text-sm font-medium text-slate-700">Authority</FormLabel>
-                              <div className="relative">
-                                <Input
-                                  value={authorityOpen ? authoritySearch : (field.value || '')}
-                                  className="w-full border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer"
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    setAuthoritySearch(v);
-                                    // Allow custom authority names not in the predefined list
-                                    field.onChange(v);
-                                    if (!authorityOpen) setAuthorityOpen(true);
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      setAuthorityOpen(false);
-                                      setAuthoritySearch('');
-                                      (e.currentTarget as HTMLInputElement).blur();
-                                    }
-                                    if (e.key === 'Escape') {
-                                      e.preventDefault();
-                                      setAuthorityOpen(false);
-                                      setAuthoritySearch('');
-                                      (e.currentTarget as HTMLInputElement).blur();
-                                    }
-                                  }}
-                                  onFocus={() => {
-                                    setAuthoritySearch(field.value || '');
-                                    setAuthorityOpen(true);
-                                  }}
-                                  onClick={() => {
-                                    setAuthoritySearch(field.value || '');
-                                    setAuthorityOpen(true);
-                                  }}
-                                />
-                                <ChevronDown
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                                  onClick={() => {
-                                    if (!authorityOpen) setAuthoritySearch(field.value || '');
-                                    setAuthorityOpen(!authorityOpen);
-                                    if (authorityOpen) setAuthoritySearch('');
-                                  }}
-                                />
-                              </div>
-                              {authorityOpen && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
-                                  {filteredAuthorities.length > 0 ? (
-                                    filteredAuthorities.map((name) => (
-                                      <div
-                                        key={name}
-                                        className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                                        onClick={() => {
-                                          if (field.value === name) {
-                                            field.onChange('');
-                                            setAuthorityOpen(false);
-                                            setAuthoritySearch('');
-                                            return;
-                                          }
-                                          field.onChange(name);
-                                          setAuthorityOpen(false);
-                                          setAuthoritySearch('');
-                                        }}
-                                      >
-                                        <Check
-                                          className={`mr-2 h-4 w-4 text-blue-600 ${field.value === name ? 'opacity-100' : 'opacity-0'}`}
-                                        />
-                                        <span className="font-normal">{name}</span>
-                                      </div>
-                                    ))
-                                  ) : (
-                                    <div className="px-3 py-2 text-sm text-slate-500">No matching authorities found</div>
-                                  )}
-                                </div>
-                              )}
-                              <FormMessage className="text-red-500" />
-                            </FormItem>
-                          );
-                        }}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="block text-sm font-medium text-slate-700">Authority</FormLabel>
+                            <FormControl>
+                              <SearchableStringDropdown
+                                value={String(field.value || '')}
+                                onChange={field.onChange}
+                                options={ISSUING_AUTHORITIES}
+                                className="w-full border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer"
+                              />
+                            </FormControl>
+                            <FormMessage className="text-red-500" />
+                          </FormItem>
+                        )}
                       />
 
                       {/* Contact Number */}
@@ -3066,7 +3317,7 @@ export default function GovernmentLicense() {
                   </div>
 
                   {/* Reminder Settings Section */}
-                  <div className="bg-white rounded-xl border border-gray-200 mb-6 shadow-md">
+                  <div className="bg-white border border-gray-200 mb-6 shadow-md">
                     <h3 className="text-base font-semibold text-slate-800 px-6 py-4 border-b border-gray-200 bg-gray-50">Reminder Settings</h3>
                     <div className="p-6">
                     <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-4' : 'grid-cols-2'}`}>
@@ -3160,9 +3411,13 @@ export default function GovernmentLicense() {
                 </div>
               </form>
             </Form>
+          </DialogContent>
+        </Dialog>
 
-            {/* Renewal Documents Modal (like Subscription Documents dialog) */}
-            <Dialog open={showRenewalDocumentsModal} onOpenChange={setShowRenewalDocumentsModal}>
+        {/* All modals moved outside main Dialog to prevent nesting issues */}
+        
+        {/* Renewal Documents Modal (like Subscription Documents dialog) */}
+        <Dialog open={showRenewalDocumentsModal} onOpenChange={setShowRenewalDocumentsModal}>
               <DialogContent className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
                 <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
                   <div className="flex items-start justify-between">
@@ -3926,8 +4181,6 @@ export default function GovernmentLicense() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          </DialogContent>
-        </Dialog>
         
         <input
           type="file"
@@ -3936,6 +4189,44 @@ export default function GovernmentLicense() {
           onChange={handleImport}
           className="hidden"
         />
+
+        {/* Renewal Lead Time Validation Error Dialog */}
+        <Dialog open={renewalLeadTimeErrorOpen} onOpenChange={setRenewalLeadTimeErrorOpen}>
+          <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white font-inter overflow-hidden">
+            {/* Header with Red Gradient Background */}
+            <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
+              <DialogHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <AlertCircle className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                      Invalid Format
+                    </DialogTitle>
+                  </div>
+                </div>
+              </DialogHeader>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-5">
+              <p className="text-gray-700 text-sm leading-relaxed">
+                {renewalLeadTimeError}
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
+              <Button
+                onClick={() => setRenewalLeadTimeErrorOpen(false)}
+                className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+              >
+                OK
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Exit Confirmation Dialog (match Compliance) */}
         <AlertDialog open={exitConfirmOpen} onOpenChange={(open) => !open && setExitConfirmOpen(false)}>
