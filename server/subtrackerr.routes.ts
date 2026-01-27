@@ -2650,6 +2650,68 @@ router.delete("/api/licenses/:id", async (req, res) => {
   }
 });
 
+// --- Logs API ---
+// Get all logs for the current tenant
+router.get("/api/logs", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("Log");
+    const tenantId = req.user?.tenantId;
+
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const logs = await collection
+      .find({ tenantId })
+      .sort({ timestamp: -1 })
+      .limit(100)
+      .toArray();
+
+    res.status(200).json(logs);
+  } catch (error: unknown) {
+    console.error("Error fetching logs:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to fetch logs", error: errorMessage });
+  }
+});
+
+// Create a log entry
+router.post("/api/logs", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("Log");
+    const tenantId = req.user?.tenantId;
+    const user = req.user?.email || req.user?.userId || 'System';
+
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const { licenseName, action, changes } = req.body;
+
+    const logEntry = {
+      tenantId,
+      licenseName,
+      user,
+      action, // 'create', 'update', 'delete'
+      changes,
+      timestamp: new Date(),
+    };
+
+    const result = await collection.insertOne(logEntry);
+
+    res.status(201).json({
+      message: "Log created successfully",
+      logId: result.insertedId.toString(),
+    });
+  } catch (error: unknown) {
+    console.error("Error creating log:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to create log", error: errorMessage });
+  }
+});
+
 // --- Company Information API ---
 // Company Information interface
 export interface CompanyInfo {

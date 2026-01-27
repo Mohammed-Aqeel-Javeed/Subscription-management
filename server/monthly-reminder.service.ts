@@ -1,4 +1,4 @@
-// Simple monthly reminder service for sending email reminders on the 13th of every month
+// Simple monthly reminder service for sending email reminders on the 25th of every month
 // This service identifies subscriptions renewing next month and logs/emails the owners
 
 import { emailService } from './email.service.js';
@@ -7,7 +7,7 @@ export class MonthlyReminderService {
   constructor(private storage: any) {} // Using any for now to avoid type issues
 
   /**
-   * Runs on the 13th of every month to send reminder emails
+   * Runs on the 25th of every month to send reminder emails
    * for subscriptions renewing next month
    * @param specificTenantId - Optional: only process reminders for this tenant
    */
@@ -285,11 +285,11 @@ console.log(`Subscriptions (${emailData.totalCount}):`);
       for (const subscription of subscriptions) {
         const reminderData = {
           subscriptionId: subscription.id,
-          alertDays: 30, // Sent ~30 days before (since we send on 13th for next month)
+          alertDays: 30, // Sent ~30 days before (since we send on 25th for next month)
           emailEnabled: true,
           whatsappEnabled: false,
           reminderType: 'monthly_recurring',
-          monthlyDay: 13
+          monthlyDay: 25
         };
 
         await this.storage.createReminder(reminderData, tenantId);
@@ -383,17 +383,17 @@ successCount++;
   }
 
   /**
-   * Check if today is the 13th and run reminders if so
+   * Check if today is the 25th and run reminders if so
    */
   async checkAndRunDailyReminders(): Promise<{ shouldRun: boolean; result?: any }> {
     const today = new Date();
     const dayOfMonth = today.getDate();
     
-    if (dayOfMonth === 13) {
-const result = await this.sendMonthlyReminders();
+    if (dayOfMonth === 25) {
+      const result = await this.sendMonthlyReminders();
       return { shouldRun: true, result };
     } else {
-return { shouldRun: false };
+      return { shouldRun: false };
     }
   }
 
