@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserProvider } from "@/context/UserContext";
 import { SidebarSlotProvider } from "@/context/SidebarSlotContext";
 import Sidebar from "@/components/layout/sidebar";
+import Chatbot from "@/pages/chatbot";
 import Dashboard from "@/pages/dashboard";
 import ComplianceLedger from "@/pages/compliance-ledger";
 import Subscriptions from "@/pages/subscriptions";
@@ -46,9 +47,13 @@ function App() {
 
 function AppWithSidebar() {
   const hideSidebarPaths = ["/", "/login", "/signup", "/auth", "/landing"];
+  const hideChatbotPaths = ["/", "/login", "/signup", "/auth", "/landing", "/dashboard", "/notifications", "/reports"];
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Determine if chatbot should be shown
+  const showChatbot = !hideChatbotPaths.includes(location.pathname);
 
   // Clear session when window/tab is closed
   useEffect(() => {
@@ -143,6 +148,8 @@ function AppWithSidebar() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
+        {/* Chatbot - shown on all pages except dashboard, notifications, reports, and auth pages */}
+        {showChatbot && <Chatbot />}
       </div>
     </SidebarSlotProvider>
   );

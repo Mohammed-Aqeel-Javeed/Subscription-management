@@ -262,6 +262,91 @@ const validateEmail = (email: string): { valid: boolean; error?: string } => {
   return { valid: true };
 };
 
+// Comprehensive URL Validation Function
+const validateURL = (url: string): { valid: boolean; error?: string } => {
+  // Rule 1: Required - Not empty
+  if (!url || url.trim() === '') {
+    return { valid: false, error: 'URL is required' };
+  }
+
+  const trimmedURL = url.trim();
+
+  // Rule 2: Max length ≤ 2048 characters (browser standard)
+  if (trimmedURL.length > 2048) {
+    return { valid: false, error: 'URL must be 2048 characters or less' };
+  }
+
+  // Rule 3: No spaces
+  if (/\s/.test(trimmedURL)) {
+    return { valid: false, error: 'URL cannot contain spaces' };
+  }
+
+  // Rule 4: Must start with http:// or https:// or www.
+  const hasProtocol = /^https?:\/\//i.test(trimmedURL);
+  const startsWithWWW = /^www\./i.test(trimmedURL);
+  
+  let urlToValidate = trimmedURL;
+  if (!hasProtocol && !startsWithWWW) {
+    return { valid: false, error: 'URL must start with http://, https://, or www.' };
+  }
+  
+  // Add protocol if missing but has www
+  if (startsWithWWW && !hasProtocol) {
+    urlToValidate = 'https://' + trimmedURL;
+  }
+
+  // Rule 5: Try to parse as URL
+  let parsedURL;
+  try {
+    parsedURL = new URL(urlToValidate);
+  } catch (e) {
+    return { valid: false, error: 'Invalid URL format' };
+  }
+
+  // Rule 6: Must have a valid hostname
+  if (!parsedURL.hostname || parsedURL.hostname.length < 3) {
+    return { valid: false, error: 'URL must have a valid domain name' };
+  }
+
+  // Rule 7: Hostname must contain at least one dot
+  if (!parsedURL.hostname.includes('.')) {
+    return { valid: false, error: 'URL must have a valid domain with extension (e.g., .com, .org)' };
+  }
+
+  // Rule 8: Check for valid TLD
+  const hostParts = parsedURL.hostname.split('.');
+  const tld = hostParts[hostParts.length - 1].toLowerCase();
+  
+  if (tld.length < 2 || tld.length > 6) {
+    return { valid: false, error: 'URL domain extension must be between 2-6 characters' };
+  }
+
+  // Rule 9: TLD should only contain letters
+  if (!/^[a-zA-Z]+$/.test(tld)) {
+    return { valid: false, error: 'URL domain extension must contain only letters' };
+  }
+
+  // Rule 10: Check for common TLDs
+  const commonTLDs = [
+    'com', 'org', 'net', 'edu', 'gov', 'mil', 'int',
+    'co', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'jp', 'cn', 'in', 'br', 'ru',
+    'io', 'ai', 'app', 'dev', 'tech', 'info', 'biz', 'name', 'pro',
+    'email', 'online', 'site', 'store', 'cloud', 'digital', 'global',
+    'xyz', 'top', 'vip', 'club', 'shop', 'live', 'today', 'world'
+  ];
+  
+  if (!commonTLDs.includes(tld)) {
+    return { valid: false, error: 'Please enter a valid domain extension (e.g., .com, .org, .net)' };
+  }
+
+  // Rule 11: No consecutive dots in hostname
+  if (/\.\./.test(parsedURL.hostname)) {
+    return { valid: false, error: 'URL cannot contain consecutive dots' };
+  }
+
+  return { valid: true };
+};
+
 // Update the form schema to handle multiple departments and make required fields
 const formSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
@@ -892,6 +977,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Website editing state
   const [isEditingWebsite, setIsEditingWebsite] = useState<boolean>(false);
+  const [websiteURLError, setWebsiteURLError] = useState<string>("");
 
   // Owner modal Department dropdown: close on outside click
   useEffect(() => {
@@ -2712,35 +2798,37 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           />
                         </div>
                         {currencyOpen && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
-                            {filtered.length > 0 ? (
-                              filtered.map((curr: any) => (
-                                <div
-                                  key={curr.code}
-                                  className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                                  onClick={() => {
-                                    // If already selected, clear it
-                                    if (field.value === curr.code) {
-                                      field.onChange('');
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                            <div className="max-h-60 overflow-auto custom-scrollbar">
+                              {filtered.length > 0 ? (
+                                filtered.map((curr: any) => (
+                                  <div
+                                    key={curr.code}
+                                    className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                                    onClick={() => {
+                                      // If already selected, clear it
+                                      if (field.value === curr.code) {
+                                        field.onChange('');
+                                        setCurrencyOpen(false);
+                                        setCurrencySearch('');
+                                        return;
+                                      }
+                                      field.onChange(curr.code);
                                       setCurrencyOpen(false);
                                       setCurrencySearch('');
-                                      return;
-                                    }
-                                    field.onChange(curr.code);
-                                    setCurrencyOpen(false);
-                                    setCurrencySearch('');
-                                  }}
-                                >
-                                  <Check
-                                    className={`mr-2 h-4 w-4 text-blue-600 ${field.value === curr.code ? "opacity-100" : "opacity-0"}`}
-                                  />
-                                  <span className="font-normal">{curr.code}</span>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="dropdown-item disabled text-gray-400">No currencies configured</div>
-                            )}
-                            <div className="border-t">
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 text-blue-600 ${field.value === curr.code ? "opacity-100" : "opacity-0"}`}
+                                    />
+                                    <span className="font-normal">{curr.code}</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="dropdown-item disabled text-gray-400">No currencies configured</div>
+                              )}
+                            </div>
+                            <div className="sticky bottom-0 bg-white border-t">
                               <button
                                 type="button"
                                 className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
@@ -3134,33 +3222,35 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           />
                         </div>
                         {shouldShowDropdown && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-scroll custom-scrollbar">
-                            {filtered.map(catName => (
-                              <div
-                                key={catName}
-                                className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${field.value === catName ? 'bg-blue-50 text-blue-700' : ''}`}
-                                onClick={() => {
-                                  // If already selected, clear it
-                                  if (field.value === catName) {
-                                    field.onChange('');
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                            <div className="max-h-40 overflow-y-scroll custom-scrollbar">
+                              {filtered.map(catName => (
+                                <div
+                                  key={catName}
+                                  className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${field.value === catName ? 'bg-blue-50 text-blue-700' : ''}`}
+                                  onClick={() => {
+                                    // If already selected, clear it
+                                    if (field.value === catName) {
+                                      field.onChange('');
+                                      setCategoryOpen(false);
+                                      setCategorySearch('');
+                                      return;
+                                    }
+                                    field.onChange(catName);
                                     setCategoryOpen(false);
                                     setCategorySearch('');
-                                    return;
-                                  }
-                                  field.onChange(catName);
-                                  setCategoryOpen(false);
-                                  setCategorySearch('');
-                                }}
-                              >
-                                <Check
-                                  className={`mr-2 h-4 w-4 text-blue-600 ${field.value === catName ? 'opacity-100' : 'opacity-0'}`}
-                                />
-                                <span className="font-normal">{catName}</span>
-                              </div>
-                            ))}
+                                  }}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 text-blue-600 ${field.value === catName ? 'opacity-100' : 'opacity-0'}`}
+                                  />
+                                  <span className="font-normal">{catName}</span>
+                                </div>
+                              ))}
+                            </div>
                             <div
-                              className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                              style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                              className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                              style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
                               onClick={() => {
                                 setCategoryModal({ show: true });
                                 setCategoryOpen(false);
@@ -3199,15 +3289,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
                         <div className="relative">
                           <div
-                            className="w-full border border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200"
+                            className="w-full border border-slate-300 rounded-lg p-2 text-base h-[44px] flex items-center justify-start overflow-x-auto overflow-y-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200 scrollbar-hide"
                             onClick={() => setDeptOpen(true)}
                             tabIndex={0}
                             onFocus={() => setDeptOpen(true)}
+                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                           >
                             {selectedDepartments.length > 0 ? (
-                              <div className="flex flex-wrap gap-1 w-full">
+                              <div className="flex gap-1 flex-nowrap">
                                 {selectedDepartments.map((dept) => (
-                                  <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
+                                  <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 whitespace-nowrap flex-shrink-0">
                                     <span className="truncate max-w-[80px]">{dept}</span>
                                     <button
                                       type="button"
@@ -3229,7 +3320,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               <span className="text-gray-400">Select departments</span>
                             )}
                             <ChevronDown
-                              className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer flex-shrink-0"
                               onClick={(e) => { e.stopPropagation(); setDeptOpen(!deptOpen); }}
                             />
                           </div>
@@ -3238,51 +3329,53 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           <p className="mt-1 text-xs text-slate-500">All departments are selected</p>
                         )}
                         {deptOpen && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
-                            <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
-                              <Checkbox
-                                id="dept-company-level"
-                                checked={selectedDepartments.includes('Company Level')}
-                                onCheckedChange={(checked: boolean) => handleDepartmentChange('Company Level', checked)}
-                                disabled={departmentsLoading}
-                              />
-                              <label
-                                htmlFor="dept-company-level"
-                                className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
-                              >
-                                Company Level
-                              </label>
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                            <div className="max-h-60 overflow-auto custom-scrollbar">
+                              <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
+                                <Checkbox
+                                  id="dept-company-level"
+                                  checked={selectedDepartments.includes('Company Level')}
+                                  onCheckedChange={(checked: boolean) => handleDepartmentChange('Company Level', checked)}
+                                  disabled={departmentsLoading}
+                                />
+                                <label
+                                  htmlFor="dept-company-level"
+                                  className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
+                                >
+                                  Company Level
+                                </label>
+                              </div>
+                              {Array.isArray(departments) && departments.length > 0 ? (
+                                departments
+                                  .filter(dept => dept.visible)
+                                  .map(dept => (
+                                    <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                                      <Checkbox
+                                        id={`dept-${dept.name}`}
+                                        checked={selectedDepartments.includes(dept.name)}
+                                        onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
+                                        disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
+                                      />
+                                      <label
+                                        htmlFor={`dept-${dept.name}`}
+                                        className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                                      >
+                                        {dept.name}
+                                      </label>
+                                    </div>
+                                  ))
+                              ) : null}
+                              {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
+                                <div className="dropdown-item disabled text-gray-400">No departments found</div>
+                              )}
                             </div>
-                            {Array.isArray(departments) && departments.length > 0 ? (
-                              departments
-                                .filter(dept => dept.visible)
-                                .map(dept => (
-                                  <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
-                                    <Checkbox
-                                      id={`dept-${dept.name}`}
-                                      checked={selectedDepartments.includes(dept.name)}
-                                      onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
-                                      disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
-                                    />
-                                    <label
-                                      htmlFor={`dept-${dept.name}`}
-                                      className="text-sm font-medium cursor-pointer flex-1 ml-2"
-                                    >
-                                      {dept.name}
-                                    </label>
-                                  </div>
-                                ))
-                            ) : null}
                             <div
-                              className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                              style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                              className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                              style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
                               onClick={() => setDepartmentModal({ show: true })}
                             >
                               + New
                             </div>
-                            {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
-                              <div className="dropdown-item disabled text-gray-400">No departments found</div>
-                            )}
                           </div>
                         )}
                         <FormMessage />
@@ -3447,54 +3540,56 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           />
                         </div>
                         {ownerOpen && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
-                            {filtered.length > 0 ? (
-                              filtered.map(opt => (
-                                <div
-                                  key={opt.uniqueValue}
-                                  className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                                  onClick={() => {
-                                    const value = opt.uniqueValue;
-                                    if (value === "add-new-owner") {
-                                      setOwnerModal({ show: true });
-                                    } else {
-                                      // If clicking on already selected item, clear it
-                                      if (field.value === opt.uniqueValue || field.value === opt.name) {
-                                        field.onChange('');
-                                        form.setValue('ownerEmail', '');
-                                        setOwnerOpen(false);
-                                        setOwnerSearch('');
-                                        return;
-                                      }
-                                      
-                                      const emp = employeesRaw.find((e: any) => {
-                                        if (value.includes('|')) {
-                                          const [name, email] = value.split('|');
-                                          return e.name === name && e.email === email;
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                            <div className="max-h-60 overflow-auto custom-scrollbar">
+                              {filtered.length > 0 ? (
+                                filtered.map(opt => (
+                                  <div
+                                    key={opt.uniqueValue}
+                                    className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                                    onClick={() => {
+                                      const value = opt.uniqueValue;
+                                      if (value === "add-new-owner") {
+                                        setOwnerModal({ show: true });
+                                      } else {
+                                        // If clicking on already selected item, clear it
+                                        if (field.value === opt.uniqueValue || field.value === opt.name) {
+                                          field.onChange('');
+                                          form.setValue('ownerEmail', '');
+                                          setOwnerOpen(false);
+                                          setOwnerSearch('');
+                                          return;
                                         }
-                                        return e.name === value;
-                                      });
-                                      field.onChange(emp?.name || value);
-                                      if (emp?.email) {
-                                        form.setValue('ownerEmail', emp.email);
+                                        
+                                        const emp = employeesRaw.find((e: any) => {
+                                          if (value.includes('|')) {
+                                            const [name, email] = value.split('|');
+                                            return e.name === name && e.email === email;
+                                          }
+                                          return e.name === value;
+                                        });
+                                        field.onChange(emp?.name || value);
+                                        if (emp?.email) {
+                                          form.setValue('ownerEmail', emp.email);
+                                        }
                                       }
-                                    }
-                                    setOwnerOpen(false);
-                                    setOwnerSearch('');
-                                  }}
-                                >
-                                  <Check
-                                    className={`mr-2 h-4 w-4 text-blue-600 ${field.value === opt.uniqueValue ? "opacity-100" : "opacity-0"}`}
-                                  />
-                                  <span className="font-normal">{opt.displayName}</span>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="dropdown-item disabled text-gray-400">No owners found</div>
-                            )}
+                                      setOwnerOpen(false);
+                                      setOwnerSearch('');
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 text-blue-600 ${field.value === opt.uniqueValue ? "opacity-100" : "opacity-0"}`}
+                                    />
+                                    <span className="font-normal">{opt.displayName}</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="dropdown-item disabled text-gray-400">No owners found</div>
+                              )}
+                            </div>
                             <div
-                              className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                              style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                              className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                              style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
                               onClick={() => {
                                 setOwnerModal({ show: true });
                                 setOwnerOpen(false);
@@ -3570,10 +3665,29 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             ) : (
                               <Input 
                                 type="url"
-                                className="w-full border-gray-300 rounded-lg p-2 text-sm font-normal bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                                maxLength={200}
+                                placeholder="https://example.com"
+                                className={`w-full border-gray-300 rounded-lg p-2 text-sm font-normal bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 ${
+                                  websiteURLError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20 bg-red-50' : ''
+                                }`}
                                 {...field}
+                                onChange={(e) => {
+                                  field.onChange(e);
+                                  // Clear error on change
+                                  if (websiteURLError) {
+                                    setWebsiteURLError('');
+                                  }
+                                }}
                                 onBlur={() => {
-                                  if (field.value) {
+                                  const url = field.value;
+                                  if (url && url.trim()) {
+                                    const validation = validateURL(url.trim());
+                                    if (!validation.valid) {
+                                      setWebsiteURLError(validation.error || 'Invalid URL');
+                                    } else {
+                                      setIsEditingWebsite(false);
+                                    }
+                                  } else {
                                     setIsEditingWebsite(false);
                                   }
                                 }}
@@ -3581,6 +3695,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               />
                             )}
                           </div>
+                          {websiteURLError && (
+                            <p className="text-sm text-red-600 mt-1">
+                              {websiteURLError}
+                            </p>
+                          )}
                         </FormControl>
                         <FormMessage />
                       </FormItem>

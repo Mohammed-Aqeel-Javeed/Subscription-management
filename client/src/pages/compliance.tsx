@@ -2548,15 +2548,16 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">Departments</label>
                 <div className="relative">
                   <div
-                    className="w-full border border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-base h-[44px] flex items-center justify-start overflow-x-auto overflow-y-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200 scrollbar-hide"
                     onClick={() => setDepartmentSelectOpen(true)}
                     tabIndex={0}
                     onFocus={() => setDepartmentSelectOpen(true)}
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                   >
                     {selectedDepartments.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 w-full">
+                      <div className="flex gap-1 flex-nowrap">
                         {selectedDepartments.map((dept) => (
-                          <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
+                          <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 whitespace-nowrap flex-shrink-0">
                             <span className="truncate max-w-[80px]">{dept}</span>
                             <button
                               type="button"
@@ -2578,7 +2579,7 @@ export default function Compliance() {
                       <span className="text-gray-400">Select departments</span>
                     )}
                     <ChevronDown
-                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer flex-shrink-0"
                       onClick={(e) => { e.stopPropagation(); setDepartmentSelectOpen(!departmentSelectOpen); }}
                     />
                   </div>
@@ -2587,51 +2588,53 @@ export default function Compliance() {
                   <p className="mt-1 text-xs text-slate-500">All departments are selected</p>
                 )}
                 {departmentSelectOpen && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
-                    <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
-                      <Checkbox
-                        id="dept-company-level"
-                        checked={selectedDepartments.includes('Company Level')}
-                        onCheckedChange={(checked: boolean) => handleDepartmentChange('Company Level', checked)}
-                        disabled={departmentsLoading}
-                      />
-                      <label
-                        htmlFor="dept-company-level"
-                        className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
-                      >
-                        Company Level
-                      </label>
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                    <div className="max-h-60 overflow-auto custom-scrollbar">
+                      <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
+                        <Checkbox
+                          id="dept-company-level"
+                          checked={selectedDepartments.includes('Company Level')}
+                          onCheckedChange={(checked: boolean) => handleDepartmentChange('Company Level', checked)}
+                          disabled={departmentsLoading}
+                        />
+                        <label
+                          htmlFor="dept-company-level"
+                          className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
+                        >
+                          Company Level
+                        </label>
+                      </div>
+                      {Array.isArray(departments) && departments.length > 0 ? (
+                        departments
+                          .filter(dept => dept.visible)
+                          .map(dept => (
+                            <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                              <Checkbox
+                                id={`dept-${dept.name}`}
+                                checked={selectedDepartments.includes(dept.name)}
+                                onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
+                                disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
+                              />
+                              <label
+                                htmlFor={`dept-${dept.name}`}
+                                className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                              >
+                                {dept.name}
+                              </label>
+                            </div>
+                          ))
+                      ) : null}
+                      {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
+                        <div className="dropdown-item disabled text-gray-400">No departments found</div>
+                      )}
                     </div>
-                    {Array.isArray(departments) && departments.length > 0 ? (
-                      departments
-                        .filter(dept => dept.visible)
-                        .map(dept => (
-                          <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
-                            <Checkbox
-                              id={`dept-${dept.name}`}
-                              checked={selectedDepartments.includes(dept.name)}
-                              onCheckedChange={(checked: boolean) => handleDepartmentChange(dept.name, checked)}
-                              disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
-                            />
-                            <label
-                              htmlFor={`dept-${dept.name}`}
-                              className="text-sm font-medium cursor-pointer flex-1 ml-2"
-                            >
-                              {dept.name}
-                            </label>
-                          </div>
-                        ))
-                    ) : null}
                     <div
-                      className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                      style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                      className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                      style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
                       onClick={() => setDepartmentModal({ show: true })}
                     >
                       + New
                     </div>
-                    {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
-                      <div className="dropdown-item disabled text-gray-400">No departments found</div>
-                    )}
                   </div>
                 )}
               </div>
@@ -2668,49 +2671,51 @@ export default function Compliance() {
                 </div>
 
                 {ownerOpen && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
-                    {isLoadingEmployees ? (
-                      <div className="px-3 py-2.5 text-sm text-slate-500">Loading employees...</div>
-                    ) : (
-                      (Array.isArray(employeesData) ? employeesData : [])
-                        .filter((emp: any) => {
-                          const q = ownerSearch.trim().toLowerCase();
-                          if (!q) return true;
-                          return (
-                            getEmployeeName(emp).toLowerCase().includes(q) ||
-                            getEmployeeEmail(emp).toLowerCase().includes(q)
-                          );
-                        })
-                        .map((emp: any) => {
-                          const name = getEmployeeName(emp);
-                          const email = getEmployeeEmail(emp);
-                          const selected = String(form.owner || '') === name;
-                          return (
-                            <div
-                              key={getEmployeeId(emp)}
-                              className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
-                                selected ? 'bg-blue-50 text-blue-700' : ''
-                              }`}
-                              onClick={() => {
-                                handleFormChange('owner', selected ? '' : name);
-                                setOwnerOpen(false);
-                                setOwnerSearch('');
-                              }}
-                            >
-                              <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
-                              <span className="font-normal">{name || email || 'Employee'}</span>
-                            </div>
-                          );
-                        })
-                    )}
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                    <div className="max-h-44 overflow-y-scroll custom-scrollbar">
+                      {isLoadingEmployees ? (
+                        <div className="px-3 py-2.5 text-sm text-slate-500">Loading employees...</div>
+                      ) : (
+                        (Array.isArray(employeesData) ? employeesData : [])
+                          .filter((emp: any) => {
+                            const q = ownerSearch.trim().toLowerCase();
+                            if (!q) return true;
+                            return (
+                              getEmployeeName(emp).toLowerCase().includes(q) ||
+                              getEmployeeEmail(emp).toLowerCase().includes(q)
+                            );
+                          })
+                          .map((emp: any) => {
+                            const name = getEmployeeName(emp);
+                            const email = getEmployeeEmail(emp);
+                            const selected = String(form.owner || '') === name;
+                            return (
+                              <div
+                                key={getEmployeeId(emp)}
+                                className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                  selected ? 'bg-blue-50 text-blue-700' : ''
+                                }`}
+                                onClick={() => {
+                                  handleFormChange('owner', selected ? '' : name);
+                                  setOwnerOpen(false);
+                                  setOwnerSearch('');
+                                }}
+                              >
+                                <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                <span className="font-normal">{name || email || 'Employee'}</span>
+                              </div>
+                            );
+                          })
+                      )}
 
-                    {!isLoadingEmployees && (Array.isArray(employeesData) ? employeesData : []).length === 0 && (
-                      <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
-                    )}
+                      {!isLoadingEmployees && (Array.isArray(employeesData) ? employeesData : []).length === 0 && (
+                        <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                      )}
+                    </div>
 
                     <div
-                      className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                      style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                      className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                      style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
                       onClick={() => {
                         setOwnerModal({ show: true });
                         setOwnerOpen(false);

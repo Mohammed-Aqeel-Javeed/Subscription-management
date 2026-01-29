@@ -269,6 +269,149 @@ const validateEmail = (email: string): { valid: boolean; error?: string } => {
   return { valid: true };
 };
 
+// Comprehensive Phone Number Validation Function (Universal - E.164 Standard)
+const validatePhoneNumber = (phone: string): { valid: boolean; error?: string } => {
+  // Rule 1: Required - Not empty
+  if (!phone || phone.trim() === '') {
+    return { valid: false, error: 'Contact number is required' };
+  }
+
+  const trimmedPhone = phone.trim();
+
+  // Rule 2: No spaces at start or end (already trimmed)
+  if (phone !== trimmedPhone) {
+    return { valid: false, error: 'Contact number cannot have spaces at start or end' };
+  }
+
+  // Rule 3: Only digits and optional + at start
+  if (!/^\+?[0-9]+$/.test(trimmedPhone)) {
+    return { valid: false, error: 'Contact number can only contain digits and optional + at start' };
+  }
+
+  // Rule 4: Only one + and only at the beginning
+  const plusCount = (trimmedPhone.match(/\+/g) || []).length;
+  if (plusCount > 1) {
+    return { valid: false, error: 'Contact number can have only one + symbol' };
+  }
+  if (plusCount === 1 && !trimmedPhone.startsWith('+')) {
+    return { valid: false, error: '+ symbol must be at the beginning' };
+  }
+
+  // Rule 5: Must start with + or a digit (not 0)
+  const digitsOnly = trimmedPhone.replace(/\+/g, '');
+  if (digitsOnly.startsWith('0')) {
+    return { valid: false, error: 'Contact number cannot start with 0 (use country code instead)' };
+  }
+
+  // Rule 6: Minimum length: 7 digits
+  if (digitsOnly.length < 7) {
+    return { valid: false, error: 'Contact number must be at least 7 digits' };
+  }
+
+  // Rule 7: Maximum length: 15 digits (ITU E.164 standard)
+  if (digitsOnly.length > 15) {
+    return { valid: false, error: 'Contact number must be 15 digits or less' };
+  }
+
+  // Rule 8: Not all digits same (e.g., +111111111111)
+  const uniqueDigits = new Set(digitsOnly.split(''));
+  if (uniqueDigits.size === 1) {
+    return { valid: false, error: 'Contact number cannot have all same digits' };
+  }
+
+  // Rule 9: Universal regex validation (E.164 standard)
+  if (!/^\+?[1-9]\d{6,14}$/.test(trimmedPhone)) {
+    return { valid: false, error: 'Invalid contact number format' };
+  }
+
+  return { valid: true };
+};
+
+// Comprehensive URL Validation Function
+const validateURL = (url: string): { valid: boolean; error?: string } => {
+  // Rule 1: Required - Not empty
+  if (!url || url.trim() === '') {
+    return { valid: false, error: 'URL is required' };
+  }
+
+  const trimmedURL = url.trim();
+
+  // Rule 2: Max length ≤ 2048 characters (browser standard)
+  if (trimmedURL.length > 2048) {
+    return { valid: false, error: 'URL must be 2048 characters or less' };
+  }
+
+  // Rule 3: No spaces
+  if (/\s/.test(trimmedURL)) {
+    return { valid: false, error: 'URL cannot contain spaces' };
+  }
+
+  // Rule 4: Must start with http:// or https:// or www.
+  const hasProtocol = /^https?:\/\//i.test(trimmedURL);
+  const startsWithWWW = /^www\./i.test(trimmedURL);
+  
+  let urlToValidate = trimmedURL;
+  if (!hasProtocol && !startsWithWWW) {
+    return { valid: false, error: 'URL must start with http://, https://, or www.' };
+  }
+  
+  // Add protocol if missing but has www
+  if (startsWithWWW && !hasProtocol) {
+    urlToValidate = 'https://' + trimmedURL;
+  }
+
+  // Rule 5: Try to parse as URL
+  let parsedURL;
+  try {
+    parsedURL = new URL(urlToValidate);
+  } catch (e) {
+    return { valid: false, error: 'Invalid URL format' };
+  }
+
+  // Rule 6: Must have a valid hostname
+  if (!parsedURL.hostname || parsedURL.hostname.length < 3) {
+    return { valid: false, error: 'URL must have a valid domain name' };
+  }
+
+  // Rule 7: Hostname must contain at least one dot
+  if (!parsedURL.hostname.includes('.')) {
+    return { valid: false, error: 'URL must have a valid domain with extension (e.g., .com, .org)' };
+  }
+
+  // Rule 8: Check for valid TLD
+  const hostParts = parsedURL.hostname.split('.');
+  const tld = hostParts[hostParts.length - 1].toLowerCase();
+  
+  if (tld.length < 2 || tld.length > 6) {
+    return { valid: false, error: 'URL domain extension must be between 2-6 characters' };
+  }
+
+  // Rule 9: TLD should only contain letters
+  if (!/^[a-zA-Z]+$/.test(tld)) {
+    return { valid: false, error: 'URL domain extension must contain only letters' };
+  }
+
+  // Rule 10: Check for common TLDs
+  const commonTLDs = [
+    'com', 'org', 'net', 'edu', 'gov', 'mil', 'int',
+    'co', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'jp', 'cn', 'in', 'br', 'ru',
+    'io', 'ai', 'app', 'dev', 'tech', 'info', 'biz', 'name', 'pro',
+    'email', 'online', 'site', 'store', 'cloud', 'digital', 'global',
+    'xyz', 'top', 'vip', 'club', 'shop', 'live', 'today', 'world'
+  ];
+  
+  if (!commonTLDs.includes(tld)) {
+    return { valid: false, error: 'Please enter a valid domain extension (e.g., .com, .org, .net)' };
+  }
+
+  // Rule 11: No consecutive dots in hostname
+  if (/\.\./.test(parsedURL.hostname)) {
+    return { valid: false, error: 'URL cannot contain consecutive dots' };
+  }
+
+  return { valid: true };
+};
+
 // Form schema (all fields optional - no mandatory validation)
 const licenseSchema = z
   .object({
@@ -449,49 +592,53 @@ function EmployeeSearchDropdown(props: {
       />
       {open && (
         <div
-          className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-auto overscroll-contain custom-scrollbar"
-          onWheel={(e) => e.stopPropagation()}
-          onTouchMove={(e) => e.stopPropagation()}
+          className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
         >
-          {filtered.length > 0 ? (
-            filtered.map((opt) => (
-              <div
-                key={opt.uniqueValue}
-                className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                onClick={() => {
-                  const unique = opt.uniqueValue;
-                  if (value === opt.name || value === unique) {
-                    onChange('');
+          <div
+            className="max-h-44 overflow-auto overscroll-contain custom-scrollbar"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
+            {filtered.length > 0 ? (
+              filtered.map((opt) => (
+                <div
+                  key={opt.uniqueValue}
+                  className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                  onClick={() => {
+                    const unique = opt.uniqueValue;
+                    if (value === opt.name || value === unique) {
+                      onChange('');
+                      setOpen(false);
+                      setSearch('');
+                      return;
+                    }
+
+                    const emp = employees.find((e: any) => {
+                      if (unique.includes('|')) {
+                        const [n, em] = unique.split('|');
+                        return e?.name === n && (e?.email || '') === em;
+                      }
+                      return e?.name === unique;
+                    });
+
+                    onChange(String(emp?.name || opt.name));
                     setOpen(false);
                     setSearch('');
-                    return;
-                  }
-
-                  const emp = employees.find((e: any) => {
-                    if (unique.includes('|')) {
-                      const [n, em] = unique.split('|');
-                      return e?.name === n && (e?.email || '') === em;
-                    }
-                    return e?.name === unique;
-                  });
-
-                  onChange(String(emp?.name || opt.name));
-                  setOpen(false);
-                  setSearch('');
-                }}
-              >
-                <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt.name ? 'opacity-100' : 'opacity-0'}`} />
-                <span className="font-normal">{opt.displayName}</span>
-              </div>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-sm text-slate-500">No employees found</div>
-          )}
+                  }}
+                >
+                  <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt.name ? 'opacity-100' : 'opacity-0'}`} />
+                  <span className="font-normal">{opt.displayName}</span>
+                </div>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-sm text-slate-500">No employees found</div>
+            )}
+          </div>
 
           {onAddNew && (
             <div
-              className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-              style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+              className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+              style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
               onClick={() => {
                 setOpen(false);
                 setSearch('');
@@ -526,6 +673,10 @@ function SearchableStringDropdown(props: {
 
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        // Only save if user typed something, don't restore old value
+        if (search.trim() !== value) {
+          onChange(search.trim());
+        }
         setOpen(false);
         setSearch('');
       }
@@ -533,6 +684,10 @@ function SearchableStringDropdown(props: {
 
     const dialogEl = dropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
     function handleDialogScroll() {
+      // Only save if user typed something different
+      if (search.trim() !== value) {
+        onChange(search.trim());
+      }
       setOpen(false);
       setSearch('');
     }
@@ -544,7 +699,7 @@ function SearchableStringDropdown(props: {
       document.removeEventListener('mousedown', handleClickOutside);
       dialogEl?.removeEventListener('scroll', handleDialogScroll);
     };
-  }, [open]);
+  }, [open, search, onChange, value]);
 
   const normalizedSearch = search.trim().toLowerCase();
   const filtered = normalizedSearch
@@ -580,37 +735,41 @@ function SearchableStringDropdown(props: {
       />
       {open && (
         <div
-          className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-auto overscroll-contain custom-scrollbar"
-          onWheel={(e) => e.stopPropagation()}
-          onTouchMove={(e) => e.stopPropagation()}
+          className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
         >
-          {filtered.length > 0 ? (
-            filtered.map((opt) => (
-              <div
-                key={opt}
-                className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                onClick={() => {
-                  if (value === opt) {
-                    onChange('');
-                  } else {
-                    onChange(opt);
-                  }
-                  setOpen(false);
-                  setSearch('');
-                }}
-              >
-                <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
-                <span className="font-normal">{opt}</span>
-              </div>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-sm text-slate-500">No options found</div>
-          )}
+          <div
+            className="max-h-44 overflow-auto overscroll-contain custom-scrollbar"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
+            {filtered.length > 0 ? (
+              filtered.map((opt) => (
+                <div
+                  key={opt}
+                  className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                  onClick={() => {
+                    if (value === opt) {
+                      onChange('');
+                    } else {
+                      onChange(opt);
+                    }
+                    setOpen(false);
+                    setSearch('');
+                  }}
+                >
+                  <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
+                  <span className="font-normal">{opt}</span>
+                </div>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-sm text-slate-500">No options found</div>
+            )}
+          </div>
 
           {onAddNew && (
             <div
-              className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-              style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+              className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+              style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
               onClick={() => {
                 setOpen(false);
                 setSearch('');
@@ -641,29 +800,41 @@ function MultiSelectDepartmentsDropdown(props: {
 
   useEffect(() => {
     if (!deptOpen) return;
+    
     function handleClickOutside(event: MouseEvent) {
       if (deptDropdownRef.current && !deptDropdownRef.current.contains(event.target as Node)) {
         setDeptOpen(false);
       }
     }
+    
+    // Close dropdown when dialog/modal scrolls
+    const dialogEl = deptDropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
+    function handleDialogScroll() {
+      setDeptOpen(false);
+    }
+    
     document.addEventListener('mousedown', handleClickOutside);
+    dialogEl?.addEventListener('scroll', handleDialogScroll, { passive: true });
+    
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      dialogEl?.removeEventListener('scroll', handleDialogScroll);
     };
   }, [deptOpen]);
 
   return (
     <div className="relative" ref={deptDropdownRef}>
       <div
-        className="w-full border border-slate-300 rounded-lg p-2 text-base min-h-[44px] flex items-start justify-start overflow-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200"
+        className="w-full border border-slate-300 rounded-lg p-2 text-base h-[44px] flex items-center justify-start overflow-x-auto overflow-y-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200 scrollbar-hide"
         onClick={() => setDeptOpen(true)}
         tabIndex={0}
         onFocus={() => setDeptOpen(true)}
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {selectedDepartments.length > 0 ? (
-          <div className="flex flex-wrap gap-1 w-full">
+          <div className="flex gap-1 flex-nowrap">
             {selectedDepartments.map((dept) => (
-              <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 max-w-full">
+              <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 whitespace-nowrap flex-shrink-0">
                 <span className="truncate max-w-[80px]">{dept}</span>
                 <button
                   type="button"
@@ -685,7 +856,7 @@ function MultiSelectDepartmentsDropdown(props: {
           <span className="text-gray-400">Select departments</span>
         )}
         <ChevronDown
-          className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+          className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer flex-shrink-0"
           onClick={(e) => {
             e.stopPropagation();
             setDeptOpen(!deptOpen);
@@ -696,51 +867,53 @@ function MultiSelectDepartmentsDropdown(props: {
         <p className="mt-1 text-xs text-slate-500">All departments are selected</p>
       )}
       {deptOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
-          <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
-            <Checkbox
-              id="dept-company-level"
-              checked={selectedDepartments.includes('Company Level')}
-              onCheckedChange={(checked: boolean) => onDepartmentChange('Company Level', checked)}
-              disabled={departmentsLoading}
-            />
-            <label
-              htmlFor="dept-company-level"
-              className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
-            >
-              Company Level
-            </label>
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+          <div className="max-h-60 overflow-auto custom-scrollbar">
+            <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
+              <Checkbox
+                id="dept-company-level"
+                checked={selectedDepartments.includes('Company Level')}
+                onCheckedChange={(checked: boolean) => onDepartmentChange('Company Level', checked)}
+                disabled={departmentsLoading}
+              />
+              <label
+                htmlFor="dept-company-level"
+                className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
+              >
+                Company Level
+              </label>
+            </div>
+            {Array.isArray(departments) && departments.length > 0
+              ? departments
+                  .filter(dept => dept.visible)
+                  .map(dept => (
+                    <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                      <Checkbox
+                        id={`dept-${dept.name}`}
+                        checked={selectedDepartments.includes(dept.name)}
+                        onCheckedChange={(checked: boolean) => onDepartmentChange(dept.name, checked)}
+                        disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
+                      />
+                      <label
+                        htmlFor={`dept-${dept.name}`}
+                        className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                      >
+                        {dept.name}
+                      </label>
+                    </div>
+                  ))
+              : null}
+            {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
+              <div className="dropdown-item disabled text-gray-400">No departments found</div>
+            )}
           </div>
-          {Array.isArray(departments) && departments.length > 0
-            ? departments
-                .filter(dept => dept.visible)
-                .map(dept => (
-                  <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
-                    <Checkbox
-                      id={`dept-${dept.name}`}
-                      checked={selectedDepartments.includes(dept.name)}
-                      onCheckedChange={(checked: boolean) => onDepartmentChange(dept.name, checked)}
-                      disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
-                    />
-                    <label
-                      htmlFor={`dept-${dept.name}`}
-                      className="text-sm font-medium cursor-pointer flex-1 ml-2"
-                    >
-                      {dept.name}
-                    </label>
-                  </div>
-                ))
-            : null}
           <div
-            className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-            style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
+            className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+            style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
             onClick={() => onAddNew()}
           >
             + New
           </div>
-          {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
-            <div className="dropdown-item disabled text-gray-400">No departments found</div>
-          )}
         </div>
       )}
     </div>
@@ -792,6 +965,7 @@ export default function GovernmentLicense() {
   const [previousRenewalStatusForExpiry, setPreviousRenewalStatusForExpiry] = useState<string>('');
 
   const [renewalFeeText, setRenewalFeeText] = useState('');
+  const [renewalAmountText, setRenewalAmountText] = useState('');
   const [currency, setCurrency] = useState('');
   const [lcyAmount, setLcyAmount] = useState('');
 
@@ -923,6 +1097,21 @@ export default function GovernmentLicense() {
   });
 
   const renewalStatusValue = form.watch('renewalStatus');
+
+  // Watch for changes in responsiblePerson and secondaryPerson to validate in real-time
+  const responsiblePerson = form.watch('responsiblePerson');
+  const secondaryPerson = form.watch('secondaryPerson');
+
+  useEffect(() => {
+    // Check if both fields have values and if they're the same
+    if (secondaryPerson && responsiblePerson && 
+        secondaryPerson.trim() !== '' && responsiblePerson.trim() !== '' &&
+        secondaryPerson.trim() === responsiblePerson.trim()) {
+      setDuplicatePersonError("Renewal Person In Charge 1 and 2 cannot be the same person");
+    } else {
+      setDuplicatePersonError("");
+    }
+  }, [responsiblePerson, secondaryPerson]);
 
   useEffect(() => {
     if (renewalStatusValue !== 'Resubmitted') {
@@ -1129,6 +1318,8 @@ export default function GovernmentLicense() {
     if (!isModalOpen) return;
     const fee = form.getValues('renewalFee');
     setRenewalFeeText(typeof fee === 'number' && Number.isFinite(fee) ? fee.toFixed(2) : '');
+    const amount = form.getValues('renewalAmount');
+    setRenewalAmountText(typeof amount === 'number' && Number.isFinite(amount) ? amount.toFixed(2) : '');
   }, [isModalOpen, editingLicense]);
 
   // Initialize auto-calc comparison values on open
@@ -1595,6 +1786,18 @@ export default function GovernmentLicense() {
   const [renewalLeadTimeError, setRenewalLeadTimeError] = useState<string>("");
   const [renewalLeadTimeErrorOpen, setRenewalLeadTimeErrorOpen] = useState<boolean>(false);
   
+  // State for duplicate person validation
+  const [duplicatePersonError, setDuplicatePersonError] = useState<string>("");
+  
+  // State for issuing authority email validation
+  const [issuingAuthorityEmailError, setIssuingAuthorityEmailError] = useState<string>("");
+  
+  // State for issuing authority phone validation
+  const [issuingAuthorityPhoneError, setIssuingAuthorityPhoneError] = useState<string>("");
+  
+  // State for website URL validation
+  const [websiteURLError, setWebsiteURLError] = useState<string>("");
+  
   // Extract existing license names for validation (excluding current license if editing)
   const existingLicenseNames = licenses
     .filter((license: License) => editingLicense ? license.id !== editingLicense.id : true)
@@ -1754,6 +1957,7 @@ export default function GovernmentLicense() {
         }
         
         const logData: any = {
+          licenseId: editingLicense?.id || result.id, // Include license ID for filtering
           licenseName: data.licenseName || 'Unnamed License',
           action,
           changes,
@@ -1813,6 +2017,7 @@ export default function GovernmentLicense() {
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
+            licenseId: id, // Include license ID for filtering
             licenseName,
             action: 'Deleted',
             changes: `Deleted license: ${licenseName}`,
@@ -2033,6 +2238,64 @@ export default function GovernmentLicense() {
       return;
     }
     
+    // Check for duplicate person error
+    if (duplicatePersonError) {
+      toast({
+        title: "Validation Error",
+        description: duplicatePersonError,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check for email validation error
+    if (issuingAuthorityEmailError) {
+      toast({
+        title: "Validation Error",
+        description: "Please fix the email error before submitting",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check for phone validation error
+    if (issuingAuthorityPhoneError) {
+      toast({
+        title: "Validation Error",
+        description: "Please fix the contact number error before submitting",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate email one more time if provided
+    if (data.issuingAuthorityEmail && data.issuingAuthorityEmail.trim()) {
+      const emailValidation = validateEmail(data.issuingAuthorityEmail.trim());
+      if (!emailValidation.valid) {
+        setIssuingAuthorityEmailError(emailValidation.error || 'Invalid email address');
+        toast({
+          title: "Validation Error",
+          description: emailValidation.error || 'Invalid email address',
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    // Validate phone one more time if provided
+    if (data.issuingAuthorityPhone && data.issuingAuthorityPhone.trim()) {
+      const phoneValidation = validatePhoneNumber(data.issuingAuthorityPhone.trim());
+      if (!phoneValidation.valid) {
+        setIssuingAuthorityPhoneError(phoneValidation.error || 'Invalid contact number');
+        toast({
+          title: "Validation Error",
+          description: phoneValidation.error || 'Invalid contact number',
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
     // On normal Save/Update, status is based on expiry date (Active/Expired).
     // Cancelled is only set via the "Cancel License" action.
     const derivedStatus = getDerivedStatus({ endDate: String(data.endDate || ''), status: '' });
@@ -2140,6 +2403,7 @@ export default function GovernmentLicense() {
   setSubmissionOpenedFromTable(false);
   setSelectedDepartments([]);
   setRenewalFeeText('');
+  setRenewalAmountText('');
   setCurrency('');
   setLcyAmount('');
   setEndDateManuallySet(false);
@@ -2213,6 +2477,7 @@ export default function GovernmentLicense() {
       setEditingLicense(null);
       setSelectedDepartments([]);
       setRenewalFeeText('');
+      setRenewalAmountText('');
       setEndDateManuallySet(false);
       setShowRenewalDocumentsModal(false);
       setShowRenewalStatusReasonModal(false);
@@ -2295,6 +2560,28 @@ export default function GovernmentLicense() {
         return "bg-gray-100 text-gray-800 border border-gray-200";
       default:
         return "bg-gray-100 text-gray-800 border border-gray-200";
+    }
+  };
+
+  // Renewal Status badge colors
+  const getRenewalStatusClassName = (renewalStatus: string) => {
+    switch (renewalStatus) {
+      case "Approved":
+        return "bg-green-600 text-white";
+      case "Cancelled":
+        return "bg-red-600 text-white";
+      case "Rejected":
+        return "bg-red-600 text-white";
+      case "Renewal Initiated":
+        return "bg-blue-600 text-white";
+      case "Application Submitted":
+        return "bg-indigo-600 text-white";
+      case "Amendments/ Appeal Submitted":
+        return "bg-orange-600 text-white";
+      case "Resubmitted":
+        return "bg-purple-600 text-white";
+      default:
+        return "bg-blue-600 text-white";
     }
   };
 
@@ -2457,15 +2744,6 @@ export default function GovernmentLicense() {
                           {getSortIcon('licenseName')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">
-                        <button
-                          onClick={() => handleSort('issuingAuthorityName')}
-                          className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
-                        >
-                          ISSUING AUTHORITY
-                          {getSortIcon('issuingAuthorityName')}
-                        </button>
-                      </TableHead>
                       <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
                         <button
                           onClick={() => handleSort('startDate')}
@@ -2495,6 +2773,7 @@ export default function GovernmentLicense() {
                         </button>
                       </TableHead>
                       <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">Status</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Renewal Status</TableHead>
                       <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -2518,14 +2797,6 @@ export default function GovernmentLicense() {
                               >
                                 {truncateText(license.licenseName, 18)}
                               </button>
-                            </TableCell>
-                            <TableCell className="px-3 py-3 text-sm text-gray-700 w-[220px] min-w-0">
-                              <div>
-                                <div className="font-medium block w-full truncate whitespace-nowrap" title={license.issuingAuthorityName}>
-                                  {license.issuingAuthorityName}
-                                </div>
-                                {/* Removed email and phone display as per requirements */}
-                              </div>
                             </TableCell>
                             <TableCell className="px-3 py-3 text-sm text-gray-600 w-[120px]">
                               <div className="flex items-center gap-1">
@@ -2566,6 +2837,15 @@ export default function GovernmentLicense() {
                                   </span>
                                 );
                               })()}
+                            </TableCell>
+                            <TableCell className="px-3 py-3 w-[150px]">
+                              {license.renewalStatus ? (
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getRenewalStatusClassName(license.renewalStatus)}`}>
+                                  {license.renewalStatus}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 text-xs">-</span>
+                              )}
                             </TableCell>
                             <TableCell className="px-3 py-3 text-right w-[110px]">
                               <div className="flex gap-2 justify-end">
@@ -2618,7 +2898,7 @@ export default function GovernmentLicense() {
               <div className="flex items-center gap-4">
                 <ShieldCheck className="h-6 w-6" />
                 <DialogTitle className="text-xl font-bold leading-none">
-                  {showSubmissionDetails ? 'Renewal Submission' : editingLicense ? 'Edit Renewal' : 'Renewal'}
+                  {showSubmissionDetails ? 'Renewal Status' : editingLicense ? 'Edit Renewal' : 'Renewal'}
                 </DialogTitle>
                 {(() => {
                   const derived = getDerivedStatus({ endDate: expiryDateValue, status: statusValue });
@@ -2647,6 +2927,23 @@ export default function GovernmentLicense() {
                     className="relative overflow-hidden px-3 py-1 text-sm rounded-lg font-semibold transition-all duration-300 bg-gradient-to-r from-emerald-500/70 to-green-600/70 text-white border border-emerald-300/60 hover:from-emerald-500 hover:to-green-600 hover:shadow-[0_8px_16px_rgba(16,185,129,0.25)]"
                   >
                     Submission
+                  </Button>
+                )}
+                {/* Log Button - Navigate to renewal log page */}
+                {editingLicense?.id && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
+                    onClick={() => {
+                      if (editingLicense?.id) {
+                        window.location.href = `/renewal-log?id=${editingLicense.id}`;
+                      }
+                    }}
+                    title="View renewal log for this license"
+                  >
+                    <History className="h-4 w-4" />
+                    Log
                   </Button>
                 )}
                 {/* License No. display removed */}
@@ -2703,7 +3000,7 @@ export default function GovernmentLicense() {
                                       else if (val === 'Rejected') reasonTitle = 'Rejection Reason';
                                       else if (val === 'Amendments/ Appeal Submitted') reasonTitle = 'Amendment/Appeal Reason';
                                       setReasonModalTitle(reasonTitle);
-                                      setRenewalStatusReasonDraft(String(form.getValues('renewalStatusReason') || ''));
+                                      setRenewalStatusReasonDraft(''); // Clear previous reason
                                       setShowRenewalStatusReasonModal(true);
                                     }
 
@@ -2822,12 +3119,59 @@ export default function GovernmentLicense() {
                                 <Input
                                   className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                                   inputMode="decimal"
-                                  value={field.value === undefined ? '' : String(field.value)}
+                                  value={renewalAmountText}
                                   onChange={(e) => {
-                                    const v = e.target.value;
-                                    if (v === '') return field.onChange(undefined);
-                                    const n = Number(v);
-                                    field.onChange(Number.isFinite(n) ? n : undefined);
+                                    const raw = e.target.value;
+                                    let cleaned = raw.replace(/[^0-9.]/g, '');
+                                    // keep only first dot
+                                    const firstDot = cleaned.indexOf('.');
+                                    if (firstDot !== -1) {
+                                      cleaned =
+                                        cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+                                    }
+                                    // normalize leading dot
+                                    if (cleaned.startsWith('.')) cleaned = `0${cleaned}`;
+
+                                    // limit to 2 decimals while typing
+                                    const parts = cleaned.split('.');
+                                    if (parts.length === 2) {
+                                      cleaned = `${parts[0]}.${parts[1].slice(0, 2)}`;
+                                    }
+
+                                    // Check max limit
+                                    const n = parseFloat(cleaned);
+                                    if (Number.isFinite(n) && n > 100000000) {
+                                      return; // Don't update if exceeds max
+                                    }
+
+                                    setRenewalAmountText(cleaned);
+                                    if (cleaned === '' || cleaned === '0.' || cleaned === '.') {
+                                      form.setValue('renewalAmount', undefined);
+                                      return;
+                                    }
+                                    form.setValue('renewalAmount', Number.isFinite(n) ? n : undefined);
+                                  }}
+                                  onBlur={() => {
+                                    const raw = renewalAmountText.trim();
+                                    if (!raw) {
+                                      form.setValue('renewalAmount', undefined);
+                                      setRenewalAmountText('');
+                                      return;
+                                    }
+                                    const n = parseFloat(raw);
+                                    if (!Number.isFinite(n)) {
+                                      form.setValue('renewalAmount', undefined);
+                                      setRenewalAmountText('');
+                                      return;
+                                    }
+                                    // Enforce max limit on blur
+                                    if (n > 100000000) {
+                                      form.setValue('renewalAmount', 100000000);
+                                      setRenewalAmountText('100000000.00');
+                                      return;
+                                    }
+                                    form.setValue('renewalAmount', n);
+                                    setRenewalAmountText(n.toFixed(2));
                                   }}
                                 />
                               </FormControl>
@@ -2888,7 +3232,7 @@ export default function GovernmentLicense() {
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-slate-700">Title/Name/No.</label>
                         <Input
-                          className={`w-full border-slate-300 rounded-lg p-2.5 text-base ${licenseNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                          className={`w-full border-slate-300 rounded-lg p-2.5 text-base placeholder:text-gray-400 ${licenseNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                           value={form.watch('licenseName') || ''}
                           onChange={(e) => {
                             // Just set the value as-is, no auto-capitalization
@@ -2912,49 +3256,31 @@ export default function GovernmentLicense() {
                       {/* Category */}
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-slate-700">Category</label>
-                        <Select
+                        <SearchableStringDropdown
                           value={form.watch('category') || ''}
-                          onValueChange={(value) => {
+                          onChange={(value) => {
                             form.setValue('category', value);
                           }}
-                        >
-                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-56 overflow-y-auto custom-scrollbar">
-                            <SelectItem value="Visa">Visa</SelectItem>
-                            <SelectItem value="E-Pass">E-Pass</SelectItem>
-                            <SelectItem value="Govt. License">Govt. License</SelectItem>
-                            <SelectItem value="Insurance">Insurance</SelectItem>
-                            <SelectItem value="Contract">Contract</SelectItem>
-                            <SelectItem value="Agreement">Agreement</SelectItem>
-                            <SelectItem value="Maintenance">Maintenance</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          options={['Visa', 'E-Pass', 'Govt. License', 'Insurance', 'Contract', 'Agreement', 'Maintenance', 'Other']}
+                          placeholder="Select category"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                        />
                       </div>
 
                       {/* Beneficiary Type */}
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-slate-700">Beneficiary Type</label>
-                        <Select
+                        <SearchableStringDropdown
                           value={form.watch('beneficiaryType') || ''}
-                          onValueChange={(value) => {
+                          onChange={(value) => {
                             form.setValue('beneficiaryType', value);
                             // Clear Beneficiary Name/No when type changes
                             form.setValue('beneficiaryNameNo', '');
                           }}
-                        >
-                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-56 overflow-y-auto custom-scrollbar">
-                            <SelectItem value="Employee">Employee</SelectItem>
-                            <SelectItem value="Company">Company</SelectItem>
-                            <SelectItem value="Vehicle">Vehicle</SelectItem>
-                            <SelectItem value="Customer">Customer</SelectItem>
-                            <SelectItem value="Department">Department</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          options={['Employee', 'Company', 'Vehicle', 'Customer', 'Department', 'Other']}
+                          placeholder="Select type"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                        />
                       </div>
 
                       {/* Beneficiary Name / No - Dynamic field based on Beneficiary Type */}
@@ -2982,7 +3308,7 @@ export default function GovernmentLicense() {
                           <label className="block text-sm font-medium text-slate-700">Beneficiary Name / No</label>
                           <Input
                             type="text"
-                            className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                            className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 placeholder:text-gray-400"
                             value={form.watch('beneficiaryNameNo') || ''}
                             onChange={(e) => {
                               form.setValue('beneficiaryNameNo', e.target.value);
@@ -3029,6 +3355,9 @@ export default function GovernmentLicense() {
                               />
                             </FormControl>
                             <FormMessage className="text-red-500" />
+                            {duplicatePersonError && (
+                              <p className="text-sm text-red-500 mt-1">{duplicatePersonError}</p>
+                            )}
                           </FormItem>
                         )}
                       />
@@ -3061,7 +3390,8 @@ export default function GovernmentLicense() {
                         <label className="block text-sm font-medium text-slate-700">Issue Date</label>
                         <Input 
                           type="date"
-                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          max={new Date().toISOString().split('T')[0]}
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 placeholder:text-gray-400"
                           value={form.watch('startDate') || ''}
                           onChange={(e) => {
                             setEndDateManuallySet(false);
@@ -3077,6 +3407,10 @@ export default function GovernmentLicense() {
                           onValueChange={(value) => {
                             setEndDateManuallySet(false);
                             form.setValue('renewalCycleTime', value);
+                            // Clear expiry date when changing to Ad-hoc
+                            if (value === 'Ad-hoc') {
+                              form.setValue('endDate', '');
+                            }
                           }}
                         >
                           <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
@@ -3119,24 +3453,17 @@ export default function GovernmentLicense() {
                       {/* Currency */}
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-slate-700">Currency</label>
-                        <Select
+                        <SearchableStringDropdown
                           value={currency || ''}
-                          onValueChange={(value) => {
+                          onChange={(value) => {
                             setCurrency(value);
                             form.setValue('currency', value);
                           }}
-                        >
-                          <SelectTrigger className="w-full border-slate-300 rounded-lg p-2.5 text-base">
-                            <SelectValue placeholder="Select currency" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-56 overflow-y-auto custom-scrollbar">
-                            {currencies.map((curr: any) => (
-                              <SelectItem key={curr.code} value={curr.code}>
-                                {curr.code}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          options={currencies.map((curr: any) => curr.code)}
+                          placeholder="Select currency"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          onAddNew={() => navigate('/configuration?tab=currency')}
+                        />
                       </div>
 
                       {/* Renewal Cost */}
@@ -3165,12 +3492,17 @@ export default function GovernmentLicense() {
                               cleaned = `${parts[0]}.${parts[1].slice(0, 2)}`;
                             }
 
+                            // Check max limit
+                            const n = parseFloat(cleaned);
+                            if (Number.isFinite(n) && n > 100000000) {
+                              return; // Don't update if exceeds max
+                            }
+
                             setRenewalFeeText(cleaned);
                             if (cleaned === '' || cleaned === '0.' || cleaned === '.') {
                               form.setValue('renewalFee', undefined);
                               return;
                             }
-                            const n = parseFloat(cleaned);
                             form.setValue('renewalFee', Number.isFinite(n) ? n : undefined);
                           }}
                           onBlur={() => {
@@ -3184,6 +3516,12 @@ export default function GovernmentLicense() {
                             if (!Number.isFinite(n)) {
                               form.setValue('renewalFee', undefined);
                               setRenewalFeeText('');
+                              return;
+                            }
+                            // Enforce max limit on blur
+                            if (n > 100000000) {
+                              form.setValue('renewalFee', 100000000);
+                              setRenewalFeeText('100000000.00');
                               return;
                             }
                             form.setValue('renewalFee', n);
@@ -3267,7 +3605,8 @@ export default function GovernmentLicense() {
                                 value={String(field.value || '')}
                                 onChange={field.onChange}
                                 options={ISSUING_AUTHORITIES}
-                                className="w-full border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer"
+                                placeholder="Select or type authority"
+                                className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 placeholder:text-gray-400"
                               />
                             </FormControl>
                             <FormMessage className="text-red-500" />
@@ -3280,17 +3619,40 @@ export default function GovernmentLicense() {
                         <label className="block text-sm font-medium text-slate-700">Contact Number</label>
                         <Input
                           type="text"
-                          pattern="[0-9+\-\s()]*"
-                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          maxLength={16}
+                          className={`w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 ${
+                            issuingAuthorityPhoneError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20 bg-red-50' : ''
+                          }`}
+                          placeholder="+14155552671 or 971501234567"
                           value={form.watch('issuingAuthorityPhone') || ''}
                           onChange={(e) => {
                             const value = e.target.value;
-                            // Only allow numbers, +, -, spaces, and parentheses
-                            if (/^[0-9+\-\s()]*$/.test(value)) {
+                            // Only allow digits and + at start, max 16 chars (+ plus 15 digits)
+                            if (/^\+?[0-9]*$/.test(value) && value.length <= 16) {
                               form.setValue('issuingAuthorityPhone', value);
+                              // Clear error when user types
+                              if (issuingAuthorityPhoneError) {
+                                setIssuingAuthorityPhoneError('');
+                              }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const value = e.target.value.trim();
+                            if (value) {
+                              const validation = validatePhoneNumber(value);
+                              if (!validation.valid) {
+                                setIssuingAuthorityPhoneError(validation.error || 'Invalid contact number');
+                              } else {
+                                setIssuingAuthorityPhoneError('');
+                              }
+                            } else {
+                              setIssuingAuthorityPhoneError('');
                             }
                           }}
                         />
+                        {issuingAuthorityPhoneError && (
+                          <p className="text-sm text-red-600 mt-1">{issuingAuthorityPhoneError}</p>
+                        )}
                       </div>
 
                       {/* Email */}
@@ -3298,10 +3660,40 @@ export default function GovernmentLicense() {
                         <label className="block text-sm font-medium text-slate-700">Email</label>
                         <Input 
                           type="email"
-                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          maxLength={254}
+                          className={`w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 ${
+                            issuingAuthorityEmailError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20 bg-red-50' : ''
+                          }`}
                           value={form.watch('issuingAuthorityEmail') || ''}
-                          onChange={(e) => form.setValue('issuingAuthorityEmail', e.target.value)}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Limit to 254 characters (email standard max length)
+                            if (value.length <= 254) {
+                              form.setValue('issuingAuthorityEmail', value);
+                              // Clear error on change
+                              if (issuingAuthorityEmailError) {
+                                setIssuingAuthorityEmailError('');
+                              }
+                            }
+                          }}
+                          onBlur={() => {
+                            const email = form.watch('issuingAuthorityEmail');
+                            if (email && email.trim()) {
+                              const validation = validateEmail(email.trim());
+                              if (!validation.valid) {
+                                setIssuingAuthorityEmailError(validation.error || 'Invalid email address');
+                              }
+                            } else {
+                              setIssuingAuthorityEmailError('');
+                            }
+                          }}
                         />
+                        {issuingAuthorityEmailError && (
+                          <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {issuingAuthorityEmailError}
+                          </p>
+                        )}
                       </div>
 
                       {/* Website */}
@@ -3309,8 +3701,35 @@ export default function GovernmentLicense() {
                         <label className="block text-sm font-medium text-slate-700">Website</label>
                         <Input 
                           type="url"
-                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          maxLength={200}
+                          placeholder="https://example.com"
+                          className={`w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 ${
+                            websiteURLError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20 bg-red-50' : ''
+                          }`}
+                          onChange={(e) => {
+                            // Clear error on change
+                            if (websiteURLError) {
+                              setWebsiteURLError('');
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const url = e.target.value;
+                            if (url && url.trim()) {
+                              const validation = validateURL(url.trim());
+                              if (!validation.valid) {
+                                setWebsiteURLError(validation.error || 'Invalid URL');
+                              }
+                            } else {
+                              setWebsiteURLError('');
+                            }
+                          }}
                         />
+                        {websiteURLError && (
+                          <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {websiteURLError}
+                          </p>
+                        )}
                       </div>
                     </div>
                     </div>
@@ -3327,15 +3746,26 @@ export default function GovernmentLicense() {
                         <Input 
                           type="number"
                           min="1"
-                          max="365"
+                          max="1000"
                           className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
                           value={form.watch('reminderDays') || ''}
                           onChange={(e) => {
                             const value = parseInt(e.target.value) || '';
+                            // Check max limit
+                            if (value && value > 1000) {
+                              return; // Don't update if exceeds max
+                            }
                             form.setValue('reminderDays', value);
                             // If reminderDays is 1, automatically set policy to 'One time'
                             if (value === 1) {
                               form.setValue('reminderPolicy', 'One time');
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const value = parseInt(e.target.value);
+                            // Enforce max limit on blur
+                            if (value > 1000) {
+                              form.setValue('reminderDays', 1000);
                             }
                           }}
                         />
@@ -3374,7 +3804,7 @@ export default function GovernmentLicense() {
 
                 {/* Form Actions */}
                 <div className="flex justify-end gap-4 mt-10 pt-6 border-t border-gray-200 bg-gray-50/50 -mx-8 px-8 -mb-8 pb-8 rounded-b-2xl">
-                  {/* Only show Cancel License button when editing an existing license */}
+                  {/* Only show Cancel button when editing an existing license */}
                   {editingLicense && (
                     <Button 
                       type="button" 
@@ -3390,7 +3820,7 @@ export default function GovernmentLicense() {
                         licenseMutation.mutate(payload);
                       }}
                     >
-                      Cancel License
+                      Cancel
                     </Button>
                   )}
                   <Button 
@@ -3406,7 +3836,7 @@ export default function GovernmentLicense() {
                     className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold px-8 py-3 shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-blue-700 rounded-lg transition-all duration-200 tracking-tight"
                     disabled={licenseMutation.isPending}
                   >
-                    {licenseMutation.isPending ? 'Saving...' : (editingLicense ? 'Update License' : 'Save License')}
+                    {licenseMutation.isPending ? 'Saving...' : (editingLicense ? 'Update' : 'Save')}
                   </Button>
                 </div>
               </form>
@@ -3662,7 +4092,7 @@ export default function GovernmentLicense() {
                     <textarea
                       value={renewalStatusReasonDraft}
                       onChange={(e) => setRenewalStatusReasonDraft(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg p-3 text-base min-h-[120px] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 resize-none"
+                      className="w-full border border-gray-300 rounded-lg p-3 text-base min-h-[120px] focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 resize-none"
                       placeholder="Enter reason"
                     />
                   </div>
@@ -3685,7 +4115,7 @@ export default function GovernmentLicense() {
                     </Button>
                     <Button
                       type="button"
-                      className="bg-red-600 hover:bg-red-700"
+                      className="bg-red-600 hover:bg-red-700 text-white"
                       onClick={() => {
                         if (!renewalStatusReasonDraft.trim()) {
                           toast({
@@ -3774,7 +4204,7 @@ export default function GovernmentLicense() {
                     </Button>
                     <Button
                       type="button"
-                      className="bg-emerald-600 hover:bg-emerald-700"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
                       onClick={() => {
                         const nextStart = String(approvedIssueDraft || '').trim();
                         const nextEnd = String(approvedExpiryDraft || '').trim();
@@ -3823,6 +4253,13 @@ export default function GovernmentLicense() {
                         setApprovedExpiryDraft('');
                         setApprovedIssueDraft('');
                         setPreviousRenewalStatusForExpiry('');
+
+                        // Clear submission fields after approval
+                        form.setValue('renewalInitiatedDate', '', { shouldDirty: true });
+                        form.setValue('submittedBy', '', { shouldDirty: true });
+                        form.setValue('renewalAmount', undefined, { shouldDirty: true });
+                        form.setValue('renewalStatusReason', '', { shouldDirty: true });
+                        form.setValue('renewalAttachments', [], { shouldDirty: true });
 
                         // Show the updated expiry date immediately in the main form.
                         setShowSubmissionDetails(false);
