@@ -1,14 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { History, ArrowLeft } from "lucide-react";
 import { API_BASE_URL } from "@/lib/config";
 import { Badge } from "../components/ui/badge";
 
 export default function RenewalLog() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const licenseId = searchParams.get('id');
 
   // Fetch logs
   const { data: logs = [], isLoading } = useQuery({
@@ -21,6 +22,20 @@ export default function RenewalLog() {
       return res.json();
     },
   });
+
+  // Filter logs by license ID if provided
+  // Try to match by licenseId first (new logs), fallback to licenseName (old logs)
+  const filteredLogs = licenseId 
+    ? logs.filter((log: any) => {
+        // First try to match by licenseId (for new logs)
+        if (log.licenseId) {
+          return log.licenseId === licenseId;
+        }
+        // If no licenseId in log, we can't filter by ID
+        // This means old logs won't show when filtering by ID
+        return false;
+      })
+    : logs;
 
   const getActionBadgeColor = (action: string) => {
     switch (action?.toLowerCase()) {
@@ -64,17 +79,24 @@ export default function RenewalLog() {
               </div>
               <div>
                 <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Renewal History Log</h1>
+                {licenseId && filteredLogs.length > 0 && (
+                  <p className="text-sm text-slate-600 mt-1">
+                    Showing logs for: <span className="font-medium text-slate-900">{filteredLogs[0]?.licenseName || 'Selected Renewal'}</span>
+                  </p>
+                )}
               </div>
             </div>
             
-            <Button
-              onClick={() => navigate('/government-license')}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Renewals
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => navigate('/government-license')}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Renewals
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -88,7 +110,7 @@ export default function RenewalLog() {
                   <p className="text-slate-600">Loading logs...</p>
                 </div>
               </div>
-            ) : logs && logs.length > 0 ? (
+            ) : filteredLogs && filteredLogs.length > 0 ? (
               <div className="h-full overflow-auto">
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 z-10 bg-slate-50">
@@ -101,7 +123,7 @@ export default function RenewalLog() {
                     </tr>
                   </thead>
                   <tbody className="bg-white">
-                  {logs.map((log: any, index: number) => {
+                  {filteredLogs.map((log: any, index: number) => {
                     const timestamp = formatTimestamp(log.timestamp);
                     // Filter out lines that contain "Not Set →" EXCEPT for important reasons
                     let changesText = log.changes || 'No changes recorded';
@@ -157,8 +179,14 @@ export default function RenewalLog() {
                     <History className="h-8 w-8 text-slate-400" />
                   </div>
                   <div>
-                    <p className="text-slate-600 font-medium">No history records found</p>
-                    <p className="text-sm text-slate-500 mt-1">Logs will appear here when renewals are created, updated, or deleted</p>
+                    <p className="text-slate-600 font-medium">
+                      {licenseId ? 'No history records found for this renewal' : 'No history records found'}
+                    </p>
+                    <p className="text-sm text-slate-500 mt-1">
+                      {licenseId 
+                        ? 'This renewal has no recorded changes yet' 
+                        : 'Logs will appear here when renewals are created, updated, or deleted'}
+                    </p>
                   </div>
                 </div>
               </div>

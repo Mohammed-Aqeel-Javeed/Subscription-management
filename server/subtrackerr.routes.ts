@@ -2688,10 +2688,11 @@ router.post("/api/logs", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
 
-    const { licenseName, action, changes } = req.body;
+    const { licenseId, licenseName, action, changes } = req.body;
 
     const logEntry = {
       tenantId,
+      licenseId, // Store license ID for filtering
       licenseName,
       user,
       action, // 'create', 'update', 'delete'
