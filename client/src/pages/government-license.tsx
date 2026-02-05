@@ -517,6 +517,7 @@ function EmployeeSearchDropdown(props: {
   const { value, onChange, employees, onAddNew } = props;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [showAll, setShowAll] = useState(false); // Flag to show all items
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -526,6 +527,7 @@ function EmployeeSearchDropdown(props: {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setOpen(false);
         setSearch('');
+        setShowAll(false);
       }
     }
 
@@ -533,6 +535,7 @@ function EmployeeSearchDropdown(props: {
     function handleDialogScroll() {
       setOpen(false);
       setSearch('');
+      setShowAll(false);
     }
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -560,9 +563,21 @@ function EmployeeSearchDropdown(props: {
     : [];
 
   const normalizedSearch = search.trim().toLowerCase();
-  const filtered = normalizedSearch
-    ? options.filter((opt) => (opt.displayName || '').toLowerCase().includes(normalizedSearch))
-    : options;
+  // If showAll is true, show all options; otherwise filter by search
+  let filtered = (showAll || !normalizedSearch)
+    ? options
+    : options.filter((opt) => (opt.displayName || '').toLowerCase().includes(normalizedSearch));
+
+  // Sort to show selected item first
+  if (value) {
+    filtered = filtered.sort((a, b) => {
+      const aIsSelected = a.name === value;
+      const bIsSelected = b.name === value;
+      if (aIsSelected && !bIsSelected) return -1;
+      if (!aIsSelected && bIsSelected) return 1;
+      return 0;
+    });
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -571,23 +586,40 @@ function EmployeeSearchDropdown(props: {
         className="w-full border-slate-300 rounded-lg p-3 pr-10 text-base cursor-pointer focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
         onChange={(e) => {
           setSearch(e.target.value);
+          setShowAll(false); // Start filtering when user types
           if (!open) setOpen(true);
         }}
         onFocus={() => {
-          setSearch(value || '');
-          setOpen(true);
+          if (!open) {
+            setSearch(value || '');
+            setShowAll(true); // Show all when focusing
+            setOpen(true);
+          }
         }}
         onClick={() => {
-          setSearch(value || '');
-          setOpen(true);
+          // Only handle click if dropdown is closed
+          if (!open) {
+            setSearch(value || '');
+            setShowAll(true); // Show all when clicking
+            setOpen(true);
+          }
         }}
       />
       <ChevronDown
         className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-        onClick={() => {
-          if (!open) setSearch(value || '');
-          setOpen(!open);
-          if (open) setSearch('');
+        onClick={(e) => {
+          e.stopPropagation(); // Prevent input onClick from firing
+          if (open) {
+            // Closing dropdown
+            setOpen(false);
+            setSearch('');
+            setShowAll(false);
+          } else {
+            // Opening dropdown - show all items with selected value in field
+            setSearch(value || '');
+            setShowAll(true); // Show all items
+            setOpen(true);
+          }
         }}
       />
       {open && (
@@ -610,6 +642,7 @@ function EmployeeSearchDropdown(props: {
                       onChange('');
                       setOpen(false);
                       setSearch('');
+                      setShowAll(false);
                       return;
                     }
 
@@ -624,6 +657,7 @@ function EmployeeSearchDropdown(props: {
                     onChange(String(emp?.name || opt.name));
                     setOpen(false);
                     setSearch('');
+                    setShowAll(false);
                   }}
                 >
                   <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt.name ? 'opacity-100' : 'opacity-0'}`} />
@@ -642,6 +676,7 @@ function EmployeeSearchDropdown(props: {
               onClick={() => {
                 setOpen(false);
                 setSearch('');
+                setShowAll(false);
                 onAddNew();
               }}
             >
@@ -666,6 +701,7 @@ function SearchableStringDropdown(props: {
   const { value, onChange, options, placeholder, className, onAddNew } = props;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [showAll, setShowAll] = useState(false); // Flag to show all items
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -673,12 +709,13 @@ function SearchableStringDropdown(props: {
 
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        // Only save if user typed something, don't restore old value
+        // Only save if user typed something different
         if (search.trim() !== value) {
           onChange(search.trim());
         }
         setOpen(false);
         setSearch('');
+        setShowAll(false);
       }
     }
 
@@ -690,6 +727,7 @@ function SearchableStringDropdown(props: {
       }
       setOpen(false);
       setSearch('');
+      setShowAll(false);
     }
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -702,9 +740,21 @@ function SearchableStringDropdown(props: {
   }, [open, search, onChange, value]);
 
   const normalizedSearch = search.trim().toLowerCase();
-  const filtered = normalizedSearch
-    ? options.filter((opt) => opt.toLowerCase().includes(normalizedSearch))
-    : options;
+  // If showAll is true, show all options; otherwise filter by search
+  const filtered = (showAll || !normalizedSearch)
+    ? options
+    : options.filter((opt) => opt.toLowerCase().includes(normalizedSearch));
+
+  // Sort to show selected item first
+  const sortedFiltered = value
+    ? filtered.sort((a, b) => {
+        const aIsSelected = a === value;
+        const bIsSelected = b === value;
+        if (aIsSelected && !bIsSelected) return -1;
+        if (!aIsSelected && bIsSelected) return 1;
+        return 0;
+      })
+    : filtered;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -714,23 +764,40 @@ function SearchableStringDropdown(props: {
         className={className || "w-full border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer"}
         onChange={(e) => {
           setSearch(e.target.value);
+          setShowAll(false); // Start filtering when user types
           if (!open) setOpen(true);
         }}
         onFocus={() => {
-          setSearch(value || '');
-          setOpen(true);
+          if (!open) {
+            setSearch(value || '');
+            setShowAll(true); // Show all when focusing
+            setOpen(true);
+          }
         }}
         onClick={() => {
-          setSearch(value || '');
-          setOpen(true);
+          // Only handle click if dropdown is closed
+          if (!open) {
+            setSearch(value || '');
+            setShowAll(true); // Show all when clicking
+            setOpen(true);
+          }
         }}
       />
       <ChevronDown
         className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-        onClick={() => {
-          if (!open) setSearch(value || '');
-          setOpen(!open);
-          if (open) setSearch('');
+        onClick={(e) => {
+          e.stopPropagation(); // Prevent input onClick from firing
+          if (open) {
+            // Closing dropdown
+            setOpen(false);
+            setSearch('');
+            setShowAll(false);
+          } else {
+            // Opening dropdown - show all items with selected value in field
+            setSearch(value || '');
+            setShowAll(true); // Show all items
+            setOpen(true);
+          }
         }}
       />
       {open && (
@@ -742,8 +809,8 @@ function SearchableStringDropdown(props: {
             onWheel={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
           >
-            {filtered.length > 0 ? (
-              filtered.map((opt) => (
+            {sortedFiltered.length > 0 ? (
+              sortedFiltered.map((opt) => (
                 <div
                   key={opt}
                   className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
@@ -755,6 +822,7 @@ function SearchableStringDropdown(props: {
                     }
                     setOpen(false);
                     setSearch('');
+                    setShowAll(false);
                   }}
                 >
                   <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
@@ -773,6 +841,7 @@ function SearchableStringDropdown(props: {
               onClick={() => {
                 setOpen(false);
                 setSearch('');
+                setShowAll(false);
                 onAddNew();
               }}
             >

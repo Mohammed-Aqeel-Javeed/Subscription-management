@@ -791,6 +791,31 @@ export class MongoStorage implements IStorage {
     const { ObjectId } = await import("mongodb");
     const notifications: NotificationItem[] = [];
     const today = new Date();
+
+    const normalizeDateString = (value: any): any => {
+      if (!value || typeof value !== 'string') return value;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+      if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+        const [dd, mm, yyyy] = value.split('-');
+        return `${yyyy}-${mm}-${dd}`;
+      }
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+        const [dd, mm, yyyy] = value.split('/');
+        return `${yyyy}-${mm}-${dd}`;
+      }
+      return value;
+    };
+
+    const parseDateOnlyUtc = (value: any): Date | null => {
+      if (!value) return null;
+      const normalized = normalizeDateString(value);
+      if (typeof normalized === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+        const d = new Date(`${normalized}T00:00:00.000Z`);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      const d = new Date(String(normalized));
+      return isNaN(d.getTime()) ? null : d;
+    };
     const remindersEntries = Array.from(remindersBySub.entries());
     for (const entry of remindersEntries) {
       const subId = entry[0];
@@ -808,27 +833,42 @@ export class MongoStorage implements IStorage {
       let reminderTriggeredDate = null;
       if (reminderPolicy === "One time") {
         if (renewalDate) {
-          const trigger = new Date(renewalDate);
-          trigger.setDate(trigger.getDate() - reminderDays);
-          reminderTriggeredDate = trigger;
+          const trigger = parseDateOnlyUtc(renewalDate);
+          if (trigger) {
+            trigger.setUTCDate(trigger.getUTCDate() - reminderDays);
+            reminderTriggeredDate = trigger;
+          } else {
+            reminderTriggeredDate = null;
+          }
         }
       } else if (reminderPolicy === "Two times") {
         if (renewalDate) {
-          const first = new Date(renewalDate);
-          first.setDate(first.getDate() - reminderDays);
+          const first = parseDateOnlyUtc(renewalDate);
+          if (!first) {
+            reminderTriggeredDate = null;
+          } else {
+            first.setUTCDate(first.getUTCDate() - reminderDays);
           const secondDays = Math.floor(reminderDays / 2);
-          const second = new Date(renewalDate);
-          second.setDate(second.getDate() - secondDays);
-          if (first > today && second > today) reminderTriggeredDate = first;
-          else if (first <= today && second > today) reminderTriggeredDate = second;
-          else if (first > today && second <= today) reminderTriggeredDate = first;
-          else reminderTriggeredDate = null;
+            const second = parseDateOnlyUtc(renewalDate);
+            if (!second) {
+              reminderTriggeredDate = null;
+            } else {
+              second.setUTCDate(second.getUTCDate() - secondDays);
+              if (first > today && second > today) reminderTriggeredDate = first;
+              else if (first <= today && second > today) reminderTriggeredDate = second;
+              else if (first > today && second <= today) reminderTriggeredDate = first;
+              else reminderTriggeredDate = null;
+            }
+          }
         }
       } else if (reminderPolicy === "Until Renewal") {
         if (renewalDate) {
-          const start = new Date(renewalDate);
-          start.setDate(start.getDate() - reminderDays);
-          const end = new Date(renewalDate);
+          const start = parseDateOnlyUtc(renewalDate);
+          const end = parseDateOnlyUtc(renewalDate);
+          if (!start || !end) {
+            reminderTriggeredDate = null;
+          } else {
+            start.setUTCDate(start.getUTCDate() - reminderDays);
           
           // For "Until Renewal", show notifications if we're within the reminder window
           // (from start date until renewal date)
@@ -840,6 +880,7 @@ export class MongoStorage implements IStorage {
             reminderTriggeredDate = todayDate;
           } else {
             reminderTriggeredDate = null;
+          }
           }
         }
       }
@@ -854,6 +895,10 @@ export class MongoStorage implements IStorage {
         reminderTriggerDate: reminderTriggeredDate ? reminderTriggeredDate.toISOString().slice(0, 10) : reminderObj?.reminderDate,
         subscriptionEndDate: subscription?.nextRenewal || subscription?.endDate || "",
         status: reminderObj?.status || subscription?.status || "Active",
+        ownerEmail: subscription?.ownerEmail || "",
+        owner: subscription?.owner || "",
+        departments: subscription?.departments || [],
+        department: subscription?.department || "",
         type: 'subscription',
       });
     }

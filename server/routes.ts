@@ -134,7 +134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate OTP
       const otp = generateOTP();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
 
       // Store OTP in database
       await db.collection("otps").updateOne(
@@ -175,7 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   <p style="color: #3b82f6; font-size: 42px; font-weight: bold; margin: 0; letter-spacing: 8px; font-family: 'Courier New', monospace;">${otp}</p>
                 </div>
                 <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 24px 0 0 0; text-align: center;">
-                  This OTP will expire in <strong>10 minutes</strong>.
+                  This OTP will expire in <strong>2 minutes</strong>.
                 </p>
                 <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 12px 0 0 0; text-align: center;">
                   If you didn't request this, please ignore this email.
@@ -1041,13 +1041,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Notifications =====
   app.get("/api/notifications", async (req, res) => {
     const tenantId = req.user?.tenantId;
+    const userId = req.user?.userId || req.user?.id;
+    const userRole = req.user?.role;
+    const userEmail = req.user?.email;
+    const userDept = (req.user as any)?.department;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
       // Get both reminder-based notifications and event-based notifications
-      const reminderNotifications = await storage.getNotifications(tenantId);
+      let reminderNotifications = await storage.getNotifications(tenantId);
       const eventNotifications = await storage.getNotificationEvents(tenantId);
-// Combine and sort by timestamp
-      const allNotifications = [...reminderNotifications, ...eventNotifications]
+
+      // Apply matrix rules for renewal reminders:
+      // - Admin: no in-app reminders
+      // - Subscription Owner: reminders for their subscriptions only
+      // - Dept Head: reminders for their department only
+      const normalizedEmail = String(userEmail || '').trim().toLowerCase();
+      const normalizedDept = String(userDept || '').trim().toLowerCase();
+
+      const extractDepartments = (n: any): string[] => {
+        if (Array.isArray(n?.departments)) return n.departments.map(String).filter(Boolean);
+        const raw = n?.department;
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+        if (typeof raw === 'string') {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+            if (parsed) return [String(parsed)];
+          } catch {
+            return [raw];
+          }
+        }
+        return [];
+      };
+
+      if (userRole === 'admin' || userRole === 'super_admin') {
+        reminderNotifications = [];
+      } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
+        if (normalizedDept) {
+          reminderNotifications = reminderNotifications.filter((n: any) => {
+            const depts = extractDepartments(n).map(d => String(d).trim().toLowerCase());
+            return depts.includes(normalizedDept);
+          });
+        } else {
+          // If dept-head user has no department resolved, hide reminders to avoid leaking other departments
+          reminderNotifications = [];
+        }
+      } else {
+        // Default: owner/user view
+        if (normalizedEmail) {
+          reminderNotifications = reminderNotifications.filter((n: any) => {
+            const ownerEmail = String(n?.ownerEmail || '').trim().toLowerCase();
+            return ownerEmail && ownerEmail === normalizedEmail;
+          });
+        } else {
+          reminderNotifications = [];
+        }
+      }
+
+      // Get user-scoped in-app notifications (subscription lifecycle notifications)
+      let userInAppNotifications: any[] = [];
+      try {
+        if (userId || userEmail) {
+          const db = await connectToDatabase();
+          const normalizedEmailForQuery = String(userEmail || '').trim().toLowerCase();
+          userInAppNotifications = await db
+            .collection("notifications")
+            .find({
+              tenantId,
+              $or: [
+                ...(userId ? [{ userId: String(userId) }] : []),
+                ...(normalizedEmailForQuery ? [{ userEmail: normalizedEmailForQuery }] : []),
+              ],
+            })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+          userInAppNotifications = userInAppNotifications.map((n) => ({
+            ...n,
+            id: n._id?.toString?.() || n.id,
+            type: n.type || 'subscription',
+          }));
+        }
+      } catch (e) {
+        console.error("❌ Error fetching user in-app notifications:", e);
+      }
+
+      // Combine and sort by timestamp
+      const allNotifications = [...reminderNotifications, ...eventNotifications, ...userInAppNotifications]
         .sort((a, b) => new Date(b.timestamp || b.createdAt || '').getTime() - new Date(a.timestamp || a.createdAt || '').getTime());
       
       res.json(allNotifications);

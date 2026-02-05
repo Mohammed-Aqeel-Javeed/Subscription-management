@@ -19,12 +19,25 @@ interface EmailData {
 class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private isConfigured: boolean = false;
+  private resend: any = null;
+  private isResendConfigured: boolean = false;
+  private fromAddress: string = '';
 
   constructor() {
     this.setupTransporter();
   }
 
   private setupTransporter() {
+    this.fromAddress = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '';
+
+    // Prefer Resend on hosted environments (Render often blocks SMTP)
+    const resendKey = process.env.RESEND_API_KEY || '';
+    if (resendKey) {
+      this.isResendConfigured = true;
+      this.isConfigured = true;
+      return;
+    }
+
     // Default configuration - should be moved to environment variables
     const config: EmailConfig = {
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -49,24 +62,52 @@ class EmailService {
         this.isConfigured = false;
       }
     } else {
-      console.warn('Email service not configured. SMTP_USER or SMTP_PASS missing.');
+      console.warn('Email service not configured. Set RESEND_API_KEY (recommended) or SMTP_USER/SMTP_PASS.');
     }
   }
 
   async sendEmail(emailData: EmailData): Promise<boolean> {
-    if (!this.isConfigured || !this.transporter) {
-      return false;
-    }
-
     try {
+      if (!this.isConfigured) return false;
+
+      // Resend
+      if (this.isResendConfigured && this.resend) {
+        const from = this.fromAddress || 'onboarding@resend.dev';
+        const result = await this.resend.emails.send({
+          from,
+          to: emailData.to,
+          subject: emailData.subject,
+          html: emailData.html,
+        });
+        return !!(result && (result as any).data && (result as any).data.id);
+      }
+
+      if (this.isResendConfigured && !this.resend) {
+        const resendKey = process.env.RESEND_API_KEY || '';
+        if (!resendKey) return false;
+        const mod: any = await import('resend');
+        const ResendCtor = mod?.Resend;
+        if (!ResendCtor) return false;
+        this.resend = new ResendCtor(resendKey);
+        const from = this.fromAddress || 'onboarding@resend.dev';
+        const result = await this.resend.emails.send({
+          from,
+          to: emailData.to,
+          subject: emailData.subject,
+          html: emailData.html,
+        });
+        return !!(result && (result as any).data && (result as any).data.id);
+      }
+
+      // SMTP fallback
+      if (!this.transporter) return false;
       const mailOptions = {
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        from: this.fromAddress,
         to: emailData.to,
         subject: emailData.subject,
         html: emailData.html
       };
-
-      const info = await this.transporter.sendMail(mailOptions);
+      await this.transporter.sendMail(mailOptions);
       return true;
     } catch (error) {
       console.error('Error sending email:', error);
