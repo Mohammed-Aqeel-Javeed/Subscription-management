@@ -46,10 +46,7 @@ const result = await this.processTenantReminders(tenantId, nextMonth, endOfNextM
         totalResult.emailResults.push(...(result.emailResults || []));
         totalResult.ownerSummaries.push(...(result.ownerSummaries || []));
         
-        // Send admin summary email PER TENANT (not combined)
-        if (result.ownerSummaries && result.ownerSummaries.length > 0) {
-          await this.sendAdminSummaryEmailForTenant(tenantId, result.ownerSummaries, nextMonth);
-        }
+        // Admin summary emails disabled (per notification matrix: Admin = X for reminder workflows)
       }
 return {
         success: true,

@@ -11,6 +11,33 @@ function log(message: string, source = "express") {
     second: "2-digit",
     hour12: true,
   });
+
+  console.log(`[${formattedTime}] [${source}] ${message}`);
+}
+
+function normalizeDateString(value: any): any {
+  if (!value || typeof value !== "string") return value;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+    const [dd, mm, yyyy] = value.split("-");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+    const [dd, mm, yyyy] = value.split("/");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return value;
+}
+
+function parseDateOnlyUtc(value: any): Date | null {
+  if (!value) return null;
+  const normalized = normalizeDateString(value);
+  if (typeof normalized === "string" && /^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const d = new Date(`${normalized}T00:00:00.000Z`);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(String(normalized));
+  return isNaN(d.getTime()) ? null : d;
 }
 
 
@@ -135,6 +162,30 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   setInterval(checkMonthlyReminders, 24 * 60 * 60 * 1000);
   log("Monthly reminder scheduler initialized - will send on 13th of each month", "reminders");
 
+  // Schedule daily renewal reminder emails (non-yearly; yearly handled separately)
+  const { DailyRenewalReminderEmailService } = await import("./daily-renewal-reminder-email.service.js");
+  const dailyRenewalReminderEmailService = new DailyRenewalReminderEmailService();
+
+  const checkDailyRenewalReminderEmails = async () => {
+    try {
+      log("Running scheduled daily renewal reminder email check...", "reminders");
+      const result = await dailyRenewalReminderEmailService.sendDueReminderEmails();
+      log(
+        `Daily renewal reminder email check done (tenants=${result.tenantsProcessed}, due=${result.subscriptionsDue}, attempted=${result.emailsAttempted}, sent=${result.emailsSent})`,
+        "reminders"
+      );
+    } catch (error) {
+      log(`Failed to send daily renewal reminder emails: ${error}`, "reminders");
+    }
+  };
+
+  // Run on startup
+  checkDailyRenewalReminderEmails();
+
+  // Run daily
+  setInterval(checkDailyRenewalReminderEmails, 24 * 60 * 60 * 1000);
+  log("Daily renewal reminder email scheduler initialized - will check daily", "reminders");
+
   // Schedule automatic yearly reminder checks
   const { YearlyReminderService } = await import("./yearly-reminder.service.js");
   const yearlyReminderService = new YearlyReminderService(storage);
@@ -176,6 +227,30 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   // This will automatically renew subscriptions when Next Payment Date = Today
   setInterval(checkAutoRenewals, 24 * 60 * 60 * 1000);
   log("Auto-renewal scheduler initialized - will check daily", "auto-renewal");
+
+  // Schedule payment method expiry notifications
+  const { PaymentExpiryService } = await import("./payment-expiry.service.js");
+  const paymentExpiryService = new PaymentExpiryService();
+
+  const checkPaymentMethodExpiry = async () => {
+    try {
+      log("Running scheduled payment method expiry check...", "payment");
+      const result = await paymentExpiryService.checkAndSendPaymentMethodExpiringNotifications();
+      log(
+        `Payment expiry check done: tenants=${result.tenantsProcessed}, inAppCreated=${result.noticesCreated}, emailsSent=${result.emailsSent}`,
+        "payment"
+      );
+    } catch (error) {
+      log(`Failed to process payment method expiry notifications: ${error}`, "payment");
+    }
+  };
+
+  // Run on startup
+  checkPaymentMethodExpiry();
+
+  // Run daily
+  setInterval(checkPaymentMethodExpiry, 24 * 60 * 60 * 1000);
+  log("Payment method expiry scheduler initialized - will check daily", "payment");
 
   // Send department head notification emails on startup
   const sendDepartmentHeadNotifications = async () => {
@@ -222,7 +297,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
           // Filter by next month's renewal dates
           const nextMonthRenewals = allDepartmentSubscriptions.filter((sub: any) => {
             if (!sub.nextRenewal) return false;
-            const renewalDate = new Date(sub.nextRenewal);
+            const renewalDate = parseDateOnlyUtc(sub.nextRenewal);
+            if (!renewalDate) return false;
             return renewalDate >= nextMonth && renewalDate <= endOfNextMonth;
           });
           

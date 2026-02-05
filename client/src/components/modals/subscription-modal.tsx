@@ -398,6 +398,353 @@ function parseInputDate(dateStr: string): Date {
   }
   return new Date(dateStr);
 }
+
+// Employee Search Dropdown Component
+function EmployeeSearchDropdown(props: {
+  value: string;
+  onChange: (value: string) => void;
+  employees: Array<{ name?: string; email?: string }>;
+  onAddNew?: () => void;
+}) {
+  const { value, onChange, employees, onAddNew } = props;
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setSearch('');
+        setShowAll(false);
+      }
+    }
+
+    const dialogEl = dropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
+    function handleDialogScroll() {
+      setOpen(false);
+      setSearch('');
+      setShowAll(false);
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    dialogEl?.addEventListener('scroll', handleDialogScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      dialogEl?.removeEventListener('scroll', handleDialogScroll);
+    };
+  }, [open]);
+
+  const options = employees.length > 0
+    ? employees
+        .filter((e) => e?.name)
+        .map((emp) => {
+          const duplicateNames = employees.filter((e: any) => e?.name && e.name === emp.name);
+          const displayName = duplicateNames.length > 1
+            ? `${emp.name} (${emp.email || 'no-email'})`
+            : String(emp.name);
+          const uniqueValue = duplicateNames.length > 1
+            ? `${emp.name}|${emp.email || ''}`
+            : String(emp.name);
+          return { displayName, uniqueValue, name: String(emp.name || ''), email: String(emp.email || '') };
+        })
+    : [];
+
+  const normalizedSearch = search.trim().toLowerCase();
+  let filtered = (showAll || !normalizedSearch)
+    ? options
+    : options.filter((opt) => (opt.displayName || '').toLowerCase().includes(normalizedSearch));
+
+  if (value) {
+    filtered = filtered.sort((a, b) => {
+      const aIsSelected = a.name === value;
+      const bIsSelected = b.name === value;
+      if (aIsSelected && !bIsSelected) return -1;
+      if (!aIsSelected && bIsSelected) return 1;
+      return 0;
+    });
+  }
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <Input
+        value={open ? search : (value || '')}
+        className="w-full border-slate-300 rounded-lg p-3 pr-10 text-base cursor-pointer focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setShowAll(false);
+          if (!open) setOpen(true);
+        }}
+        onFocus={() => {
+          if (!open) {
+            setSearch(value || '');
+            setShowAll(true);
+            setOpen(true);
+          }
+        }}
+        onClick={() => {
+          if (!open) {
+            setSearch(value || '');
+            setShowAll(true);
+            setOpen(true);
+          }
+        }}
+      />
+      <ChevronDown
+        className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (open) {
+            setOpen(false);
+            setSearch('');
+            setShowAll(false);
+          } else {
+            setSearch(value || '');
+            setShowAll(true);
+            setOpen(true);
+          }
+        }}
+      />
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+          <div
+            className="max-h-44 overflow-auto overscroll-contain custom-scrollbar"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
+            {filtered.length > 0 ? (
+              filtered.map((opt) => (
+                <div
+                  key={opt.uniqueValue}
+                  className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                  onClick={() => {
+                    const unique = opt.uniqueValue;
+                    if (value === opt.name || value === unique) {
+                      onChange('');
+                      setOpen(false);
+                      setSearch('');
+                      setShowAll(false);
+                      return;
+                    }
+
+                    const emp = employees.find((e: any) => {
+                      if (unique.includes('|')) {
+                        const [n, em] = unique.split('|');
+                        return e?.name === n && (e?.email || '') === em;
+                      }
+                      return e?.name === unique;
+                    });
+
+                    onChange(String(emp?.name || opt.name));
+                    setOpen(false);
+                    setSearch('');
+                    setShowAll(false);
+                  }}
+                >
+                  <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt.name ? 'opacity-100' : 'opacity-0'}`} />
+                  <span className="font-normal">{opt.displayName}</span>
+                </div>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-sm text-slate-500">No employees found</div>
+            )}
+          </div>
+
+          {onAddNew && (
+            <div
+              className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+              style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
+              onClick={() => {
+                setOpen(false);
+                setSearch('');
+                setShowAll(false);
+                onAddNew();
+              }}
+            >
+              + New
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Generic searchable dropdown for string options
+function SearchableStringDropdown(props: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+  className?: string;
+  onAddNew?: () => void;
+  disabled?: boolean;
+  capitalizeDisplay?: boolean; // New prop to capitalize display text
+  readOnly?: boolean; // New prop to make field read-only (no manual typing)
+}) {
+  const { value, onChange, options, placeholder, className, onAddNew, disabled, capitalizeDisplay, readOnly } = props;
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        // Only save if not readOnly and user typed something different
+        if (!readOnly && search.trim() !== value) {
+          onChange(search.trim());
+        }
+        setOpen(false);
+        setSearch('');
+        setShowAll(false);
+      }
+    }
+
+    const dialogEl = dropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
+    function handleDialogScroll() {
+      // Only save if not readOnly and user typed something different
+      if (!readOnly && search.trim() !== value) {
+        onChange(search.trim());
+      }
+      setOpen(false);
+      setSearch('');
+      setShowAll(false);
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    dialogEl?.addEventListener('scroll', handleDialogScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      dialogEl?.removeEventListener('scroll', handleDialogScroll);
+    };
+  }, [open, search, onChange, value, readOnly]);
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = (showAll || !normalizedSearch)
+    ? options
+    : options.filter((opt) => opt.toLowerCase().includes(normalizedSearch));
+
+  const sortedFiltered = value
+    ? filtered.sort((a, b) => {
+        const aIsSelected = a === value;
+        const bIsSelected = b === value;
+        if (aIsSelected && !bIsSelected) return -1;
+        if (!aIsSelected && bIsSelected) return 1;
+        return 0;
+      })
+    : filtered;
+
+  // Helper function to capitalize text for display
+  const getDisplayText = (text: string) => {
+    if (!capitalizeDisplay) return text;
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <Input
+        value={open ? search : (value ? getDisplayText(value) : '')}
+        placeholder={placeholder}
+        disabled={disabled}
+        readOnly={readOnly}
+        className={className || "w-full border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer"}
+        onChange={(e) => {
+          if (readOnly) return; // Prevent typing if readOnly
+          setSearch(e.target.value);
+          setShowAll(false);
+          if (!open) setOpen(true);
+        }}
+        onFocus={() => {
+          if (!open && !disabled) {
+            setSearch(value ? getDisplayText(value) : '');
+            setShowAll(true);
+            setOpen(true);
+          }
+        }}
+        onClick={() => {
+          if (!open && !disabled) {
+            setSearch(value ? getDisplayText(value) : '');
+            setShowAll(true);
+            setOpen(true);
+          }
+        }}
+      />
+      <ChevronDown
+        className={`absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+        onClick={(e) => {
+          if (disabled) return;
+          e.stopPropagation();
+          if (open) {
+            setOpen(false);
+            setSearch('');
+            setShowAll(false);
+          } else {
+            setSearch(value ? getDisplayText(value) : '');
+            setShowAll(true);
+            setOpen(true);
+          }
+        }}
+      />
+      {open && !disabled && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+          <div
+            className="max-h-44 overflow-auto overscroll-contain custom-scrollbar"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
+            {sortedFiltered.length > 0 ? (
+              sortedFiltered.map((opt) => (
+                <div
+                  key={opt}
+                  className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                  onClick={() => {
+                    if (value === opt) {
+                      onChange('');
+                    } else {
+                      onChange(opt);
+                    }
+                    setOpen(false);
+                    setSearch('');
+                    setShowAll(false);
+                  }}
+                >
+                  <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
+                  <span className="font-normal">{getDisplayText(opt)}</span>
+                </div>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-sm text-slate-500">No options found</div>
+            )}
+          </div>
+
+          {onAddNew && (
+            <div
+              className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+              style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
+              onClick={() => {
+                setOpen(false);
+                setSearch('');
+                setShowAll(false);
+                onAddNew();
+              }}
+            >
+              + New
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Safely convert value to YYYY-MM-DD string or empty if invalid
 function toISODateOnly(val: any): string {
   if (!val) return "";
@@ -826,11 +1173,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   const [categoryOpen, setCategoryOpen] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
-  const [categorySearch, setCategorySearch] = useState('');
+  const [, setCategorySearch] = useState('');
 
   const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
   const paymentMethodDropdownRef = useRef<HTMLDivElement>(null);
-  const [paymentMethodSearch, setPaymentMethodSearch] = useState('');
+  const [, setPaymentMethodSearch] = useState('');
   
   // Validation error dialog state
   const [validationErrorOpen, setValidationErrorOpen] = useState(false);
@@ -2640,103 +2987,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   control={form.control}
                   name="vendor"
                   render={({ field }) => {
-                    const [vendorOpen, setVendorOpen] = useState(false);
-                    const [vendorSearch, setVendorSearch] = useState('');
-                    const vendorDropdownRef = useRef<HTMLDivElement>(null);
-                    useEffect(() => {
-                      if (!vendorOpen) return;
-                      function handleClickOutside(event: MouseEvent) {
-                        if (vendorDropdownRef.current && !vendorDropdownRef.current.contains(event.target as Node)) {
-                          setVendorOpen(false);
-                          setVendorSearch('');
-                        }
-                      }
-                      document.addEventListener('mousedown', handleClickOutside);
-                      return () => {
-                        document.removeEventListener('mousedown', handleClickOutside);
-                      };
-                    }, [vendorOpen]);
-
-                    const normalizedVendorSearch = vendorSearch.trim().toLowerCase();
-                    const filteredVendors = normalizedVendorSearch
-                      ? VENDOR_LIST.filter(v => v.toLowerCase().includes(normalizedVendorSearch))
-                      : VENDOR_LIST;
-                    
                     return (
-                      <FormItem className="relative" ref={vendorDropdownRef}>
+                      <FormItem>
                         <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Vendor</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Input 
-                              className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer" 
-                              value={vendorOpen ? vendorSearch : (field.value || '')}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setVendorSearch(v);
-                                // Allow custom vendor names not in the predefined list
-                                field.onChange(v);
-                                if (!vendorOpen) setVendorOpen(true);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  setVendorOpen(false);
-                                  setVendorSearch('');
-                                  (e.currentTarget as HTMLInputElement).blur();
-                                }
-                                if (e.key === 'Escape') {
-                                  e.preventDefault();
-                                  setVendorOpen(false);
-                                  setVendorSearch('');
-                                  (e.currentTarget as HTMLInputElement).blur();
-                                }
-                              }}
-                              onFocus={() => {
-                                setVendorSearch(field.value || '');
-                                setVendorOpen(true);
-                              }}
-                              onClick={() => {
-                                setVendorSearch(field.value || '');
-                                setVendorOpen(true);
-                              }}
-                            />
-                            <ChevronDown
-                              className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                              onClick={() => {
-                                if (!vendorOpen) setVendorSearch(field.value || '');
-                                setVendorOpen(!vendorOpen);
-                                if (vendorOpen) setVendorSearch('');
-                              }}
-                            />
-                            {vendorOpen && (
-                              <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
-                                {filteredVendors.map((vendor, index) => (
-                                  <div
-                                    key={index}
-                                    className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                                    onClick={() => {
-                                      // If already selected, clear it
-                                      if (field.value === vendor) {
-                                        field.onChange('');
-                                        setVendorOpen(false);
-                                        setVendorSearch('');
-                                        return;
-                                      }
-                                      field.onChange(vendor);
-                                      setVendorOpen(false);
-                                      setVendorSearch('');
-                                    }}
-                                  >
-                                    <Check
-                                      className={`mr-2 h-4 w-4 text-blue-600 ${field.value === vendor ? "opacity-100" : "opacity-0"}`}
-                                    />
-                                    <span className="font-normal">{vendor}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </FormControl>
+                        <SearchableStringDropdown
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          options={VENDOR_LIST}
+                          placeholder="Select or type vendor"
+                          className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer"
+                        />
                         <FormMessage />
                       </FormItem>
                     );
@@ -2746,99 +3006,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   control={form.control}
                   name="currency"
                   render={({ field }) => {
-                    const [currencyOpen, setCurrencyOpen] = useState(false);
-                    const [currencySearch, setCurrencySearch] = useState('');
-                    const currencyDropdownRef = useRef<HTMLDivElement>(null);
-                    useEffect(() => {
-                      if (!currencyOpen) return;
-                      function handleClickOutside(event: MouseEvent) {
-                        if (currencyDropdownRef.current && !currencyDropdownRef.current.contains(event.target as Node)) {
-                          setCurrencyOpen(false);
-                          setCurrencySearch('');
-                        }
-                      }
-                      document.addEventListener('mousedown', handleClickOutside);
-                      return () => {
-                        document.removeEventListener('mousedown', handleClickOutside);
-                      };
-                    }, [currencyOpen]);
-                    const allCurrencies = currencies && currencies.length > 0 ? currencies : [];
-
-                    const normalizedCurrencySearch = currencySearch.trim().toLowerCase();
-                    const filtered = normalizedCurrencySearch
-                      ? allCurrencies.filter((curr: any) => curr.code?.toLowerCase().includes(normalizedCurrencySearch))
-                      : allCurrencies;
+                    const allCurrencies = currencies && currencies.length > 0 
+                      ? currencies.map((curr: any) => curr.code)
+                      : [];
+                    
                     return (
-                      <FormItem className="relative" ref={currencyDropdownRef}>
+                      <FormItem>
                         <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Currency</FormLabel>
-                        <div className="relative">
-                          <Input
-                            value={currencyOpen ? currencySearch : (field.value || '')}
-                            className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer"
-                            onChange={(e) => {
-                              setCurrencySearch(e.target.value);
-                              if (!currencyOpen) setCurrencyOpen(true);
-                            }}
-                            onFocus={() => {
-                              setCurrencySearch(field.value || '');
-                              setCurrencyOpen(true);
-                            }}
-                            onClick={() => {
-                              setCurrencySearch(field.value || '');
-                              setCurrencyOpen(true);
-                            }}
-                          />
-                          <ChevronDown
-                            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                            onClick={() => {
-                              if (!currencyOpen) setCurrencySearch(field.value || '');
-                              setCurrencyOpen(!currencyOpen);
-                              if (currencyOpen) setCurrencySearch('');
-                            }}
-                          />
-                        </div>
-                        {currencyOpen && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                            <div className="max-h-60 overflow-auto custom-scrollbar">
-                              {filtered.length > 0 ? (
-                                filtered.map((curr: any) => (
-                                  <div
-                                    key={curr.code}
-                                    className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                                    onClick={() => {
-                                      // If already selected, clear it
-                                      if (field.value === curr.code) {
-                                        field.onChange('');
-                                        setCurrencyOpen(false);
-                                        setCurrencySearch('');
-                                        return;
-                                      }
-                                      field.onChange(curr.code);
-                                      setCurrencyOpen(false);
-                                      setCurrencySearch('');
-                                    }}
-                                  >
-                                    <Check
-                                      className={`mr-2 h-4 w-4 text-blue-600 ${field.value === curr.code ? "opacity-100" : "opacity-0"}`}
-                                    />
-                                    <span className="font-normal">{curr.code}</span>
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="dropdown-item disabled text-gray-400">No currencies configured</div>
-                              )}
-                            </div>
-                            <div className="sticky bottom-0 bg-white border-t">
-                              <button
-                                type="button"
-                                className="w-full px-3 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
-                                onClick={() => window.location.href = '/configuration?tab=currency'}
-                              >
-                                + New
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                        <SearchableStringDropdown
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          options={allCurrencies}
+                          placeholder="Select currency"
+                          onAddNew={() => window.location.href = '/configuration?tab=currency'}
+                          className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer"
+                        />
                         <FormMessage />
                       </FormItem>
                     );
@@ -3131,10 +3313,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     // For Trial and Pay-as-you-go, don't show any payment frequency options
                     const isTrialOrPayAsYouGo = commitmentCycle === 'trial' || commitmentCycle === 'pay-as-you-go';
                     
+                    // Disable if no commitment cycle selected
+                    const isDisabled = !billingCycle || isTrialOrPayAsYouGo;
+                    
                     // Get the index of the commitment cycle
                     const commitmentIndex = cycleHierarchy.indexOf(commitmentCycle);
                     
-                    // Filter frequencies: only show options <= commitment cycle
+                    // Filter frequencies: only show options <= commitment cycle (keep lowercase)
                     const availableFrequencies = commitmentIndex >= 0 
                       ? cycleHierarchy.slice(0, commitmentIndex + 1)
                       : []; // Empty for trial and pay-as-you-go
@@ -3142,29 +3327,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     return (
                       <FormItem>
                         <FormLabel className="block text-sm font-medium text-slate-700">Payment Frequency</FormLabel>
-                        <Select 
-                          value={field.value || ""} 
-                          onValueChange={field.onChange}
-                          disabled={isTrialOrPayAsYouGo}
-                        >
-                          <SelectTrigger className={`w-full border-slate-300 rounded-lg p-2 text-base ${isTrialOrPayAsYouGo ? 'bg-gray-100 cursor-not-allowed' : ''}`}>
-                            <SelectValue placeholder={isTrialOrPayAsYouGo ? "N/A" : "Select"} />
-                          </SelectTrigger>
-                          <SelectContent className="dropdown-content">
-                            {!isTrialOrPayAsYouGo && availableFrequencies.includes('weekly') && (
-                              <SelectItem value="weekly" className="dropdown-item">Weekly</SelectItem>
-                            )}
-                            {!isTrialOrPayAsYouGo && availableFrequencies.includes('monthly') && (
-                              <SelectItem value="monthly" className="dropdown-item">Monthly</SelectItem>
-                            )}
-                            {!isTrialOrPayAsYouGo && availableFrequencies.includes('quarterly') && (
-                              <SelectItem value="quarterly" className="dropdown-item">Quarterly</SelectItem>
-                            )}
-                            {!isTrialOrPayAsYouGo && availableFrequencies.includes('yearly') && (
-                              <SelectItem value="yearly" className="dropdown-item">Yearly</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
+                        <SearchableStringDropdown
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          options={availableFrequencies}
+                          placeholder={isTrialOrPayAsYouGo ? "N/A" : !billingCycle ? "Select commitment cycle first" : "Select"}
+                          disabled={isDisabled}
+                          capitalizeDisplay={true}
+                          readOnly={true}
+                          className={`w-full border-slate-300 rounded-lg p-2 pr-10 text-base ${isDisabled ? 'bg-gray-100 cursor-not-allowed' : 'cursor-pointer'}`}
+                        />
                         <FormMessage />
                       </FormItem>
                     );
@@ -3182,85 +3354,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     // Combine and deduplicate
                     const allCategories = Array.from(new Set([...dbCategories, ...DEFAULT_CATEGORY_SUGGESTIONS]));
 
-                    const normalizedSearch = categorySearch.trim().toLowerCase();
-                    const filtered = normalizedSearch
-                      ? allCategories.filter(cat => cat.toLowerCase().includes(normalizedSearch))
-                      : allCategories;
-                    
-                    const shouldShowDropdown = categoryOpen && filtered.length > 0;
-
-                    // Unified dropdown UI for Category field
                     return (
-                      <FormItem className="relative" ref={categoryDropdownRef}>
+                      <FormItem>
                         <FormLabel className="block text-sm font-medium text-slate-700">Category</FormLabel>
-                        <div className="relative">
-                          <Input
-                            value={categoryOpen ? categorySearch : (field.value || '')}
-                            className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
-                            disabled={categoriesLoading}
-                            onChange={(e) => {
-                              setCategorySearch(e.target.value);
-                              if (!categoryOpen) setCategoryOpen(true);
-                            }}
-                            onFocus={() => {
-                              setCategorySearch(field.value || '');
-                              setCategoryOpen(true);
-                            }}
-                            onClick={() => {
-                              setCategorySearch(field.value || '');
-                              setCategoryOpen(true);
-                            }}
-                            autoComplete="off"
-                          />
-                          <ChevronDown
-                            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                            onClick={() => {
-                              if (!categoryOpen) setCategorySearch(field.value || '');
-                              setCategoryOpen(!categoryOpen);
-                              if (categoryOpen) setCategorySearch('');
-                            }}
-                          />
-                        </div>
-                        {shouldShowDropdown && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                            <div className="max-h-40 overflow-y-scroll custom-scrollbar">
-                              {filtered.map(catName => (
-                                <div
-                                  key={catName}
-                                  className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${field.value === catName ? 'bg-blue-50 text-blue-700' : ''}`}
-                                  onClick={() => {
-                                    // If already selected, clear it
-                                    if (field.value === catName) {
-                                      field.onChange('');
-                                      setCategoryOpen(false);
-                                      setCategorySearch('');
-                                      return;
-                                    }
-                                    field.onChange(catName);
-                                    setCategoryOpen(false);
-                                    setCategorySearch('');
-                                  }}
-                                >
-                                  <Check
-                                    className={`mr-2 h-4 w-4 text-blue-600 ${field.value === catName ? 'opacity-100' : 'opacity-0'}`}
-                                  />
-                                  <span className="font-normal">{catName}</span>
-                                </div>
-                              ))}
-                            </div>
-                            <div
-                              className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                              style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
-                              onClick={() => {
-                                setCategoryModal({ show: true });
-                                setCategoryOpen(false);
-                                setCategorySearch('');
-                              }}
-                            >
-                              + New
-                            </div>
-                          </div>
-                        )}
+                        <SearchableStringDropdown
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          options={allCategories}
+                          placeholder="Select or type category"
+                          disabled={categoriesLoading}
+                          onAddNew={() => setCategoryModal({ show: true })}
+                          className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
+                        />
                         <FormMessage />
                       </FormItem>
                     );
@@ -3392,80 +3497,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       ? paymentMethods.map(pm => pm.name)
                       : [];
 
-                    const normalizedSearch = paymentMethodSearch.trim().toLowerCase();
-                    const filtered = normalizedSearch
-                      ? allPaymentMethods.filter(pm => pm.toLowerCase().includes(normalizedSearch))
-                      : allPaymentMethods;
                     return (
-                      <FormItem className="relative" ref={paymentMethodDropdownRef}>
+                      <FormItem>
                         <FormLabel className="block text-sm font-medium text-slate-700">
                           Payment Method <span className="text-red-500">*</span>
                         </FormLabel>
-                        <div className="relative">
-                          <Input
-                            value={paymentMethodOpen ? paymentMethodSearch : (field.value || '')}
-                            className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
-                            disabled={paymentMethodsLoading}
-                            onChange={(e) => {
-                              setPaymentMethodSearch(e.target.value);
-                              if (!paymentMethodOpen) setPaymentMethodOpen(true);
-                            }}
-                            onFocus={() => {
-                              setPaymentMethodSearch(field.value || '');
-                              setPaymentMethodOpen(true);
-                            }}
-                            onClick={() => {
-                              setPaymentMethodSearch(field.value || '');
-                              setPaymentMethodOpen(true);
-                            }}
-                          />
-                          <ChevronDown
-                            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                            onClick={() => {
-                              if (!paymentMethodOpen) setPaymentMethodSearch(field.value || '');
-                              setPaymentMethodOpen(!paymentMethodOpen);
-                              if (paymentMethodOpen) setPaymentMethodSearch('');
-                            }}
-                          />
-                        </div>
-                        {paymentMethodOpen && filtered.length > 0 && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-auto custom-scrollbar">
-                            {filtered.map(pmName => (
-                              <div
-                                key={pmName}
-                                className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                                onClick={() => {
-                                  // If already selected, clear it
-                                  if (field.value === pmName) {
-                                    field.onChange('');
-                                    setPaymentMethodOpen(false);
-                                    setPaymentMethodSearch('');
-                                    return;
-                                  }
-                                  field.onChange(pmName);
-                                  setPaymentMethodOpen(false);
-                                  setPaymentMethodSearch('');
-                                }}
-                              >
-                                <Check
-                                  className={`mr-2 h-4 w-4 text-blue-600 ${field.value === pmName ? "opacity-100" : "opacity-0"}`}
-                                />
-                                <span className="font-normal">{pmName}</span>
-                              </div>
-                            ))}
-                            <div
-                              className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                              style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
-                              onClick={() => {
-                                setPaymentMethodModal({ show: true });
-                                setPaymentMethodOpen(false);
-                                setPaymentMethodSearch('');
-                              }}
-                            >
-                              + New
-                            </div>
-                          </div>
-                        )}
+                        <SearchableStringDropdown
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          options={allPaymentMethods}
+                          placeholder="Select payment method"
+                          disabled={paymentMethodsLoading}
+                          onAddNew={() => setPaymentMethodModal({ show: true })}
+                          className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
+                        />
                         <FormMessage className="text-red-500" />
                       </FormItem>
                     );
@@ -3477,129 +3522,24 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   control={form.control}
                   name="owner"
                   render={({ field }) => {
-                    const [ownerOpen, setOwnerOpen] = useState(false);
-                    const [ownerSearch, setOwnerSearch] = useState('');
-                    const ownerDropdownRef = useRef<HTMLDivElement>(null);
-                    useEffect(() => {
-                      if (!ownerOpen) return;
-                      function handleClickOutside(event: MouseEvent) {
-                        if (ownerDropdownRef.current && !ownerDropdownRef.current.contains(event.target as Node)) {
-                          setOwnerOpen(false);
-                          setOwnerSearch('');
-                        }
-                      }
-                      document.addEventListener('mousedown', handleClickOutside);
-                      return () => {
-                        document.removeEventListener('mousedown', handleClickOutside);
-                      };
-                    }, [ownerOpen]);
-                    const ownerOptions = employeesRaw.length > 0
-                      ? employeesRaw.map((emp: any) => {
-                          const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
-                          const displayName = duplicateNames.length > 1 
-                            ? `${emp.name} (${emp.email})` 
-                            : emp.name;
-                          const uniqueValue = duplicateNames.length > 1
-                            ? `${emp.name}|${emp.email}`
-                            : emp.name;
-                          return { displayName, uniqueValue, name: emp.name, email: emp.email };
-                        })
-                      : [];
-
-                    const normalizedOwnerSearch = ownerSearch.trim().toLowerCase();
-                    const filtered = normalizedOwnerSearch
-                      ? ownerOptions.filter(opt => (opt.displayName || '').toLowerCase().includes(normalizedOwnerSearch))
-                      : ownerOptions;
                     return (
-                      <FormItem className="relative" ref={ownerDropdownRef}>
+                      <FormItem>
                         <FormLabel className="block text-sm font-medium text-slate-700">Owner</FormLabel>
-                        <div className="relative">
-                          <Input
-                            value={ownerOpen ? ownerSearch : (field.value || '')}
-                            className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base cursor-pointer"
-                            onChange={(e) => {
-                              setOwnerSearch(e.target.value);
-                              if (!ownerOpen) setOwnerOpen(true);
-                            }}
-                            onFocus={() => {
-                              setOwnerSearch(field.value || '');
-                              setOwnerOpen(true);
-                            }}
-                            onClick={() => {
-                              setOwnerSearch(field.value || '');
-                              setOwnerOpen(true);
-                            }}
-                          />
-                          <ChevronDown
-                            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                            onClick={() => {
-                              if (!ownerOpen) setOwnerSearch(field.value || '');
-                              setOwnerOpen(!ownerOpen);
-                              if (ownerOpen) setOwnerSearch('');
-                            }}
-                          />
-                        </div>
-                        {ownerOpen && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                            <div className="max-h-60 overflow-auto custom-scrollbar">
-                              {filtered.length > 0 ? (
-                                filtered.map(opt => (
-                                  <div
-                                    key={opt.uniqueValue}
-                                    className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
-                                    onClick={() => {
-                                      const value = opt.uniqueValue;
-                                      if (value === "add-new-owner") {
-                                        setOwnerModal({ show: true });
-                                      } else {
-                                        // If clicking on already selected item, clear it
-                                        if (field.value === opt.uniqueValue || field.value === opt.name) {
-                                          field.onChange('');
-                                          form.setValue('ownerEmail', '');
-                                          setOwnerOpen(false);
-                                          setOwnerSearch('');
-                                          return;
-                                        }
-                                        
-                                        const emp = employeesRaw.find((e: any) => {
-                                          if (value.includes('|')) {
-                                            const [name, email] = value.split('|');
-                                            return e.name === name && e.email === email;
-                                          }
-                                          return e.name === value;
-                                        });
-                                        field.onChange(emp?.name || value);
-                                        if (emp?.email) {
-                                          form.setValue('ownerEmail', emp.email);
-                                        }
-                                      }
-                                      setOwnerOpen(false);
-                                      setOwnerSearch('');
-                                    }}
-                                  >
-                                    <Check
-                                      className={`mr-2 h-4 w-4 text-blue-600 ${field.value === opt.uniqueValue ? "opacity-100" : "opacity-0"}`}
-                                    />
-                                    <span className="font-normal">{opt.displayName}</span>
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="dropdown-item disabled text-gray-400">No owners found</div>
-                              )}
-                            </div>
-                            <div
-                              className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                              style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
-                              onClick={() => {
-                                setOwnerModal({ show: true });
-                                setOwnerOpen(false);
-                                setOwnerSearch('');
-                              }}
-                            >
-                              + New
-                            </div>
-                          </div>
-                        )}
+                        <EmployeeSearchDropdown
+                          value={field.value || ""}
+                          onChange={(value) => {
+                            field.onChange(value);
+                            // Auto-fill owner email when owner is selected
+                            const emp = employeesRaw.find((e: any) => e.name === value);
+                            if (emp?.email) {
+                              form.setValue('ownerEmail', emp.email);
+                            } else {
+                              form.setValue('ownerEmail', '');
+                            }
+                          }}
+                          employees={employeesRaw}
+                          onAddNew={() => setOwnerModal({ show: true })}
+                        />
                         <FormMessage />
                       </FormItem>
                     );

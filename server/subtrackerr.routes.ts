@@ -58,6 +58,7 @@ import { connectToDatabase } from "./mongo.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import type { User } from "./types";
+import { sendSubscriptionNotifications, detectSubscriptionChanges } from "./subscription-notification.service.js";
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 
 const router = Router();
@@ -186,10 +187,31 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
   await db.collection("reminders").deleteMany({ subscriptionId });
 
   // Use nextRenewal as the target date for reminders
-  const renewalDate = subscription.nextRenewal;
-  if (!renewalDate) {
+  const renewalDateRaw = subscription.nextRenewal;
+  if (!renewalDateRaw) {
     return;
   }
+
+  // Normalize date strings (supports dd-mm-yyyy, dd/mm/yyyy, yyyy-mm-dd)
+  const normalizedRenewalDate = normalizeDateString(renewalDateRaw);
+  if (!normalizedRenewalDate || typeof normalizedRenewalDate !== 'string') {
+    return;
+  }
+
+  // Parse as date-only in UTC to avoid locale parsing ambiguity (e.g., 07-02-2026)
+  const parseDateOnlyUtc = (value: string): Date | null => {
+    if (!value) return null;
+    const v = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      const d = new Date(`${v}T00:00:00.000Z`);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const renewalDate = parseDateOnlyUtc(normalizedRenewalDate);
+  if (!renewalDate) return;
 
   // Use reminderDays from subscription, default to 7 if not set
   const reminderDays = Number(subscription.reminderDays) || 7;
@@ -199,17 +221,17 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
 
   if (reminderPolicy === "One time") {
     const reminderDate = new Date(renewalDate);
-    reminderDate.setDate(reminderDate.getDate() - reminderDays);
+    reminderDate.setUTCDate(reminderDate.getUTCDate() - reminderDays);
     remindersToInsert.push({
       type: `Before ${reminderDays} days`,
       date: reminderDate.toISOString().slice(0, 10),
     });
   } else if (reminderPolicy === "Two times") {
     const firstDate = new Date(renewalDate);
-    firstDate.setDate(firstDate.getDate() - reminderDays);
+    firstDate.setUTCDate(firstDate.getUTCDate() - reminderDays);
     const secondDays = Math.floor(reminderDays / 2);
     const secondDate = new Date(renewalDate);
-    secondDate.setDate(secondDate.getDate() - secondDays);
+    secondDate.setUTCDate(secondDate.getUTCDate() - secondDays);
     remindersToInsert.push({
       type: `Before ${reminderDays} days`,
       date: firstDate.toISOString().slice(0, 10),
@@ -223,7 +245,7 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
   } else if (reminderPolicy === "Until Renewal") {
     // Daily reminders from (renewalDate - reminderDays) to renewalDate
     const startDate = new Date(renewalDate);
-    startDate.setDate(startDate.getDate() - reminderDays);
+    startDate.setUTCDate(startDate.getUTCDate() - reminderDays);
     let current = new Date(startDate);
     const end = new Date(renewalDate);
     while (current <= end) {
@@ -231,7 +253,7 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
         type: `Daily`,
         date: current.toISOString().slice(0, 10),
       });
-      current.setDate(current.getDate() + 1);
+      current.setUTCDate(current.getUTCDate() + 1);
     }
   }
 
@@ -1001,6 +1023,9 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
       filter = { id: id, tenantId };
     }
     
+    // Get subscription data BEFORE deletion for notifications
+    const subscriptionToDelete = await collection.findOne(filter);
+    
     // Delete subscription first (main operation)
     const result = await collection.deleteOne(filter);
     
@@ -1016,26 +1041,13 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
             $or: [ { subscriptionId: id }, { subscriptionId: new ObjectId(id) } ] 
           });
           
-          // Create notification event (optional, don't block on this)
-          const subscriptionData = await collection.findOne(filter);
-          if (subscriptionData) {
-            const { decryptSubscriptionData } = await import("./encryption.service.js");
-            const decrypted = decryptSubscriptionData(subscriptionData);
-            
-            await db.collection("notification_events").insertOne({
-              _id: new ObjectId(),
-              tenantId,
-              type: 'subscription',
-              eventType: 'deleted',
-              subscriptionId: id,
-              subscriptionName: decrypted.serviceName,
-              category: decrypted.category || 'Software',
-              message: `Subscription ${decrypted.serviceName} deleted`,
-              read: false,
-              timestamp: new Date().toISOString(),
-              createdAt: new Date().toISOString(),
-              reminderTriggerDate: new Date().toISOString().slice(0, 10)
-            });
+          // Send subscription lifecycle notifications for deletion (in-app + email)
+          if (subscriptionToDelete) {
+            try {
+              await sendSubscriptionNotifications('delete', subscriptionToDelete, null, tenantId, db);
+            } catch (notificationError) {
+              console.error(`❌ [SUBTRACKERR] Failed to send deletion notifications:`, notificationError);
+            }
           }
         } catch (cleanupError) {
           console.error(`❌ [SUBTRACKERR] Cleanup error after deletion:`, cleanupError);
@@ -1697,10 +1709,34 @@ router.post("/api/subscriptions", async (req, res) => {
     const subscription = {
       ...req.body,
       tenantId,
-      initialDate: req.body.initialDate || req.body.startDate, // Set initialDate to startDate if not provided
+      // Normalize common date fields (UI may send dd-mm-yyyy)
+      startDate: normalizeDateString(req.body.startDate),
+      nextRenewal: normalizeDateString(req.body.nextRenewal),
+      endDate: normalizeDateString(req.body.endDate),
+      firstPurchaseDate: normalizeDateString((req.body as any)?.firstPurchaseDate),
+      currentCycleStart: normalizeDateString((req.body as any)?.currentCycleStart),
+      initialDate: normalizeDateString(req.body.initialDate || req.body.startDate), // Set initialDate to startDate if not provided
       createdAt: new Date(),
       updatedAt: new Date()
     };
+
+    // Backfill ownerEmail from Employees if missing (used for reminder visibility + emails)
+    if (subscription.owner && (!subscription.ownerEmail || String(subscription.ownerEmail).trim() === '')) {
+      try {
+        const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const ownerValue = String(subscription.owner).trim();
+        const ownerRegex = new RegExp(`^${escapeRegex(ownerValue)}$`, 'i');
+        const employee = await db.collection('employees').findOne({
+          tenantId,
+          $or: [{ email: ownerRegex }, { name: ownerRegex }],
+        });
+        if (employee?.email) {
+          subscription.ownerEmail = String(employee.email).trim();
+        }
+      } catch {
+        // ignore
+      }
+    }
     
     // ENCRYPT sensitive data before storing
     const encryptedSubscription = encryptSubscriptionData(subscription);
@@ -1748,8 +1784,26 @@ const notificationResult = await db.collection("notification_events").insertOne(
       // Don't throw - let subscription creation succeed even if notification fails
     }
 
-    // Generate reminders for the new subscription
-    await generateRemindersForSubscription(createdSubscription, tenantId, db);
+    if (createdSubscription) {
+      // Generate reminders for the new subscription
+      await generateRemindersForSubscription(createdSubscription, tenantId, db);
+
+      // Send subscription lifecycle notifications (in-app + email)
+      try {
+        await sendSubscriptionNotifications(
+          'create',
+          createdSubscription,
+          null, // no old subscription for create
+          tenantId,
+          db
+        );
+      } catch (notificationError) {
+        console.error(`❌ [SUBTRACKERR] Failed to send lifecycle notifications for ${subscription.serviceName}:`, notificationError);
+        // Don't throw - let subscription creation succeed even if notifications fail
+      }
+    } else {
+      console.warn('⚠️ [SUBTRACKERR] createdSubscription is null; skipping reminders and lifecycle notifications');
+    }
 
     res.status(201).json({ 
       message: "Subscription created",
@@ -1970,6 +2024,39 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     if ('tenantId' in req.body) {
       delete req.body.tenantId;
     }
+
+    // Preserve existing ownerEmail if UI sends empty string (common on status-only updates like cancel)
+    if ('ownerEmail' in req.body && String(req.body.ownerEmail || '').trim() === '') {
+      delete req.body.ownerEmail;
+    }
+
+    // Normalize common date fields (UI may send dd-mm-yyyy)
+    if ('startDate' in req.body) req.body.startDate = normalizeDateString(req.body.startDate);
+    if ('nextRenewal' in req.body) req.body.nextRenewal = normalizeDateString(req.body.nextRenewal);
+    if ('endDate' in req.body) req.body.endDate = normalizeDateString(req.body.endDate);
+    if ('initialDate' in req.body) req.body.initialDate = normalizeDateString(req.body.initialDate);
+    if ('firstPurchaseDate' in req.body) (req.body as any).firstPurchaseDate = normalizeDateString((req.body as any).firstPurchaseDate);
+    if ('currentCycleStart' in req.body) (req.body as any).currentCycleStart = normalizeDateString((req.body as any).currentCycleStart);
+
+    // If owner is being set/changed and ownerEmail not provided, backfill from Employees
+    if ('owner' in req.body && (!('ownerEmail' in req.body) || String((req.body as any).ownerEmail || '').trim() === '')) {
+      try {
+        const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const ownerValue = String((req.body as any).owner || '').trim();
+        if (ownerValue) {
+          const ownerRegex = new RegExp(`^${escapeRegex(ownerValue)}$`, 'i');
+          const employee = await db.collection('employees').findOne({
+            tenantId,
+            $or: [{ email: ownerRegex }, { name: ownerRegex }],
+          });
+          if (employee?.email) {
+            (req.body as any).ownerEmail = String(employee.email).trim();
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
     
     // ENCRYPT sensitive fields in the update payload
     const encryptedPayload = encryptSubscriptionData(req.body);
@@ -2022,6 +2109,38 @@ try {
 
       // Update reminders for the subscription
       await generateRemindersForSubscription(updatedDoc, tenantId, db);
+
+      // Send subscription lifecycle notifications for changes (in-app + email)
+      if (result.modifiedCount > 0) {
+        try {
+          if (!updatedDoc) {
+            console.warn('⚠️ [SUBTRACKERR] Updated subscription document not found after update; skipping lifecycle notifications');
+            return;
+          }
+          // Detect what changed and send appropriate notifications
+          const changes = detectSubscriptionChanges(oldDoc, updatedDoc);
+          
+          if (changes.ownerChanged) {
+            await sendSubscriptionNotifications('ownerChange', updatedDoc, oldDoc, tenantId, db);
+          }
+          if (changes.priceChanged) {
+            await sendSubscriptionNotifications('priceChange', updatedDoc, oldDoc, tenantId, db);
+          }
+          if (changes.quantityChanged) {
+            await sendSubscriptionNotifications('quantityChange', updatedDoc, oldDoc, tenantId, db);
+          }
+          if (changes.statusChanged) {
+            const normalizedStatus = String(updatedDoc.status || '').trim().toLowerCase();
+            const isCancelled = normalizedStatus === 'cancelled' || normalizedStatus === 'canceled' || normalizedStatus === 'cancel';
+            if (isCancelled) {
+              await sendSubscriptionNotifications('cancel', updatedDoc, oldDoc, tenantId, db);
+            }
+          }
+        } catch (notificationError) {
+          console.error(`❌ [SUBTRACKERR] Failed to send lifecycle notifications for ${updatedDoc?.serviceName}:`, notificationError);
+          // Don't throw - let subscription update succeed even if notifications fail
+        }
+      }
 
       res.status(200).json({ 
         message: "Subscription updated",

@@ -40,7 +40,7 @@ export type NotificationItem = {
 	submissionDeadline?: string;
 	type?: 'subscription' | 'compliance';
 	// Event tracking fields
-	eventType?: 'created' | 'deleted' | 'reminder';
+	eventType?: 'created' | 'deleted' | 'updated' | 'reminder' | 'payment_method_expiring';
 	createdAt?: string;
 };
 

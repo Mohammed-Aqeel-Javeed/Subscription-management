@@ -1,5 +1,4 @@
 import { useAbility } from '../context/AbilityContext';
-import { Subject } from '@casl/ability';
 
 interface CanProps {
   I: 'manage' | 'create' | 'read' | 'update' | 'delete';
@@ -12,7 +11,7 @@ interface CanProps {
 export function Can({ I, a, field, children, fallback = null }: CanProps) {
   const ability = useAbility();
   
-  const canPerform = ability.can(I, a as Subject, field);
+  const canPerform = ability.can(I, a, field);
   
   if (canPerform) {
     return <>{children}</>;

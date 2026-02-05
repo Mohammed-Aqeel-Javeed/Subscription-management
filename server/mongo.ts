@@ -37,6 +37,17 @@ export async function ensureTTLIndexes() {
   // 60 days in seconds
   const expireAfterSeconds = 60 * 24 * 60 * 60;
 
+  // OTP TTL (expire at the exact time stored in expiresAt)
+  // Note: MongoDB's TTL monitor runs ~every 60s, so deletion is not instantaneous.
+  try {
+    await db.collection("otps").createIndex(
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 }
+    );
+  } catch (err) {
+    // Ignore index creation errors (e.g., permissions)
+  }
+
   // Notification events TTL
   await db.collection("notification_events").createIndex(
     { createdAt: 1 },
