@@ -2118,7 +2118,11 @@ try {
             return;
           }
           // Detect what changed and send appropriate notifications
-          const changes = detectSubscriptionChanges(oldDoc, updatedDoc);
+          const { decryptSubscriptionData } = await import("./encryption.service.js");
+          const changes = detectSubscriptionChanges(
+            decryptSubscriptionData(oldDoc),
+            decryptSubscriptionData(updatedDoc)
+          );
           
           if (changes.ownerChanged) {
             await sendSubscriptionNotifications('ownerChange', updatedDoc, oldDoc, tenantId, db);

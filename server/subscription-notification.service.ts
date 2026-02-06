@@ -141,9 +141,9 @@ async function getNotificationRecipients(
         deptHead: { inApp: true, email: true }
       },
       quantity_changed: {
-        admin: { inApp: true, email: true },
-        owner: { inApp: true, email: true },
-        deptHead: { inApp: true, email: true }
+        admin: { inApp: true, email: false },
+        owner: { inApp: true, email: false },
+        deptHead: { inApp: true, email: false }
       },
       cancelled: {
         admin: { inApp: true, email: true },
@@ -536,12 +536,18 @@ async function sendEmailNotification(
         break;
     }
 
-    await emailService.sendEmail({
+    const ok = await emailService.sendEmail({
       to: recipient.email,
       subject: subject,
       html: body
     });
-    console.log(`✅ Email sent to ${recipient.email} for ${eventType} event`);
+    if (ok) {
+      console.log(`✅ Email sent to ${recipient.email} for ${eventType} event`);
+    } else {
+      console.warn(
+        `⚠️ Email NOT sent to ${recipient.email} for ${eventType} event (email service not configured or send failed)`
+      );
+    }
 
   } catch (error) {
     console.error(`❌ Error sending email notification to ${recipient.email}:`, error);
