@@ -1861,10 +1861,45 @@ router.post("/api/subscriptions", async (req, res) => {
     // Import encryption functions
     const { encryptSubscriptionData } = await import("./encryption.service.js");
     
+    const rawServiceName = String((req.body as any)?.serviceName || '').trim();
+    if (!rawServiceName) {
+      return res.status(400).json({ message: 'Service name is required' });
+    }
+
+    // Used to detect duplicates despite serviceName being encrypted (encryption is randomized).
+    const serviceNameKey = rawServiceName.toLowerCase();
+    const createIdempotencyKey = typeof (req.body as any)?.createIdempotencyKey === 'string'
+      ? String((req.body as any).createIdempotencyKey).trim()
+      : '';
+
+    // If client retries the same create (slow network), return the already-created doc.
+    if (createIdempotencyKey) {
+      const existing = await collection.findOne({ tenantId, createIdempotencyKey, isDraft: { $ne: true } });
+      if (existing?._id) {
+        return res.status(200).json({
+          message: 'Subscription already created',
+          _id: existing._id,
+          subscription: existing,
+        });
+      }
+    }
+
+    // Best-effort duplicate guard (works once documents have serviceNameKey)
+    const existingByName = await collection.findOne({ tenantId, serviceNameKey, isDraft: { $ne: true } });
+    if (existingByName?._id) {
+      return res.status(200).json({
+        message: 'Subscription already exists',
+        _id: existingByName._id,
+        subscription: existingByName,
+      });
+    }
+
     // Prepare subscription document with timestamps and tenantId
     const subscription = {
       ...req.body,
       tenantId,
+      serviceNameKey,
+      ...(createIdempotencyKey ? { createIdempotencyKey } : {}),
       // Normalize common date fields (UI may send dd-mm-yyyy)
       startDate: normalizeDateString(req.body.startDate),
       nextRenewal: normalizeDateString(req.body.nextRenewal),
@@ -1897,92 +1932,113 @@ router.post("/api/subscriptions", async (req, res) => {
     // ENCRYPT sensitive data before storing
     const encryptedSubscription = encryptSubscriptionData(subscription);
     
-    // Create the subscription with encrypted data
-    const result = await collection.insertOne(encryptedSubscription);
-    const subscriptionId = result.insertedId;
-    // Get the complete subscription document
-    const createdSubscription = await collection.findOne({ _id: subscriptionId });
-    // Create history record
-    const historyRecord = {
-      subscriptionId: subscriptionId,  // Store as ObjectId
-      tenantId, // Always include tenantId for filtering
-      data: {
-        ...createdSubscription,
-        _id: subscriptionId
-      },
-      action: "create",
-      timestamp: new Date(),
-      serviceName: subscription.serviceName  // Add serviceName for easier querying
-    };
-await historyCollection.insertOne(historyRecord);
-
-    // Create notification event for subscription creation
+    let subscriptionId;
     try {
-const { ObjectId } = await import("mongodb");
-      
-      const notificationEvent = {
-        _id: new ObjectId(),
-        tenantId,
-        type: 'subscription',
-        eventType: 'created',
-        subscriptionId: subscriptionId.toString(),
-        subscriptionName: subscription.serviceName,
-        category: subscription.category || 'Software',
-        message: `Subscription ${subscription.serviceName} created`,
-        read: false,
-        timestamp: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        reminderTriggerDate: new Date().toISOString().slice(0, 10)
-      };
-const notificationResult = await db.collection("notification_events").insertOne(notificationEvent);
-} catch (notificationError) {
-      console.error(`❌ [SUBTRACKERR] Failed to create notification event for ${subscription.serviceName}:`, notificationError);
-      // Don't throw - let subscription creation succeed even if notification fails
-    }
+      const result = await collection.insertOne(encryptedSubscription);
+      subscriptionId = result.insertedId;
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      const isDup = msg.includes('E11000') || msg.toLowerCase().includes('duplicate key');
+      if (isDup) {
+        const existing = createIdempotencyKey
+          ? await collection.findOne({ tenantId, createIdempotencyKey, isDraft: { $ne: true } })
+          : await collection.findOne({ tenantId, serviceNameKey, isDraft: { $ne: true } });
 
-    if (createdSubscription) {
-      // Generate reminders for the new subscription
-      await generateRemindersForSubscription(createdSubscription, tenantId, db);
-
-      // Send subscription lifecycle notifications (in-app + email)
-      try {
-        await sendSubscriptionNotifications(
-          'create',
-          createdSubscription,
-          null, // no old subscription for create
-          tenantId,
-          db
-        );
-      } catch (notificationError) {
-        console.error(`❌ [SUBTRACKERR] Failed to send lifecycle notifications for ${subscription.serviceName}:`, notificationError);
-        // Don't throw - let subscription creation succeed even if notifications fail
-      }
-
-      // After save, check if the selected payment method is expiring soon
-      // and send in-app + email notifications (non-blocking).
-      try {
-        const paymentMethodName = String((subscription as any)?.paymentMethod || '').trim();
-        if (paymentMethodName) {
-          const { PaymentExpiryService } = await import('./payment-expiry.service.js');
-          const svc = new PaymentExpiryService();
-          void svc.checkAndSendPaymentMethodExpiringNotificationsForTenant({
-            tenantId,
-            paymentName: paymentMethodName,
-            db,
+        if (existing?._id) {
+          return res.status(200).json({
+            message: 'Subscription already created',
+            _id: existing._id,
+            subscription: existing,
           });
         }
-      } catch (paymentNotifyErr) {
-        console.error('❌ [SUBTRACKERR] Failed to run payment expiry check after subscription create:', paymentNotifyErr);
       }
-    } else {
-      console.warn('⚠️ [SUBTRACKERR] createdSubscription is null; skipping reminders and lifecycle notifications');
+      throw err;
     }
 
-    res.status(201).json({ 
-      message: "Subscription created",
+    // Respond immediately; run heavy side-effects in background.
+    res.status(201).json({
+      message: 'Subscription created',
       _id: subscriptionId,
-      subscription: createdSubscription 
     });
+
+    void (async () => {
+      try {
+        const createdSubscription = await collection.findOne({ _id: subscriptionId, tenantId });
+        if (!createdSubscription) return;
+
+        // History record
+        try {
+          const historyRecord = {
+            subscriptionId: subscriptionId,
+            tenantId,
+            data: {
+              ...createdSubscription,
+              _id: subscriptionId,
+            },
+            action: 'create',
+            timestamp: new Date(),
+            serviceName: (subscription as any).serviceName,
+          };
+          await historyCollection.insertOne(historyRecord);
+        } catch (e) {
+          console.error('❌ [SUBTRACKERR] Failed to write subscription history on create:', e);
+        }
+
+        // Notification event
+        try {
+          const { ObjectId } = await import('mongodb');
+          const notificationEvent = {
+            _id: new ObjectId(),
+            tenantId,
+            type: 'subscription',
+            eventType: 'created',
+            subscriptionId: subscriptionId.toString(),
+            subscriptionName: (subscription as any).serviceName,
+            category: (subscription as any).category || 'Software',
+            message: `Subscription ${(subscription as any).serviceName} created`,
+            read: false,
+            timestamp: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            reminderTriggerDate: new Date().toISOString().slice(0, 10),
+          };
+          await db.collection('notification_events').insertOne(notificationEvent);
+        } catch (e) {
+          console.error('❌ [SUBTRACKERR] Failed to create notification event on create:', e);
+        }
+
+        // Reminders
+        try {
+          await generateRemindersForSubscription(createdSubscription, tenantId, db);
+        } catch (e) {
+          console.error('❌ [SUBTRACKERR] Failed to generate reminders on create:', e);
+        }
+
+        // Lifecycle notifications (in-app + email)
+        try {
+          await sendSubscriptionNotifications('create', createdSubscription, null, tenantId, db);
+        } catch (e) {
+          console.error('❌ [SUBTRACKERR] Failed to send lifecycle notifications on create:', e);
+        }
+
+        // Payment method expiry check (non-blocking inside background already)
+        try {
+          const paymentMethodName = String((subscription as any)?.paymentMethod || '').trim();
+          if (paymentMethodName) {
+            const { PaymentExpiryService } = await import('./payment-expiry.service.js');
+            const svc = new PaymentExpiryService();
+            void svc.checkAndSendPaymentMethodExpiringNotificationsForTenant({
+              tenantId,
+              paymentName: paymentMethodName,
+              db,
+            });
+          }
+        } catch (e) {
+          console.error('❌ [SUBTRACKERR] Failed to run payment expiry check after create:', e);
+        }
+      } catch (e) {
+        console.error('❌ [SUBTRACKERR] Background create tasks failed:', e);
+      }
+    })();
   } catch (error: unknown) {
     console.error("Creation error:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -2280,65 +2336,71 @@ try {
       } else {
 }
 
-      // Update reminders for the subscription
-      await generateRemindersForSubscription(updatedDoc, tenantId, db);
-
-      // Send subscription lifecycle notifications for changes (in-app + email)
-      if (result.modifiedCount > 0) {
-        try {
-          if (!updatedDoc) {
-            console.warn('⚠️ [SUBTRACKERR] Updated subscription document not found after update; skipping lifecycle notifications');
-            return;
-          }
-          // Detect what changed and send appropriate notifications
-          const { decryptSubscriptionData } = await import("./encryption.service.js");
-          const decryptedOld = decryptSubscriptionData(oldDoc);
-          const decryptedUpdated = decryptSubscriptionData(updatedDoc);
-          const changes = detectSubscriptionChanges(decryptedOld, decryptedUpdated);
-          
-          if (changes.ownerChanged) {
-            await sendSubscriptionNotifications('ownerChange', updatedDoc, oldDoc, tenantId, db);
-          }
-          if (changes.priceChanged) {
-            await sendSubscriptionNotifications('priceChange', updatedDoc, oldDoc, tenantId, db);
-          }
-          if (changes.quantityChanged) {
-            await sendSubscriptionNotifications('quantityChange', updatedDoc, oldDoc, tenantId, db);
-          }
-          if (changes.statusChanged) {
-            const normalizedStatus = String(updatedDoc.status || '').trim().toLowerCase();
-            const isCancelled = normalizedStatus === 'cancelled' || normalizedStatus === 'canceled' || normalizedStatus === 'cancel';
-            if (isCancelled) {
-              await sendSubscriptionNotifications('cancel', updatedDoc, oldDoc, tenantId, db);
-            }
-          }
-
-          // After save, check if the subscription's payment method is expiring soon
-          // and send in-app + email notifications (non-blocking).
-          try {
-            const paymentMethodName = String((decryptedUpdated as any)?.paymentMethod || '').trim();
-            if (paymentMethodName) {
-              const { PaymentExpiryService } = await import('./payment-expiry.service.js');
-              const svc = new PaymentExpiryService();
-              void svc.checkAndSendPaymentMethodExpiringNotificationsForTenant({
-                tenantId,
-                paymentName: paymentMethodName,
-                db,
-              });
-            }
-          } catch (paymentNotifyErr) {
-            console.error('❌ [SUBTRACKERR] Failed to run payment expiry check after subscription update:', paymentNotifyErr);
-          }
-        } catch (notificationError) {
-          console.error(`❌ [SUBTRACKERR] Failed to send lifecycle notifications for ${updatedDoc?.serviceName}:`, notificationError);
-          // Don't throw - let subscription update succeed even if notifications fail
-        }
-      }
-
       res.status(200).json({ 
         message: "Subscription updated",
         subscription: updatedDoc
       });
+
+      // Run reminders + notifications in background so the update API stays fast.
+      void (async () => {
+        try {
+          if (!updatedDoc) return;
+
+          // Update reminders
+          try {
+            await generateRemindersForSubscription(updatedDoc, tenantId, db);
+          } catch (e) {
+            console.error('❌ [SUBTRACKERR] Failed to generate reminders on update:', e);
+          }
+
+          // Lifecycle notifications (in-app + email)
+          if (result.modifiedCount > 0) {
+            try {
+              const { decryptSubscriptionData } = await import("./encryption.service.js");
+              const decryptedOld = decryptSubscriptionData(oldDoc);
+              const decryptedUpdated = decryptSubscriptionData(updatedDoc);
+              const changes = detectSubscriptionChanges(decryptedOld, decryptedUpdated);
+
+              if (changes.ownerChanged) {
+                await sendSubscriptionNotifications('ownerChange', updatedDoc, oldDoc, tenantId, db);
+              }
+              if (changes.priceChanged) {
+                await sendSubscriptionNotifications('priceChange', updatedDoc, oldDoc, tenantId, db);
+              }
+              if (changes.quantityChanged) {
+                await sendSubscriptionNotifications('quantityChange', updatedDoc, oldDoc, tenantId, db);
+              }
+              if (changes.statusChanged) {
+                const normalizedStatus = String((updatedDoc as any).status || '').trim().toLowerCase();
+                const isCancelled = normalizedStatus === 'cancelled' || normalizedStatus === 'canceled' || normalizedStatus === 'cancel';
+                if (isCancelled) {
+                  await sendSubscriptionNotifications('cancel', updatedDoc, oldDoc, tenantId, db);
+                }
+              }
+
+              // Payment method expiry check (non-blocking inside background already)
+              try {
+                const paymentMethodName = String((decryptedUpdated as any)?.paymentMethod || '').trim();
+                if (paymentMethodName) {
+                  const { PaymentExpiryService } = await import('./payment-expiry.service.js');
+                  const svc = new PaymentExpiryService();
+                  void svc.checkAndSendPaymentMethodExpiringNotificationsForTenant({
+                    tenantId,
+                    paymentName: paymentMethodName,
+                    db,
+                  });
+                }
+              } catch (e) {
+                console.error('❌ [SUBTRACKERR] Failed payment expiry check after update:', e);
+              }
+            } catch (e) {
+              console.error(`❌ [SUBTRACKERR] Background lifecycle notifications failed for update:`, e);
+            }
+          }
+        } catch (e) {
+          console.error('❌ [SUBTRACKERR] Background update tasks failed:', e);
+        }
+      })();
     } else {
       res.status(404).json({ message: "Subscription not found or access denied" });
     }

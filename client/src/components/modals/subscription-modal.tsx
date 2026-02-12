@@ -818,6 +818,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // and a synchronous single-flight guard.
   const draftSessionIdRef = useRef<string | null>(null);
   const draftSaveInFlightRef = useRef(false);
+
+  // Prevent duplicate *active subscription* creation on slow networks / retries.
+  const createIdempotencyKeyRef = useRef<string | null>(null);
   
   // Get tenant ID for API calls
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
@@ -826,6 +829,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (!open) {
       draftSessionIdRef.current = null;
       draftSaveInFlightRef.current = false;
+      createIdempotencyKeyRef.current = null;
       return;
     }
 
@@ -833,6 +837,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (!isEditing && !draftSessionIdRef.current) {
       const uuid = (globalThis as any)?.crypto?.randomUUID?.();
       draftSessionIdRef.current = uuid || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    // New idempotency key per modal open (create only)
+    if (!isEditing && !createIdempotencyKeyRef.current) {
+      const uuid = (globalThis as any)?.crypto?.randomUUID?.();
+      createIdempotencyKeyRef.current = uuid || `create-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     }
   }, [open, isEditing]);
   
@@ -1799,7 +1809,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   }, [form.watch('website'), open]);
   
   const mutation = useMutation({
-    mutationFn: async (data: FormData & { id?: string }) => {
+    mutationFn: async (data: FormData & { id?: string; createIdempotencyKey?: string | null }) => {
       const { id, createdAt, ...rest } = data as any;
       
       // Convert departments array to JSON string for storage
@@ -2183,9 +2193,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         // Create new subscription - use mutation for consistent state management
         mutation.mutate({
           ...payload,
+          createIdempotencyKey: createIdempotencyKeyRef.current,
           startDate: payload.startDate instanceof Date ? payload.startDate.toISOString() : String(payload.startDate),
           nextRenewal: payload.nextRenewal instanceof Date ? payload.nextRenewal.toISOString() : String(payload.nextRenewal),
-        });
+        } as any);
       }
     } catch (error: any) {
       toast({
