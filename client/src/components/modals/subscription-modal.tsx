@@ -812,7 +812,7 @@ interface SubscriptionModalProps {
 export default function SubscriptionModal({ open, onOpenChange, subscription }: SubscriptionModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const isEditing = !!subscription;
+  const isEditing = !!subscription && subscription.status !== 'Draft';
 
   // Prevent duplicate draft creation on slow networks by using a per-modal draft session id
   // and a synchronous single-flight guard.
@@ -2826,7 +2826,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     <>
       <style>{animationStyles}</style>
       <Dialog open={open} onOpenChange={(v) => { if (!v) setIsFullscreen(false); onOpenChange(v); }}>
-        <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'} rounded-2xl border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter flex flex-col overflow-hidden`}> 
+        <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'} rounded-2xl border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter flex flex-col overflow-hidden`}> 
           <DialogHeader className="sticky top-0 z-50 bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white p-6 rounded-t-2xl flex flex-row items-center shadow-sm">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               {companyLogo && (
@@ -2915,6 +2915,25 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 onClick={() => setIsFullscreen(f => !f)}
               >
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                title="Close"
+                className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-indigo-200 shadow-sm"
+                onClick={() => {
+                  const formValues = form.getValues();
+                  const hasData = formValues.serviceName || formValues.vendor || formValues.amount ||
+                                 formValues.category || formValues.owner || formValues.notes;
+
+                  if (hasData && !subscriptionCreated) {
+                    setExitConfirmDialog({ show: true });
+                  } else {
+                    onOpenChange(false);
+                  }
+                }}
+              >
+                <X className="h-4 w-4" />
               </Button>
             </div>
           </DialogHeader>

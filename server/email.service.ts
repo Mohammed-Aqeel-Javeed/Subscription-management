@@ -55,6 +55,13 @@ class EmailService {
 
   async sendEmail(emailData: EmailData): Promise<boolean> {
     if (!this.isConfigured || !this.transporter) {
+      console.error('❌ Email service is NOT configured. Please check SMTP_USER and SMTP_PASS environment variables.');
+      console.error('   Current config:', {
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: process.env.SMTP_PORT || '587',
+        user: process.env.SMTP_USER ? '***configured***' : 'MISSING',
+        pass: process.env.SMTP_PASS ? '***configured***' : 'MISSING'
+      });
       return false;
     }
 
@@ -66,10 +73,17 @@ class EmailService {
         html: emailData.html
       };
 
+      console.log(`📧 Sending email...`);
+      
       const info = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ Email sent successfully! Message ID: ${info.messageId}`);
       return true;
     } catch (error) {
-      console.error('Error sending email:', error);
+      console.error('❌ Error sending email:', error);
+      if (error instanceof Error) {
+        console.error('   Error message:', error.message);
+        console.error('   Error stack:', error.stack);
+      }
       return false;
     }
   }

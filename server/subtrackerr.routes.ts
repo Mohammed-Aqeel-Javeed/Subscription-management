@@ -59,6 +59,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import type { User } from "./types";
 import { sendSubscriptionNotifications, detectSubscriptionChanges } from "./subscription-notification.service.js";
+import { sendComplianceNotifications, detectComplianceChanges } from "./compliance-notification.service.js";
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 
 const router = Router();
@@ -81,6 +82,62 @@ function normalizeDateString(value: any): any {
   return value;
 }
 
+function toEpochMsServer(raw: any): number {
+  if (!raw) return 0;
+  const d = raw instanceof Date ? raw : new Date(String(raw));
+  const t = d.getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+function notificationDedupeKey(n: any): string {
+  if (!n) return '';
+  const type = String(n.type || '').trim().toLowerCase();
+  const eventType = String(n.eventType || (n.reminderTriggerDate || n.reminderDate ? 'reminder' : '')).trim().toLowerCase();
+  const lifecycle = String(n.lifecycleEventType || '').trim().toLowerCase();
+  const entityId = String(n.subscriptionId || n.complianceId || n.licenseId || n.paymentId || '').trim().toLowerCase();
+  const trigger = String(n.reminderTriggerDate || n.reminderDate || '').trim().toLowerCase();
+  const deadline = String(n.submissionDeadline || n.subscriptionEndDate || n.endDate || '').trim().toLowerCase();
+  const reminderType = String(n.reminderType || '').trim().toLowerCase();
+  const title = String(n.filingName || n.subscriptionName || n.licenseName || n.name || '').trim().toLowerCase();
+  const message = String(n.message || '').trim().toLowerCase();
+  return [type, eventType, lifecycle, entityId, trigger, deadline, reminderType, title, message].join('|');
+}
+
+function dedupeNotifications(list: any[]): any[] {
+  if (!Array.isArray(list) || list.length === 0) return Array.isArray(list) ? list : [];
+
+  const score = (n: any): number => {
+    if (!n) return 0;
+    let s = 0;
+    if (n.recipientRole) s += 2;
+    if (Array.isArray(n.recipientDepartments) && n.recipientDepartments.length) s += 1;
+    if (n.message) s += 1;
+    if (n.reminderTriggerDate || n.reminderDate) s += 1;
+    if (n.filingName || n.subscriptionName || n.licenseName) s += 1;
+    if (n.lifecycleEventType) s += 1;
+    return s;
+  };
+
+  const pickBetter = (a: any, b: any) => {
+    const sa = score(a);
+    const sb = score(b);
+    if (sa !== sb) return sa > sb ? a : b;
+    const ta = toEpochMsServer(a?.timestamp || a?.createdAt);
+    const tb = toEpochMsServer(b?.timestamp || b?.createdAt);
+    return tb > ta ? b : a;
+  };
+
+  const map = new Map<string, any>();
+  for (const n of list) {
+    const key = notificationDedupeKey(n) || (n?.id ? `id:${String(n.id)}` : '');
+    if (!key) continue;
+    const existing = map.get(key);
+    if (!existing) map.set(key, n);
+    else map.set(key, pickBetter(existing, n));
+  }
+  return Array.from(map.values());
+}
+
 // Helper function to generate reminders for a subscription
 async function generateRemindersForCompliance(compliance: any, tenantId: string, db: any) {
   const complianceId = compliance._id ? compliance._id.toString() : (typeof compliance.id === 'string' ? compliance.id : undefined);
@@ -97,13 +154,11 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
     // Failed to prune existing notifications - continue
   }
 
-  // Use submissionDeadline as the target date for reminders
-  // Normalize deadline to ISO format if provided in dd-mm-yyyy etc.
-  const rawDeadline = compliance.submissionDeadline;
-  const deadlineDate = normalizeDateString(rawDeadline);
-  if (!deadlineDate) {
-    return;
-  }
+  // Use submissionDeadline as the primary target date for reminders.
+  // If submissionDeadline is missing, fall back to endDate.
+  const normalizedSubmissionDeadline = normalizeDateString(compliance.submissionDeadline);
+  const targetDateStr = normalizedSubmissionDeadline || normalizeDateString(compliance.endDate);
+  if (!targetDateStr) return;
 
   // Use reminderDays from compliance, default to 7 if not set
   const reminderDays = Number(compliance.reminderDays) || 7;
@@ -112,7 +167,7 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
   let remindersToInsert = [];
 
   if (reminderPolicy === "One time") {
-    const reminderDate = new Date(deadlineDate);
+    const reminderDate = new Date(targetDateStr);
     if (isNaN(reminderDate.getTime())) {
       return;
     }
@@ -122,13 +177,13 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
       date: reminderDate.toISOString().slice(0, 10),
     });
   } else if (reminderPolicy === "Two times") {
-    const firstDate = new Date(deadlineDate);
+    const firstDate = new Date(targetDateStr);
     if (isNaN(firstDate.getTime())) {
       return;
     }
     firstDate.setDate(firstDate.getDate() - reminderDays);
     const secondDays = Math.floor(reminderDays / 2);
-    const secondDate = new Date(deadlineDate);
+    const secondDate = new Date(targetDateStr);
     secondDate.setDate(secondDate.getDate() - secondDays);
     remindersToInsert.push({
       type: `Before ${reminderDays} days`,
@@ -142,13 +197,13 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
     }
   } else if (reminderPolicy === "Until Renewal") {
     // Daily reminders from (deadlineDate - reminderDays) to deadlineDate
-    const startDate = new Date(deadlineDate);
+    const startDate = new Date(targetDateStr);
     if (isNaN(startDate.getTime())) {
       return;
     }
     startDate.setDate(startDate.getDate() - reminderDays);
     let current = new Date(startDate);
-    const end = new Date(deadlineDate);
+    const end = new Date(targetDateStr);
     while (current <= end) {
       remindersToInsert.push({
         type: `Daily`,
@@ -166,6 +221,8 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
       reminderType: reminder.type,
       reminderDate: reminder.date,
       reminderTriggerDate: reminder.date, // ensure frontend filter works
+      reminderDays,
+      reminderPolicy,
       sent: false,
       status: compliance.status || "Active",
       createdAt: new Date(),
@@ -173,7 +230,7 @@ async function generateRemindersForCompliance(compliance: any, tenantId: string,
       type: 'compliance',
       filingName: compliance.policy || compliance.filingName || compliance.complianceName || compliance.name || 'Compliance Filing',
       complianceCategory: compliance.category || compliance.complianceCategory || undefined,
-      submissionDeadline: deadlineDate // Add submission deadline for frontend display
+      submissionDeadline: normalizedSubmissionDeadline || undefined
     };
     await db.collection("compliance_notifications").insertOne(notificationDoc);
   }
@@ -655,7 +712,70 @@ router.post("/api/ledger/insert", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    const result = await collection.insertOne({ ...req.body, tenantId });
+
+    const filingSubmissionDateRaw =
+      req.body?.filingSubmissionDate ??
+      req.body?.submissionDate ??
+      req.body?.SubmissionDate;
+    const submittedByRaw = req.body?.submittedBy ?? req.body?.SubmittedBy;
+
+    if (!filingSubmissionDateRaw || !String(filingSubmissionDateRaw).trim()) {
+      return res.status(400).json({ message: "Submission Date is required" });
+    }
+
+    if (!submittedByRaw || !String(submittedByRaw).trim()) {
+      return res.status(400).json({ message: "Submitted By is required" });
+    }
+
+    const ledgerDoc = {
+      ...req.body,
+      tenantId,
+      filingSubmissionDate: normalizeDateString(filingSubmissionDateRaw),
+      submittedBy: String(submittedByRaw),
+      createdAt: new Date(),
+    };
+
+    const result = await collection.insertOne(ledgerDoc);
+
+    // Create an in-app compliance "Submitted" notification when ledger entry is created
+    const complianceIdRaw = req.body?.complianceId ?? req.body?.complianceID ?? req.body?.compliance_id;
+    if (complianceIdRaw) {
+      try {
+        // Prefer fetching the compliance doc to get correct owners/departments.
+        let complianceDoc: any = null;
+        try {
+          const complianceObjId = new ObjectId(String(complianceIdRaw));
+          complianceDoc = await db.collection('compliance').findOne({ _id: complianceObjId, tenantId });
+        } catch {
+          // ignore
+        }
+
+        const complianceForNotification: any = {
+          ...(complianceDoc || {}),
+          id: String(complianceIdRaw),
+          tenantId,
+          // Keep fallback fields from request in case lookup failed
+          filingName: (complianceDoc as any)?.filingName || req.body?.filingName || req.body?.policy || req.body?.complianceName || req.body?.name,
+          policy: (complianceDoc as any)?.policy || req.body?.policy || req.body?.filingName,
+          owner: (complianceDoc as any)?.owner || req.body?.owner,
+          ownerEmail: (complianceDoc as any)?.ownerEmail || req.body?.ownerEmail,
+          owner2: (complianceDoc as any)?.owner2 || req.body?.owner2,
+          owner2Email: (complianceDoc as any)?.owner2Email || req.body?.owner2Email,
+          departments: (complianceDoc as any)?.departments || (Array.isArray(req.body?.departments) ? req.body.departments : undefined),
+          department: (complianceDoc as any)?.department || req.body?.department,
+          complianceCategory: (complianceDoc as any)?.complianceCategory || req.body?.filingComplianceCategory || req.body?.complianceCategory || req.body?.category,
+          category: (complianceDoc as any)?.category || req.body?.filingComplianceCategory || req.body?.complianceCategory || req.body?.category,
+          submissionDeadline: (complianceDoc as any)?.submissionDeadline || req.body?.filingSubmissionDeadline || req.body?.submissionDeadline,
+          status: 'Submitted',
+          filingSubmissionDate: normalizeDateString(filingSubmissionDateRaw),
+          submittedBy: String(submittedByRaw),
+        };
+
+        await sendComplianceNotifications('submitted', complianceForNotification, null, tenantId, db);
+      } catch (notifyErr) {
+        console.error('Failed to create submitted in-app notification after ledger insert:', notifyErr);
+      }
+    }
 // Add this line
     res.status(201).json({ insertedId: result.insertedId });
   } catch (error) {
@@ -778,9 +898,9 @@ router.post("/api/compliance/insert", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     // Normalize date fields before inserting so reminder generation works immediately
-    const normalizedSubmissionDeadline = normalizeDateString(req.body.submissionDeadline);
-    const normalizedStart = normalizeDateString(req.body.lastAudit || req.body.startDate);
-    const normalizedEnd = normalizeDateString(req.body.endDate);
+    const normalizedSubmissionDeadline = normalizeDateString(req.body.submissionDeadline || req.body.filingSubmissionDeadline);
+    const normalizedStart = normalizeDateString(req.body.lastAudit || req.body.startDate || req.body.filingStartDate);
+    const normalizedEnd = normalizeDateString(req.body.endDate || req.body.filingEndDate);
 
     const complianceData = { 
       ...req.body, 
@@ -803,28 +923,27 @@ await generateRemindersForCompliance(createdCompliance, tenantId, db);
       console.error(`❌ [COMPLIANCE] Failed to generate reminders:`, reminderError);
       // Don't throw - let compliance creation succeed even if reminder generation fails
     }
-    
-    // Create notification event for compliance creation
+
+    // If any reminders are already due (e.g., editing deadlines to today/past), send them immediately.
+    // This also creates user-scoped in-app reminder notifications.
     try {
-const filingName = complianceData.policy || complianceData.filingName || complianceData.complianceName || complianceData.name || 'Compliance Filing';
-      const notificationEvent = {
-        _id: new ObjectId(),
+      const { runComplianceReminderCheck } = await import("./compliance-reminder.service.js");
+      await runComplianceReminderCheck(tenantId);
+    } catch (e) {
+      console.error(`❌ [COMPLIANCE] Immediate reminder check failed:`, e);
+    }
+    
+    // Send lifecycle notifications for compliance creation
+    try {
+      await sendComplianceNotifications(
+        'create',
+        { ...createdCompliance, id: result.insertedId.toString() },
+        null,
         tenantId,
-        type: 'compliance',
-        eventType: 'created',
-        complianceId: result.insertedId.toString(),
-        complianceName: filingName,
-        filingName: filingName,
-        category: complianceData.complianceCategory || complianceData.category || 'General',
-        message: `Compliance filing ${filingName} created`,
-        read: false,
-        timestamp: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        reminderTriggerDate: new Date().toISOString().slice(0, 10)
-      };
-const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
-} catch (notificationError) {
-      console.error(`❌ [COMPLIANCE] Failed to create notification event:`, notificationError);
+        db
+      );
+    } catch (notificationError) {
+      console.error(`❌ [COMPLIANCE] Failed to send lifecycle notifications:`, notificationError);
       // Don't throw - let compliance creation succeed even if notification fails
     }
     
@@ -844,7 +963,20 @@ router.put("/api/compliance/:id", async (req, res) => {
     // Get the document before update for notification
     const oldDoc = await collection.findOne({ _id: new ObjectId(id) });
     
-    const updateData = { ...req.body, updatedAt: new Date() };
+    const updateData: any = { ...req.body, updatedAt: new Date() };
+    if ('submissionDeadline' in updateData || 'filingSubmissionDeadline' in updateData) {
+      updateData.submissionDeadline = normalizeDateString(updateData.submissionDeadline || updateData.filingSubmissionDeadline);
+      delete updateData.filingSubmissionDeadline;
+    }
+    if ('lastAudit' in updateData || 'startDate' in updateData || 'filingStartDate' in updateData) {
+      updateData.lastAudit = normalizeDateString(updateData.lastAudit || updateData.startDate || updateData.filingStartDate);
+      delete updateData.startDate;
+      delete updateData.filingStartDate;
+    }
+    if ('endDate' in updateData || 'filingEndDate' in updateData) {
+      updateData.endDate = normalizeDateString(updateData.endDate || updateData.filingEndDate);
+      delete updateData.filingEndDate;
+    }
     const result = await collection.updateOne(
       { _id: new ObjectId(id) },
       { $set: updateData }
@@ -860,38 +992,62 @@ router.put("/api/compliance/:id", async (req, res) => {
         if (tenantId) {
           const complianceName = updatedDoc?.filingName || updatedDoc?.complianceName || updatedDoc?.name || 'Unnamed Filing';
 await generateRemindersForCompliance(updatedDoc, tenantId, db);
+
+          // Run reminder check immediately so due reminders send without requiring a server restart.
+          try {
+            const { runComplianceReminderCheck } = await import("./compliance-reminder.service.js");
+            await runComplianceReminderCheck(tenantId);
+          } catch (e) {
+            console.error(`❌ [COMPLIANCE] Immediate reminder check failed:`, e);
+          }
 }
       } catch (reminderError) {
         console.error(`❌ [COMPLIANCE] Failed to regenerate reminders:`, reminderError);
         // Don't throw - let compliance update succeed even if reminder generation fails
       }
       
-      // Create notification event for compliance update ONLY if important fields changed (deadline / reminder settings / status)
+      // Send lifecycle notifications for compliance updates
       try {
-        const importantFields = ['submissionDeadline','reminderDays','reminderPolicy','status'];
-        const changedImportant = importantFields.some(f => String(oldDoc?.[f] ?? '') !== String(updateData?.[f] ?? ''));
-        if (changedImportant) {
-          const complianceName = updateData.policy || updateData.filingName || updateData.complianceName || updateData.name || oldDoc?.policy || oldDoc?.filingName || oldDoc?.complianceName || oldDoc?.name || 'Compliance Filing';
-const notificationEvent = {
-            _id: new ObjectId(),
-            tenantId: req.user?.tenantId,
-            type: 'compliance',
-            eventType: 'updated',
-            complianceId: id,
-            complianceName: complianceName,
-            filingName: complianceName,
-            category: updateData.complianceCategory || updateData.category || oldDoc?.complianceCategory || oldDoc?.category || 'General',
-            message: `Compliance filing ${complianceName} updated`,
-            read: false,
-            timestamp: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            reminderTriggerDate: new Date().toISOString().slice(0, 10)
-          };
-          const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
-} else {
-}
+        const tenantId = req.user?.tenantId;
+        if (tenantId && updatedDoc) {
+          // Detect what changed
+          const changes = detectComplianceChanges(oldDoc, updatedDoc);
+          
+          console.log(`[COMPLIANCE UPDATE] Change detection for ${updatedDoc.filingName || updatedDoc.name}:`, {
+            ownerChanged: changes.ownerChanged,
+            submitted: changes.submitted,
+            oldOwner: changes.oldOwner,
+            newOwner: updatedDoc.owner,
+            oldStatus: changes.oldStatus,
+            newStatus: updatedDoc.status
+          });
+          
+          // Send appropriate notifications based on what changed
+          if (changes.ownerChanged) {
+            console.log(`[COMPLIANCE UPDATE] Owner changed detected - sending ownerChange notifications...`);
+            await sendComplianceNotifications(
+              'ownerChange',
+              { ...updatedDoc, id: id },
+              oldDoc,
+              tenantId,
+              db
+            );
+          } else if (changes.submitted) {
+            console.log(`[COMPLIANCE UPDATE] Submitted status detected - sending submitted notifications...`);
+            await sendComplianceNotifications(
+              'submitted',
+              { ...updatedDoc, id: id },
+              oldDoc,
+              tenantId,
+              db
+            );
+          } else {
+            console.log(`[COMPLIANCE UPDATE] No significant changes detected for notifications`);
+          }
+          // Note: 'otherFields' doesn't send notifications per matrix
+        }
       } catch (notificationError) {
-        console.error(`❌ [COMPLIANCE] Failed to create conditional update notification event:`, notificationError);
+        console.error(`❌ [COMPLIANCE] Failed to send lifecycle notifications:`, notificationError);
       }
       
       res.status(200).json({ message: "Compliance filing updated" });
@@ -1801,6 +1957,23 @@ const notificationResult = await db.collection("notification_events").insertOne(
         console.error(`❌ [SUBTRACKERR] Failed to send lifecycle notifications for ${subscription.serviceName}:`, notificationError);
         // Don't throw - let subscription creation succeed even if notifications fail
       }
+
+      // After save, check if the selected payment method is expiring soon
+      // and send in-app + email notifications (non-blocking).
+      try {
+        const paymentMethodName = String((subscription as any)?.paymentMethod || '').trim();
+        if (paymentMethodName) {
+          const { PaymentExpiryService } = await import('./payment-expiry.service.js');
+          const svc = new PaymentExpiryService();
+          void svc.checkAndSendPaymentMethodExpiringNotificationsForTenant({
+            tenantId,
+            paymentName: paymentMethodName,
+            db,
+          });
+        }
+      } catch (paymentNotifyErr) {
+        console.error('❌ [SUBTRACKERR] Failed to run payment expiry check after subscription create:', paymentNotifyErr);
+      }
     } else {
       console.warn('⚠️ [SUBTRACKERR] createdSubscription is null; skipping reminders and lifecycle notifications');
     }
@@ -2119,10 +2292,9 @@ try {
           }
           // Detect what changed and send appropriate notifications
           const { decryptSubscriptionData } = await import("./encryption.service.js");
-          const changes = detectSubscriptionChanges(
-            decryptSubscriptionData(oldDoc),
-            decryptSubscriptionData(updatedDoc)
-          );
+          const decryptedOld = decryptSubscriptionData(oldDoc);
+          const decryptedUpdated = decryptSubscriptionData(updatedDoc);
+          const changes = detectSubscriptionChanges(decryptedOld, decryptedUpdated);
           
           if (changes.ownerChanged) {
             await sendSubscriptionNotifications('ownerChange', updatedDoc, oldDoc, tenantId, db);
@@ -2139,6 +2311,23 @@ try {
             if (isCancelled) {
               await sendSubscriptionNotifications('cancel', updatedDoc, oldDoc, tenantId, db);
             }
+          }
+
+          // After save, check if the subscription's payment method is expiring soon
+          // and send in-app + email notifications (non-blocking).
+          try {
+            const paymentMethodName = String((decryptedUpdated as any)?.paymentMethod || '').trim();
+            if (paymentMethodName) {
+              const { PaymentExpiryService } = await import('./payment-expiry.service.js');
+              const svc = new PaymentExpiryService();
+              void svc.checkAndSendPaymentMethodExpiringNotificationsForTenant({
+                tenantId,
+                paymentName: paymentMethodName,
+                db,
+              });
+            }
+          } catch (paymentNotifyErr) {
+            console.error('❌ [SUBTRACKERR] Failed to run payment expiry check after subscription update:', paymentNotifyErr);
           }
         } catch (notificationError) {
           console.error(`❌ [SUBTRACKERR] Failed to send lifecycle notifications for ${updatedDoc?.serviceName}:`, notificationError);
@@ -2350,13 +2539,17 @@ router.put("/api/users/:_id", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("login");
     const { _id } = req.params;
-    const updateData = req.body;
     const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const { name, email, role, status, department, password } = req.body || {};
     
     // Check if email is being updated and already exists (excluding current user)
-    if (updateData.email) {
+    if (email) {
       const existingEmail = await collection.findOne({ 
-        email: updateData.email, 
+        email, 
         tenantId,
         _id: { $ne: new EmployeeObjectId(_id) }
       });
@@ -2366,9 +2559,9 @@ router.put("/api/users/:_id", async (req, res) => {
     }
     
     // Check if name is being updated and already exists (excluding current user)
-    if (updateData.name) {
+    if (name) {
       const existingName = await collection.findOne({ 
-        fullName: updateData.name, 
+        fullName: name, 
         tenantId,
         _id: { $ne: new EmployeeObjectId(_id) }
       });
@@ -2378,21 +2571,45 @@ router.put("/api/users/:_id", async (req, res) => {
     }
     
     // If password is being updated, hash it
-    if (updateData.password) {
-      updateData.password = await bcrypt.hash(updateData.password, 10);
-    }
+    const updateData: any = {};
+    if (name) updateData.fullName = name;
+    if (email) updateData.email = email;
+    if (role) updateData.role = role;
+    if (status) updateData.status = status;
+    if (department !== undefined) updateData.department = department;
+    if (password) updateData.password = await bcrypt.hash(password, 10);
     
     let filter;
     try {
-      filter = { _id: new EmployeeObjectId(_id) };
+      filter = { _id: new EmployeeObjectId(_id), tenantId };
     } catch {
       return res.status(400).json({ message: "Invalid user _id" });
     }
-    const update = { $set: updateData };
-    const result = await collection.updateOne(filter, update);
-    if (result.matchedCount === 1) {
-      res.status(200).json({ message: "User updated" });
-    } else {
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: "No valid fields to update" });
+    }
+
+    const result = await collection.findOneAndUpdate(
+      filter,
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+
+    const updated = result?.value;
+    if (updated) {
+      return res.status(200).json({
+        id: updated._id?.toString?.() ?? String(updated._id),
+        name: updated.fullName,
+        email: updated.email,
+        role: updated.role,
+        status: updated.status,
+        department: updated.department ?? null,
+        tenantId: updated.tenantId,
+      });
+    }
+
+    {
       res.status(404).json({ message: "User not found" });
     }
   } catch (error) {
@@ -2571,46 +2788,236 @@ router.get("/api/notifications/compliance", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const tenantId = req.user?.tenantId;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    const userEmail = (req.user as any)?.email;
+    const userRole = (req.user as any)?.role;
+    const userDept = (req.user as any)?.department;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    
-  // Fetch compliance event notifications (created, deleted) and reminder notifications (no eventType)
-  const rawNotifications = await db.collection("compliance_notifications").find({ tenantId }).sort({ createdAt: -1 }).toArray();
-  const eventNotifications = rawNotifications.filter(n => n.eventType === 'created' || n.eventType === 'deleted');
-  const updateEventsSkipped = rawNotifications.filter(n => n.eventType === 'updated').length;
-    
-    // Fetch compliance reminders and transform them to notification format
-    const complianceReminders = rawNotifications.filter(n => !n.eventType); // now stored in same collection
-    
-    // Transform reminders to notification format
-    const reminderNotifications = complianceReminders.map(reminder => ({
-      _id: reminder._id,
-      tenantId: reminder.tenantId,
-      type: 'compliance',
-      // No eventType for reminders (distinguishes from event notifications)
-      complianceId: reminder.complianceId,
-      complianceName: reminder.filingName,
-      filingName: reminder.filingName,
-      category: reminder.complianceCategory || 'General',
-      message: `Your ${reminder.filingName || 'compliance filing'} submission deadline is approaching. Please review and submit your compliance filing on time.`,
-      read: false,
-      timestamp: reminder.createdAt ? reminder.createdAt.toISOString() : new Date().toISOString(),
-      createdAt: reminder.createdAt ? reminder.createdAt.toISOString() : new Date().toISOString(),
-      reminderTriggerDate: reminder.reminderDate,
-      submissionDeadline: reminder.submissionDeadline || undefined,
-      reminderType: reminder.reminderType
+
+    const normalizedEmail = String(userEmail || "").trim().toLowerCase();
+    const normalizedDept = String(userDept || "").trim().toLowerCase();
+
+    const extractDepartments = (n: any): string[] => {
+      if (!n) return [];
+      const raw = (n as any).departments ?? (n as any).department ?? (n as any).recipientDepartments;
+      if (!raw) return [];
+      if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+      if (typeof raw === 'string') {
+        const s = raw.trim();
+        if (!s) return [];
+        try {
+          const parsed = JSON.parse(s);
+          if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+          if (parsed) return [String(parsed)].filter(Boolean);
+        } catch {
+          return [s];
+        }
+      }
+      return [];
+    };
+
+    const isDeptRole = userRole === 'department_editor' || userRole === 'department_viewer';
+    const isAdminRole = userRole === 'admin' || userRole === 'super_admin';
+
+    const deptMatches = (n: any) => {
+      if (!normalizedDept) return false;
+      const depts = extractDepartments(n).map((d) => String(d || '').trim().toLowerCase()).filter(Boolean);
+      return depts.includes(normalizedDept);
+    };
+
+    const ownerMatches = (n: any) => {
+      if (!normalizedEmail) return false;
+      const ownerEmail = String((n as any)?.ownerEmail || (n as any)?.userEmail || '').trim().toLowerCase();
+      return !!ownerEmail && ownerEmail === normalizedEmail;
+    };
+
+    // 1) Fetch legacy compliance notifications (created/deleted events + reminders)
+    const rawNotifications = await db
+      .collection("compliance_notifications")
+      .find({ tenantId })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    const legacyEventNotifications = rawNotifications
+      .filter((n: any) => n.eventType === "created" || n.eventType === "deleted" || n.eventType === "updated")
+      .map((n: any) => ({
+        ...n,
+        id: n._id?.toString?.() || n.id,
+        type: "compliance",
+        timestamp: n.timestamp || n.createdAt,
+        createdAt: n.createdAt || n.timestamp,
+      }));
+
+    // Reminder documents in compliance_notifications are tenant-wide.
+    // We return ONLY due + unsent reminders so the UI can show them even if the scheduler
+    // hasn't run yet. Once the reminder job sends them, it marks them as sent=true.
+    const IST_OFFSET_MINUTES = 330;
+    const istNow = new Date(Date.now() + IST_OFFSET_MINUTES * 60 * 1000);
+    const todayIso = istNow.toISOString().slice(0, 10);
+
+    let reminderDocs = await db
+      .collection("compliance_notifications")
+      .find({
+        tenantId,
+        reminderTriggerDate: { $lte: todayIso },
+        $or: [{ eventType: { $exists: false } }, { eventType: null }],
+      })
+      .sort({ reminderTriggerDate: -1, createdAt: -1 })
+      .toArray();
+
+    // Role-based filtering
+    if (isDeptRole) {
+      reminderDocs = normalizedDept ? reminderDocs.filter(deptMatches) : [];
+    } else if (!isAdminRole) {
+      reminderDocs = reminderDocs.filter(ownerMatches);
+    }
+
+    const reminderNotifications: any[] = reminderDocs.map((n: any) => ({
+      ...n,
+      id: n._id?.toString?.() || n.id,
+      type: "compliance",
+      timestamp: n.timestamp || n.createdAt,
+      createdAt: n.createdAt || n.timestamp,
     }));
-    
-  // Filter out static/demo notifications (filingName === 'Compliance Filing')
-  const filteredEvents = eventNotifications.filter(n => n.filingName && n.filingName !== 'Compliance Filing');
-  const filteredReminders = reminderNotifications.filter(n => n.filingName && n.filingName !== 'Compliance Filing');
-  const allNotifications = [...filteredEvents, ...filteredReminders];
-  allNotifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-res.status(200).json(allNotifications);
+
+    // 2) Fetch lifecycle compliance notifications (from notifications collection)
+    let userInAppNotifications: any[] = [];
+    if (isAdminRole) {
+      userInAppNotifications = await db
+        .collection("notifications")
+        .find({ tenantId, type: "compliance" })
+        .sort({ createdAt: -1 })
+        .toArray();
+    } else if (isDeptRole) {
+      const raw = await db
+        .collection("notifications")
+        .find({ tenantId, type: "compliance" })
+        .sort({ createdAt: -1 })
+        .toArray();
+      userInAppNotifications = normalizedDept ? raw.filter(deptMatches) : [];
+    } else if (userId || normalizedEmail) {
+      userInAppNotifications = await db
+        .collection("notifications")
+        .find({
+          tenantId,
+          type: "compliance",
+          $or: [
+            ...(userId ? [{ userId: String(userId) }] : []),
+            ...(normalizedEmail ? [{ userEmail: normalizedEmail }] : []),
+          ],
+        })
+        .sort({ createdAt: -1 })
+        .toArray();
+    }
+
+    userInAppNotifications = userInAppNotifications.map((n: any) => ({
+      ...n,
+      id: n._id?.toString?.() || n.id,
+      type: "compliance",
+      timestamp: n.timestamp || n.createdAt,
+      createdAt: n.createdAt || n.timestamp,
+    }));
+
+    // Filter out static/demo notifications, but do NOT hide real reminders/events
+    // that happen to have a default filingName.
+    const notDemo = (n: any) => {
+      if (!n) return false;
+      if (n.complianceId || n.subscriptionId) return true;
+      return !!(n?.filingName && n.filingName !== "Compliance Filing");
+    };
+
+    const allNotifications = dedupeNotifications([...legacyEventNotifications, ...reminderNotifications, ...userInAppNotifications])
+      .filter(notDemo)
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.timestamp || b.createdAt || "").getTime() -
+          new Date(a.timestamp || a.createdAt || "").getTime()
+      );
+
+    res.status(200).json(allNotifications);
   } catch (error) {
     console.error('[COMPLIANCE NOTIFICATIONS] Error:', error);
     res.status(500).json({ message: "Failed to fetch compliance notifications", error });
+  }
+});
+
+router.get("/api/notifications/license", async (req, res) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    const userEmail = (req.user as any)?.email;
+    const userRole = (req.user as any)?.role;
+    const userDept = (req.user as any)?.department;
+    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
+
+    const db = await connectToDatabase();
+    const normalizedEmail = String(userEmail || "").trim().toLowerCase();
+    const normalizedDept = String(userDept || "").trim().toLowerCase();
+
+    const extractDepartments = (n: any): string[] => {
+      if (!n) return [];
+      const raw = (n as any).departments ?? (n as any).department;
+      if (!raw) return [];
+      if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+      if (typeof raw === 'string') {
+        const s = raw.trim();
+        if (!s) return [];
+        try {
+          const parsed = JSON.parse(s);
+          if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+          if (parsed) return [String(parsed)].filter(Boolean);
+        } catch {
+          return [s];
+        }
+      }
+      return [];
+    };
+
+    const isDeptRole = userRole === 'department_editor' || userRole === 'department_viewer';
+    const isAdminRole = userRole === 'admin' || userRole === 'super_admin';
+
+    let raw: any[] = [];
+    if (isAdminRole) {
+      raw = await db.collection("notifications").find({ tenantId, type: "license" }).sort({ createdAt: -1 }).toArray();
+    } else if (isDeptRole) {
+      const all = await db.collection("notifications").find({ tenantId, type: "license" }).sort({ createdAt: -1 }).toArray();
+      if (!normalizedDept) {
+        raw = [];
+      } else {
+        raw = all.filter((n: any) => {
+          const depts = extractDepartments(n).map((d) => String(d || '').trim().toLowerCase()).filter(Boolean);
+          return depts.includes(normalizedDept);
+        });
+      }
+    } else if (userId || normalizedEmail) {
+      raw = await db
+        .collection("notifications")
+        .find({
+          tenantId,
+          type: "license",
+          $or: [
+            ...(userId ? [{ userId: String(userId) }] : []),
+            ...(normalizedEmail ? [{ userEmail: normalizedEmail }] : []),
+          ],
+        })
+        .sort({ createdAt: -1 })
+        .toArray();
+    }
+
+    const userInAppNotifications = raw.map((n: any) => ({
+      ...n,
+      id: n._id?.toString?.() || n.id,
+      type: "license",
+      timestamp: n.timestamp || n.createdAt,
+      createdAt: n.createdAt || n.timestamp,
+    }));
+
+    res.status(200).json(dedupeNotifications(userInAppNotifications));
+  } catch (error) {
+    console.error('[LICENSE NOTIFICATIONS] Error:', error);
+    res.status(500).json({ message: "Failed to fetch license notifications" });
   }
 });
 
@@ -2671,6 +3078,8 @@ router.post("/api/licenses", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("licenses");
     const tenantId = req.user?.tenantId;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    const userEmailRaw = (req.user as any)?.email;
     
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
@@ -2684,6 +3093,63 @@ router.post("/api/licenses", async (req, res) => {
     };
 
     const result = await collection.insertOne(licenseData);
+
+    // Create in-app notification for the creating user
+    try {
+      const notificationsCollection = db.collection("notifications");
+      const normalizedEmail = String(userEmailRaw || "").trim().toLowerCase();
+      const createdAt = new Date();
+      const licenseName = String((req.body as any)?.licenseName || "").trim() || "License";
+
+      const parseDepartments = (value: any): string[] => {
+        if (!value) return [];
+        if (Array.isArray(value)) return value.map(String).filter(Boolean);
+        const s = String(value).trim();
+        if (!s) return [];
+        try {
+          const parsed = JSON.parse(s);
+          if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+          if (parsed) return [String(parsed)].filter(Boolean);
+        } catch {
+          return [s];
+        }
+        return [];
+      };
+
+      const licenseDepartments = (() => {
+        const body: any = req.body || {};
+        const fromDepartments = parseDepartments(body.departments);
+        if (fromDepartments.length) return fromDepartments;
+        const fromDepartment = parseDepartments(body.department);
+        return fromDepartment;
+      })();
+
+      const notificationDoc: any = {
+        tenantId,
+        type: "license",
+        eventType: "created",
+        licenseId: result.insertedId.toString(),
+        licenseName,
+        departments: licenseDepartments,
+        timestamp: createdAt.toISOString(),
+        createdAt,
+        ...(userId ? { userId: String(userId) } : {}),
+        ...(normalizedEmail ? { userEmail: normalizedEmail } : {}),
+        read: false,
+      };
+
+      await notificationsCollection.insertOne(notificationDoc);
+    } catch {
+      // Intentionally ignore notification failures to not block license creation
+    }
+
+    // Run immediate expiry reminder check for this license (in background)
+    try {
+      const { runLicenseExpiryReminderCheck } = await import('./license-expiry-reminder.service.js');
+      void runLicenseExpiryReminderCheck({ tenantId, licenseId: result.insertedId.toString(), db });
+    } catch {
+      // ignore
+    }
     
     res.status(201).json({ 
       message: "License created successfully",
@@ -2703,6 +3169,8 @@ router.put("/api/licenses/:id", async (req, res) => {
     const collection = db.collection("licenses");
     const { id } = req.params;
     const tenantId = req.user?.tenantId;
+    const actorUserId = (req.user as any)?.userId || (req.user as any)?.id;
+    const actorEmailRaw = (req.user as any)?.email;
     
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
@@ -2723,6 +3191,57 @@ router.put("/api/licenses/:id", async (req, res) => {
     // Remove tenantId from update payload if present
     delete updateData.tenantId;
 
+    const existing = await collection.findOne({ _id: licenseId, tenantId });
+    if (!existing) {
+      return res.status(404).json({ message: "License not found or access denied" });
+    }
+
+    const parseDepartments = (value: any): string[] => {
+      if (!value) return [];
+      if (Array.isArray(value)) return value.map(String).filter(Boolean);
+      const s = String(value).trim();
+      if (!s) return [];
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+        if (parsed) return [String(parsed)].filter(Boolean);
+      } catch {
+        return [s];
+      }
+      return [];
+    };
+
+    const normalizeName = (v: any) => String(v || '').trim();
+
+    const existingResponsible = normalizeName((existing as any)?.responsiblePerson);
+    const existingSecondary = normalizeName((existing as any)?.secondaryPerson);
+    const nextResponsible = normalizeName((updateData as any)?.responsiblePerson ?? (existing as any)?.responsiblePerson);
+    const nextSecondary = normalizeName((updateData as any)?.secondaryPerson ?? (existing as any)?.secondaryPerson);
+
+    const existingDepts = (() => {
+      const a = parseDepartments((existing as any)?.departments);
+      if (a.length) return a;
+      return parseDepartments((existing as any)?.department);
+    })();
+    const nextDepts = (() => {
+      const a = parseDepartments((updateData as any)?.departments);
+      if (a.length) return a;
+      const b = parseDepartments((updateData as any)?.department);
+      if (b.length) return b;
+      return existingDepts;
+    })();
+
+    const sameDept = (a: string[], b: string[]) => {
+      const aa = [...a].map((d) => String(d || '').trim().toLowerCase()).filter(Boolean).sort();
+      const bb = [...b].map((d) => String(d || '').trim().toLowerCase()).filter(Boolean).sort();
+      return JSON.stringify(aa) === JSON.stringify(bb);
+    };
+
+    const changeTypes: Array<'responsible_person_changed' | 'secondary_person_changed' | 'department_changed'> = [];
+    if (existingResponsible && nextResponsible && existingResponsible !== nextResponsible) changeTypes.push('responsible_person_changed');
+    if (existingSecondary !== nextSecondary && (existingSecondary || nextSecondary)) changeTypes.push('secondary_person_changed');
+    if (!sameDept(existingDepts, nextDepts)) changeTypes.push('department_changed');
+
     const result = await collection.updateOne(
       { _id: licenseId, tenantId },
       { $set: updateData }
@@ -2730,6 +3249,128 @@ router.put("/api/licenses/:id", async (req, res) => {
 
     if (result.matchedCount === 0) {
       return res.status(404).json({ message: "License not found or access denied" });
+    }
+
+    // In-app notifications for key changes
+    try {
+      if (changeTypes.length > 0) {
+        const notificationsCollection = db.collection('notifications');
+
+        const isEmail = (value: any) => {
+          if (!value) return false;
+          const s = String(value).trim();
+          return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
+        };
+
+        const getEmployeeEmailByName = async (name: string): Promise<string> => {
+          const n = String(name || '').trim();
+          if (!n) return '';
+          if (isEmail(n)) return n.toLowerCase();
+          const employees = await db.collection('employees').find({ tenantId }).toArray();
+          const target = n.toLowerCase();
+          const match = employees.find((e: any) => String(e?.name || '').trim().toLowerCase() === target);
+          const email = String(match?.email || '').trim();
+          return email ? email.toLowerCase() : '';
+        };
+
+        const resolveDeptHeadEmails = async (departments: string[]): Promise<string[]> => {
+          const deptSet = new Set((departments || []).map((d) => String(d || '').trim().toLowerCase()).filter(Boolean));
+          if (deptSet.size === 0) return [];
+
+          const deptDocs = await db.collection('departments').find({ tenantId }).toArray();
+          const matches = deptDocs.filter((d: any) => deptSet.has(String(d?.name || '').trim().toLowerCase()));
+
+          const emails: string[] = [];
+          for (const d of matches) {
+            const emailField = String((d as any)?.email || '').trim();
+            const headField = String((d as any)?.departmentHead || '').trim();
+            if (isEmail(emailField)) {
+              emails.push(emailField.toLowerCase());
+              continue;
+            }
+            if (isEmail(headField)) {
+              emails.push(headField.toLowerCase());
+              continue;
+            }
+            if (headField) {
+              const empEmail = await getEmployeeEmailByName(headField);
+              if (empEmail) emails.push(empEmail.toLowerCase());
+            }
+          }
+
+          return Array.from(new Set(emails)).filter(Boolean);
+        };
+
+        const licenseName = String((updateData as any)?.licenseName ?? (existing as any)?.licenseName ?? '').trim() || 'License';
+        const normalizedActorEmail = String(actorEmailRaw || '').trim().toLowerCase();
+        const base = {
+          tenantId,
+          type: 'license',
+          eventType: 'updated',
+          licenseId: id,
+          licenseName,
+          departments: nextDepts,
+          timestamp: new Date().toISOString(),
+          createdAt: new Date(),
+          read: false,
+          ...(actorUserId ? { actorUserId: String(actorUserId) } : {}),
+          ...(normalizedActorEmail ? { actorEmail: normalizedActorEmail } : {}),
+        } as any;
+
+        // Admin notification: visible to all admins (admin endpoint returns all tenant license notifications)
+        for (const changeType of changeTypes) {
+          await notificationsCollection.insertOne({
+            ...base,
+            lifecycleEventType: changeType,
+            recipientRole: 'admin',
+          });
+        }
+
+        const recipientEmailsWithRole: Array<{ email: string; role: 'responsible_person' | 'secondary_person' | 'dept_head' }> = [];
+        const responsibleEmail = await getEmployeeEmailByName(nextResponsible);
+        const secondaryEmail = await getEmployeeEmailByName(nextSecondary);
+        if (responsibleEmail) recipientEmailsWithRole.push({ email: responsibleEmail, role: 'responsible_person' });
+        if (secondaryEmail) recipientEmailsWithRole.push({ email: secondaryEmail, role: 'secondary_person' });
+
+        const deptHeadEmails = await resolveDeptHeadEmails(nextDepts);
+        for (const email of deptHeadEmails) recipientEmailsWithRole.push({ email, role: 'dept_head' });
+
+        // Dedup by email, but prefer dept_head labeling
+        const rolePriority: Record<string, number> = { dept_head: 3, responsible_person: 2, secondary_person: 1 };
+        const byEmail = new Map<string, { email: string; role: any }>();
+        for (const r of recipientEmailsWithRole) {
+          const key = String(r.email || '').trim().toLowerCase();
+          if (!key) continue;
+          const existingR = byEmail.get(key);
+          if (!existingR || rolePriority[r.role] > rolePriority[existingR.role]) {
+            byEmail.set(key, { email: key, role: r.role });
+          }
+        }
+
+        for (const changeType of changeTypes) {
+          const recipients = Array.from(byEmail.values());
+          for (let i = 0; i < recipients.length; i++) {
+            const r = recipients[i];
+            await notificationsCollection.insertOne({
+              ...base,
+              lifecycleEventType: changeType,
+              userEmail: r.email,
+              recipientRole: r.role,
+              recipientDepartments: nextDepts,
+            });
+          }
+        }
+      }
+    } catch {
+      // Ignore notification errors so update still succeeds
+    }
+
+    // Run immediate expiry reminder check for this license (in background)
+    try {
+      const { runLicenseExpiryReminderCheck } = await import('./license-expiry-reminder.service.js');
+      void runLicenseExpiryReminderCheck({ tenantId, licenseId: id, db });
+    } catch {
+      // ignore
     }
 
     res.status(200).json({ message: "License updated successfully" });
@@ -2747,6 +3388,8 @@ router.delete("/api/licenses/:id", async (req, res) => {
     const collection = db.collection("licenses");
     const { id } = req.params;
     const tenantId = req.user?.tenantId;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    const userEmailRaw = (req.user as any)?.email;
     
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
@@ -2759,10 +3402,59 @@ router.delete("/api/licenses/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid license ID format" });
     }
 
+    const existing = await collection.findOne({ _id: licenseId, tenantId });
     const result = await collection.deleteOne({ _id: licenseId, tenantId });
 
     if (result.deletedCount === 0) {
       return res.status(404).json({ message: "License not found or access denied" });
+    }
+
+    // Create in-app notification about deletion
+    try {
+      const notificationsCollection = db.collection("notifications");
+      const normalizedEmail = String(userEmailRaw || "").trim().toLowerCase();
+      const createdAt = new Date();
+      const licenseName = String((existing as any)?.licenseName || '').trim() || 'License';
+
+      const parseDepartments = (value: any): string[] => {
+        if (!value) return [];
+        if (Array.isArray(value)) return value.map(String).filter(Boolean);
+        const s = String(value).trim();
+        if (!s) return [];
+        try {
+          const parsed = JSON.parse(s);
+          if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+          if (parsed) return [String(parsed)].filter(Boolean);
+        } catch {
+          return [s];
+        }
+        return [];
+      };
+
+      const licenseDepartments = (() => {
+        const fromDepartments = parseDepartments((existing as any)?.departments);
+        if (fromDepartments.length) return fromDepartments;
+        const fromDepartment = parseDepartments((existing as any)?.department);
+        return fromDepartment;
+      })();
+
+      const notificationDoc: any = {
+        tenantId,
+        type: "license",
+        eventType: "deleted",
+        licenseId: id,
+        licenseName,
+        departments: licenseDepartments,
+        timestamp: createdAt.toISOString(),
+        createdAt,
+        ...(userId ? { userId: String(userId) } : {}),
+        ...(normalizedEmail ? { userEmail: normalizedEmail } : {}),
+        read: false,
+      };
+
+      await notificationsCollection.insertOne(notificationDoc);
+    } catch {
+      // Don't block delete if notification fails
     }
 
     res.status(200).json({ message: "License deleted successfully" });

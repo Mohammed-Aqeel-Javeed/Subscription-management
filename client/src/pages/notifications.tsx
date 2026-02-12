@@ -1,19 +1,22 @@
-// Helper to check if a date string is valid
-function isValidDate(date: any) {
-if (!date) return false;
-const d = new Date(date);
-return d instanceof Date && !isNaN(d.getTime());
-}
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell, Eye, Filter } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { Bell, Eye } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import type { ComplianceItem } from "@shared/types";
+import { format, isValid as isValidDateFns, parse, parseISO } from "date-fns";
+import { useState, useEffect } from "react";
+import SubscriptionModal from "@/components/modals/subscription-modal";
+import { apiRequest } from "@/lib/queryClient";
+import type { Subscription } from "@shared/types";
+
 type NotificationItem = {
 	id?: string;
-	type: 'subscription' | 'compliance';
-	eventType?: 'created' | 'deleted' | 'updated' | 'payment_method_expiring';
+	type: 'subscription' | 'compliance' | 'license';
+	eventType?: 'created' | 'deleted' | 'updated' | 'reminder' | 'payment_method_expiring';
+	recipientRole?: string;
+	recipientDepartments?: string[];
 	filingName?: string;
 	complianceName?: string;
 	name?: string;
@@ -25,25 +28,27 @@ type NotificationItem = {
 	timestamp?: string;
 	complianceId?: string;
 	subscriptionId?: string;
+	licenseId?: string;
+	licenseName?: string;
 	submissionDeadline?: string;
 	subscriptionEndDate?: string;
 	[key: string]: any;
 };
-import type { ComplianceItem } from "@shared/types";
-import { format } from "date-fns";
-import { useState, useEffect } from "react";
-import SubscriptionModal from "@/components/modals/subscription-modal";
-import { apiRequest } from "@/lib/queryClient";
-import type { Subscription } from "@shared/types";
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+
+// Helper to check if a date string is valid
+function isValidDate(date: any) {
+	if (!date) return false;
+	const d = new Date(date);
+	return d instanceof Date && !isNaN(d.getTime());
+}
 
 export default function Notifications() {
 // State to force daily refresh
 const [, setToday] = useState(new Date());
 const [, setLocation] = useLocation();
-const [notificationType, setNotificationType] = useState<'subscription' | 'compliance'>('subscription');
-const [statusFilter, setStatusFilter] = useState<string>('all');
+const [notificationType, setNotificationType] = useState<'subscription' | 'compliance' | 'license'>('subscription');
 const [, setExpandedNotificationId] = useState<string | null>(null);
+const queryClient = useQueryClient();
 
 useEffect(() => {
 const timer = setInterval(() => {
@@ -59,8 +64,13 @@ const [isModalOpen, setIsModalOpen] = useState(false);
 const [modalJustClosed, setModalJustClosed] = useState(false);
 
 const { data: notifications = [], isLoading, refetch } = useQuery<NotificationItem[]>({
-queryKey: [notificationType === 'subscription' ? '/api/notifications' : '/api/notifications/compliance'],
-refetchInterval: 5000, // Refresh every 5 seconds for automatic updates
+queryKey: [
+	notificationType === 'subscription'
+		? '/api/notifications'
+		: notificationType === 'compliance'
+			? '/api/notifications/compliance'
+			: '/api/notifications/license'
+],
 });
 
 const { data: subscriptions = [], refetch: refetchSubscriptions } = useQuery<Subscription[]>({
@@ -73,11 +83,21 @@ queryKey: ['/api/compliance/list'],
 
 // Refresh data when notification type changes
 useEffect(() => {
+// Invalidate cache for the new query
+queryClient.invalidateQueries({ 
+	queryKey: [
+		notificationType === 'subscription'
+			? '/api/notifications'
+			: notificationType === 'compliance'
+				? '/api/notifications/compliance'
+				: '/api/notifications/license'
+	]
+});
 refetch();
 refetchSubscriptions();
 refetchCompliance();
 setExpandedNotificationId(null); // Collapse any expanded notification
-}, [notificationType, refetch, refetchSubscriptions, refetchCompliance]);
+}, [notificationType, refetch, refetchSubscriptions, refetchCompliance, queryClient]);
 
 // Auto-refresh when coming back to the page
 useEffect(() => {
@@ -94,89 +114,40 @@ return () => document.removeEventListener('visibilitychange', handleVisibilityCh
 
 // Filter notifications based on the selected status
 const todayDate = new Date();
-const getFilteredNotifications = () => {
-    if (statusFilter === 'all') {
-        return notifications.filter(n => {
-            // For event-based notifications, show all
-            if (n.eventType === 'created' || n.eventType === 'deleted') return true;
-            // For reminder-based notifications, check trigger date
-            if (!n.reminderTriggerDate) return true;
-            const triggerDate = new Date(n.reminderTriggerDate);
-            return triggerDate <= todayDate;
-        });
-    }
-    
-    // Handle specific filters
-    if (statusFilter === 'created') {
-        return notifications.filter(n => n.eventType === 'created');
-    }
-    
-    if (statusFilter === 'deleted') {
-        return notifications.filter(n => n.eventType === 'deleted');
-    }
-    
-    return notifications.filter(notification => {
-        // For renewal/pending filters, exclude event-based notifications
-		if (statusFilter === 'renewal' || statusFilter === 'pending') {
-			// Exclude event-based notifications
-			if (notification.eventType === 'created' || notification.eventType === 'deleted') {
-				return false;
-			}
-		}
+const filteredNotifications = notifications.filter(n => {
+	// For event-based notifications (created/deleted/updated), show all
+	if (n.eventType === 'created' || n.eventType === 'deleted' || n.eventType === 'updated') return true;
+	// For reminder-based notifications, show only when due
+	if (!n.reminderTriggerDate) return true;
+	const triggerDate = new Date(n.reminderTriggerDate);
+	return triggerDate <= todayDate;
+});
 
-		// Only show notifications with reminderTriggerDate <= today for reminder-based notifications
-		if (notification.reminderTriggerDate) {
-			const triggerDate = new Date(notification.reminderTriggerDate);
-			if (triggerDate > todayDate) return false;
-		}
+const toEpochMs = (raw: any): number => {
+	if (!raw) return 0;
+	const value = String(raw).trim();
+	let parsedDate: Date;
 
-		if (notification.type === 'subscription') {
-			const subscription = subscriptions.find(sub => 
-				String(sub.id) === String(notification.subscriptionId) || 
-				String((sub as any)._id) === String(notification.subscriptionId)
-			);
-			if (!subscription) return false;
-			switch (statusFilter) {
-				case 'renewal':
-					// Only show reminder-based notifications for active subscriptions
-					return !notification.eventType && (subscription.status?.toLowerCase() === 'active' || subscription.isActive);
-				default:
-					return true;
-			}
-		} else if (notification.type === 'compliance') {
-			const compliance = complianceItems.find(item => 
-				String(item.id) === String(notification.complianceId) || 
-				String(item._id) === String(notification.complianceId)
-			);
-			switch (statusFilter) {
-				case 'pending':
-					// Show reminder notifications (no eventType) for compliance items
-					if (notification.eventType) return false; // exclude created/deleted events
-					
-					// If we can't find the compliance item, but it's a reminder notification, show it
-					if (!compliance) {
-						return !notification.eventType; // show reminder notifications even if compliance not found
-					}
-					
-					// Check compliance status - be more inclusive for pending filter
-					const compStatus = (compliance.status || '').toLowerCase();
-					// Include more statuses that should show reminders
-					if (!['pending', 'active', 'non-compliant', 'submitted', 'under review', ''].includes(compStatus)) {
-						return false;
-					}
-					
-					// Check trigger date
-					const trigger = notification.reminderTriggerDate || notification.reminderDate;
-					if (!trigger) return true; // if no trigger date, show as active reminder
-					return new Date(trigger) <= todayDate;
-				default:
-					return true;
-			}
-		}
-		return true;
-    });
+	// ISO strings and most server timestamps
+	if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+		parsedDate = parseISO(value);
+		return isValidDateFns(parsedDate) ? parsedDate.getTime() : 0;
+	}
+
+	// Date-only values
+	if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+		parsedDate = parse(value, 'yyyy-MM-dd', new Date());
+		return isValidDateFns(parsedDate) ? parsedDate.getTime() : 0;
+	}
+	if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+		parsedDate = parse(value, 'dd-MM-yyyy', new Date());
+		return isValidDateFns(parsedDate) ? parsedDate.getTime() : 0;
+	}
+
+	// Last resort
+	parsedDate = new Date(value);
+	return isValidDateFns(parsedDate) ? parsedDate.getTime() : 0;
 };
-const filteredNotifications = getFilteredNotifications();
 
 const handleViewSubscription = async (subscriptionId: string | number) => {
 // Convert to string for backend lookup
@@ -245,22 +216,6 @@ return (
 			<span className="text-lg text-gray-500 font-normal">{filteredNotifications.length} Active</span>
 		</div>
 		<div className="flex gap-3 items-center">
-			<Select value={statusFilter} onValueChange={setStatusFilter}>
-				<SelectTrigger className="w-48 h-10">
-					<Filter className="h-4 w-4 mr-2 text-gray-500" />
-					<SelectValue placeholder="Filter" />
-				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value="all">All Notifications</SelectItem>
-					{notificationType === 'subscription' ? (
-						<SelectItem value="renewal">Renewal Reminders Only</SelectItem>
-					) : (
-						<SelectItem value="pending">Pending Compliance</SelectItem>
-					)}
-					<SelectItem value="created">{notificationType === 'compliance' ? 'Created Compliance' : 'Creation Events Only'}</SelectItem>
-					<SelectItem value="deleted">{notificationType === 'compliance' ? 'Deleted Compliance' : 'Deletion Events Only'}</SelectItem>
-				</SelectContent>
-			</Select>
 			<Button 
 				variant={notificationType === 'subscription' ? "default" : "outline"} 
 				className={`px-5 py-2.5 h-10 font-medium rounded-lg transition-colors ${
@@ -283,6 +238,17 @@ return (
 			>
 				Compliance Notification
 			</Button>
+			<Button 
+				variant={notificationType === 'license' ? "default" : "outline"} 
+				className={`px-5 py-2.5 h-10 font-medium rounded-lg transition-colors ${
+					notificationType === 'license' 
+						? 'bg-blue-600 hover:bg-blue-700 text-white' 
+						: 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
+				}`}
+				onClick={() => setNotificationType('license')}
+			>
+				Renewal Notification
+			</Button>
 		</div>
 	</div>
 {filteredNotifications.length === 0 ? (
@@ -290,22 +256,18 @@ return (
 <CardContent className="flex flex-col items-center justify-center py-12">
 <Bell className="h-12 w-12 text-gray-400 mb-4" />
 <h3 className="text-base font-medium text-gray-900 mb-2">
-{statusFilter === 'all' 
-	? (notificationType === 'subscription' ? 'No Active Subscription Notifications' : 'No Active Compliance Notifications')
-	: statusFilter === 'renewal' ? 'No Active Renewal Reminders'
-	: statusFilter === 'pending' ? 'No Active Deadline Reminders'
-	: statusFilter === 'created' ? 'No Creation Events'
-	: statusFilter === 'deleted' ? 'No Deletion Events'
-	: `No ${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Notifications`}
+{notificationType === 'subscription'
+	? 'No Active Subscription Notifications'
+	: notificationType === 'compliance'
+		? 'No Active Compliance Notifications'
+		: 'No Active Renewal Notifications'}
 </h3>
 <p className="text-gray-500 text-center">
-{statusFilter === 'all' 
-	? (notificationType === 'subscription')
-	: statusFilter === 'renewal' ? 'No active subscription renewal reminders. Renewal reminders will appear here based on your subscription reminder settings.'
-	: statusFilter === 'pending' ? 'No active compliance deadline reminders. Deadline reminders will appear here when submission deadlines approach.'
-	: statusFilter === 'created' ? 'No creation events found. Creation events appear when new subscriptions or compliance items are added.'
-	: statusFilter === 'deleted' ? 'No deletion events found. Deletion events appear when subscriptions or compliance items are removed.'
-	: `No notifications found for the ${statusFilter} filter.`}
+{notificationType === 'subscription'
+	? 'No active subscription notifications. Notifications will appear here based on your subscription reminder settings.'
+	: notificationType === 'compliance'
+		? 'No active compliance notifications. Deadline reminders will appear here when submission deadlines approach.'
+		: 'No active renewal notifications. License-related notifications will appear here.'}
 </p>
 </CardContent>
 </Card>
@@ -314,17 +276,22 @@ return (
 <div className="space-y-3">
 {[...filteredNotifications]
 .sort((a, b) => {
-// Sort by reminderTriggerDate if present, otherwise by timestamp/createdAt
-const rawA = a.reminderTriggerDate || a.timestamp || a.createdAt;
-const rawB = b.reminderTriggerDate || b.timestamp || b.createdAt;
-const dateA = isValidDate(rawA) ? new Date(rawA ?? '').getTime() : 0;
-const dateB = isValidDate(rawB) ? new Date(rawB ?? '').getTime() : 0;
-return dateB - dateA;
+// Sort newest first using time-aware fields first.
+// reminderTriggerDate is date-only, so it should be a fallback.
+const rawA = a.timestamp || a.createdAt || a.reminderTriggerDate;
+const rawB = b.timestamp || b.createdAt || b.reminderTriggerDate;
+return toEpochMs(rawB) - toEpochMs(rawA);
 })
 .map((notification) => {
 return (
 				<div 
-					key={notification.id} 
+					key={
+						String(
+							notification.id ||
+							(notification as any)._id ||
+							`${notification.type}-${notification.eventType || 'reminder'}-${notification.complianceId || notification.subscriptionId || 'unknown'}-${notification.timestamp || notification.createdAt || notification.reminderTriggerDate || ''}`
+						)
+					}
 					className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
 				>
 	<div className="flex items-center justify-between">
@@ -344,20 +311,24 @@ return (
 	 											return compliance?.filingName || compliance?.policy || 'Compliance Filing';
 	 										})()
 	 									)
-	 									: (() => {
-	 										const subscription = subscriptions.find(sub => 
-	 											String(sub.id) === String(notification.subscriptionId) || 
-	 											String((sub as any)._id) === String(notification.subscriptionId)
-	 										);
-	 										return subscription?.serviceName || notification.subscriptionName || 'Unknown Subscription';
-	 									})()}
+	 									: notification.type === 'license'
+	 										? (notification.licenseName || 'License')
+	 										: (() => {
+	 											const subscription = subscriptions.find(sub => 
+	 												String(sub.id) === String(notification.subscriptionId) || 
+	 												String((sub as any)._id) === String(notification.subscriptionId)
+	 											);
+	 											return subscription?.serviceName || notification.subscriptionName || 'Unknown Subscription';
+	 										})()}
  								</h3>
 				<div className="flex items-center gap-2 flex-wrap">
 								{/* Category text */}
 								<span className="text-sm text-gray-600">
- 											{notification.type === 'compliance'
- 												? (notification.complianceCategory || notification.category || notification.filingName || notification.complianceName || notification.name || 'Compliance')
- 												: (notification.category || 'Subscription')}
+	 												{notification.type === 'compliance'
+	 													? (notification.complianceCategory || notification.category || notification.filingName || notification.complianceName || notification.name || 'Compliance')
+	 													: notification.type === 'license'
+	 														? (notification.category || 'License')
+	 														: (notification.category || 'Subscription')}
 								</span>
 								<span className="text-gray-400">•</span>
 								
@@ -365,26 +336,64 @@ return (
 								<Badge className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
 									notification.eventType === 'created' ? 'bg-green-600 text-white hover:bg-green-600' :
 									notification.eventType === 'deleted' ? 'bg-red-600 text-white hover:bg-red-600' :
-									notification.eventType === 'updated' ? 'bg-purple-600 text-white hover:bg-purple-600' :
+									notification.eventType === 'updated' ? (() => {
+										const lifecycle = String((notification as any).lifecycleEventType || '').toLowerCase();
+										if (notification.type === 'compliance' && lifecycle === 'submitted') {
+											return 'bg-emerald-600 text-white hover:bg-emerald-600';
+										}
+										return 'bg-purple-600 text-white hover:bg-purple-600';
+									})() :
 									notification.eventType === 'payment_method_expiring' ? 'bg-orange-600 text-white hover:bg-orange-600' :
 									'bg-blue-600 text-white hover:bg-blue-600'
 								}`}>
 									{(() => {
 										// Handle event-based notifications
 										if (notification.eventType === 'created') {
-											return notification.type === 'compliance' ? 'Compliance Created' : 'Subscription Created';
+														if (notification.type === 'compliance') return 'Compliance Created';
+														if (notification.type === 'license') return 'License Created';
+														return 'Subscription Created';
 										}
 										if (notification.eventType === 'deleted') {
-											return notification.type === 'compliance' ? 'Compliance Deleted' : 'Subscription Deleted';
+														if (notification.type === 'compliance') return 'Compliance Deleted';
+														if (notification.type === 'license') return 'License Deleted';
+														return 'Subscription Deleted';
 										}
 
 										if (notification.eventType === 'payment_method_expiring') {
 											return 'Payment Method Expiring';
 										}
 
-										// Subscription lifecycle updates (price/qty/owner/etc.)
-										if (notification.type === 'subscription' && notification.eventType === 'updated') {
+										// Handle lifecycle updates (for both subscription and compliance)
+										if (notification.eventType === 'updated') {
 											const lifecycle = String((notification as any).lifecycleEventType || '').toLowerCase();
+											
+											// Compliance lifecycle events
+											if (notification.type === 'compliance') {
+												switch (lifecycle) {
+													case 'owner_changed':
+														return 'Owner Changed';
+													case 'submitted':
+														return 'Submitted';
+													default:
+														return 'Compliance Updated';
+												}
+											}
+
+											// License lifecycle events
+											if (notification.type === 'license') {
+												switch (lifecycle) {
+													case 'department_changed':
+														return 'Department Changed';
+													case 'responsible_person_changed':
+														return 'Responsible Person Changed';
+													case 'secondary_person_changed':
+														return 'Secondary Person Changed';
+													default:
+														return 'License Updated';
+												}
+											}
+											
+											// Subscription lifecycle events
 											switch (lifecycle) {
 												case 'owner_changed':
 													return 'Owner Changed';
@@ -392,6 +401,8 @@ return (
 													return 'Price Changed';
 												case 'quantity_changed':
 													return 'Quantity Changed';
+												case 'cancelled':
+													return 'Subscription Cancelled';
 												default:
 													return 'Subscription Updated';
 											}
@@ -414,7 +425,13 @@ return (
 											} else {
 												return `Reminder`;
 											}
-										} else {
+													} else if (notification.type === 'license') {
+														let reminderDays = Number((notification as any).reminderDays || 0);
+														const policy = String((notification as any).reminderPolicy || '').trim();
+														if (policy === 'Until Renewal') return 'Daily reminder';
+														if (reminderDays > 0) return `One-time reminder (${reminderDays} days before)`;
+														return 'Reminder';
+													} else {
 											const subscription = subscriptions.find(sub => 
 												String(sub.id) === String(notification.subscriptionId) || 
 												String((sub as any)._id) === String(notification.subscriptionId)
@@ -428,7 +445,14 @@ return (
 											}
 										}
 									})()}
-								</Badge>
+									</Badge>
+									{notification.type === 'subscription' && String((notification as any).recipientRole || '') === 'dept_head' ? (
+									<span className="w-full text-xs text-gray-500 mt-1">
+										You are receiving this because you are the Department Head for: {Array.isArray((notification as any).recipientDepartments) && (notification as any).recipientDepartments.length
+											? (notification as any).recipientDepartments.join(', ')
+											: 'your department'}.
+									</span>
+								) : null}
 				</div>
 			</div>
 		</div>
@@ -439,6 +463,10 @@ return (
 				e.stopPropagation();
 				if (notification.eventType === 'payment_method_expiring') {
 					setLocation('/configuration');
+					return;
+				}
+				if (notification.type === 'license') {
+					setLocation('/government-license');
 					return;
 				}
 				if (notification.type === 'compliance') {

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../lib/config";
+import { queryClient } from "../lib/queryClient";
 
 export default function AuthPage() {
   const [loginEmail, setLoginEmail] = useState("");
@@ -30,9 +31,14 @@ export default function AuthPage() {
         setLoginError(data.message || "Login failed");
         return;
       }
+      
+      // Clear all cached data from previous session/user
+      queryClient.clear();
+      sessionStorage.clear();
       sessionStorage.setItem("isAuthenticated", "true");
-      // Use replace to prevent going back to login page
-      navigate("/dashboard", { replace: true });
+      
+      // Force full page reload to ensure clean state for new user
+      window.location.href = "/dashboard";
     } catch (err) {
       setLoginError("Network error");
     }

@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChevronDown, Check } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, FileSpreadsheet, AlertCircle } from "lucide-react";
+import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, FileSpreadsheet, AlertCircle, X } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -2272,7 +2272,7 @@ export default function Configuration() {
                     
                     {/* Edit Payment Method Modal */}
                     <Dialog open={editPaymentModalOpen} onOpenChange={setEditPaymentModalOpen}>
-                      <DialogContent className={`${isEditPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
+                      <DialogContent showClose={false} className={`${isEditPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
                         {/* Header with Gradient Background */}
                         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-6 rounded-t-2xl">
                           <DialogHeader>
@@ -2289,16 +2289,32 @@ export default function Configuration() {
                                 </div>
                               </div>
                               
-                              {/* Extend Button */}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setIsEditPaymentFullscreen(!isEditPaymentFullscreen)}
-                                className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
-                              >
-                                {isEditPaymentFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                              </Button>
+                              <div className="flex items-center gap-3">
+                                {/* Extend Button */}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setIsEditPaymentFullscreen(!isEditPaymentFullscreen)}
+                                  className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
+                                  title={isEditPaymentFullscreen ? 'Exit Fullscreen' : 'Expand'}
+                                >
+                                  {isEditPaymentFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditPaymentModalOpen(false);
+                                    setIsEditPaymentFullscreen(false);
+                                  }}
+                                  className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
+                                  title="Close"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
                           </DialogHeader>
                         </div>
@@ -2765,7 +2781,7 @@ export default function Configuration() {
                     
                     {/* Modal for Add Payment Method */}
                     <Dialog open={addPaymentModalOpen} onOpenChange={setAddPaymentModalOpen}>
-                      <DialogContent className={`${isAddPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
+                      <DialogContent showClose={false} className={`${isAddPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
                         {/* Header with Gradient Background */}
                         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
                           <DialogHeader>
@@ -2782,16 +2798,32 @@ export default function Configuration() {
                                 </div>
                               </div>
                               
-                              {/* Extend Button */}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setIsAddPaymentFullscreen(!isAddPaymentFullscreen)}
-                                className="bg-white text-blue-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
-                              >
-                                {isAddPaymentFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                              </Button>
+                              <div className="flex items-center gap-3">
+                                {/* Extend Button */}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setIsAddPaymentFullscreen(!isAddPaymentFullscreen)}
+                                  className="bg-white text-blue-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
+                                  title={isAddPaymentFullscreen ? 'Exit Fullscreen' : 'Expand'}
+                                >
+                                  {isAddPaymentFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setAddPaymentModalOpen(false);
+                                    setIsAddPaymentFullscreen(false);
+                                  }}
+                                  className="bg-white text-blue-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
+                                  title="Close"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
                           </DialogHeader>
                         </div>

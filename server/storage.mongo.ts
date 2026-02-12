@@ -194,7 +194,7 @@ export class MongoStorage implements IStorage {
         billingCycle: subscription.billingCycle && subscription.billingCycle !== "" ? subscription.billingCycle : "monthly",
         commitmentCycle: subscription.commitmentCycle || null,
         paymentFrequency: subscription.paymentFrequency || null,
-        paymentMethod: subscription.paymentMethod || null,
+        paymentMethod: decrypted.paymentMethod || null,
         category: subscription.category && subscription.category !== "" ? subscription.category : "Software",
         departments: subscription.departments || [],
         department: subscription.department || null,
@@ -208,8 +208,8 @@ export class MongoStorage implements IStorage {
         isActive: typeof subscription.isActive === 'boolean' ? subscription.isActive : true,
         createdAt: subscription.createdAt ? new Date(subscription.createdAt) : new Date(),
         updatedBy: subscription.updatedBy || null,
-        owner: subscription.owner || null,
-        ownerEmail: subscription.ownerEmail || null,
+        owner: decrypted.owner || null,
+        ownerEmail: decrypted.ownerEmail || null,
         autoRenewal: typeof subscription.autoRenewal === 'boolean' ? subscription.autoRenewal : false
       } as any;
   }
@@ -780,7 +780,9 @@ export class MongoStorage implements IStorage {
 
   async getNotifications(tenantId: string): Promise<NotificationItem[]> {
     const db = await this.getDb();
-    const reminders = await db.collection("reminders").find({ tenantId, sent: false }).toArray();
+    // For in-app notifications, show reminders even after they were sent.
+    // (Email/WhatsApp sending can mark reminders as sent=true, but the UI should still surface them when due.)
+    const reminders = await db.collection("reminders").find({ tenantId }).toArray();
     const remindersBySub = new Map();
     for (const reminder of reminders) {
       const subId = reminder.subscriptionId || reminder.subscription_id;
@@ -907,46 +909,37 @@ export class MongoStorage implements IStorage {
 
   async getComplianceNotifications(tenantId: string): Promise<NotificationItem[]> {
     const db = await this.getDb();
-    const { ObjectId } = await import("mongodb");
     const notifications: NotificationItem[] = [];
-    const today = new Date();
-    
-    // Get all compliance items for the tenant
-    const complianceItems = await db.collection("compliance").find({ tenantId }).toArray();
-    
-    // Fetch compliance reminders from the reminders collection
-    const complianceReminders = await db.collection("reminders").find({
+
+    // Compliance reminders are stored in compliance_notifications.
+    // Return due reminders for in-app visibility.
+    // Note: the reminder *sending job* still uses sent=false to avoid duplicate emails,
+    // but the UI should be able to show reminders even after they were sent.
+    const IST_OFFSET_MINUTES = 330;
+    const istNow = new Date(Date.now() + IST_OFFSET_MINUTES * 60 * 1000);
+    const todayIso = istNow.toISOString().slice(0, 10);
+
+    const reminderDocs = await db.collection("compliance_notifications").find({
       tenantId,
-      complianceId: { $exists: true },
-      status: "Active"
-    }).toArray();
-for (const reminder of complianceReminders) {
-      const reminderDate = new Date(reminder.reminderDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      reminderDate.setHours(0, 0, 0, 0);
+      reminderTriggerDate: { $lte: todayIso },
+      $or: [{ eventType: { $exists: false } }, { eventType: null }],
+    }).sort({ reminderTriggerDate: -1, createdAt: -1 }).toArray();
 
-      // Show reminders that are due (today or earlier)
-      if (reminderDate <= today) {
-const displayName = (
-          reminder.filingName ||
-          'Compliance Filing'
-        );
-
-        notifications.push({
-          id: reminder._id?.toString() || Math.random().toString(),
-          complianceId: reminder.complianceId,
-          filingName: displayName,
-          complianceCategory: reminder.complianceCategory || "",
-          reminderTriggerDate: reminder.reminderDate,
-          submissionDeadline: "", // Will be filled by frontend if needed
-          status: reminder.status || "Active",
-          type: 'compliance',
-          message: `Compliance reminder for ${displayName}`,
-          read: false,
-          timestamp: new Date().toISOString(),
-        });
-      }
+    for (const reminder of reminderDocs) {
+      const displayName = reminder.filingName || reminder.complianceName || reminder.name || 'Compliance Filing';
+      notifications.push({
+        id: reminder._id?.toString?.() || reminder.id || Math.random().toString(),
+        complianceId: reminder.complianceId,
+        filingName: displayName,
+        complianceCategory: reminder.complianceCategory || reminder.category || "",
+        reminderTriggerDate: reminder.reminderTriggerDate || reminder.reminderDate,
+        submissionDeadline: reminder.submissionDeadline || "",
+        status: reminder.status || "Active",
+        type: 'compliance',
+        message: reminder.message || `Compliance reminder for ${displayName}`,
+        read: false,
+        timestamp: (reminder.timestamp && String(reminder.timestamp)) || new Date().toISOString(),
+      });
     }
     
     return notifications;

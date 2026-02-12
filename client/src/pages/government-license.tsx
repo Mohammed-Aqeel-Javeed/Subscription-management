@@ -2046,6 +2046,7 @@ export default function GovernmentLicense() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/license"] });
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
       toast({
         title: "Success",
@@ -2101,6 +2102,7 @@ export default function GovernmentLicense() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/license"] });
       toast({
         title: "Success",
         description: "License deleted successfully",
@@ -2199,6 +2201,7 @@ export default function GovernmentLicense() {
           }
         }
         queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/notifications/license"] });
         toast({ title: 'Import finished', description: `Imported ${success} license(s). Failed: ${failed}` });
         e.target.value = '';
       },
@@ -2962,7 +2965,7 @@ export default function GovernmentLicense() {
             requestExit();
           }}
         >
-          <DialogContent className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto overflow-x-hidden rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
+          <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto overflow-x-hidden rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
             <DialogHeader className={`sticky top-0 z-20 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'px-4 py-3 md:px-5 md:py-3' : 'p-5'} rounded-t-2xl flex flex-row items-center justify-between`}>
               <div className="flex items-center gap-4">
                 <ShieldCheck className="h-6 w-6" />
@@ -3024,6 +3027,15 @@ export default function GovernmentLicense() {
                   onClick={() => setIsFullscreen(f => !f)}
                 >
                   {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  title="Close"
+                  className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-indigo-200 shadow-sm"
+                  onClick={requestExit}
+                >
+                  <X className="h-5 w-5" />
                 </Button>
               </div>
             </DialogHeader>

@@ -40,6 +40,47 @@ function parseDateOnlyUtc(value: any): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+const IST_OFFSET_MINUTES = 330;
+const IST_OFFSET_MS = IST_OFFSET_MINUTES * 60 * 1000;
+
+function msUntilNextMidnightIST(nowUtc = new Date()): number {
+  const nowUtcMs = nowUtc.getTime();
+  const nowIstMs = nowUtcMs + IST_OFFSET_MS;
+  const nowIst = new Date(nowIstMs);
+
+  // Treat IST time as UTC for calculation (use UTC getters/setters)
+  const y = nowIst.getUTCFullYear();
+  const m = nowIst.getUTCMonth();
+  const d = nowIst.getUTCDate();
+
+  // Next day's midnight in IST
+  const nextMidnightIstMs = Date.UTC(y, m, d + 1, 0, 0, 0, 0);
+  const nextMidnightUtcMs = nextMidnightIstMs - IST_OFFSET_MS;
+  const delay = nextMidnightUtcMs - nowUtcMs;
+
+  // Safety: never schedule negative/zero delays
+  return Math.max(delay, 1000);
+}
+
+function scheduleDailyAtMidnightIST(taskName: string, task: () => Promise<void> | void) {
+  const scheduleNext = () => {
+    const delay = msUntilNextMidnightIST(new Date());
+    setTimeout(async () => {
+      try {
+        log(`Running scheduled task at 12:00 AM IST: ${taskName}`, "scheduler");
+        await task();
+      } catch (error) {
+        log(`Scheduled task failed (${taskName}): ${error}`, "scheduler");
+      } finally {
+        scheduleNext();
+      }
+    }, delay);
+  };
+
+  scheduleNext();
+  log(`Scheduler initialized: ${taskName} (runs daily at 12:00 AM IST)`, "scheduler");
+}
+
 
 const app = express();
 
@@ -75,9 +116,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
 
       if (logLine.length > 80) {
         logLine = logLine.slice(0, 79) + "…";
@@ -137,9 +175,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   // Run cleanup immediately on startup
   cleanupOldNotifications();
-  
-  // Schedule cleanup to run every 24 hours
-  setInterval(cleanupOldNotifications, 24 * 60 * 60 * 1000);
+
+  // Schedule cleanup to run daily at 12:00 AM IST
+  scheduleDailyAtMidnightIST("cleanupOldNotifications", cleanupOldNotifications);
 
   // Schedule automatic monthly reminder checks
   const { MonthlyReminderService } = await import("./monthly-reminder.service.js");
@@ -156,10 +194,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   // Run reminder check immediately on startup (in case server restarted on the 13th)
   checkMonthlyReminders();
-  
-  // Schedule reminder check to run every 24 hours
+
+  // Schedule reminder check to run daily at 12:00 AM IST
   // This will automatically send emails on the 13th of each month
-  setInterval(checkMonthlyReminders, 24 * 60 * 60 * 1000);
+  scheduleDailyAtMidnightIST("checkMonthlyReminders", checkMonthlyReminders);
   log("Monthly reminder scheduler initialized - will send on 13th of each month", "reminders");
 
   // Schedule daily renewal reminder emails (non-yearly; yearly handled separately)
@@ -182,8 +220,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   // Run on startup
   checkDailyRenewalReminderEmails();
 
-  // Run daily
-  setInterval(checkDailyRenewalReminderEmails, 24 * 60 * 60 * 1000);
+  // Run daily at 12:00 AM IST
+  scheduleDailyAtMidnightIST("checkDailyRenewalReminderEmails", checkDailyRenewalReminderEmails);
   log("Daily renewal reminder email scheduler initialized - will check daily", "reminders");
 
   // Schedule automatic yearly reminder checks
@@ -201,11 +239,34 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   // Run yearly reminder check immediately on startup
   checkYearlyReminders();
-  
-  // Schedule yearly reminder check to run every 24 hours
+
+  // Schedule yearly reminder check to run daily at 12:00 AM IST
   // This will check daily for any yearly subscriptions that need reminders
-  setInterval(checkYearlyReminders, 24 * 60 * 60 * 1000);
+  scheduleDailyAtMidnightIST("checkYearlyReminders", checkYearlyReminders);
   log("Yearly reminder scheduler initialized - will check daily", "reminders");
+
+  // Schedule compliance reminder notifications (in-app + email)
+  const { runComplianceReminderCheck } = await import("./compliance-reminder.service.js");
+
+  const checkComplianceReminders = async () => {
+    try {
+      log("Running scheduled compliance reminder check...", "compliance-reminders");
+      const result = await runComplianceReminderCheck();
+      log(
+        `Compliance reminder check done (processed=${result.processed}, sent=${result.sent}, skipped=${result.skipped}, errors=${result.errors})`,
+        "compliance-reminders"
+      );
+    } catch (error) {
+      log(`Failed to check compliance reminders: ${error}`, "compliance-reminders");
+    }
+  };
+
+  // Run on startup
+  checkComplianceReminders();
+
+  // Run daily at 12:00 AM IST
+  scheduleDailyAtMidnightIST("checkComplianceReminders", checkComplianceReminders);
+  log("Compliance reminder scheduler initialized - will check daily", "compliance-reminders");
 
   // Schedule automatic auto-renewal checks
   const { AutoRenewalService } = await import("./auto-renewal.service.js");
@@ -222,10 +283,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   // Run auto-renewal check immediately on startup
   checkAutoRenewals();
-  
-  // Schedule auto-renewal check to run every 24 hours
+
+  // Schedule auto-renewal check to run daily at 12:00 AM IST
   // This will automatically renew subscriptions when Next Payment Date = Today
-  setInterval(checkAutoRenewals, 24 * 60 * 60 * 1000);
+  scheduleDailyAtMidnightIST("checkAutoRenewals", checkAutoRenewals);
   log("Auto-renewal scheduler initialized - will check daily", "auto-renewal");
 
   // Schedule payment method expiry notifications
@@ -248,9 +309,32 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   // Run on startup
   checkPaymentMethodExpiry();
 
-  // Run daily
-  setInterval(checkPaymentMethodExpiry, 24 * 60 * 60 * 1000);
+  // Run daily at 12:00 AM IST
+  scheduleDailyAtMidnightIST("checkPaymentMethodExpiry", checkPaymentMethodExpiry);
   log("Payment method expiry scheduler initialized - will check daily", "payment");
+
+  // Schedule license expiry reminders (in-app + email)
+  const { runLicenseExpiryReminderCheck } = await import("./license-expiry-reminder.service.js");
+
+  const checkLicenseExpiryReminders = async () => {
+    try {
+      log("Running scheduled license expiry reminder check...", "license-reminders");
+      const result = await runLicenseExpiryReminderCheck();
+      log(
+        `License expiry reminder check done (tenants=${result.tenantsProcessed}, due=${result.licensesDue}, inApp=${result.inAppCreated}, attempted=${result.emailsAttempted}, sent=${result.emailsSent})`,
+        "license-reminders"
+      );
+    } catch (error) {
+      log(`Failed to check license expiry reminders: ${error}`, "license-reminders");
+    }
+  };
+
+  // Run on startup
+  checkLicenseExpiryReminders();
+
+  // Run daily at 12:00 AM IST
+  scheduleDailyAtMidnightIST("checkLicenseExpiryReminders", checkLicenseExpiryReminders);
+  log("License expiry reminder scheduler initialized - will check daily", "license-reminders");
 
   // Send department head notification emails on startup
   const sendDepartmentHeadNotifications = async () => {
@@ -356,10 +440,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   // Run department notification check immediately on startup (if it's the 13th)
   checkAndSendDepartmentNotifications();
-  
-  // Schedule department notification check to run every 24 hours at midnight
+
+  // Schedule department notification check to run daily at 12:00 AM IST
   // This will check daily and send on the 13th of each month
-  setInterval(checkAndSendDepartmentNotifications, 24 * 60 * 60 * 1000);
+  scheduleDailyAtMidnightIST("checkAndSendDepartmentNotifications", checkAndSendDepartmentNotifications);
   log("Department head notification scheduler initialized - will send on 13th of each month", "departments");
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

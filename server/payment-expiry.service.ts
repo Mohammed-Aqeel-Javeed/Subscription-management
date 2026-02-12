@@ -1,13 +1,14 @@
 import { connectToDatabase } from "./mongo.js";
 import { emailService } from "./email.service";
 
-type RecipientRole = "owner" | "dept_head";
+type RecipientRole = "owner" | "owner2" | "dept_head";
 
 type Recipient = {
   userId?: string;
   email?: string;
   name?: string;
   role: RecipientRole;
+  recipientDepartments?: string[];
   sendInApp: boolean;
   sendEmail: boolean;
 };
@@ -33,6 +34,8 @@ type SubscriptionDoc = {
   paymentMethod?: string;
   owner?: string;
   ownerEmail?: string;
+  owner2?: string;
+  owner2Email?: string;
   department?: any;
   departments?: any;
   category?: string;
@@ -124,7 +127,12 @@ function buildEmailHtml(params: {
   expiresLabel: string;
   linkedCount: number;
 }): string {
-  const roleLabel = params.role === "dept_head" ? "Department Head" : "Subscription Owner";
+  const roleLabel =
+    params.role === "dept_head"
+      ? "Department Head"
+      : params.role === "owner2"
+        ? "Subscription Owner 2"
+        : "Subscription Owner";
 
   return `
   <!DOCTYPE html>
@@ -161,6 +169,302 @@ function buildEmailHtml(params: {
 }
 
 export class PaymentExpiryService {
+  async checkAndSendPaymentMethodExpiringNotificationsForTenant(params: {
+    tenantId: string;
+    paymentName?: string;
+    windowDays?: number;
+    now?: Date;
+    db?: any;
+  }): Promise<{ noticesCreated: number; emailsSent: number }> {
+    const tenantId = String(params.tenantId || '').trim();
+    if (!tenantId) return { noticesCreated: 0, emailsSent: 0 };
+
+    const windowDays = Number(params.windowDays ?? process.env.PAYMENT_METHOD_EXPIRY_DAYS ?? 30);
+    const now = params.now ?? new Date();
+
+    const db = params.db ?? (await connectToDatabase());
+    const { decrypt } = await import("./encryption.service.js");
+
+    const payments: PaymentDoc[] = await db
+      .collection("payment")
+      .find({ tenantId, expiresAt: { $exists: true, $ne: "" } })
+      .toArray();
+
+    const paymentNameFilterKey = params.paymentName ? normalizeKey(params.paymentName) : "";
+
+    const expiringPayments = payments
+      .map((p) => {
+        const parsed = parseExpiresAt(p.expiresAt);
+        if (!parsed) return null;
+        const expiryEnd = endOfExpiryMonthUtc(parsed.year, parsed.month);
+        const remaining = daysUntil(expiryEnd, now);
+        if (remaining < 0) return null;
+        if (remaining > windowDays) return null;
+        return { payment: p, expiryEnd, remainingDays: remaining };
+      })
+      .filter(Boolean) as Array<{ payment: PaymentDoc; expiryEnd: Date; remainingDays: number }>;
+
+    const filteredExpiringPayments = paymentNameFilterKey
+      ? expiringPayments.filter(({ payment }) => normalizeKey(getPaymentName(payment)) === paymentNameFilterKey)
+      : expiringPayments;
+
+    if (filteredExpiringPayments.length === 0) return { noticesCreated: 0, emailsSent: 0 };
+
+    const [allUsers, allEmployees, allDepts, allSubs] = await Promise.all([
+      db.collection("login").find({ tenantId }).toArray(),
+      db.collection("employees").find({ tenantId }).toArray(),
+      db.collection("departments").find({ tenantId }).toArray(),
+      db
+        .collection("subscriptions")
+        .find({ tenantId, $or: [{ isActive: true }, { status: { $in: ["Active", "active"] } }] })
+        .toArray(),
+    ]);
+
+    const subsByPaymentName = new Map<string, SubscriptionDoc[]>();
+    for (const sub of allSubs as SubscriptionDoc[]) {
+      let paymentMethodName = "";
+      try {
+        paymentMethodName = sub.paymentMethod ? decrypt(sub.paymentMethod) : "";
+      } catch {
+        paymentMethodName = String(sub.paymentMethod ?? "");
+      }
+      const key = normalizeKey(paymentMethodName);
+      if (!key) continue;
+      const existing = subsByPaymentName.get(key);
+      if (existing) existing.push(sub);
+      else subsByPaymentName.set(key, [sub]);
+    }
+
+    const deptByName = new Map<string, any>();
+    for (const dept of allDepts) {
+      const k = normalizeKey((dept as any)?.name);
+      if (k) deptByName.set(k, dept);
+    }
+
+    let noticesCreated = 0;
+    let emailsSent = 0;
+
+    for (const { payment } of filteredExpiringPayments) {
+      const paymentName = getPaymentName(payment);
+      const paymentKey = normalizeKey(paymentName);
+      if (!paymentKey) continue;
+
+      const linkedSubs = subsByPaymentName.get(paymentKey) || [];
+      if (linkedSubs.length === 0) continue;
+
+      const recipientsByKey = new Map<string, Recipient>();
+
+      const resolveEmployeeEmailByNameOrEmail = (value: any): string => {
+        const v = String(value ?? "").trim();
+        if (!v) return "";
+        if (isValidEmail(v)) return v;
+        const key = normalizeKey(v);
+        const employee = (allEmployees as any[]).find((e) => {
+          const employeeName = normalizeKey(e?.name);
+          const employeeEmail = normalizeKey(e?.email);
+          return employeeName === key || employeeEmail === key;
+        });
+        const email = String(employee?.email || "").trim();
+        return isValidEmail(email) ? email : "";
+      };
+
+      const addOwnerRecipient = (sub: SubscriptionDoc, role: "owner" | "owner2") => {
+        const ownerValue = String((role === "owner" ? sub.owner : sub.owner2) ?? "").trim();
+        const explicitEmail = String((role === "owner" ? sub.ownerEmail : sub.owner2Email) ?? "").trim();
+
+        const resolvedOwnerEmail =
+          resolveEmployeeEmailByNameOrEmail(ownerValue) ||
+          (isValidEmail(explicitEmail) ? explicitEmail : "") ||
+          (isValidEmail(ownerValue) ? ownerValue : "");
+
+        const ownerUser = resolvedOwnerEmail
+          ? (allUsers as any[]).find((u) => normalizeKey(u?.email) === normalizeKey(resolvedOwnerEmail))
+          : undefined;
+
+        if (ownerUser || isValidEmail(resolvedOwnerEmail)) {
+          const recipientKeyBase = ownerUser?._id ? `u:${String(ownerUser._id)}` : `e:${normalizeKey(resolvedOwnerEmail)}`;
+          const key = `${role}|${recipientKeyBase}`;
+          if (!recipientsByKey.has(key)) {
+            recipientsByKey.set(key, {
+              userId: ownerUser?._id ? String(ownerUser._id) : undefined,
+              email: resolvedOwnerEmail,
+              name: ownerUser?.fullName || ownerUser?.name || resolvedOwnerEmail,
+              role,
+              sendInApp: true,
+              sendEmail: true,
+            });
+          }
+        }
+      };
+
+      for (const sub of linkedSubs) {
+        addOwnerRecipient(sub, "owner");
+        addOwnerRecipient(sub, "owner2");
+      }
+
+      for (const sub of linkedSubs) {
+        const subscriptionDepts = parseDepartments(sub);
+        for (const deptName of subscriptionDepts) {
+          const dept = deptByName.get(normalizeKey(deptName));
+          if (!dept) continue;
+
+          const deptEmail = String((dept as any)?.email || "").trim();
+          const deptHeadName = String((dept as any)?.departmentHead || "").trim();
+
+          let deptHeadUser: any | undefined;
+          let resolvedEmail = "";
+
+          if (isValidEmail(deptEmail)) {
+            resolvedEmail = deptEmail;
+            deptHeadUser = (allUsers as any[]).find((u) => normalizeKey(u?.email) === normalizeKey(deptEmail));
+          }
+
+          if (!resolvedEmail && isValidEmail(deptHeadName)) {
+            resolvedEmail = deptHeadName;
+            deptHeadUser = (allUsers as any[]).find((u) => normalizeKey(u?.email) === normalizeKey(deptHeadName));
+          }
+
+          if (!deptHeadUser && deptHeadName) {
+            deptHeadUser = (allUsers as any[]).find(
+              (u) => normalizeKey(u?.fullName) === normalizeKey(deptHeadName) || normalizeKey(u?.name) === normalizeKey(deptHeadName)
+            );
+            if (deptHeadUser && isValidEmail(deptHeadUser.email)) {
+              resolvedEmail = String(deptHeadUser.email).trim();
+            }
+          }
+
+          if (!resolvedEmail && deptHeadName) {
+            const empEmail = resolveEmployeeEmailByNameOrEmail(deptHeadName);
+            if (empEmail) resolvedEmail = empEmail;
+          }
+
+          if (deptHeadUser || isValidEmail(resolvedEmail)) {
+            const recipientKeyBase = deptHeadUser?._id ? `u:${String(deptHeadUser._id)}` : `e:${normalizeKey(resolvedEmail)}`;
+            const key = `dept_head|${recipientKeyBase}`;
+            if (!recipientsByKey.has(key)) {
+              recipientsByKey.set(key, {
+                userId: deptHeadUser?._id ? String(deptHeadUser._id) : undefined,
+                email: resolvedEmail,
+                name: deptHeadUser?.fullName || deptHeadUser?.name || deptHeadName || resolvedEmail,
+                role: "dept_head",
+                recipientDepartments: [String(deptName || "").trim()].filter(Boolean),
+                sendInApp: true,
+                sendEmail: true,
+              });
+            } else {
+              const existing = recipientsByKey.get(key);
+              const deptTrimmed = String(deptName || "").trim();
+              if (existing && deptTrimmed) {
+                const merged = Array.from(new Set([...(existing.recipientDepartments || []), deptTrimmed]));
+                recipientsByKey.set(key, { ...existing, recipientDepartments: merged });
+              }
+            }
+          }
+        }
+      }
+
+      const paymentId = String(payment._id?.toString?.() || payment.id || paymentName);
+      const expiresLabel = formatExpiryLabel(payment.expiresAt);
+
+      for (const recipient of Array.from(recipientsByKey.values())) {
+        const recipientEmail = recipient.email && isValidEmail(recipient.email) ? String(recipient.email).trim() : "";
+
+        const noticeKey = [
+          "payment_method_expiring",
+          tenantId,
+          paymentId,
+          String(payment.expiresAt || ""),
+          `role:${recipient.role}`,
+          recipient.userId ? `uid:${recipient.userId}` : `email:${normalizeKey(recipientEmail)}`,
+        ].join("|");
+
+        const already = await db.collection("payment_expiry_notices").findOne({ tenantId, noticeKey });
+        if (already) continue;
+
+        let emailOk = false;
+        if (recipient.sendEmail && recipientEmail) {
+          const subject = `Payment method expiring soon: ${paymentName || "Payment Method"}`;
+          const html = buildEmailHtml({
+            recipientName: String(recipient.name || recipientEmail || "User"),
+            role: recipient.role,
+            paymentName,
+            expiresLabel,
+            linkedCount: linkedSubs.length,
+          });
+
+          emailOk = await emailService.sendEmail({
+            to: recipientEmail,
+            subject,
+            html,
+          });
+
+          if (emailOk) emailsSent++;
+        }
+
+        let inAppOk = false;
+        if (recipient.sendInApp && (recipient.userId || recipientEmail)) {
+          const userEmail = recipientEmail ? normalizeKey(recipientEmail) : "";
+          const existing = await db.collection("notifications").findOne({
+            tenantId,
+            $or: [
+              ...(recipient.userId ? [{ userId: String(recipient.userId) }] : []),
+              ...(userEmail ? [{ userEmail }] : []),
+            ],
+            eventType: "payment_method_expiring",
+            paymentId,
+            paymentExpiresAt: String(payment.expiresAt || ""),
+            recipientRole: recipient.role,
+          });
+
+          if (!existing) {
+            const message = `Payment method "${paymentName || "(Unnamed)"}" is expiring soon (${expiresLabel}).`;
+            const deptNames =
+              recipient.role === "dept_head"
+                ? Array.from(new Set((recipient.recipientDepartments || []).map((d) => String(d || "").trim()).filter(Boolean)))
+                : [];
+
+            await db.collection("notifications").insertOne({
+              tenantId,
+              ...(recipient.userId ? { userId: String(recipient.userId) } : {}),
+              ...(userEmail ? { userEmail } : {}),
+              type: "subscription",
+              eventType: "payment_method_expiring",
+              message,
+              recipientRole: recipient.role,
+              ...(recipient.role === "dept_head" ? { recipientDepartments: deptNames } : {}),
+              read: false,
+              createdAt: new Date(),
+              timestamp: new Date(),
+              subscriptionName: paymentName || "Payment Method",
+              category: "Payment Method",
+              paymentId,
+              paymentExpiresAt: String(payment.expiresAt || ""),
+              linkedSubscriptionCount: linkedSubs.length,
+            });
+            inAppOk = true;
+            noticesCreated++;
+          }
+        }
+
+        await db.collection("payment_expiry_notices").insertOne({
+          tenantId,
+          noticeKey,
+          paymentId,
+          paymentName,
+          expiresAt: payment.expiresAt,
+          recipientRole: recipient.role,
+          recipientUserId: recipient.userId || null,
+          recipientEmail: recipientEmail || null,
+          emailSent: emailOk,
+          inAppCreated: inAppOk,
+          createdAt: new Date(),
+        });
+      }
+    }
+
+    return { noticesCreated, emailsSent };
+  }
+
   async checkAndSendPaymentMethodExpiringNotifications(params?: {
     windowDays?: number;
     now?: Date;
@@ -237,24 +541,31 @@ export class PaymentExpiryService {
         const linkedSubs = subsByPaymentName.get(paymentKey) || [];
         if (linkedSubs.length === 0) continue;
 
+        // Use role-specific keys so the same email can receive multiple notifications/emails
+        // (e.g., an email can be both owner2 and dept_head).
         const recipientsByKey = new Map<string, Recipient>();
 
-        // Owners
-        for (const sub of linkedSubs) {
-          const ownerValue = String(sub.owner ?? "").trim();
-          const ownerKey = normalizeKey(ownerValue);
+        const resolveEmployeeEmailByNameOrEmail = (value: any): string => {
+          const v = String(value ?? "").trim();
+          if (!v) return "";
+          if (isValidEmail(v)) return v;
+          const key = normalizeKey(v);
+          const employee = (allEmployees as any[]).find((e) => {
+            const employeeName = normalizeKey(e?.name);
+            const employeeEmail = normalizeKey(e?.email);
+            return employeeName === key || employeeEmail === key;
+          });
+          const email = String(employee?.email || "").trim();
+          return isValidEmail(email) ? email : "";
+        };
 
-          const employee = ownerKey
-            ? (allEmployees as any[]).find((e) => {
-                const employeeName = normalizeKey(e?.name);
-                const employeeEmail = normalizeKey(e?.email);
-                return employeeName === ownerKey || employeeEmail === ownerKey;
-              })
-            : undefined;
+        const addOwnerRecipient = (sub: SubscriptionDoc, role: "owner" | "owner2") => {
+          const ownerValue = String((role === "owner" ? sub.owner : sub.owner2) ?? "").trim();
+          const explicitEmail = String((role === "owner" ? sub.ownerEmail : sub.owner2Email) ?? "").trim();
 
           const resolvedOwnerEmail =
-            (employee?.email && String(employee.email).trim()) ||
-            (sub.ownerEmail && String(sub.ownerEmail).trim()) ||
+            resolveEmployeeEmailByNameOrEmail(ownerValue) ||
+            (isValidEmail(explicitEmail) ? explicitEmail : "") ||
             (isValidEmail(ownerValue) ? ownerValue : "");
 
           const ownerUser = resolvedOwnerEmail
@@ -262,18 +573,25 @@ export class PaymentExpiryService {
             : undefined;
 
           if (ownerUser || isValidEmail(resolvedOwnerEmail)) {
-            const key = ownerUser?._id ? `u:${String(ownerUser._id)}` : `e:${normalizeKey(resolvedOwnerEmail)}`;
+            const recipientKeyBase = ownerUser?._id ? `u:${String(ownerUser._id)}` : `e:${normalizeKey(resolvedOwnerEmail)}`;
+            const key = `${role}|${recipientKeyBase}`;
             if (!recipientsByKey.has(key)) {
               recipientsByKey.set(key, {
                 userId: ownerUser?._id ? String(ownerUser._id) : undefined,
                 email: resolvedOwnerEmail,
                 name: ownerUser?.fullName || ownerUser?.name || resolvedOwnerEmail,
-                role: "owner",
+                role,
                 sendInApp: true,
                 sendEmail: true,
               });
             }
           }
+        };
+
+        // Owners (Person 1) + Owners 2 (Person 2)
+        for (const sub of linkedSubs) {
+          addOwnerRecipient(sub, "owner");
+          addOwnerRecipient(sub, "owner2");
         }
 
         // Dept Heads
@@ -294,6 +612,12 @@ export class PaymentExpiryService {
               deptHeadUser = (allUsers as any[]).find((u) => normalizeKey(u?.email) === normalizeKey(deptEmail));
             }
 
+            // Allow departmentHead to be an email
+            if (!resolvedEmail && isValidEmail(deptHeadName)) {
+              resolvedEmail = deptHeadName;
+              deptHeadUser = (allUsers as any[]).find((u) => normalizeKey(u?.email) === normalizeKey(deptHeadName));
+            }
+
             if (!deptHeadUser && deptHeadName) {
               deptHeadUser = (allUsers as any[]).find(
                 (u) => normalizeKey(u?.fullName) === normalizeKey(deptHeadName) || normalizeKey(u?.name) === normalizeKey(deptHeadName)
@@ -303,17 +627,32 @@ export class PaymentExpiryService {
               }
             }
 
+            // As a fallback, resolve departmentHead name through employees
+            if (!resolvedEmail && deptHeadName) {
+              const empEmail = resolveEmployeeEmailByNameOrEmail(deptHeadName);
+              if (empEmail) resolvedEmail = empEmail;
+            }
+
             if (deptHeadUser || isValidEmail(resolvedEmail)) {
-              const key = deptHeadUser?._id ? `u:${String(deptHeadUser._id)}` : `e:${normalizeKey(resolvedEmail)}`;
+              const recipientKeyBase = deptHeadUser?._id ? `u:${String(deptHeadUser._id)}` : `e:${normalizeKey(resolvedEmail)}`;
+              const key = `dept_head|${recipientKeyBase}`;
               if (!recipientsByKey.has(key)) {
                 recipientsByKey.set(key, {
                   userId: deptHeadUser?._id ? String(deptHeadUser._id) : undefined,
                   email: resolvedEmail,
                   name: deptHeadUser?.fullName || deptHeadUser?.name || deptHeadName || resolvedEmail,
                   role: "dept_head",
+                  recipientDepartments: [String(deptName || "").trim()].filter(Boolean),
                   sendInApp: true,
                   sendEmail: true,
                 });
+              } else {
+                const existing = recipientsByKey.get(key);
+                const deptTrimmed = String(deptName || "").trim();
+                if (existing && deptTrimmed) {
+                  const merged = Array.from(new Set([...(existing.recipientDepartments || []), deptTrimmed]));
+                  recipientsByKey.set(key, { ...existing, recipientDepartments: merged });
+                }
               }
             }
           }
@@ -330,6 +669,7 @@ export class PaymentExpiryService {
             tenantId,
             paymentId,
             String(payment.expiresAt || ""),
+            `role:${recipient.role}`,
             recipient.userId ? `uid:${recipient.userId}` : `email:${normalizeKey(recipientEmail)}`,
           ].join("|");
 
@@ -368,10 +708,17 @@ export class PaymentExpiryService {
               eventType: "payment_method_expiring",
               paymentId,
               paymentExpiresAt: String(payment.expiresAt || ""),
+              recipientRole: recipient.role,
             });
 
             if (!existing) {
               const message = `Payment method "${paymentName || "(Unnamed)"}" is expiring soon (${expiresLabel}).`;
+
+              // For dept heads, include the departments they matched.
+              const deptNames = recipient.role === "dept_head"
+                ? Array.from(new Set((recipient.recipientDepartments || []).map((d) => String(d || "").trim()).filter(Boolean)))
+                : [];
+
               await db.collection("notifications").insertOne({
                 tenantId,
                 ...(recipient.userId ? { userId: String(recipient.userId) } : {}),
@@ -379,6 +726,8 @@ export class PaymentExpiryService {
                 type: "subscription",
                 eventType: "payment_method_expiring",
                 message,
+                recipientRole: recipient.role,
+                ...(recipient.role === "dept_head" ? { recipientDepartments: deptNames } : {}),
                 read: false,
                 createdAt: new Date(),
                 timestamp: new Date(),
