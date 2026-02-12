@@ -83,29 +83,56 @@ export async function ensureHistoryIndexes() {
 
 export async function ensureSubscriptionIndexes() {
   const db = await connectToDatabase();
-  try {
-    await db.collection("subscriptions").createIndex({ tenantId: 1, _id: 1 });
-    await db.collection("subscriptions").createIndex({ tenantId: 1, ownerEmail: 1 });
-    await db.collection("subscriptions").createIndex({ tenantId: 1, owner: 1 });
-    await db.collection("subscriptions").createIndex({ tenantId: 1, departments: 1 });
-    await db.collection("subscriptions").createIndex({ tenantId: 1, department: 1 });
-    // For analytics dashboard - count active subscriptions faster
-    await db.collection("subscriptions").createIndex({ tenantId: 1, status: 1 });
-    await db.collection("subscriptions").createIndex({ tenantId: 1, status: 1, nextRenewal: 1 });
 
-    // Prevent duplicate draft creation on repeated clicks / race conditions.
-    // Only applies to draft documents that include a string draftSessionId.
-    await db.collection("subscriptions").createIndex(
-      { tenantId: 1, draftSessionId: 1 },
-      {
-        unique: true,
-        partialFilterExpression: { isDraft: true, draftSessionId: { $type: "string" } },
-      }
-    );
-    
-    // Exchange rates batch query optimization
-    await db.collection("exchange_rates").createIndex({ tenantId: 1, code: 1, date: -1, createdAt: -1 });
-  } catch (err) {
-    // Ignore index creation errors (e.g., permissions or missing collection)
-  }
+  const safeCreateIndex = async (
+    collectionName: string,
+    keys: Record<string, any>,
+    options?: Record<string, any>
+  ) => {
+    try {
+      await db.collection(collectionName).createIndex(keys, options);
+    } catch {
+      // Ignore index creation errors (e.g., permissions, duplicates, missing collection)
+    }
+  };
+
+  await safeCreateIndex("subscriptions", { tenantId: 1, _id: 1 });
+  await safeCreateIndex("subscriptions", { tenantId: 1, ownerEmail: 1 });
+  await safeCreateIndex("subscriptions", { tenantId: 1, owner: 1 });
+  await safeCreateIndex("subscriptions", { tenantId: 1, departments: 1 });
+  await safeCreateIndex("subscriptions", { tenantId: 1, department: 1 });
+  // For analytics dashboard - count active subscriptions faster
+  await safeCreateIndex("subscriptions", { tenantId: 1, status: 1 });
+  await safeCreateIndex("subscriptions", { tenantId: 1, status: 1, nextRenewal: 1 });
+
+  // Deterministic key used to detect duplicates despite encryption of serviceName.
+  await safeCreateIndex("subscriptions", { tenantId: 1, serviceNameKey: 1 });
+
+  // Prevent duplicate *create* requests when client retries (slow network/render deploy).
+  // Only applies to non-draft documents that include a string createIdempotencyKey.
+  await safeCreateIndex(
+    "subscriptions",
+    { tenantId: 1, createIdempotencyKey: 1 },
+    {
+      unique: true,
+      partialFilterExpression: {
+        isDraft: { $ne: true },
+        createIdempotencyKey: { $type: "string" },
+      },
+    }
+  );
+
+  // Prevent duplicate draft creation on repeated clicks / race conditions.
+  // Only applies to draft documents that include a string draftSessionId.
+  await safeCreateIndex(
+    "subscriptions",
+    { tenantId: 1, draftSessionId: 1 },
+    {
+      unique: true,
+      partialFilterExpression: { isDraft: true, draftSessionId: { $type: "string" } },
+    }
+  );
+
+  // Exchange rates batch query optimization
+  await safeCreateIndex("exchange_rates", { tenantId: 1, code: 1, date: -1, createdAt: -1 });
 }
