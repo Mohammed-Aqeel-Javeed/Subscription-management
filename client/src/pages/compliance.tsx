@@ -25,6 +25,7 @@ import {
 import Papa from 'papaparse';
 import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
+import { parse, isValid as isValidDateFns } from "date-fns";
 
 const AMOUNT_MAX_10CR = 100000000;
 const REMINDER_DAYS_MAX = 1000;
@@ -400,6 +401,7 @@ export default function Compliance() {
     reminderPolicy?: string;
     submittedBy?: string;
     owner?: string;
+    owner2?: string;
     amount?: string | number;
     isDraft?: boolean;
     paymentDate?: string;
@@ -429,8 +431,13 @@ export default function Compliance() {
   const [ownerSearch, setOwnerSearch] = useState('');
   const ownerDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [owner2Open, setOwner2Open] = useState(false);
+  const [owner2Search, setOwner2Search] = useState('');
+  const owner2DropdownRef = useRef<HTMLDivElement>(null);
+
   // Owner '+ New' employee creation modal (match Subscription modal)
   const [ownerModal, setOwnerModal] = useState<{ show: boolean }>({ show: false });
+  const [ownerModalTarget, setOwnerModalTarget] = useState<'owner' | 'owner2'>('owner');
   const [newOwnerName, setNewOwnerName] = useState<string>('');
   const [newOwnerEmail, setNewOwnerEmail] = useState<string>('');
   const [newOwnerEmailError, setNewOwnerEmailError] = useState<string>('');
@@ -484,6 +491,7 @@ export default function Compliance() {
     reminderPolicy: "One time",
     submittedBy: "",
     owner: "",
+    owner2: "",
     amount: "",
     paymentDate: "",
     submissionAmount: "",
@@ -996,9 +1004,18 @@ export default function Compliance() {
 
       await refetchEmployees();
 
-      setForm((prev: any) => ({ ...prev, owner: newOwnerName.trim() }));
-      setOwnerSearch('');
-      setOwnerOpen(false);
+      setForm((prev: any) => ({
+        ...prev,
+        [ownerModalTarget]: newOwnerName.trim()
+      }));
+
+      if (ownerModalTarget === 'owner') {
+        setOwnerSearch('');
+        setOwnerOpen(false);
+      } else {
+        setOwner2Search('');
+        setOwner2Open(false);
+      }
 
       setNewOwnerName('');
       setNewOwnerEmail('');
@@ -1014,6 +1031,21 @@ export default function Compliance() {
       toast({ title: 'Error', description: 'Failed to add employee. Please try again.', variant: 'destructive' });
     }
   };
+
+  // Close Owner2 dropdown when clicking outside
+  useEffect(() => {
+    if (!owner2Open) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (owner2DropdownRef.current && !owner2DropdownRef.current.contains(event.target as Node)) {
+        setOwner2Open(false);
+        setOwner2Search('');
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [owner2Open]);
 
   // Auto-fill and lock department email when head is selected (same as subscription modal)
   useEffect(() => {
@@ -1201,29 +1233,48 @@ export default function Compliance() {
     paymentDate?: string;
   }>({});
 
+  const [submittedByError, setSubmittedByError] = useState<string>("");
+
   // Date validation helper functions
+  const parseDateValue = (dateValue: string): Date | null => {
+    if (!dateValue) return null;
+    const raw = String(dateValue).trim();
+
+    let parsed: Date;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      // Native <input type="date"> value
+      parsed = parse(raw, 'yyyy-MM-dd', new Date());
+    } else if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) {
+      // Some imports/legacy values can be dd-MM-yyyy
+      parsed = parse(raw, 'dd-MM-yyyy', new Date());
+    } else {
+      // Last resort (avoid relying on this for dd-MM-yyyy)
+      parsed = new Date(raw);
+    }
+
+    if (!isValidDateFns(parsed)) return null;
+    parsed.setHours(0, 0, 0, 0);
+    return parsed;
+  };
+
   const validateDate = (dateValue: string, fieldName: string, allowFuture: boolean = false): string => {
     if (!dateValue) return "";
-    
-    const inputDate = new Date(dateValue);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    inputDate.setHours(0, 0, 0, 0);
-    
-    if (isNaN(inputDate.getTime())) {
+
+    const inputDate = parseDateValue(dateValue);
+    if (!inputDate) {
       return "Invalid date format";
     }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     
     // Special handling for submission date - allow future dates within submission window
     if (fieldName === "Submission Date" && !allowFuture && inputDate > today) {
       // Check if we have end date and submission deadline to determine valid window
-      const endDate = form.filingEndDate ? new Date(form.filingEndDate) : null;
-      const submissionDeadline = form.filingSubmissionDeadline ? new Date(form.filingSubmissionDeadline) : null;
+      const endDate = parseDateValue(form.filingEndDate);
+      const submissionDeadline = parseDateValue(form.filingSubmissionDeadline);
       
       if (endDate && submissionDeadline) {
-        endDate.setHours(0, 0, 0, 0);
-        submissionDeadline.setHours(0, 0, 0, 0);
-        
         // Allow future submission dates if they're within the valid submission window
         if (inputDate >= endDate && inputDate <= submissionDeadline) {
           return ""; // Valid - within submission window
@@ -1245,10 +1296,10 @@ export default function Compliance() {
     const errors: typeof dateErrors = {};
     let isValid = true;
     
-    const startDate = form.filingStartDate ? new Date(form.filingStartDate) : null;
-    const endDate = form.filingEndDate ? new Date(form.filingEndDate) : null;
-    const submissionDeadline = form.filingSubmissionDeadline ? new Date(form.filingSubmissionDeadline) : null;
-    const submissionDate = form.filingSubmissionDate ? new Date(form.filingSubmissionDate) : null;
+    const startDate = parseDateValue(form.filingStartDate);
+    const endDate = parseDateValue(form.filingEndDate);
+    const submissionDeadline = parseDateValue(form.filingSubmissionDeadline);
+    const submissionDate = parseDateValue(form.filingSubmissionDate);
     
     // Validate individual dates
     const startDateError = validateDate(form.filingStartDate, "Start Date", true);
@@ -1353,8 +1404,7 @@ export default function Compliance() {
   const { data: complianceItems = [], isLoading } = useQuery({
     queryKey: ["compliance"],
     queryFn: async () => {
-      const response = await fetch("/api/compliance/list");
-      if (!response.ok) throw new Error("Failed to fetch compliance filings");
+      const response = await apiRequest("GET", "/api/compliance/list");
       return response.json();
     },
     staleTime: 0,
@@ -1439,15 +1489,29 @@ export default function Compliance() {
     setFilingNameError("");
     return true;
   };
+
+  const resolveEmployeeEmail = (value: any): string => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+
+    // If user typed an email directly
+    if (raw.includes('@')) return raw;
+
+    const employees = Array.isArray(employeesData) ? employeesData : [];
+    const rawNorm = raw.toLowerCase();
+
+    const match = employees.find((emp: any) => {
+      const name = getEmployeeName(emp).trim().toLowerCase();
+      const email = getEmployeeEmail(emp).trim().toLowerCase();
+      return name === rawNorm || email === rawNorm;
+    });
+
+    return match ? String(getEmployeeEmail(match) || '').trim() : '';
+  };
   
   const addMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch("/api/compliance/insert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
-      if (!response.ok) throw new Error("Failed to save compliance");
+      const response = await apiRequest("POST", "/api/compliance/insert", data);
       return response.json();
     },
     onSuccess: (newItem) => {
@@ -1455,13 +1519,13 @@ export default function Compliance() {
         oldData ? [...oldData, newItem] : [newItem]
       );
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/compliance"] });
     }
   });
   
   const deleteMutation = useMutation({
     mutationFn: async (_id: string) => {
-      const res = await fetch(`/api/compliance/${_id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete compliance item.");
+      await apiRequest("DELETE", `/api/compliance/${_id}`);
       return _id;
     },
     onSuccess: (deletedId) => {
@@ -1514,6 +1578,7 @@ export default function Compliance() {
       hasText(form.filingSubmissionDate) ||
       hasText(form.submittedBy) ||
       hasText(form.owner) ||
+      hasText((form as any).owner2) ||
       hasText(form.amount) ||
       hasText(form.paymentDate) ||
       hasText(form.submissionAmount) ||
@@ -1553,12 +1618,7 @@ export default function Compliance() {
   
   const editMutation = useMutation({
     mutationFn: async ({ _id, data }: { _id: string; data: any }) => {
-      const res = await fetch(`/api/compliance/${_id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
-      if (!res.ok) throw new Error("Failed to update compliance item.");
+      await apiRequest("PUT", `/api/compliance/${_id}`, data);
       return { _id, data };
     },
     onSuccess: ({ _id, data }) => {
@@ -1568,8 +1628,11 @@ export default function Compliance() {
         ) : []
       );
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/compliance"] });
     }
   });
+
+  const isSavingCompliance = addMutation.isPending || editMutation.isPending;
   
   // IMPORT from CSV -> create compliance items
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1607,11 +1670,7 @@ export default function Compliance() {
             };
             // Basic validation
             if (!payload.policy || !payload.category) { failed++; continue; }
-            await fetch('/api/compliance/insert', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-            });
+            await apiRequest('POST', '/api/compliance/insert', payload);
             success++;
           } catch (err) {
             failed++;
@@ -1750,6 +1809,7 @@ export default function Compliance() {
                       reminderPolicy: "One time",
                       submittedBy: "",
                       owner: "",
+                      owner2: "",
                       amount: "",
                       paymentDate: "",
                       submissionAmount: "",
@@ -1919,6 +1979,7 @@ export default function Compliance() {
                               reminderPolicy: currentItem.reminderPolicy || "One time",
                               submittedBy: currentItem.submittedBy || "",
                               owner: currentItem.owner || "",
+                              owner2: (currentItem as any).owner2 || "",
                               amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
                               paymentDate: currentItem.paymentDate || "",
                               submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
@@ -2009,6 +2070,7 @@ export default function Compliance() {
                                 reminderPolicy: currentItem.reminderPolicy || "One time",
                                 submittedBy: currentItem.submittedBy || "",
                                 owner: currentItem.owner || "",
+                                owner2: (currentItem as any).owner2 || "",
                                 amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
                                 paymentDate: currentItem.paymentDate || "",
                                 submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
@@ -2057,6 +2119,7 @@ export default function Compliance() {
                                 reminderPolicy: currentItem.reminderPolicy || "One time",
                                 submittedBy: currentItem.submittedBy || "",
                                 owner: currentItem.owner || "",
+                                owner2: (currentItem as any).owner2 || "",
                                 amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
                                 paymentDate: currentItem.paymentDate || "",
                                 submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
@@ -2096,7 +2159,7 @@ export default function Compliance() {
       
       {/* Modal */}
       <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setModalOpen(v); }}>
-        <DialogContent className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300 flex flex-col overflow-hidden`}>
+        <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300 flex flex-col overflow-hidden`}>
           {/* Local keyframes for the sheen animation */}
           <style>{`@keyframes sheen { 0% { transform: translateX(-60%); } 100% { transform: translateX(180%); } }`}</style>
           <DialogHeader className={`sticky top-0 z-50 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'p-4 md:p-5' : 'p-5'} rounded-t-2xl`}>
@@ -2161,6 +2224,30 @@ export default function Compliance() {
                 >
                   {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  title="Close"
+                  onClick={() => {
+                    if (showSubmissionDetails) {
+                      if (submissionOpenedFromTable) {
+                        handleExitConfirm();
+                        return;
+                      }
+                      setShowSubmissionDetails(false);
+                      return;
+                    }
+
+                    if (hasMeaningfulFormData()) {
+                      setExitConfirmOpen(true);
+                    } else {
+                      handleExitConfirm();
+                    }
+                  }}
+                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold rounded-xl shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
                 {editIndex !== null && complianceItems[editIndex]?._id && (
                   <Button
                     type="button"
@@ -2187,7 +2274,7 @@ export default function Compliance() {
                 <div className={`grid gap-6 mb-8 grid-cols-1 md:grid-cols-2`}>
                   {/* Submission Date and Submitted By fields */}
                   <div className="space-y-3">
-                    <label className="block text-sm font-medium text-slate-700">Submission Date</label>
+                    <label className="block text-sm font-medium text-slate-700">Submission Date <span className="text-red-600">*</span></label>
                     <Input 
                       className={`w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 ${dateErrors.submissionDate ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                       type="date" 
@@ -2202,14 +2289,14 @@ export default function Compliance() {
                     )}
                   </div>
                   <div className="space-y-3">
-                    <label className="block text-sm font-medium text-slate-700">Submitted By</label>
+                    <label className="block text-sm font-medium text-slate-700">Submitted By <span className="text-red-600">*</span></label>
                     <div className="flex flex-col sm:flex-row sm:items-end gap-3">
                       <div className="relative flex-1" ref={submittedByDropdownRef}>
                         <div className="relative">
                           <Input
                             value={submittedByOpen ? submittedBySearch : submittedByDisplayValue}
                             placeholder="Select employee"
-                            className="w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 pr-10"
+                            className={`w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 pr-10 ${submittedByError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                             onFocus={() => {
                               setSubmittedBySearch(submittedByDisplayValue);
                               setSubmittedByOpen(true);
@@ -2232,6 +2319,13 @@ export default function Compliance() {
                             }}
                           />
                         </div>
+
+                        {submittedByError && (
+                          <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {submittedByError}
+                          </p>
+                        )}
 
                         {submittedByOpen && (
                           <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
@@ -2717,9 +2811,100 @@ export default function Compliance() {
                       className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
                       style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
                       onClick={() => {
+                        setOwnerModalTarget('owner');
                         setOwnerModal({ show: true });
                         setOwnerOpen(false);
                         setOwnerSearch('');
+                      }}
+                    >
+                      + New
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Owner2 field (secondary owner) */}
+              <div className="space-y-2 relative" ref={owner2DropdownRef}>
+                <label className="block text-sm font-medium text-slate-700">Owner2</label>
+                <div className="relative">
+                  <Input
+                    value={owner2Open ? owner2Search : (form.owner2 || '')}
+                    placeholder="Select employee"
+                    className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 pr-10"
+                    onFocus={() => {
+                      setOwner2Search(form.owner2 || '');
+                      setOwner2Open(true);
+                    }}
+                    onClick={() => {
+                      setOwner2Search(form.owner2 || '');
+                      setOwner2Open(true);
+                    }}
+                    onChange={(e) => {
+                      setOwner2Search(e.target.value);
+                      if (!owner2Open) setOwner2Open(true);
+                    }}
+                    autoComplete="off"
+                  />
+                  <ChevronDown
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+                    onClick={() => {
+                      setOwner2Open((v) => !v);
+                      setOwner2Search('');
+                    }}
+                  />
+                </div>
+
+                {owner2Open && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                    <div className="max-h-44 overflow-y-scroll custom-scrollbar">
+                      {isLoadingEmployees ? (
+                        <div className="px-3 py-2.5 text-sm text-slate-500">Loading employees...</div>
+                      ) : (
+                        (Array.isArray(employeesData) ? employeesData : [])
+                          .filter((emp: any) => {
+                            const q = owner2Search.trim().toLowerCase();
+                            if (!q) return true;
+                            return (
+                              getEmployeeName(emp).toLowerCase().includes(q) ||
+                              getEmployeeEmail(emp).toLowerCase().includes(q)
+                            );
+                          })
+                          .map((emp: any) => {
+                            const name = getEmployeeName(emp);
+                            const email = getEmployeeEmail(emp);
+                            const selected = String(form.owner2 || '') === name;
+                            return (
+                              <div
+                                key={getEmployeeId(emp)}
+                                className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                  selected ? 'bg-blue-50 text-blue-700' : ''
+                                }`}
+                                onClick={() => {
+                                  handleFormChange('owner2', selected ? '' : name);
+                                  setOwner2Open(false);
+                                  setOwner2Search('');
+                                }}
+                              >
+                                <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                <span className="font-normal">{name || email || 'Employee'}</span>
+                              </div>
+                            );
+                          })
+                      )}
+
+                      {!isLoadingEmployees && (Array.isArray(employeesData) ? employeesData : []).length === 0 && (
+                        <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
+                      )}
+                    </div>
+
+                    <div
+                      className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+                      style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
+                      onClick={() => {
+                        setOwnerModalTarget('owner2');
+                        setOwnerModal({ show: true });
+                        setOwner2Open(false);
+                        setOwner2Search('');
                       }}
                     >
                       + New
@@ -2988,6 +3173,9 @@ export default function Compliance() {
                     reminderPolicy: form.reminderPolicy,
                     submittedBy: form.submittedBy,
                     owner: form.owner,
+                    owner2: (form as any).owner2,
+                    ownerEmail: resolveEmployeeEmail(form.owner),
+                    owner2Email: resolveEmployeeEmail((form as any).owner2),
                     amount: form.amount,
                     paymentDate: form.paymentDate,
                     department: form.department,
@@ -3029,6 +3217,7 @@ export default function Compliance() {
                       reminderPolicy: "One time",
                       submittedBy: "",
                       owner: "",
+                      owner2: "",
                       amount: "",
                       paymentDate: "",
                       submissionAmount: "",
@@ -3053,8 +3242,12 @@ export default function Compliance() {
                 type="button" 
                 className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-6 py-2 shadow-md hover:shadow-lg"
                 onClick={async () => {
-                  if (showSubmissionDetails) {
+                  try {
+                    if (showSubmissionDetails) {
+                      setSubmittedByError('');
+
                     if (!form.filingSubmissionDate) {
+                      setDateErrors(prev => ({ ...prev, submissionDate: 'Submission Date is required' }));
                       toast({
                         title: 'Validation Error',
                         description: 'Submission Date is required',
@@ -3063,6 +3256,7 @@ export default function Compliance() {
                       return;
                     }
                     if (!form.submittedBy) {
+                      setSubmittedByError('Submitted By is required');
                       toast({
                         title: 'Validation Error',
                         description: 'Submitted By is required',
@@ -3070,18 +3264,19 @@ export default function Compliance() {
                       });
                       return;
                     }
-                    if (submissionDocuments.length === 0) {
+
+                    if (!validateDateLogic()) {
                       toast({
-                        title: 'Validation Error',
-                        description: 'Please upload a document before submitting',
-                        variant: 'destructive',
+                        title: "Validation Error",
+                        description: "Please fix the date validation errors before submitting",
+                        variant: "destructive",
                       });
                       return;
                     }
                   }
 
                   // Check for filing name validation errors
-                  if (filingNameError) {
+                  if (!showSubmissionDetails && filingNameError) {
                     toast({
                       title: "Validation Error",
                       description: "Please fix the filing name error before saving",
@@ -3091,17 +3286,17 @@ export default function Compliance() {
                   }
                   
                   // Validate filing name uniqueness one more time before saving
-                  if (form.filingName && !validateFilingName(form.filingName)) {
+                  if (!showSubmissionDetails && form.filingName && !validateFilingName(form.filingName)) {
                     return;
                   }
                   
                   // Validate required fields
-                  if (!validateRequiredFields()) {
+                  if (!showSubmissionDetails && !validateRequiredFields()) {
                     return;
                   }
                   
                   // Validate dates before saving compliance
-                  if (!validateDateLogic()) {
+                  if (!showSubmissionDetails && !validateDateLogic()) {
                     toast({
                       title: "Validation Error", 
                       description: "Please fix the date validation errors before saving",
@@ -3138,6 +3333,9 @@ export default function Compliance() {
                     reminderPolicy: form.reminderPolicy,
                     submittedBy: form.submittedBy,
                     owner: form.owner,
+                    owner2: (form as any).owner2,
+                    ownerEmail: resolveEmployeeEmail(form.owner),
+                    owner2Email: resolveEmployeeEmail((form as any).owner2),
                     department: form.department,
                     departments: selectedDepartments,
                     complianceFieldValues: dynamicFieldValues, // <--- store dynamic field values
@@ -3246,9 +3444,16 @@ export default function Compliance() {
                   }
                   setModalOpen(false);
                   setEditIndex(null);
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error?.message || "Failed to save compliance",
+                      variant: "destructive",
+                    });
+                  }
                 }}
               >
-                {showSubmissionDetails ? 'Submit' : 'Save Compliance'}
+                {isSavingCompliance ? 'Saving...' : (showSubmissionDetails ? 'Submit' : 'Save Compliance')}
               </Button>
             </div>
           </form>

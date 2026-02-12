@@ -20,6 +20,61 @@ import { connectToDatabase } from "./mongo.js";
 import bcrypt from "bcrypt";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  const toEpochMsServer = (raw: any): number => {
+    if (!raw) return 0;
+    const d = raw instanceof Date ? raw : new Date(String(raw));
+    const t = d.getTime();
+    return Number.isFinite(t) ? t : 0;
+  };
+
+  const notificationDedupeKey = (n: any): string => {
+    if (!n) return '';
+    const type = String(n.type || '').trim().toLowerCase();
+    const eventType = String(n.eventType || (n.reminderTriggerDate || n.reminderDate ? 'reminder' : '')).trim().toLowerCase();
+    const lifecycle = String(n.lifecycleEventType || '').trim().toLowerCase();
+    const entityId = String(n.subscriptionId || n.complianceId || n.licenseId || n.paymentId || '').trim().toLowerCase();
+    const trigger = String(n.reminderTriggerDate || n.reminderDate || '').trim().toLowerCase();
+    const deadline = String(n.submissionDeadline || n.subscriptionEndDate || n.endDate || '').trim().toLowerCase();
+    const reminderType = String(n.reminderType || '').trim().toLowerCase();
+    const title = String(n.filingName || n.subscriptionName || n.licenseName || n.name || '').trim().toLowerCase();
+    const message = String(n.message || '').trim().toLowerCase();
+    return [type, eventType, lifecycle, entityId, trigger, deadline, reminderType, title, message].join('|');
+  };
+
+  const dedupeNotifications = (list: any[]): any[] => {
+    if (!Array.isArray(list) || list.length === 0) return Array.isArray(list) ? list : [];
+
+    const score = (n: any): number => {
+      if (!n) return 0;
+      let s = 0;
+      if (n.recipientRole) s += 2;
+      if (Array.isArray(n.recipientDepartments) && n.recipientDepartments.length) s += 1;
+      if (n.message) s += 1;
+      if (n.reminderTriggerDate || n.reminderDate) s += 1;
+      if (n.filingName || n.subscriptionName || n.licenseName) s += 1;
+      if (n.lifecycleEventType) s += 1;
+      return s;
+    };
+
+    const pickBetter = (a: any, b: any) => {
+      const sa = score(a);
+      const sb = score(b);
+      if (sa !== sb) return sa > sb ? a : b;
+      const ta = toEpochMsServer(a?.timestamp || a?.createdAt);
+      const tb = toEpochMsServer(b?.timestamp || b?.createdAt);
+      return tb > ta ? b : a;
+    };
+
+    const map = new Map<string, any>();
+    for (const n of list) {
+      const key = notificationDedupeKey(n) || (n?.id ? `id:${String(n.id)}` : '');
+      if (!key) continue;
+      const existing = map.get(key);
+      if (!existing) map.set(key, n);
+      else map.set(key, pickBetter(existing, n));
+    }
+    return Array.from(map.values());
+  };
   // Logout
   app.post("/api/logout", (req, res) => {
     res.cookie("token", "", {
@@ -1075,9 +1130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return [];
       };
 
-      if (userRole === 'admin' || userRole === 'super_admin') {
-        reminderNotifications = [];
-      } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
+      if (userRole === 'department_editor' || userRole === 'department_viewer') {
         if (normalizedDept) {
           reminderNotifications = reminderNotifications.filter((n: any) => {
             const depts = extractDepartments(n).map(d => String(d).trim().toLowerCase());
@@ -1099,7 +1152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Get user-scoped in-app notifications (subscription lifecycle notifications)
+      // Get user-scoped in-app notifications (subscription lifecycle notifications ONLY)
       let userInAppNotifications: any[] = [];
       try {
         if (userId || userEmail) {
@@ -1109,6 +1162,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .collection("notifications")
             .find({
               tenantId,
+              type: 'subscription', // ONLY subscription notifications
               $or: [
                 ...(userId ? [{ userId: String(userId) }] : []),
                 ...(normalizedEmailForQuery ? [{ userEmail: normalizedEmailForQuery }] : []),
@@ -1120,7 +1174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userInAppNotifications = userInAppNotifications.map((n) => ({
             ...n,
             id: n._id?.toString?.() || n.id,
-            type: n.type || 'subscription',
+            type: 'subscription',
           }));
         }
       } catch (e) {
@@ -1140,12 +1194,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/notifications/compliance", async (req, res) => {
     const tenantId = req.user?.tenantId;
+    const userId = req.user?.userId || req.user?.id;
+    const userEmail = req.user?.email;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
-      const notifications = await storage.getComplianceNotifications(tenantId);
-      res.json(notifications);
+      // Get compliance reminder notifications
+      const reminderNotifications = await storage.getComplianceNotifications(tenantId);
+      
+      // Get user-scoped in-app compliance lifecycle notifications
+      let userInAppNotifications: any[] = [];
+      try {
+        if (userId || userEmail) {
+          const db = await connectToDatabase();
+          const normalizedEmailForQuery = String(userEmail || '').trim().toLowerCase();
+          userInAppNotifications = await db
+            .collection("notifications")
+            .find({
+              tenantId,
+              type: 'compliance', // ONLY compliance notifications
+              $or: [
+                ...(userId ? [{ userId: String(userId) }] : []),
+                ...(normalizedEmailForQuery ? [{ userEmail: normalizedEmailForQuery }] : []),
+              ],
+            })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+          userInAppNotifications = userInAppNotifications.map((n) => ({
+            ...n,
+            id: n._id?.toString?.() || n.id,
+            type: 'compliance',
+          }));
+        }
+      } catch (e) {
+        console.error("❌ Error fetching user in-app compliance notifications:", e);
+      }
+      
+      // Combine reminder notifications and lifecycle notifications
+      const allNotifications = dedupeNotifications([...reminderNotifications, ...userInAppNotifications])
+        .sort((a, b) => new Date(b.timestamp || b.createdAt || '').getTime() - new Date(a.timestamp || a.createdAt || '').getTime());
+      
+      res.json(allNotifications);
     } catch {
       res.status(500).json({ message: "Failed to fetch compliance notifications" });
+    }
+  });
+
+  app.get("/api/notifications/license", async (req, res) => {
+    const tenantId = req.user?.tenantId;
+    const userId = req.user?.userId || req.user?.id;
+    const userEmail = req.user?.email;
+    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
+    try {
+      let userInAppNotifications: any[] = [];
+      if (userId || userEmail) {
+        const db = await connectToDatabase();
+        const normalizedEmailForQuery = String(userEmail || "").trim().toLowerCase();
+        userInAppNotifications = await db
+          .collection("notifications")
+          .find({
+            tenantId,
+            type: "license",
+            $or: [
+              ...(userId ? [{ userId: String(userId) }] : []),
+              ...(normalizedEmailForQuery ? [{ userEmail: normalizedEmailForQuery }] : []),
+            ],
+          })
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        userInAppNotifications = userInAppNotifications.map((n) => ({
+          ...n,
+          id: n._id?.toString?.() || n.id,
+          type: "license",
+        }));
+      }
+
+      const allNotifications = dedupeNotifications([...userInAppNotifications]).sort(
+        (a, b) =>
+          new Date(b.timestamp || b.createdAt || "").getTime() -
+          new Date(a.timestamp || a.createdAt || "").getTime()
+      );
+
+      res.json(allNotifications);
+    } catch {
+      res.status(500).json({ message: "Failed to fetch license notifications" });
     }
   });
 

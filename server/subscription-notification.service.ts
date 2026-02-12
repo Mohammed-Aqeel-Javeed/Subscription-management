@@ -253,7 +253,7 @@ async function getNotificationRecipients(
         // Fallback: still send email to ownerEmail if provided (email-only recipient)
         const fallbackEmail = isEmail(resolvedOwnerEmail) ? resolvedOwnerEmail : '';
 
-        if (fallbackEmail && rule.owner.email) {
+        if (fallbackEmail && (rule.owner.email || rule.owner.inApp)) {
           console.log(`  → Using resolved owner email for delivery: ${fallbackEmail}`);
           const alreadyAdded = recipients.some(r => r.email?.toLowerCase?.() === String(fallbackEmail).toLowerCase());
           if (!alreadyAdded) {
@@ -262,8 +262,8 @@ async function getNotificationRecipients(
               email: fallbackEmail,
               name: subscription.owner || fallbackEmail,
               role: 'owner',
-              sendInApp: false,
-              sendEmail: true,
+              sendInApp: rule.owner.inApp,
+              sendEmail: rule.owner.email,
             });
           }
         } else {
@@ -276,14 +276,14 @@ async function getNotificationRecipients(
     }
 
     // Edge case: owner not set but ownerEmail exists (still notify by email if required)
-    if (!subscription.owner && subscription.ownerEmail && rule.owner.email && isEmail(subscription.ownerEmail)) {
+    if (!subscription.owner && subscription.ownerEmail && (rule.owner.email || rule.owner.inApp) && isEmail(subscription.ownerEmail)) {
       recipients.push({
         userId: '',
         email: String(subscription.ownerEmail),
         name: String(subscription.ownerEmail),
         role: 'owner',
-        sendInApp: false,
-        sendEmail: true,
+        sendInApp: rule.owner.inApp,
+        sendEmail: rule.owner.email,
       });
     }
 
@@ -324,7 +324,7 @@ async function getNotificationRecipients(
               email: dept.email,
               name: dept.departmentHead || dept.name,
               role: 'dept_head',
-              sendInApp: false, // Can't send in-app without userId
+              sendInApp: rule.deptHead.inApp,
               sendEmail: rule.deptHead.email
             });
           }
@@ -365,20 +365,32 @@ async function getNotificationRecipients(
  * Create in-app notification
  */
 async function createInAppNotification(
-  userId: string,
+  userId: string | null | undefined,
+  userEmail: string | null | undefined,
   subscription: SubscriptionData,
   eventType: 'created' | 'owner_changed' | 'price_changed' | 'quantity_changed' | 'cancelled' | 'deleted',
   additionalData?: any
 ) {
   try {
     const db = await connectToDatabase();
+
+    const normalizedUserId = userId ? String(userId).trim() : '';
+    const normalizedEmail = userEmail ? String(userEmail).trim().toLowerCase() : '';
+    if (!normalizedUserId && !normalizedEmail) {
+      console.log('Skipping in-app notification: missing userId and userEmail');
+      return;
+    }
     
     const notificationData = {
-      userId,
+      ...(normalizedUserId ? { userId: normalizedUserId } : {}),
+      ...(normalizedEmail ? { userEmail: normalizedEmail } : {}),
       tenantId: subscription.tenantId,
       type: 'subscription',
-      eventType: eventType === 'created' ? 'created' : 
-                 (eventType === 'cancelled' || eventType === 'deleted') ? 'deleted' : 'updated',
+      eventType: eventType === 'created'
+        ? 'created'
+        : eventType === 'deleted'
+          ? 'deleted'
+          : 'updated',
       lifecycleEventType: eventType,
       subscriptionId: String(subscription.id || subscription._id),
       subscriptionName: subscription.serviceName,
@@ -389,8 +401,8 @@ async function createInAppNotification(
     };
 
     // Store notification in MongoDB
-    await db.collection("notifications").insertOne(notificationData);
-    console.log(`Created in-app notification for user ${userId}:`, notificationData);
+    const result = await db.collection("notifications").insertOne(notificationData);
+    console.log(`✅ Created in-app subscription notification (ID: ${result.insertedId})`);
 
   } catch (error) {
     console.error('Error creating in-app notification:', error);
@@ -567,16 +579,12 @@ export async function sendSubscriptionNotifications(
   try {
     // DECRYPT subscription data before processing
     const { decryptSubscriptionData } = await import("./encryption.service.js");
-    
-    console.log(`🔐 Before decryption - serviceName: ${newSubscription.serviceName?.substring(0, 50)}...`);
+
     const decryptedNew = decryptSubscriptionData(newSubscription);
-    console.log(`� Aftder decryption - serviceName: ${decryptedNew.serviceName}`);
-    console.log(`🔓 After decryption - owner: ${decryptedNew.owner}`);
-    console.log(`🔓 After decryption - amount: ${decryptedNew.amount}`);
     
     const decryptedOld = oldSubscription ? decryptSubscriptionData(oldSubscription) : null;
     
-    console.log(`🔔 Sending ${eventType} notifications for subscription: ${decryptedNew.serviceName}`);
+    console.log(`🔔 Sending ${eventType} notifications for subscription`);
 
     // Map event types to internal format
     const eventTypeMap: Record<string, 'created' | 'owner_changed' | 'price_changed' | 'quantity_changed' | 'cancelled' | 'deleted'> = {
@@ -615,11 +623,11 @@ export async function sendSubscriptionNotifications(
 
     // Send notifications to each recipient
     for (const recipient of recipients) {
-      console.log(`  → ${recipient.name} (${recipient.role}): InApp=${recipient.sendInApp}, Email=${recipient.sendEmail}`);
+      console.log(`  → Recipient role=${recipient.role}: InApp=${recipient.sendInApp}, Email=${recipient.sendEmail}`);
       
-      // Create in-app notification (only if userId exists)
-      if (recipient.userId && (recipient.sendInApp || recipient.sendEmail)) {
-        await createInAppNotification(recipient.userId, decryptedNew, internalEventType, additionalData);
+      // Create in-app notification (userId preferred; fallback by email)
+      if (recipient.sendInApp && (recipient.userId || recipient.email)) {
+        await createInAppNotification(recipient.userId, recipient.email, decryptedNew, internalEventType, additionalData);
       }
 
       // Send email notification
@@ -628,7 +636,7 @@ export async function sendSubscriptionNotifications(
       }
     }
 
-    console.log(`✅ Successfully sent ${eventType} notifications for subscription: ${decryptedNew.serviceName}`);
+    console.log(`✅ Successfully sent ${eventType} notifications for subscription`);
 
   } catch (error) {
     console.error('❌ Error in sendSubscriptionNotifications:', error);
