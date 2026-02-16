@@ -16,6 +16,7 @@ declare global {
     interface User {
       userId?: string;
       id?: string;
+      name?: string;
       email?: string;
       tenantId?: string;
       role?: string;
@@ -356,12 +357,73 @@ router.use((req, res, next) => {
   next();
 });
 
+async function resolveHistoryChangedBy(db: any, reqUser: any): Promise<string> {
+  const tenantId = typeof reqUser?.tenantId === 'string' ? reqUser.tenantId : String(reqUser?.tenantId || '').trim();
+  const email = typeof reqUser?.email === 'string' ? reqUser.email.trim() : '';
+  const userIdRaw = reqUser?.userId ?? reqUser?.id;
+
+  // 1) RBAC users collection (preferred: has `name`)
+  if (tenantId && email) {
+    try {
+      const u = await db.collection('users').findOne({ tenantId, email });
+      const name = typeof u?.name === 'string' ? u.name.trim() : '';
+      if (name) return name;
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2) Main login collection (often has `fullName`)
+  try {
+    if (userIdRaw) {
+      const oid = new ObjectId(String(userIdRaw));
+      const loginDoc = await db.collection('login').findOne({ _id: oid });
+      const name = (typeof loginDoc?.name === 'string' && loginDoc.name.trim())
+        ? loginDoc.name.trim()
+        : (typeof loginDoc?.fullName === 'string' && loginDoc.fullName.trim())
+          ? loginDoc.fullName.trim()
+          : '';
+      if (name) return name;
+      if (typeof loginDoc?.email === 'string' && loginDoc.email.trim()) return loginDoc.email.trim();
+    }
+  } catch {
+    // ignore
+  }
+
+  if (tenantId && email) {
+    try {
+      const loginDoc = await db.collection('login').findOne({ tenantId, email });
+      const name = (typeof loginDoc?.name === 'string' && loginDoc.name.trim())
+        ? loginDoc.name.trim()
+        : (typeof loginDoc?.fullName === 'string' && loginDoc.fullName.trim())
+          ? loginDoc.fullName.trim()
+          : '';
+      if (name) return name;
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3) Employees collection (often has proper display name)
+  if (tenantId && email) {
+    try {
+      const emp = await db.collection('employees').findOne({ tenantId, email });
+      const name = typeof emp?.name === 'string' ? emp.name.trim() : '';
+      if (name) return name;
+    } catch {
+      // ignore
+    }
+  }
+
+  return email || 'System';
+}
+
 // Add a new history record
 router.post("/api/history", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const historyCollection = db.collection("history");
-    const { subscriptionId, action, data, updatedFields } = req.body;
+    const { subscriptionId, action, data, updatedFields, changedBy, changeReason } = req.body;
     if (!subscriptionId) {
       return res.status(400).json({ message: "subscriptionId is required" });
     }
@@ -380,13 +442,20 @@ router.post("/api/history", async (req, res) => {
     }
     // Create history document with tenantId
     const timestamp = new Date();
+    const resolvedChangedBy =
+      typeof changedBy === 'string' && changedBy.trim()
+        ? changedBy.trim()
+        : await resolveHistoryChangedBy(db, req.user);
+
     const historyDoc = {
       subscriptionId: subscriptionObjId,
       tenantId,
       action,
       timestamp,
       data: data ? { ...data } : undefined,
-      updatedFields: updatedFields ? { ...updatedFields } : undefined
+      updatedFields: updatedFields ? { ...updatedFields } : undefined,
+      changedBy: resolvedChangedBy,
+      changeReason: typeof changeReason === 'string' && changeReason.trim() ? changeReason.trim() : undefined
     };
 
     const result = await historyCollection.insertOne(historyDoc);
@@ -403,8 +472,8 @@ router.post("/api/history", async (req, res) => {
 router.get("/api/history/list", async (req, res) => {
   try {
     const startTime = Date.now();
-    
-    res.setHeader('Cache-Control', 'private, max-age=60'); // 1 minute cache
+
+    res.setHeader('Cache-Control', 'no-store');
     
     const db = await connectToDatabase();
     const collection = db.collection("history");
@@ -420,7 +489,7 @@ router.get("/api/history/list", async (req, res) => {
     // Sort by timestamp and _id for consistent ordering
     const items = await collection
       .find({ tenantId })
-      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, data: 1, updatedFields: 1 })
+      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
       .sort({ timestamp: -1, _id: -1 })
       .limit(limit)
       .toArray();
@@ -483,8 +552,8 @@ router.get("/api/history/list", async (req, res) => {
 router.get("/api/history/:subscriptionId", async (req, res) => {
   try {
     const startTime = Date.now();
-    
-    res.setHeader('Cache-Control', 'private, max-age=60');
+
+    res.setHeader('Cache-Control', 'no-store');
     
     const db = await connectToDatabase();
     const collection = db.collection("history");
@@ -514,7 +583,7 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
     // Sort by timestamp descending (newest first)
     const items = await collection
       .find(filter)
-      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, data: 1, updatedFields: 1 })
+      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
       .sort({ timestamp: -1, _id: -1 })
       .limit(limit)
       .toArray();
@@ -1966,6 +2035,8 @@ router.post("/api/subscriptions", async (req, res) => {
         const createdSubscription = await collection.findOne({ _id: subscriptionId, tenantId });
         if (!createdSubscription) return;
 
+        const changedBy = await resolveHistoryChangedBy(db, req.user);
+
         // History record
         try {
           const historyRecord = {
@@ -1978,6 +2049,7 @@ router.post("/api/subscriptions", async (req, res) => {
             action: 'create',
             timestamp: new Date(),
             serviceName: (subscription as any).serviceName,
+            changedBy,
           };
           await historyCollection.insertOne(historyRecord);
         } catch (e) {
@@ -2177,7 +2249,8 @@ router.post("/api/subscriptions/draft/:id/activate", async (req, res) => {
       data: activatedSubscription,
       action: "activate_draft",
       timestamp: new Date(),
-      serviceName: activatedSubscription?.serviceName
+      serviceName: activatedSubscription?.serviceName,
+      changedBy: await resolveHistoryChangedBy(db, req.user),
     };
     await historyCollection.insertOne(historyRecord);
 
@@ -2307,8 +2380,13 @@ const update = {
       
       // Only create history record if there were actual changes
       if (result.modifiedCount > 0) {
-        // Use effectiveDate if provided, otherwise use current date
-        const effectiveDate = req.body.effectiveDate ? new Date(req.body.effectiveDate) : new Date();
+        // Use effectiveDate if provided (and valid), otherwise use current date
+        let effectiveDate = req.body.effectiveDate ? new Date(req.body.effectiveDate) : new Date();
+        if (!(effectiveDate instanceof Date) || Number.isNaN(effectiveDate.getTime())) {
+          effectiveDate = new Date();
+        }
+
+        const changedBy = await resolveHistoryChangedBy(db, req.user);
         
         // Create history record with tenantId
         const historyRecord = {
@@ -2320,13 +2398,12 @@ const update = {
           },
           updatedFields: {
             ...updatedDoc,
-            _id: subscriptionId,
-            // Override startDate with effectiveDate if provided
-            startDate: req.body.effectiveDate ? effectiveDate : (updatedDoc?.startDate || new Date())
+            _id: subscriptionId
           },
           action: "update",
           timestamp: effectiveDate, // Use effective date instead of new Date()
-          serviceName: updatedDoc?.serviceName  // Add serviceName for easier querying
+          serviceName: updatedDoc?.serviceName,  // Add serviceName for easier querying
+          changedBy,
         };
 try {
           const historyResult = await historyCollection.insertOne(historyRecord);

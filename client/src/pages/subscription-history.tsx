@@ -1,511 +1,314 @@
-import React, { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
-import { Card, CardContent } from "../components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Badge } from "../components/ui/badge";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { 
-  Loader2, 
-  AlertCircle, 
-  Search, 
-  Download, 
-  CheckCircle,
-  Clock
-} from "lucide-react";
-import { format } from "date-fns";
-
-interface HistoryData {
-  serviceName: string;
-  owner: string;
-  startDate: string;
-  nextRenewal: string;
-  status: string;
-  _id?: string | { toString(): string };
-  [key: string]: any;
-}
+import { History, ArrowLeft } from "lucide-react";
+import { Badge } from "../components/ui/badge";
+import { apiRequest } from "@/lib/queryClient";
 
 interface HistoryRecord {
   _id?: string;
   action: string;
   subscriptionId?: string | { toString(): string };
-  data: HistoryData & { _id?: string | { toString(): string } };
-  updatedFields?: HistoryData & { _id?: string | { toString(): string } };
   timestamp: string;
+  changedBy?: string;
+  changeReason?: string;
+  data?: Record<string, any>;
+  updatedFields?: Record<string, any>;
 }
 
-function formatDate(date: string | Date) {
-  return format(new Date(date), "MM/dd/yyyy");
+function getActionBadgeColor(action: string) {
+  switch (String(action || "").toLowerCase()) {
+    case "create":
+    case "created":
+      return "bg-blue-100 text-blue-700 border-blue-200";
+    case "update":
+    case "updated":
+      return "bg-amber-100 text-amber-700 border-amber-200";
+    case "delete":
+    case "deleted":
+      return "bg-red-100 text-red-700 border-red-200";
+    case "renewed":
+      return "bg-emerald-100 text-emerald-700 border-emerald-200";
+    default:
+      return "bg-slate-100 text-slate-700 border-slate-200";
+  }
 }
 
-function formatDateTime(date: string | Date) {
-  return format(new Date(date), "MM/dd/yyyy HH:mm:ss");
+function formatTimestamp(timestamp: string) {
+  if (!timestamp) return { date: "N/A", time: "" };
+
+  const raw = String(timestamp);
+  // If backend stored a date-only effective date, it comes back as UTC midnight.
+  // Showing local time (e.g., 05:30) is confusing; display date only.
+  if (/T00:00:00(\.000)?Z$/.test(raw)) {
+    const ymd = raw.split("T")[0];
+    const [year, month, day] = ymd.split("-");
+    if (year && month && day) {
+      return { date: `${day}/${month}/${year}`, time: "" };
+    }
+  }
+
+  const date = new Date(raw);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return { date: `${day}/${month}/${year}`, time: `${hours}:${minutes}` };
+}
+
+function prettyFieldLabel(key: string) {
+  switch (key) {
+    case "serviceName":
+      return "Subscription Name";
+    case "vendor":
+      return "Vendor";
+    case "ownerName":
+    case "owner":
+      return "Owner";
+    case "startDate":
+      return "Start Date";
+    case "nextRenewal":
+      return "End Date";
+    case "amount":
+      return "Amount";
+    case "qty":
+      return "Qty";
+    case "totalAmount":
+      return "Total Amount";
+    case "lcyAmount":
+      return "LCY Amount";
+    case "status":
+      return "Status";
+    default:
+      return key;
+  }
+}
+
+function formatValue(value: any) {
+  if (value === null || value === undefined || value === "") return "Not Set";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function formatDateDdMmYyyy(value: any) {
+  if (value === null || value === undefined || value === "") return "Not Set";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return formatValue(value);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+function buildChangesText(record: HistoryRecord) {
+  const action = String(record.action || "").toLowerCase();
+  const oldData = record.data || {};
+  const newData = record.updatedFields || {};
+
+  const reason = record.changeReason ? `Reason: ${record.changeReason}` : "";
+
+  if (action === "create" || action === "created") {
+    return ["Created subscription", reason].filter(Boolean).join("\n");
+  }
+
+  if (action === "delete" || action === "deleted") {
+    return ["Deleted subscription", reason].filter(Boolean).join("\n");
+  }
+
+  const fieldsToCompare = [
+    "serviceName",
+    "vendor",
+    "ownerName",
+    "owner",
+    "startDate",
+    "nextRenewal",
+    "amount",
+    "qty",
+    "totalAmount",
+    "lcyAmount",
+    "status",
+  ];
+
+  const lines: string[] = [];
+  for (const key of fieldsToCompare) {
+    if (!(key in newData)) continue;
+    const before = oldData[key];
+    const after = newData[key];
+
+    const isDateField = key === "startDate" || key === "nextRenewal" || key === "endDate" || key === "initialDate";
+    const beforeText = isDateField ? formatDateDdMmYyyy(before) : formatValue(before);
+    const afterText = isDateField ? formatDateDdMmYyyy(after) : formatValue(after);
+
+    if (beforeText === afterText) continue;
+    lines.push(`${prettyFieldLabel(key)}: ${beforeText} → ${afterText}`);
+  }
+
+  const fallbackLabel = record.action ? String(record.action) : "Updated";
+  const main = lines.length > 0 ? lines.join("\n") : fallbackLabel;
+  return [main, reason].filter(Boolean).join("\n");
 }
 
 export default function SubscriptionHistory() {
-  // Get serviceName from query params if present
-  const location = useLocation();
-  // More robust extraction of id from URL
-  let idParam = null;
-  try {
-    const urlParams = new URLSearchParams(location.search || "");
-    idParam = urlParams.get("id");
-  } catch (e) {
-    idParam = null;
-  }
-  const [searchTerm, setSearchTerm] = useState("");
-  const [quantityFilter, setQuantityFilter] = useState<string>("");
-  const [lcyMin, setLcyMin] = useState<string>("");
-  const [lcyMax, setLcyMax] = useState<string>("");
-  const [filteredHistory, setFilteredHistory] = useState<HistoryRecord[]>([]);
-  const [fetchLimit, setFetchLimit] = useState(200);
-  const [displayLimit, setDisplayLimit] = useState(50); // Show 50 records initially
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const subscriptionId = searchParams.get("id");
+  const subscriptionNameParam = searchParams.get("name");
 
-  // Listen for subscription changes and refresh history
-  React.useEffect(() => {
-    function handleSubscriptionChange() {
-      queryClient.invalidateQueries({ queryKey: ["history"] });
-    }
-    window.addEventListener('subscription-created', handleSubscriptionChange);
-    window.addEventListener('subscription-updated', handleSubscriptionChange);
-    window.addEventListener('account-changed', handleSubscriptionChange);
-    window.addEventListener('login', handleSubscriptionChange);
-    window.addEventListener('logout', handleSubscriptionChange);
-    return () => {
-      window.removeEventListener('subscription-created', handleSubscriptionChange);
-      window.removeEventListener('subscription-updated', handleSubscriptionChange);
-      window.removeEventListener('account-changed', handleSubscriptionChange);
-      window.removeEventListener('login', handleSubscriptionChange);
-      window.removeEventListener('logout', handleSubscriptionChange);
-    };
-  }, [queryClient]);
+  const endpoint = subscriptionId ? `/api/history/${subscriptionId}` : `/api/history/list`;
+  const queryKey = subscriptionId
+    ? ["/api/history", "subscription", subscriptionId]
+    : ["/api/history", "list"];
 
-  const historyKey = idParam ? ["history", idParam, fetchLimit] : ["history", "list", fetchLimit];
-
-  const { data, isLoading, error, isFetching } = useQuery<HistoryRecord[]>({
-    queryKey: historyKey,
+  const { data: history = [], isLoading } = useQuery<HistoryRecord[]>({
+    queryKey,
+    staleTime: 0,
+    refetchOnMount: "always",
     queryFn: async () => {
-      // Build URL based on whether we're looking at specific subscription or all
-      const endpoint = idParam ? `/api/history/${idParam}` : `/api/history/list`;
-      const url = `${endpoint}?limit=${fetchLimit}`;
-
-      const res = await fetch(url, {
-        method: "GET",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json"
-        }
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        
-        // Handle 401 specifically for better user experience
-        if (res.status === 401) {
-          throw new Error('Authentication required');
-        }
-        
-        throw new Error(`API error: ${res.status} - ${errorText}`);
-      }
-
-      const result = await res.json();
-      
-      if (!Array.isArray(result)) {
+      try {
+        const res = await apiRequest("GET", `${endpoint}?limit=2000`);
+        const json = await res.json().catch(() => []);
+        return Array.isArray(json) ? json : [];
+      } catch (e) {
+        console.error("Failed to load history:", e);
         return [];
       }
-
-      return result;
     },
-    retry: 1, // Reduce retries
-    refetchOnMount: false, // Only fetch on first mount, then rely on events
-    refetchOnWindowFocus: false, // Don't refetch on every tab switch
-    refetchOnReconnect: true,
-    staleTime: 2 * 60 * 1000, // 2 minutes - history is static
-    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-    placeholderData: (previous) => previous
   });
 
-  const history: HistoryRecord[] = Array.isArray(data) ? data : [];
-
-  // Filter based on search term only - the API already filters by subscriptionId
-
-  useEffect(() => {
-    if (!history) return;
-
-    let filtered = [...history];
-
-    // Filter out Draft subscriptions - no history for drafts
-    filtered = filtered.filter(item => {
-      const record = item.data || item.updatedFields || {};
-      return record.status !== 'Draft';
+  const sortedHistory = useMemo(() => {
+    const items = Array.isArray(history) ? [...history] : [];
+    items.sort((a, b) => {
+      const aTimeRaw = new Date(a.timestamp).getTime();
+      const bTimeRaw = new Date(b.timestamp).getTime();
+      const aTime = Number.isFinite(aTimeRaw) ? aTimeRaw : 0;
+      const bTime = Number.isFinite(bTimeRaw) ? bTimeRaw : 0;
+      if (bTime !== aTime) return bTime - aTime;
+      return String(b._id || "").localeCompare(String(a._id || ""));
     });
+    return items;
+  }, [history]);
 
-    // Apply search term filter
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(item => {
-        const record = item.data || item.updatedFields || {};
-        return (
-          record.serviceName?.toLowerCase().includes(searchLower) ||
-          record.owner?.toLowerCase().includes(searchLower) ||
-          record.ownerName?.toLowerCase().includes(searchLower) ||
-          record.status?.toLowerCase().includes(searchLower)
-        );
-      });
-    }
+  const firstName =
+    (sortedHistory?.[0]?.updatedFields?.serviceName as string) ||
+    (sortedHistory?.[0]?.data?.serviceName as string) ||
+    "Selected Subscription";
 
-    // Apply quantity filter (only if not empty and is a valid number)
-    if (quantityFilter !== "" && !isNaN(Number(quantityFilter))) {
-      filtered = filtered.filter(item => {
-        const record = item.data || item.updatedFields || {};
-        // Use strict equality with numbers
-        return Number(record.qty) === Number(quantityFilter);
-      });
-    }
-
-    // Apply LCY amount range filter
-    if ((lcyMin !== "" && !isNaN(Number(lcyMin))) || (lcyMax !== "" && !isNaN(Number(lcyMax)))) {
-      filtered = filtered.filter(item => {
-        const record = item.data || item.updatedFields || {};
-        const lcy = Number(record.lcyAmount);
-        if (isNaN(lcy)) return false;
-        if (lcyMin !== "" && !isNaN(Number(lcyMin)) && lcy < Number(lcyMin)) return false;
-        if (lcyMax !== "" && !isNaN(Number(lcyMax)) && lcy > Number(lcyMax)) return false;
-        return true;
-      });
-    }
-
-    // Sort by timestamp descending (newest first) - backend already sorts, but ensure it
-    filtered = filtered.sort((a, b) => {
-      const timeB = new Date(b.timestamp || '').getTime();
-      const timeA = new Date(a.timestamp || '').getTime();
-      if (timeB === timeA) {
-        // If timestamps are equal, use _id for consistent ordering (newer IDs first)
-        return (b._id || '').localeCompare(a._id || '');
-      }
-      return timeB - timeA; // Newest first
-    });
-
-    setFilteredHistory(filtered);
-    // Reset display limit when filters change
-    if (searchTerm || quantityFilter || lcyMin || lcyMax) {
-      setDisplayLimit(50);
-    }
-  }, [history, searchTerm, quantityFilter, lcyMin, lcyMax, idParam]);
-  
-  const exportData = () => {
-    // Implementation for exporting data
-};
-  
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case "active":
-        return "bg-emerald-100 text-emerald-800 hover:bg-emerald-200";
-      case "inactive":
-        return "bg-rose-100 text-rose-800 hover:bg-rose-200";
-      case "pending":
-        return "bg-amber-100 text-amber-800 hover:bg-amber-200";
-      default:
-        return "bg-slate-100 text-slate-800 hover:bg-slate-200";
-    }
-  };
+  const headerName = subscriptionNameParam ? decodeURIComponent(subscriptionNameParam) : firstName;
+  const headerTitle = subscriptionId ? `${headerName} Audit Log` : "Subscription Audit Log";
 
   return (
-    <motion.div 
-      className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-indigo-50 via-white to-cyan-50"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-    >
-      <div className="max-w-7xl mx-auto">
+    <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 font-['Inter']">
+      <div className="flex-1 overflow-hidden flex flex-col p-6">
         {/* Header */}
-        <motion.div 
-          className="mb-8"
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-        >
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-700 to-cyan-600 bg-clip-text text-transparent">
-                Subscription History
-              </h1>
-              <p className="text-slate-600 mt-2">Track all changes made to your subscriptions</p>
-            </div>
-            
-            <div className="flex gap-3 mt-4 md:mt-0">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={exportData}
-                className="flex items-center gap-1.5 border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-sm"
-              >
-                <Download className="h-4 w-4" />
-                Export
-              </Button>
-            </div>
-          </div>
-          
-          {/* Search */}
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <Search className="h-5 w-5 text-slate-400" />
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-4">
+              <div className="h-12 w-12 bg-gradient-to-br from-orange-500 to-amber-600 rounded-lg flex items-center justify-center shadow-lg">
+                <History className="h-6 w-6 text-white" />
               </div>
-              <Input
-                type="text"
-                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 placeholder-slate-400 shadow-sm"
-                placeholder="Search subscriptions..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+              <div>
+                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{headerTitle}</h1>
+              </div>
             </div>
-            <div className="flex gap-2 items-center">
-              <Input
-                type="number"
-                min="1"
-                className="w-24 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 placeholder-slate-400 shadow-sm"
-                placeholder="Qty"
-                value={quantityFilter}
-                onChange={e => setQuantityFilter(e.target.value)}
-              />
-              <Input
-                type="number"
-                min="0"
-                className="w-32 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 placeholder-slate-400 shadow-sm"
-                placeholder="LCY Min"
-                value={lcyMin}
-                onChange={e => setLcyMin(e.target.value)}
-              />
-              <span className="text-slate-500">-</span>
-              <Input
-                type="number"
-                min="0"
-                className="w-32 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 placeholder-slate-400 shadow-sm"
-                placeholder="LCY Max"
-                value={lcyMax}
-                onChange={e => setLcyMax(e.target.value)}
-              />
+
+            <div className="flex items-center gap-3">
+              <Button onClick={() => navigate("/subscriptions")} variant="outline" className="flex items-center gap-2">
+                <ArrowLeft className="h-4 w-4" />
+                Back to Subscriptions
+              </Button>
             </div>
           </div>
-        </motion.div>
-        
-        {/* Main Card */}
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3, duration: 0.5 }}
-        >
-          
-          <Card className="shadow-xl border border-slate-100 rounded-2xl bg-white overflow-hidden">
-            <CardContent className="p-0">
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  >
-                    <Loader2 className="w-12 h-12 text-indigo-500" />
-                  </motion.div>
-                  <p className="text-slate-600 mt-4">Loading subscription history...</p>
+        </div>
+
+        {/* Log Table */}
+        <Card className="flex-1 overflow-hidden flex flex-col border-slate-200 shadow-lg bg-white">
+          <div className="flex-1 overflow-auto relative">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-slate-600">Loading logs...</p>
                 </div>
-              ) : error ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <div className="bg-rose-50 rounded-full p-4 mb-4">
-                    <AlertCircle className="w-10 h-10 text-rose-500" />
+              </div>
+            ) : history && history.length > 0 ? (
+              <div className="h-full overflow-auto">
+                <table className="w-full border-collapse">
+                  <thead className="sticky top-0 z-10 bg-slate-50">
+                    <tr className="border-b border-slate-200">
+                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[200px]">Subscription Name</th>
+                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[180px]">Changed By</th>
+                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[400px]">Changes</th>
+                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[100px]">Action</th>
+                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[140px]">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    {sortedHistory.map((item: any, index: number) => {
+                      const timestamp = formatTimestamp(item.timestamp);
+                      const name = item?.updatedFields?.serviceName || item?.data?.serviceName || "N/A";
+                      const changedBy =
+                        item?.changedBy ||
+                        item?.user ||
+                        item?.data?.ownerName ||
+                        item?.data?.owner ||
+                        "System";
+                      const changesText = buildChangesText(item);
+
+                      return (
+                        <tr key={item._id || index} className="hover:bg-slate-50 border-b border-slate-100">
+                          <td className="font-medium text-sm text-slate-900 align-top py-3 px-4">{name}</td>
+                          <td className="text-sm text-slate-700 align-top py-3 px-4">{changedBy}</td>
+                          <td className="text-sm text-slate-600 align-top py-3 px-4">
+                            <div className="whitespace-pre-line leading-relaxed">{changesText || "No changes recorded"}</div>
+                          </td>
+                          <td className="align-top py-3 px-4">
+                            <Badge className={`${getActionBadgeColor(item.action)} px-2 py-1 text-xs font-medium border capitalize`}>
+                              {item.action}
+                            </Badge>
+                          </td>
+                          <td className="text-sm text-slate-500 align-top py-3 px-4">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{timestamp.date}</span>
+                              {timestamp.time && <span className="text-xs text-slate-400">{timestamp.time}</span>}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full p-12">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center">
+                    <History className="h-8 w-8 text-slate-400" />
                   </div>
-                  <p className="text-rose-500 font-medium text-lg">Failed to load history</p>
-                  <p className="text-slate-500 mt-2">Please try again later</p>
-                  <Button 
-                    variant="outline" 
-                    className="mt-4 border-rose-300 text-rose-700 hover:bg-rose-50"
-                    onClick={() => window.location.reload()}
-                  >
-                    Retry
-                  </Button>
-                </div>
-              ) : history.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <div className="bg-slate-100 rounded-full p-5 mb-5">
-                    <AlertCircle className="w-12 h-12 text-slate-400" />
+                  <div>
+                    <p className="text-slate-600 font-medium">
+                      {subscriptionId ? "No history records found for this subscription" : "No history records found"}
+                    </p>
+                    <p className="text-sm text-slate-500 mt-1">
+                      {subscriptionId
+                        ? "This subscription has no recorded changes yet"
+                        : "Logs will appear here when subscriptions are created, updated, renewed, or deleted"}
+                    </p>
                   </div>
-                  <h3 className="text-xl font-medium text-slate-800 mb-2">
-                    No history records found
-                  </h3>
-                  <p className="text-slate-600 max-w-md text-center">
-                    {idParam 
-                      ? "No changes have been made to this subscription yet" 
-                      : "No subscription changes have been recorded yet"
-                    }
-                  </p>
                 </div>
-              ) : filteredHistory.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <div className="bg-slate-100 rounded-full p-5 mb-5">
-                    <AlertCircle className="w-12 h-12 text-slate-400" />
-                  </div>
-                  <h3 className="text-xl font-medium text-slate-800 mb-2">
-                    {searchTerm 
-                      ? "No matching records found" 
-                      : "No filtered records"
-                    }
-                  </h3>
-                  <p className="text-slate-600 max-w-md text-center">
-                    {searchTerm 
-                      ? "Try adjusting your search terms" 
-                      : `${history.length} total records loaded but none match current filters`
-                    }
-                  </p>
-                  {searchTerm && (
-                    <Button 
-                      variant="outline" 
-                      className="mt-4 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                      onClick={() => setSearchTerm("")}
-                    >
-                      Clear Search
-                    </Button>
-                  )}
-                  {!searchTerm && history.length > 0 && (
-                    <Badge variant="secondary" className="mt-4">
-                      {history.length} records available
-                    </Badge>
-                  )}
-                </div>
-              ) : (
-                <motion.div 
-                  className="w-full"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.4 }}
-                >
-                  <Table className="w-full table-fixed divide-y divide-slate-100">
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="w-[12%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Service</TableHead>
-                        <TableHead className="w-[18%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Vendor</TableHead>
-                        <TableHead className="w-[10%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Owner</TableHead>
-                        <TableHead className="w-[8%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Start Date</TableHead>
-                        <TableHead className="w-[8%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">End Date</TableHead>
-                        <TableHead className="w-[10%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Amount per unit</TableHead>
-                        <TableHead className="w-[5%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Qty</TableHead>
-                        <TableHead className="w-[10%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Total Amount</TableHead>
-                        <TableHead className="w-[9%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">LCY Amount</TableHead>
-                        <TableHead className="w-[12%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Timestamp</TableHead>
-                        <TableHead className="w-[6%] font-semibold text-slate-800 py-2 px-3 text-xs whitespace-normal break-words">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody className="divide-y divide-slate-100">
-                      <AnimatePresence>
-                        {filteredHistory.slice(0, displayLimit).map((item, index) => {
-                          // For update actions, prioritize updatedFields (new values) over data (old values)
-                          // For create actions, use data as it contains the complete record
-                          const record = item.action === "update" ? (item.updatedFields || item.data || {}) : (item.data || item.updatedFields || {});
-                          return (
-                            <motion.tr 
-                              key={item._id || index}
-                              className="hover:bg-slate-50 transition-colors cursor-pointer"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0 }}
-                              transition={{ delay: Math.min(0.05 * index, 1) }}
-                              whileHover={{ backgroundColor: "#f8fafc" }}
-                            >
-                              <TableCell className="py-2 px-3 text-xs font-medium text-slate-800 whitespace-normal break-words">
-                                {record.serviceName || "-"}
-                              </TableCell>
-                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-normal break-words">
-                                {record.vendor || record.serviceName || "-"}
-                              </TableCell>
-                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-normal break-words">
-                                {record.owner || record.ownerName || "-"}
-                              </TableCell>
-                              <TableCell className="py-2 px-3 text-xs text-slate-600 whitespace-nowrap">
-                                {record.startDate ? formatDate(record.startDate) : "-"}
-                              </TableCell>
-                              <TableCell className="py-2 px-3 text-xs text-slate-600 whitespace-nowrap">
-                                {record.nextRenewal ? formatDate(record.nextRenewal) : "-"}
-                              </TableCell>
-                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-nowrap">
-                                {record.amount !== undefined ? `$${Number(record.amount).toFixed(2)}` : "-"}
-                              </TableCell>
-                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-nowrap">
-                                {record.qty !== undefined ? record.qty : "-"}
-                              </TableCell>
-                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-nowrap">
-                                {record.totalAmount !== undefined ? `$${Number(record.totalAmount).toFixed(2)}` : "-"}
-                              </TableCell>
-                              <TableCell className="py-2 px-3 text-xs text-slate-700 whitespace-nowrap">
-                                {record.lcyAmount !== undefined && record.lcyAmount !== null ? `$${Number(record.lcyAmount).toFixed(2)}` : "-"}
-                              </TableCell>
-                              <TableCell className="py-2 px-3 text-xs text-slate-600 whitespace-normal break-words">
-                                {item.timestamp ? formatDateTime(item.timestamp) : "-"}
-                              </TableCell>
-                              <TableCell className="py-2 px-3 text-xs">
-                                <Badge className={getStatusColor(record.status || '')}>
-                                  {record.status || "-"}
-                                </Badge>
-                              </TableCell>
-                            </motion.tr>
-                          );
-                        })}
-                      </AnimatePresence>
-                    </TableBody>
-                  </Table>
-                </motion.div>
-              )}
-            </CardContent>
-          </Card>
-          
-          {/* Load More Button */}
-          {filteredHistory.length > displayLimit && (
-            <motion.div 
-              className="mt-6 flex flex-col items-center gap-3"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              <p className="text-slate-600 text-sm">
-                Showing {displayLimit} of {filteredHistory.length} records
-              </p>
-              <Button
-                onClick={() => {
-                  setDisplayLimit(prev => {
-                    const next = prev + 50;
-                    // If we're about to exceed what we fetched, fetch more from server
-                    if (next >= history.length - 10) {
-                      setFetchLimit(l => l + 200);
-                    }
-                    return next;
-                  });
-                }}
-                variant="outline"
-                className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-sm"
-              >
-                <Clock className="h-4 w-4 mr-2" />
-                {isFetching ? 'Loading…' : 'Load More (50)'}
-              </Button>
-            </motion.div>
-          )}
-          
-          {/* Record count at bottom */}
-          {filteredHistory.length > 0 && filteredHistory.length <= displayLimit && (
-            <motion.div 
-              className="mt-6 flex justify-center"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
-            >
-              <Badge variant="secondary" className="text-slate-600">
-                <CheckCircle className="h-3 w-3 mr-1 inline" />
-                All {filteredHistory.length} records displayed
-              </Badge>
-            </motion.div>
-          )}
-        </motion.div>
+              </div>
+            )}
+          </div>
+        </Card>
       </div>
-    </motion.div>
+    </div>
   );
 }

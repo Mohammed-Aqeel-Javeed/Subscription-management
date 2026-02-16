@@ -3,9 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit, Trash2, Search, FileText, Calendar, CheckCircle, XCircle, Clock, Filter } from "lucide-react";
+import { Edit, Trash2, FileText, Calendar, CheckCircle, XCircle, Clock } from "lucide-react";
 
 // Helper to format date as dd/mm/yyyy
 const formatDate = (dateStr?: string): string => {
@@ -90,9 +88,6 @@ export default function ComplianceLedger() {
   // Read all ledger records from MongoDB
   const [ledgerItems, setLedgerItems] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [searchTerm, setSearchTerm] = React.useState("");
-  const [selectedCategory, setSelectedCategory] = React.useState("all");
-  const [categories, setCategories] = React.useState<string[]>([]);
   
   // Get compliance id from URL
   const getComplianceIdFromUrl = () => {
@@ -113,15 +108,6 @@ export default function ComplianceLedger() {
         filteredData = data.filter((item: any) => item.complianceId === complianceId || item._id === complianceId);
       }
       setLedgerItems(filteredData);
-      
-      // Extract unique categories with proper typing
-      const categorySet = new Set<string>();
-      filteredData.forEach((item: any) => {
-        if (item.filingComplianceCategory && typeof item.filingComplianceCategory === 'string') {
-          categorySet.add(item.filingComplianceCategory);
-        }
-      });
-      setCategories(Array.from(categorySet));
     } catch {
       setLedgerItems([]);
     }
@@ -135,26 +121,7 @@ export default function ComplianceLedger() {
     return () => window.removeEventListener('popstate', fetchLedger);
   }, []);
   
-  // Filter ledger items based on search term and category
-  const filteredLedgerItems = React.useMemo(() => {
-    let filtered = ledgerItems;
-    
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(item => 
-        item.filingName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.filingComplianceCategory?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.filingSubmissionStatus?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    
-    // Filter by category
-    if (selectedCategory !== "all") {
-      filtered = filtered.filter(item => item.filingComplianceCategory === selectedCategory);
-    }
-    
-    return filtered;
-  }, [ledgerItems, searchTerm, selectedCategory]);
+  const displayedLedgerItems = ledgerItems;
   
   // Delete handler
   const handleDelete = async (id: string) => {
@@ -176,40 +143,6 @@ export default function ComplianceLedger() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Compliance General Ledger</h2>
-              <p className="text-lg text-gray-600 mt-2 font-light">View all compliance records and their audit history</p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Search filings..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-full sm:w-64 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="flex gap-3">
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger className="w-full sm:w-48 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
-                    <Filter className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="All Categories" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button 
-                  onClick={fetchLedger}
-                  className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-md"
-                >
-                  Refresh
-                </Button>
-              </div>
             </div>
           </div>
         </div>
@@ -220,7 +153,7 @@ export default function ComplianceLedger() {
               <FileText className="w-5 h-5 text-indigo-600" />
               Compliance Records
               <Badge className="ml-2 bg-indigo-100 text-indigo-800">
-                {filteredLedgerItems.length} {filteredLedgerItems.length === 1 ? 'Record' : 'Records'}
+                {displayedLedgerItems.length} {displayedLedgerItems.length === 1 ? 'Record' : 'Records'}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -248,18 +181,18 @@ export default function ComplianceLedger() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ) : filteredLedgerItems.length === 0 ? (
+                  ) : displayedLedgerItems.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-12">
                         <div className="flex flex-col items-center justify-center">
                           <FileText className="w-12 h-12 text-gray-400 mb-3" />
                           <p className="text-lg font-medium text-gray-900">No records found</p>
-                          <p className="text-gray-500 mt-1">Try adjusting your search or check back later</p>
+                          <p className="text-gray-500 mt-1">Check back later</p>
                         </div>
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredLedgerItems.map((item: any) => {
+                    displayedLedgerItems.map((item: any) => {
                       // Calculate dynamic status based on submission date and deadline
                       let displayStatus = item.filingSubmissionStatus;
                       

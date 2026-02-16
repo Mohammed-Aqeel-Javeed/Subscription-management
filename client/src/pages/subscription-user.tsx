@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
@@ -36,6 +35,7 @@ export default function SubscriptionUserPage() {
   const { name: subscriptionName, id: subscriptionId } = getSubscriptionFromUrl();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Fetch all employees
   const { data: employees = [], isLoading: employeesLoading } = useQuery({
@@ -340,7 +340,7 @@ if (!response.ok) {
         throw new Error(`Failed to save: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
-      const result = await response.json();
+      await response.json();
       toast({
         title: "Success",
         description: "Subscription users updated successfully.",
@@ -366,23 +366,21 @@ if (!response.ok) {
 
   // Cancel handler
   const handleCancel = () => {
-    // Navigate back to the subscription modal page
-    if (subscriptionId) {
-      navigate(`/subscriptions?open=${subscriptionId}`, { replace: true });
-    } else {
-      navigate(-1);
-    }
-  };
+    const state = (location.state || {}) as {
+      returnOpenSubscriptionId?: string;
+      returnPath?: string;
+    };
 
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.05
-      }
+    const idToOpen = state.returnOpenSubscriptionId || subscriptionId;
+    const returnPath = state.returnPath || "/subscriptions";
+
+    // Navigate back to subscriptions and re-open the subscription modal.
+    if (idToOpen) {
+      navigate(`${returnPath}?open=${idToOpen}`, { replace: true });
+      return;
     }
+
+    navigate(returnPath, { replace: true });
   };
 
   const itemVariants = {
@@ -420,9 +418,7 @@ if (!response.ok) {
               <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
                 Manage Subscription Users
               </h1>
-              <p className="text-gray-600">
-                Add or remove team members from the <span className="font-semibold text-indigo-600">{subscriptionName}</span> subscription.
-              </p>
+             
             </div>
             
             {/* Import/Export Buttons */}
@@ -472,8 +468,9 @@ if (!response.ok) {
           >
             <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
               <div className="flex justify-between items-center gap-4">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Users in <span className="text-indigo-600">{subscriptionName}</span>
+                <h2 className="text-2xl font-bold text-gray-900 flex flex-nowrap items-baseline gap-2 min-w-0">
+                  <span className="whitespace-nowrap">Users in</span>
+                  <span className="text-indigo-600 truncate">{subscriptionName}</span>
                 </h2>
                 <div className="flex items-center gap-3">
                   <div className="relative w-64">
@@ -539,7 +536,6 @@ if (!response.ok) {
                     <thead className="bg-gray-50 border-b-2 border-gray-200 sticky top-0 z-10">
                       <tr>
                         <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">User</th>
-                        <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[150px]">Email</th>
                         <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px]">Department</th>
                         <th className="px-3 sm:px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px]">Action</th>
                       </tr>
@@ -566,9 +562,6 @@ if (!response.ok) {
                                 </div>
                                 <div className="font-medium text-gray-900 truncate text-sm">{user.name || 'Unnamed'}</div>
                               </div>
-                            </td>
-                            <td className="px-3 sm:px-6 py-4">
-                              <div className="text-xs sm:text-sm text-gray-600 truncate">{user.email || '—'}</div>
                             </td>
                             <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                               {user.department ? (
@@ -692,7 +685,6 @@ if (!response.ok) {
                         <thead className="bg-gray-50 border-b-2 border-gray-200 sticky top-0 z-10">
                           <tr>
                             <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">Team Member</th>
-                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[150px]">Email</th>
                             <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px]">Department</th>
                             <th className="px-3 sm:px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px]">Action</th>
                           </tr>
@@ -719,9 +711,6 @@ if (!response.ok) {
                                     </div>
                                     <div className="font-medium text-gray-900 truncate text-sm">{emp.name || 'Unnamed'}</div>
                                   </div>
-                                </td>
-                                <td className="px-3 sm:px-6 py-4">
-                                  <div className="text-xs sm:text-sm text-gray-600 truncate">{emp.email || '—'}</div>
                                 </td>
                                 <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                                   {emp.department ? (
