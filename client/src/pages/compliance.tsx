@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -8,10 +9,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Upload, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Check } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Upload, Download, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Check, MoreVertical } from "lucide-react";
+import { RiFileExcel2Fill, RiFileImageFill, RiFilePdf2Fill, RiFileTextFill, RiFileWord2Fill } from "react-icons/ri";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useSidebarSlot } from "@/context/SidebarSlotContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -255,7 +259,7 @@ const calculateEndDate = (start: string, freq: string): string => {
 const getComplianceStatus = (endDate: string, submissionDeadline: string): { status: string, color: string, bgColor: string } => {
   // If no End Date, return No Due
   if (!endDate) {
-    return { status: "No Due", color: "text-slate-700", bgColor: "bg-slate-100" };
+    return { status: "No Due", color: "text-slate-700", bgColor: "bg-slate-50 border-slate-200" };
   }
 
   const today = new Date();
@@ -271,7 +275,7 @@ const getComplianceStatus = (endDate: string, submissionDeadline: string): { sta
   
   // Check for "Going to be Due" first (2 days before end date)
   if (today.getTime() === twoDaysBeforeEnd.getTime()) {
-    return { status: "Going to be Due", color: "text-amber-800", bgColor: "bg-amber-100" };
+    return { status: "Going to be Due", color: "text-amber-700", bgColor: "bg-amber-50 border-amber-200" };
   }
   
   // If we have a submission deadline, use it for Due/Late logic
@@ -280,19 +284,19 @@ const getComplianceStatus = (endDate: string, submissionDeadline: string): { sta
     deadline.setHours(0, 0, 0, 0);
     
     if (today.getTime() >= end.getTime() && today.getTime() < deadline.getTime()) {
-      return { status: "Due", color: "text-orange-800", bgColor: "bg-orange-100" };
+      return { status: "Due", color: "text-orange-700", bgColor: "bg-orange-50 border-orange-200" };
     } else if (today.getTime() >= deadline.getTime()) {
-      return { status: "Late", color: "text-white", bgColor: "bg-red-600 animate-pulse shadow-lg border-2 border-red-400" };
+      return { status: "Late", color: "text-rose-700", bgColor: "bg-rose-50 border-rose-200" };
     }
   } else {
     // If no submission deadline but past end date, consider it Due
     if (today.getTime() >= end.getTime()) {
-      return { status: "Due", color: "text-orange-800", bgColor: "bg-orange-100" };
+      return { status: "Due", color: "text-orange-700", bgColor: "bg-orange-50 border-orange-200" };
     }
   }
   
   // Default case
-  return { status: "No Due", color: "text-slate-700", bgColor: "bg-slate-100" };
+  return { status: "No Due", color: "text-slate-700", bgColor: "bg-slate-50 border-slate-200" };
 };
 const formatDate = (dateStr?: string): string => {
   if (!dateStr) return "";
@@ -315,6 +319,8 @@ export default function Compliance() {
   
   // Fullscreen toggle state
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const [openActionsMenuForId, setOpenActionsMenuForId] = useState<string | null>(null);
   
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -412,15 +418,43 @@ export default function Compliance() {
   };
   
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter] = useState("all");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const { setActive: setSidebarSlotActive, setReplaceNav: setSidebarReplaceNav } = useSidebarSlot();
+  const [sidebarSlotEl, setSidebarSlotEl] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const el = document.getElementById("page-sidebar-slot") as HTMLElement | null;
+    setSidebarSlotEl(el);
+  }, []);
+
+  useEffect(() => {
+    setSidebarSlotActive(filtersOpen);
+    setSidebarReplaceNav(filtersOpen);
+
+    return () => {
+      setSidebarSlotActive(false);
+      setSidebarReplaceNav(false);
+    };
+  }, [filtersOpen, setSidebarSlotActive, setSidebarReplaceNav]);
+
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [showSubmissionDetails, setShowSubmissionDetails] = useState(false);
   const [submissionOpenedFromTable, setSubmissionOpenedFromTable] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const departmentDropdownRef = useRef<HTMLDivElement>(null);
-  const [submissionDocuments, setSubmissionDocuments] = useState<Array<{ name: string; url: string }>>([]);
+  const [submissionDocuments, setSubmissionDocuments] = useState<
+    Array<{ name: string; url: string; remark?: string; updatedBy?: string; updatedAt?: string }>
+  >([]);
+  const [pendingSubmissionDocument, setPendingSubmissionDocument] = useState<
+    { name: string; url: string; updatedBy?: string; updatedAt?: string } | null
+  >(null);
+  const [pendingSubmissionDocumentRemark, setPendingSubmissionDocumentRemark] = useState("");
   const [showSubmissionDocumentDialog, setShowSubmissionDocumentDialog] = useState(false);
 
   const [submittedByOpen, setSubmittedByOpen] = useState(false);
@@ -525,6 +559,139 @@ export default function Compliance() {
   // Get current user name for notes (same logic as subscription modal)
   const [currentUserName, setCurrentUserName] = useState<string>('');
 
+  const getDocumentKind = (name: string, url?: string): 'pdf' | 'excel' | 'word' | 'image' | 'csv' | 'other' => {
+    const safeUrl = typeof url === 'string' ? url : '';
+
+    if (safeUrl.startsWith('data:')) {
+      const mime = safeUrl.slice(5, safeUrl.indexOf(';')).toLowerCase();
+      if (mime === 'application/pdf') return 'pdf';
+      if (mime.startsWith('image/')) return 'image';
+      if (
+        mime === 'application/msword' ||
+        mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      )
+        return 'word';
+      if (
+        mime === 'application/vnd.ms-excel' ||
+        mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      )
+        return 'excel';
+    }
+
+    try {
+      if (safeUrl) {
+        const u = new URL(safeUrl, window.location.origin);
+        const pathLower = (u.pathname || '').toLowerCase();
+        const urlExt = pathLower.includes('.') ? pathLower.slice(pathLower.lastIndexOf('.')) : '';
+        if (urlExt === '.pdf') return 'pdf';
+        if (urlExt === '.xls' || urlExt === '.xlsx') return 'excel';
+        if (urlExt === '.doc' || urlExt === '.docx') return 'word';
+        if (urlExt === '.jpg' || urlExt === '.jpeg' || urlExt === '.png') return 'image';
+        if (urlExt === '.csv') return 'csv';
+      }
+    } catch {
+      // ignore
+    }
+
+    const lower = String(name || '').toLowerCase();
+    const ext = lower.includes('.') ? lower.slice(lower.lastIndexOf('.')) : '';
+    if (ext === '.pdf') return 'pdf';
+    if (ext === '.xls' || ext === '.xlsx') return 'excel';
+    if (ext === '.doc' || ext === '.docx') return 'word';
+    if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') return 'image';
+    if (ext === '.csv') return 'csv';
+    return 'other';
+  };
+
+  const renderDocumentTypeIcon = (name: string, url?: string) => {
+    const kind = getDocumentKind(name, url);
+    if (kind === 'pdf') return <RiFilePdf2Fill className="h-7 w-7 text-red-600" />;
+    if (kind === 'excel') return <RiFileExcel2Fill className="h-7 w-7 text-green-600" />;
+    if (kind === 'word') return <RiFileWord2Fill className="h-7 w-7 text-blue-600" />;
+    if (kind === 'csv') return <RiFileTextFill className="h-7 w-7 text-emerald-600" />;
+    if (kind === 'image') return <RiFileImageFill className="h-7 w-7 text-purple-600" />;
+    return <RiFileTextFill className="h-7 w-7 text-slate-600" />;
+  };
+
+  const dataUrlToBlob = (dataUrl: string): Blob | null => {
+    try {
+      const match = /^data:([^;]+);base64,(.*)$/i.exec(dataUrl);
+      if (!match) return null;
+      const mime = match[1] || 'application/octet-stream';
+      const b64 = match[2] || '';
+      const binary = atob(b64);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    } catch {
+      return null;
+    }
+  };
+
+  const openDocumentInNewTab = (doc: { name: string; url: string }) => {
+    try {
+      const url = String(doc?.url || '');
+      if (url.startsWith('data:')) {
+        const blob = dataUrlToBlob(url);
+        if (!blob) throw new Error('Invalid data url');
+        const objUrl = URL.createObjectURL(blob);
+        const w = window.open(objUrl, '_blank', 'noopener,noreferrer');
+        if (!w) window.location.href = objUrl;
+        setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
+        return;
+      }
+      const w = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!w) window.location.href = url;
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to view document',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const downloadDocument = (doc: { name: string; url: string }) => {
+    try {
+      const url = String(doc?.url || '');
+      const filename = String(doc?.name || 'document');
+      if (url.startsWith('data:')) {
+        const blob = dataUrlToBlob(url);
+        if (!blob) throw new Error('Invalid data url');
+        const objUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objUrl;
+        link.download = filename;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
+      } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      toast({
+        title: 'Download Started',
+        description: `Downloading ${filename}`,
+        duration: 2000,
+        variant: 'success',
+      });
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to download document',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleSubmissionDocumentUpload = async () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -612,13 +779,13 @@ export default function Compliance() {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64String = reader.result as string;
-          setSubmissionDocuments((prev) => [...(Array.isArray(prev) ? prev : []), { name: file.name, url: base64String }]);
-          toast({
-            title: 'Success',
-            description: `${file.name} uploaded successfully`,
-            duration: 2000,
-            variant: 'success',
+          setPendingSubmissionDocument({
+            name: file.name,
+            url: base64String,
+            updatedBy: currentUserName || (window as any)?.user?.name || (window as any)?.user?.email || 'User',
+            updatedAt: new Date().toISOString(),
           });
+          setPendingSubmissionDocumentRemark('');
         };
         reader.readAsDataURL(file);
       } catch (error) {
@@ -1633,6 +1800,79 @@ export default function Compliance() {
   });
 
   const isSavingCompliance = addMutation.isPending || editMutation.isPending;
+
+  const normalizePolicyName = (name: string) => String(name || "").trim().replace(/\s+/g, " ").toLowerCase();
+
+  const triggerImport = () => {
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+
+  const downloadComplianceImportTemplate = () => {
+    const templateRow = {
+      Policy: "",
+      Category: "",
+      Status: "",
+      GoverningAuthority: "",
+      StartDate: "",
+      EndDate: "",
+      SubmissionDeadline: "",
+      Frequency: "",
+      SubmissionDate: "",
+      SubmittedBy: "",
+      Amount: "",
+      PaymentDate: "",
+      ReminderDays: "",
+      ReminderPolicy: "",
+      Remarks: "",
+    };
+
+    const csv = Papa.unparse([templateRow]);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "compliance_import_template.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportCompliance = () => {
+    if (!filteredItems.length) {
+      toast({ title: "Nothing to export", description: "No rows match your current filters", variant: "destructive" });
+      return;
+    }
+
+    const rows = filteredItems.map((item: ComplianceItem) => ({
+      Policy: item.policy,
+      Category: item.category,
+      Status: item.status,
+      GoverningAuthority: item.governingAuthority || "",
+      StartDate: item.lastAudit || "",
+      EndDate: item.endDate || "",
+      SubmissionDeadline: item.submissionDeadline || "",
+      Frequency: item.frequency || "",
+      SubmissionDate: item.filingSubmissionDate || "",
+      SubmittedBy: item.submittedBy || "",
+      Amount: item.amount ?? "",
+      PaymentDate: item.paymentDate || "",
+      ReminderDays: item.reminderDays ?? "",
+      ReminderPolicy: item.reminderPolicy || "",
+      Remarks: item.remarks || "",
+    }));
+
+    const csv = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `compliance_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
   
   // IMPORT from CSV -> create compliance items
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1645,8 +1885,56 @@ export default function Compliance() {
         const rows: any[] = results.data as any[];
         if (!rows.length) {
           toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive'});
+          e.target.value = '';
           return;
         }
+
+        const existingPolicyNames = new Set(
+          (Array.isArray(complianceItems) ? complianceItems : [])
+            .map((it: ComplianceItem) => normalizePolicyName(it.policy))
+            .filter(Boolean)
+        );
+
+        const seenInFile = new Set<string>();
+        const errorSamples: string[] = [];
+        let invalidCount = 0;
+
+        rows.forEach((row, idx) => {
+          const rawPolicy = row.Policy || row.policy || '';
+          const rawCategory = row.Category || row.category || '';
+          const policyNorm = normalizePolicyName(rawPolicy);
+
+          if (!policyNorm || !String(rawCategory || '').trim()) {
+            invalidCount++;
+            if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Policy and Category are required`);
+            return;
+          }
+
+          if (existingPolicyNames.has(policyNorm)) {
+            invalidCount++;
+            if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Duplicate Policy already exists: "${String(rawPolicy).trim()}"`);
+            return;
+          }
+
+          if (seenInFile.has(policyNorm)) {
+            invalidCount++;
+            if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Duplicate Policy in file: "${String(rawPolicy).trim()}"`);
+            return;
+          }
+
+          seenInFile.add(policyNorm);
+        });
+
+        if (invalidCount > 0) {
+          toast({
+            title: 'Import blocked',
+            description: `Fix ${invalidCount} issue(s) and try again.\n${errorSamples.join('\n')}`,
+            variant: 'destructive',
+          });
+          e.target.value = '';
+          return;
+        }
+
         let success = 0; let failed = 0;
         for (const row of rows) {
           try {
@@ -1682,20 +1970,135 @@ export default function Compliance() {
       },
       error: () => {
         toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
+        e.target.value = '';
       }
     });
   };
 
-  const uniqueCategories = Array.from(new Set(complianceItems.map((item: ComplianceItem) => item.category))).filter(Boolean);
+  const getItemStatusLabel = (item: ComplianceItem) => {
+    if (item.isDraft || item.status === "Draft") return "Draft";
+    return getComplianceStatus(item.endDate || "", item.submissionDeadline || "").status;
+  };
+
+  const uniqueCategories = Array.from(
+    new Set((Array.isArray(complianceItems) ? complianceItems : []).map((item: ComplianceItem) => String(item.category || "").trim()).filter(Boolean))
+  ).sort();
+
+  const uniqueStatuses = Array.from(
+    new Set((Array.isArray(complianceItems) ? complianceItems : []).map((item: ComplianceItem) => getItemStatusLabel(item)).filter(Boolean))
+  ).sort();
+
+  const activeFilterCount = selectedCategories.length + selectedStatuses.length;
+
+  const clearAllFilters = () => {
+    setSelectedCategories([]);
+    setSelectedStatuses([]);
+  };
+
+  const toggleSelected = (current: string[], value: string) => {
+    const next = String(value || "").trim();
+    if (!next) return current;
+    return current.includes(next) ? current.filter((v) => v !== next) : [...current, next];
+  };
+
+  const FiltersSidebarPanel = () => (
+    <div className="h-full flex flex-col bg-white border-l border-gray-200">
+      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="text-base font-semibold text-gray-900">Filters</div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" className="h-9" onClick={clearAllFilters}>
+            Clear all
+          </Button>
+          <Button type="button" variant="ghost" className="h-9" onClick={() => setFiltersOpen(false)}>
+            Close
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto p-4 space-y-6">
+        <div>
+          <div className="text-sm font-semibold text-gray-900 mb-2">Category</div>
+          <div className="space-y-2">
+            {uniqueCategories.map((cat) => {
+              const checked = selectedCategories.includes(cat);
+              return (
+                <label key={cat} className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => setSelectedCategories((prev) => toggleSelected(prev, cat))}
+                  />
+                  <span>{cat}</span>
+                </label>
+              );
+            })}
+            {uniqueCategories.length === 0 && <div className="text-sm text-gray-500">No categories</div>}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-sm font-semibold text-gray-900 mb-2">Status</div>
+          <div className="space-y-2">
+            {uniqueStatuses.map((st) => {
+              const checked = selectedStatuses.includes(st);
+              return (
+                <label key={st} className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => setSelectedStatuses((prev) => toggleSelected(prev, st))}
+                  />
+                  <span>{st}</span>
+                </label>
+              );
+            })}
+            {uniqueStatuses.length === 0 && <div className="text-sm text-gray-500">No statuses</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
   
-  // Sorting handler
+  // Sorting handler (match Subscriptions behavior: asc -> desc -> clear)
   const handleSort = (field: string) => {
     if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortField("");
+        setSortDirection("asc");
+      }
     } else {
       setSortField(field);
-      setSortDirection('asc');
+      setSortDirection("asc");
     }
+  };
+
+  const getSortIcon = (field: string) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 inline-block opacity-40" />;
+    }
+    return sortDirection === "asc" ? (
+      <ArrowUp className="h-3 w-3 ml-1 inline-block" />
+    ) : (
+      <ArrowDown className="h-3 w-3 ml-1 inline-block" />
+    );
+  };
+
+  const getCategoryPillClasses = (category?: string) => {
+    const value = String(category || "").trim();
+    if (!value) return "bg-slate-100 text-slate-700 border-slate-200";
+
+    const palette = [
+      "bg-blue-50 text-blue-700 border-blue-200",
+      "bg-emerald-50 text-emerald-700 border-emerald-200",
+      "bg-purple-50 text-purple-700 border-purple-200",
+      "bg-amber-50 text-amber-800 border-amber-200",
+      "bg-rose-50 text-rose-700 border-rose-200",
+      "bg-cyan-50 text-cyan-700 border-cyan-200",
+    ];
+
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) hash = (hash + value.charCodeAt(i)) % 100000;
+    return palette[hash % palette.length];
   };
   
   // Filter and sort items
@@ -1708,8 +2111,8 @@ export default function Compliance() {
         .toLowerCase()
         .includes(normalizedSearch);
 
-    const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
-    const matchesStatus = statusFilter === "all" || mapStatus(item.status) === statusFilter;
+    const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(String(item.category || "").trim());
+    const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(getItemStatusLabel(item));
     return matchesSearch && matchesCategory && matchesStatus;
   });
   
@@ -1761,6 +2164,39 @@ export default function Compliance() {
   return (
     <div className="h-full bg-white flex flex-col overflow-hidden">
       <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
+        <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+          <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+              <AlertDialogDescription>
+                If you don’t have a file, click No to download a CSV template.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                className="bg-red-600 text-white hover:bg-red-700"
+                onClick={() => {
+                  setImportConfirmOpen(false);
+                  downloadComplianceImportTemplate();
+                }}
+              >
+                No
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-green-600 text-white hover:bg-green-700"
+                onClick={() => {
+                  setImportConfirmOpen(false);
+                  setTimeout(() => triggerImport(), 0);
+                }}
+              >
+                Yes
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {filtersOpen && sidebarSlotEl ? createPortal(<FiltersSidebarPanel />, sidebarSlotEl) : null}
+
         {/* Modern Professional Header */}
         <div className="mb-6 shrink-0">
           <div className="flex items-center justify-between mb-6">
@@ -1774,18 +2210,7 @@ export default function Compliance() {
             </div>
             
             <div className="flex items-center space-x-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  window.location.href = "/compliance-ledger";
-                }}
-                className="bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200 hover:border-indigo-300 font-medium transition-all duration-200"
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Compliance Ledger
-              </Button>
-              
+              {/* New Compliance button - first */}
               <Can I="create" a="Compliance">
                 <Button
                   onClick={() => {
@@ -1819,119 +2244,146 @@ export default function Compliance() {
                     });
                     setModalOpen(true);
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
+                  className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Compliance
+                  New Compliance
                 </Button>
               </Can>
+
+              {/* Audit Log button - second */}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  window.location.href = "/compliance-ledger";
+                }}
+                className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200"
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Audit Log
+              </Button>
+
+              <Select
+                key={dataManagementSelectKey}
+                onValueChange={(value) => {
+                  if (value === "export") {
+                    handleExportCompliance();
+                  } else if (value === "import") {
+                    setImportConfirmOpen(true);
+                  }
+
+                  // Remount so selecting the same value again still triggers
+                  setDataManagementSelectKey((k) => k + 1);
+                }}
+              >
+                <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                  <SelectValue placeholder="Data Management" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="export" className="cursor-pointer">
+                    <div className="flex items-center">
+                      <Download className="h-4 w-4 mr-2" />
+                      Export
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="import" className="cursor-pointer">
+                    <div className="flex items-center">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
           {/* Search and Filters Row */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-4">
+          <div className="mb-6 bg-white border border-gray-200 rounded-2xl shadow-sm p-4 shrink-0">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
                   placeholder="Search compliance filings..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm"
+                  className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm rounded-lg"
                 />
               </div>
-              
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-44 border-gray-200 bg-white text-gray-900 h-10 text-sm">
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {uniqueCategories.map((category, idx) => (
-                    <SelectItem key={String(category) + idx} value={String(category)}>
-                      {String(category)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 border-gray-200 bg-white text-gray-900 text-sm font-normal"
+                onClick={() => setFiltersOpen((v) => !v)}
+              >
+                Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+              </Button>
             </div>
           </div>
         </div>
 
         <div className="min-w-0 flex-1 min-h-0">
-          {/* Professional Data Table with Frozen Headers */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden h-full flex flex-col min-h-0">
+          {/* Professional Data Table */}
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden h-full flex flex-col min-h-0">
             <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full">
               <TableHeader>
-                <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100">
-                  <TableHead
-                    className="sticky top-0 z-20 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('policy')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Policy
-                      {sortField === 'policy' ? (
-                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-                      ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
-                    </div>
+                <TableRow className="border-b-2 border-gray-400 bg-gray-200">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[200px]">
+                    <button
+                      onClick={() => handleSort("policy")}
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      FILING NAME
+                      {getSortIcon("policy")}
+                    </button>
                   </TableHead>
-                  <TableHead
-                    className="sticky top-0 z-20 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('category')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Category
-                      {sortField === 'category' ? (
-                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-                      ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
-                    </div>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                    <button
+                      onClick={() => handleSort("category")}
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      CATEGORY
+                      {getSortIcon("category")}
+                    </button>
                   </TableHead>
-                  <TableHead
-                    className="sticky top-0 z-20 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('status')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Status
-                      {sortField === 'status' ? (
-                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-                      ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
-                    </div>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                    <button
+                      onClick={() => handleSort("status")}
+                      className="flex items-center justify-center font-bold hover:text-blue-600 transition-colors cursor-pointer w-full"
+                    >
+                      STATUS
+                      {getSortIcon("status")}
+                    </button>
                   </TableHead>
-                  <TableHead
-                    className="sticky top-0 z-20 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('endDate')}
-                  >
-                    <div className="flex items-center justify-center gap-2">
-                      Due Date
-                      {sortField === 'endDate' ? (
-                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-                      ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
-                    </div>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                    <button
+                      onClick={() => handleSort("endDate")}
+                      className="flex items-center justify-center font-bold hover:text-blue-600 transition-colors cursor-pointer w-full"
+                    >
+                      DUE DATE
+                      {getSortIcon("endDate")}
+                    </button>
                   </TableHead>
-                  <TableHead
-                    className="sticky top-0 z-20 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('filingSubmissionDate')}
-                  >
-                    <div className="flex items-center justify-center gap-2">
-                      Submitted Date
-                      {sortField === 'filingSubmissionDate' ? (
-                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-                      ) : <ArrowUpDown className="h-4 w-4 opacity-50" />}
-                    </div>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                    <button
+                      onClick={() => handleSort("filingSubmissionDate")}
+                      className="flex items-center justify-center font-bold hover:text-blue-600 transition-colors cursor-pointer w-full"
+                    >
+                      SUBMITTED DATE
+                      {getSortIcon("filingSubmissionDate")}
+                    </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
-                    Submission
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                    SUBMISSION
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">
-                    Actions
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                    ACTIONS
                   </TableHead>
                 </TableRow>
               </TableHeader>
-
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i} className="border-b border-gray-100">
+                    <TableRow key={i} className="border-b border-gray-200">
                       <TableCell colSpan={7} className="px-6 py-4">
                         <Skeleton className="h-10 w-full" />
                       </TableCell>
@@ -1948,9 +2400,19 @@ export default function Compliance() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredItems.map((item: ComplianceItem) => (
-                    <TableRow key={item._id || item.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100">
-                      <TableCell className="px-4 py-4">
+                  filteredItems.map((item: ComplianceItem, index: number) => {
+                    const rowKey = item._id || item.id;
+                    const isDraft = item.isDraft || item.status === "Draft";
+                    const statusInfo = getComplianceStatus(item.endDate || "", item.submissionDeadline || "");
+
+                    return (
+                    <TableRow
+                      key={rowKey}
+                      className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                        index % 2 === 0 ? "bg-white" : "bg-gray-50/30"
+                      }`}
+                    >
+                      <TableCell className="px-4 py-3 w-[200px]">
                         <button
                           onClick={() => {
                             const index = (complianceItems as ComplianceItem[]).findIndex(
@@ -1993,49 +2455,39 @@ export default function Compliance() {
                           {item.policy}
                         </button>
                       </TableCell>
-                      <TableCell className="px-4 py-4">
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-700 font-medium border-blue-200">
-                          {item.category}
-                        </Badge>
+                      <TableCell className="px-4 py-3 w-[160px]">
+                        <span
+                          className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getCategoryPillClasses(
+                            item.category
+                          )}`}
+                        >
+                          {item.category || "-"}
+                        </span>
                       </TableCell>
-                      <TableCell className="px-4 py-4">
-                        {(() => {
-                          // Check if item is a draft first
-                          if (item.isDraft || item.status === "Draft") {
-                            return (
-                              <span className="px-3 py-1 rounded-full text-xs font-medium text-amber-800 bg-amber-100 transition-all duration-300">
-                                Draft
-                              </span>
-                            );
-                          }
-                          
-                          const statusInfo = getComplianceStatus(item.endDate || '', item.submissionDeadline || '');
-                          const isLate = statusInfo.status === "Late";
-                          return (
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color} ${statusInfo.bgColor} ${
-                              isLate ? 'animate-pulse relative' : ''
-                            } transition-all duration-300`}>
-                              {isLate && (
-                                <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-400 rounded-full animate-ping"></span>
-                              )}
-                              {statusInfo.status}
-                            </span>
-                          );
-                        })()}
+                      <TableCell className="px-4 py-3 w-[140px] text-center">
+                        <span
+                          className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[120px] whitespace-nowrap ${
+                            isDraft
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : `${statusInfo.bgColor} ${statusInfo.color}`
+                          }`}
+                        >
+                          {isDraft ? "Draft" : statusInfo.status}
+                        </span>
                       </TableCell>
-                      <TableCell className="px-4 py-4 text-center">
-                        <div className="flex items-center justify-center gap-2 text-gray-700 font-medium">
-                          <Calendar className="h-4 w-4 text-blue-400" />
-                          <span className="text-sm">{formatDate(item.submissionDeadline)}</span>
+                      <TableCell className="px-4 py-3 text-center w-[160px]">
+                        <div className="flex items-center justify-center text-sm text-gray-700">
+                          <Calendar className="h-3 w-3 text-gray-400 mr-1" />
+                          {formatDate(item.submissionDeadline)}
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-4 text-center">
-                        <div className="flex items-center justify-center gap-2 text-gray-700 font-medium">
-                          <Calendar className="h-4 w-4 text-blue-400" />
-                          <span className="text-sm">{formatDate(item.filingSubmissionDate)}</span>
+                      <TableCell className="px-4 py-3 text-center w-[160px]">
+                        <div className="flex items-center justify-center text-sm text-gray-700">
+                          <Calendar className="h-3 w-3 text-gray-400 mr-1" />
+                          {formatDate(item.filingSubmissionDate)}
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-4">
+                      <TableCell className="px-4 py-3 text-center w-[160px]">
                         <div className="flex items-center justify-center">
                           <Button
                             variant="outline"
@@ -2085,71 +2537,109 @@ export default function Compliance() {
                           </Button>
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-4 text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                        <Can I="update" a="Compliance">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const index = (complianceItems as ComplianceItem[]).findIndex(
-                                (ci: ComplianceItem) => (ci._id || ci.id) === (item._id || item.id)
-                              );
-                              setEditIndex(index);
-                              setShowSubmissionDetails(false);
-                              setSubmissionOpenedFromTable(false);
-                              setModalOpen(true);
-                              const currentItem = complianceItems[index] as ComplianceItem;
-                              const depts = parseDepartments(currentItem.department);
-                              setSelectedDepartments(depts);
-                              setForm({
-                                filingName: currentItem.policy,
-                                filingFrequency: currentItem.frequency || "Monthly",
-                                filingComplianceCategory: currentItem.category,
-                                filingGoverningAuthority: currentItem.governingAuthority || "",
-                                filingStartDate: currentItem.lastAudit || "",
-                                filingEndDate: currentItem.endDate || "",
-                                filingSubmissionDeadline: currentItem.submissionDeadline || "",
-                                filingSubmissionStatus: mapStatus(currentItem.status),
-                                filingRecurringFrequency: currentItem.recurringFrequency || "",
-                                filingRemarks: currentItem.remarks || "",
-                                submissionNotes: "",
-                                filingSubmissionDate: "",
-                                reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
-                                reminderPolicy: currentItem.reminderPolicy || "One time",
-                                submittedBy: currentItem.submittedBy || "",
-                                owner: currentItem.owner || "",
-                                owner2: (currentItem as any).owner2 || "",
-                                amount: currentItem.amount !== undefined && currentItem.amount !== null ? String(currentItem.amount) : "",
-                                paymentDate: currentItem.paymentDate || "",
-                                submissionAmount: currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null ? String(currentItem.submissionAmount) : "",
-                                paymentMethod: currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null ? String(currentItem.paymentMethod) : "",
-                                department: currentItem.department || "",
-                                departments: depts,
-                              });
-                            }}
-                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors p-2"
-                          >
-                            <Edit size={16} />
-                          </Button>
-                        </Can>
-                        <Can I="delete" a="Compliance">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setComplianceToDelete(item);
-                              setDeleteConfirmOpen(true);
-                            }}
-                            className="text-red-600 hover:text-red-800 hover:bg-red-50 transition-colors p-2"
-                          >
-                            <Trash2 size={16} />
-                          </Button>
-                        </Can>
-                        </div>
+                      <TableCell className="px-4 py-3 w-[120px] text-right">
+                        {(() => {
+                          const rowId = String(item._id || item.id || "");
+                          const isOpen = !!rowId && openActionsMenuForId === rowId;
+                          const isAnotherRowOpen = !!openActionsMenuForId && openActionsMenuForId !== rowId;
+
+                          return (
+                            <DropdownMenu
+                              open={isOpen}
+                              onOpenChange={(open) => {
+                                if (!rowId) return;
+                                setOpenActionsMenuForId(open ? rowId : null);
+                              }}
+                            >
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+                                    isAnotherRowOpen ? "invisible" : ""
+                                  }`}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="z-[1000]">
+                                <Can I="update" a="Compliance">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      const index = (complianceItems as ComplianceItem[]).findIndex(
+                                        (ci: ComplianceItem) => (ci._id || ci.id) === (item._id || item.id)
+                                      );
+                                      setEditIndex(index);
+                                      setShowSubmissionDetails(false);
+                                      setSubmissionOpenedFromTable(false);
+                                      setModalOpen(true);
+                                      const currentItem = complianceItems[index] as ComplianceItem;
+                                      const depts = parseDepartments(currentItem.department);
+                                      setSelectedDepartments(depts);
+                                      setForm({
+                                        filingName: currentItem.policy,
+                                        filingFrequency: currentItem.frequency || "Monthly",
+                                        filingComplianceCategory: currentItem.category,
+                                        filingGoverningAuthority: currentItem.governingAuthority || "",
+                                        filingStartDate: currentItem.lastAudit || "",
+                                        filingEndDate: currentItem.endDate || "",
+                                        filingSubmissionDeadline: currentItem.submissionDeadline || "",
+                                        filingSubmissionStatus: mapStatus(currentItem.status),
+                                        filingRecurringFrequency: currentItem.recurringFrequency || "",
+                                        filingRemarks: currentItem.remarks || "",
+                                        submissionNotes: "",
+                                        filingSubmissionDate: "",
+                                        reminderDays:
+                                          currentItem.reminderDays !== undefined && currentItem.reminderDays !== null
+                                            ? String(currentItem.reminderDays)
+                                            : "7",
+                                        reminderPolicy: currentItem.reminderPolicy || "One time",
+                                        submittedBy: currentItem.submittedBy || "",
+                                        owner: currentItem.owner || "",
+                                        owner2: (currentItem as any).owner2 || "",
+                                        amount:
+                                          currentItem.amount !== undefined && currentItem.amount !== null
+                                            ? String(currentItem.amount)
+                                            : "",
+                                        paymentDate: currentItem.paymentDate || "",
+                                        submissionAmount:
+                                          currentItem.submissionAmount !== undefined && currentItem.submissionAmount !== null
+                                            ? String(currentItem.submissionAmount)
+                                            : "",
+                                        paymentMethod:
+                                          currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null
+                                            ? String(currentItem.paymentMethod)
+                                            : "",
+                                        department: currentItem.department || "",
+                                        departments: depts,
+                                      });
+                                    }}
+                                    className="cursor-pointer"
+                                  >
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                </Can>
+                                <Can I="delete" a="Compliance">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setComplianceToDelete(item);
+                                      setDeleteConfirmOpen(true);
+                                    }}
+                                    className="cursor-pointer text-red-600 focus:text-red-600"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </Can>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          );
+                        })()}
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -2195,8 +2685,8 @@ export default function Compliance() {
                   );
                 })()}
               </div>
-              {/* Right side controls: Submission button, fullscreen, View Ledger */}
-              <div className="flex items-center gap-3 pr-1 mr-14">
+              {/* Right side controls */}
+              <div className="flex items-center gap-3 pr-1">
                 {/* Submission Toggle Button - highlighted in green theme, now on right */}
                 {!showSubmissionDetails && (
                   <Button
@@ -2215,12 +2705,26 @@ export default function Compliance() {
                     Submission
                   </Button>
                 )}
+                {editIndex !== null && complianceItems[editIndex]?._id && (
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 flex items-center gap-2 shadow-md transition-all duration-300 rounded-xl"
+                    onClick={() => {
+                      window.location.href = `/compliance-ledger?id=${complianceItems[editIndex]._id}`;
+                    }}
+                    title="View Ledger"
+                  >
+                    <ExternalLink size={16} />
+                    View Ledger
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="outline"
                   title={isFullscreen ? 'Exit Fullscreen' : 'Expand'}
                   onClick={() => setIsFullscreen(f => !f)}
-                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold rounded-xl shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
+                  className="!bg-white !text-indigo-600 hover:!bg-indigo-50 hover:!text-indigo-600 focus:!text-indigo-600 font-semibold rounded-xl shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
                 >
                   {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
                 </Button>
@@ -2244,24 +2748,10 @@ export default function Compliance() {
                       handleExitConfirm();
                     }
                   }}
-                  className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold rounded-xl shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
+                  className="!bg-white !text-indigo-600 hover:!bg-indigo-50 hover:!text-indigo-600 focus:!text-indigo-600 font-semibold rounded-xl shadow-md transition-all duration-300 hover:scale-105 focus:ring-2 focus:ring-white/50 border border-indigo-200 h-10 w-10 p-0 flex items-center justify-center"
                 >
                   <X className="h-5 w-5" />
                 </Button>
-                {editIndex !== null && complianceItems[editIndex]?._id && (
-                  <Button
-                    type="button"
-                    variant="default"
-                    className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 flex items-center gap-2 shadow-md transition-all duration-300 rounded-xl"
-                    onClick={() => {
-                      window.location.href = `/compliance-ledger?id=${complianceItems[editIndex]._id}`;
-                    }}
-                    title="View Ledger"
-                  >
-                    <ExternalLink size={16} />
-                    View Ledger
-                  </Button>
-                )}
               </div>
             </div>
           </DialogHeader>
@@ -4330,14 +4820,22 @@ export default function Compliance() {
         </DialogContent>
       </Dialog>
 
-      {/* Document Management Dialog (match SubscriptionModal upload UX) */}
-      <Dialog open={showSubmissionDocumentDialog} onOpenChange={setShowSubmissionDocumentDialog}>
-        <DialogContent className="sm:max-w-4xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
+      {/* Document Management Dialog */}
+      <Dialog
+        open={showSubmissionDocumentDialog}
+        onOpenChange={(next) => {
+          setShowSubmissionDocumentDialog(next);
+          if (!next) {
+            setPendingSubmissionDocument(null);
+            setPendingSubmissionDocumentRemark('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
           <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
             <div className="flex items-start justify-between">
               <div>
                 <DialogTitle className="text-lg font-semibold text-gray-900">Documents</DialogTitle>
-                <p className="text-sm text-gray-600 mt-1">Submission documents</p>
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -4347,152 +4845,207 @@ export default function Compliance() {
                   className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                    />
                   </svg>
                   Upload
                 </Button>
               </div>
             </div>
           </DialogHeader>
-
           <div className="flex-1 overflow-y-auto py-4 bg-white">
-            {Array.isArray(submissionDocuments) && submissionDocuments.length > 0 ? (
-              <div className="space-y-2 pr-2">
-                {submissionDocuments.map((doc, index) => (
-                  <div
-                    key={`${doc.name}-${index}`}
-                    className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all duration-200"
-                  >
-                    <div className="grid grid-cols-12 gap-4 items-center">
-                      <div className="col-span-4 flex items-center gap-2">
-                        <div className="h-9 w-9 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
-                        </div>
-                      </div>
+            {pendingSubmissionDocument || submissionDocuments.length > 0 ? (
+              <div className="pr-2">
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-12 gap-4 items-center px-3 py-2 bg-gray-50 border-b border-gray-200">
+                    <div className="col-span-3 text-xs font-bold text-gray-600">File Name</div>
+                    <div className="col-span-2 text-xs font-bold text-gray-600">Updated By</div>
+                    <div className="col-span-2 text-xs font-bold text-gray-600">Updated Date</div>
+                    <div className="col-span-3 text-xs font-bold text-gray-600">Remark</div>
+                    <div className="col-span-2 text-xs font-bold text-gray-600 text-right">Actions</div>
+                  </div>
 
-                      <div className="col-span-3 flex items-center gap-1.5">
-                        <div className="h-5 w-5 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <svg className="h-3 w-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
+                  {pendingSubmissionDocument && (
+                    <div className="grid grid-cols-12 gap-4 items-center px-3 py-2 bg-blue-50 border-b border-gray-200">
+                      <div className="col-span-3 flex items-center gap-2 min-w-0">
+                        <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
+                          {renderDocumentTypeIcon(pendingSubmissionDocument.name, pendingSubmissionDocument.url)}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[10px] text-gray-500">Uploaded by</p>
-                          <p className="text-xs font-medium text-gray-900 truncate">{currentUserName || 'User'}</p>
-                        </div>
+                        <p className="text-xs font-semibold text-gray-900 truncate">{pendingSubmissionDocument.name}</p>
                       </div>
-
-                      <div className="col-span-3 flex items-center gap-1.5">
-                        <svg className="h-4 w-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[10px] text-gray-500">Uploaded date</p>
-                          <p className="text-xs font-medium text-gray-900 truncate">
-                            {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </p>
-                        </div>
+                      <div className="col-span-2 text-xs font-medium text-gray-900 truncate">
+                        {pendingSubmissionDocument.updatedBy || '-'}
                       </div>
-
-                      <div className="col-span-2 flex items-center justify-end gap-1.5">
-                        <button
+                      <div className="col-span-2 text-xs font-medium text-gray-900 truncate">
+                        {pendingSubmissionDocument.updatedAt
+                          ? new Date(pendingSubmissionDocument.updatedAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })
+                          : '-'}
+                      </div>
+                      <div className="col-span-3">
+                        <Input
+                          value={pendingSubmissionDocumentRemark}
+                          onChange={(e) => setPendingSubmissionDocumentRemark(e.target.value)}
+                          placeholder="Enter remark"
+                          className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
+                        />
+                      </div>
+                      <div className="col-span-2 flex items-center justify-end gap-2">
+                        <Button
                           type="button"
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
-                            try {
-                              const newWindow = window.open('', '_blank');
-                              if (newWindow) {
-                                if (doc.url.startsWith('data:application/pdf')) {
-                                  newWindow.document.write(`
-                                  <html>
-                                    <head><title>${doc.name}</title></head>
-                                    <body style="margin:0">
-                                      <iframe src="${doc.url}" style="width:100%;height:100vh;border:none;"></iframe>
-                                    </body>
-                                  </html>
-                                `);
-                                } else if (doc.url.startsWith('data:image')) {
-                                  newWindow.document.write(`
-                                  <html>
-                                    <head><title>${doc.name}</title></head>
-                                    <body style="margin:0;display:flex;justify-content:center;align-items:center;background:#000;">
-                                      <img src="${doc.url}" style="max-width:100%;max-height:100vh;"/>
-                                    </body>
-                                  </html>
-                                `);
-                                }
-                              }
-                            } catch (error) {
-                              toast({
-                                title: 'Error',
-                                description: 'Failed to view document',
-                                variant: 'destructive',
-                              });
-                            }
+                            setPendingSubmissionDocument(null);
+                            setPendingSubmissionDocumentRemark('');
                           }}
-                          className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors flex items-center gap-1"
+                          className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700"
                         >
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                          View
-                        </button>
-                        <button
+                          Cancel
+                        </Button>
+                        <Button
                           type="button"
+                          size="sm"
                           onClick={() => {
-                            try {
-                              const link = document.createElement('a');
-                              link.href = doc.url;
-                              link.download = doc.name;
-                              link.click();
-                              toast({
-                                title: 'Download Started',
-                                description: `Downloading ${doc.name}`,
-                                duration: 2000,
-                                variant: 'success',
-                              });
-                            } catch (error) {
-                              toast({
-                                title: 'Error',
-                                description: 'Failed to download document',
-                                variant: 'destructive',
-                              });
-                            }
-                          }}
-                          className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors flex items-center gap-1"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                          </svg>
-                          Download
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSubmissionDocuments((prev) => (Array.isArray(prev) ? prev.filter((_, i) => i !== index) : []));
+                            const remark = pendingSubmissionDocumentRemark.trim();
+                            setSubmissionDocuments((prev) => [
+                              ...prev,
+                              {
+                                ...pendingSubmissionDocument,
+                                remark,
+                              },
+                            ]);
                             toast({
-                              title: 'Document Removed',
-                              description: `${doc.name} has been removed`,
+                              title: 'Success',
+                              description: `${pendingSubmissionDocument.name} uploaded successfully`,
                               duration: 2000,
-                              variant: 'destructive',
+                              variant: 'success',
                             });
+                            setPendingSubmissionDocument(null);
+                            setPendingSubmissionDocumentRemark('');
                           }}
-                          className="px-2 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-600 hover:bg-red-50 rounded-md transition-colors flex items-center gap-1"
-                          title="Remove document"
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
                         >
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                          Save
+                        </Button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )}
+
+                  {submissionDocuments.map((doc, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-12 gap-4 items-center px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b last:border-b-0 border-gray-200"
+                    >
+                      <div className="col-span-3 flex items-center gap-2 min-w-0">
+                        <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
+                          {renderDocumentTypeIcon(doc.name, doc.url)}
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
+                      </div>
+                      <div className="col-span-2 text-xs font-medium text-gray-900 truncate">{doc.updatedBy || '-'}</div>
+                      <div className="col-span-2 text-xs font-medium text-gray-900 truncate">
+                        {doc.updatedAt
+                          ? new Date(doc.updatedAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })
+                          : '-'}
+                      </div>
+                      <div className="col-span-3">
+                        <Input
+                          value={doc.remark || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setSubmissionDocuments((prev) => prev.map((d, i) => (i === index ? { ...d, remark: value } : d)));
+                          }}
+                          onBlur={(e) => {
+                            const value = e.target.value;
+                            setSubmissionDocuments((prev) =>
+                              prev.map((d, i) =>
+                                i === index
+                                  ? {
+                                      ...d,
+                                      remark: value,
+                                      updatedBy:
+                                        currentUserName ||
+                                        (window as any)?.user?.name ||
+                                        (window as any)?.user?.email ||
+                                        'User',
+                                      updatedAt: new Date().toISOString(),
+                                    }
+                                  : d
+                              )
+                            );
+                          }}
+                          placeholder="Enter remark"
+                          className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
+                        />
+                      </div>
+                      <div className="col-span-2 flex items-center justify-end gap-1.5">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                              aria-label="Document actions"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            side="top"
+                            sideOffset={8}
+                            className="z-[3000] bg-white text-gray-900 border-gray-200 shadow-lg"
+                          >
+                            <DropdownMenuItem
+                              onClick={() => {
+                                openDocumentInNewTab(doc);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                downloadDocument(doc);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              Download
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const updatedDocs = submissionDocuments.filter((_, i) => i !== index);
+                                setSubmissionDocuments(updatedDocs);
+                                toast({
+                                  title: 'Document Removed',
+                                  description: `${doc.name} has been removed`,
+                                  duration: 2000,
+                                  variant: 'destructive',
+                                });
+                              }}
+                              className="cursor-pointer text-red-600 focus:text-red-600"
+                            >
+                              Remove
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -4506,11 +5059,9 @@ export default function Compliance() {
               </div>
             )}
           </div>
-
           <div className="flex justify-between items-center gap-3 pt-3 border-t border-gray-200 bg-gray-50 -mx-6 px-6 -mb-6 pb-4 rounded-b-lg">
             <span className="text-xs text-gray-600">
-              {(Array.isArray(submissionDocuments) ? submissionDocuments.length : 0)} document
-              {(Array.isArray(submissionDocuments) && submissionDocuments.length !== 1) ? 's' : ''}
+              {submissionDocuments.length} document{submissionDocuments.length !== 1 ? 's' : ''}
             </span>
             <div className="flex gap-2">
               <Button

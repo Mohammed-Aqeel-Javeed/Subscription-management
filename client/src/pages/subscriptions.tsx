@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +10,18 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, Search, Layers, AlertCircle, Calendar, XCircle, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, Edit, Trash2, Search, Layers, AlertCircle, Calendar, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, MoreVertical } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Papa from 'papaparse';
 import SubscriptionModal from "@/components/modals/subscription-modal";
 import { apiRequest } from "@/lib/queryClient";
@@ -36,6 +47,8 @@ export default function Subscriptions() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Partial<SubscriptionWithExtras> | undefined>();
+  const [pendingOpenSubscriptionId, setPendingOpenSubscriptionId] = useState<string | null>(null);
+  const [openActionsMenuForId, setOpenActionsMenuForId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const initialIsCancelledView = location.pathname.includes('cancelled');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -76,6 +89,10 @@ export default function Subscriptions() {
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [subscriptionToDelete, setSubscriptionToDelete] = useState<SubscriptionWithExtras | null>(null);
+
+  // Import confirmation dialog state
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
   
   // Sorting state
   const [sortField, setSortField] = useState<"serviceName" | "vendor" | "amount" | "billingCycle" | "nextRenewal" | "status" | null>(null);
@@ -97,26 +114,50 @@ export default function Subscriptions() {
     staleTime: 0,
     refetchOnMount: true,
   });
+
+  const { data: openedSubscription, isLoading: isOpenedSubscriptionLoading } = useQuery<SubscriptionWithExtras | null>({
+    queryKey: ["/api/subscriptions", pendingOpenSubscriptionId],
+    enabled: !!pendingOpenSubscriptionId,
+    queryFn: async () => {
+      if (!pendingOpenSubscriptionId) return null;
+      const res = await fetch(`/api/subscriptions/${pendingOpenSubscriptionId}`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
   
   // Handle URL parameter to open specific subscription modal (placed after subscriptions declaration)
   React.useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const openSubscriptionId = searchParams.get('open');
-    
-    if (openSubscriptionId && subscriptions) {
-      // Find the subscription by ID
-      const subscription = subscriptions.find(sub => 
-        sub.id === openSubscriptionId || sub._id === openSubscriptionId
-      );
-      
-      if (subscription) {
-        setEditingSubscription(subscription);
-        setModalOpen(true);
-        // Clean up URL parameter after opening modal
-        navigate(location.pathname, { replace: true });
-      }
+
+    if (!openSubscriptionId) return;
+
+    // Open immediately (avoid showing the table while data loads)
+    setModalOpen(true);
+
+    // If we already have it in the list, use it right away.
+    const fromList = subscriptions?.find(sub => sub.id === openSubscriptionId || sub._id === openSubscriptionId);
+    if (fromList) {
+      setPendingOpenSubscriptionId(null);
+      setEditingSubscription(fromList);
+      navigate(location.pathname, { replace: true });
+      return;
     }
+
+    // Otherwise fetch the single subscription by id.
+    setEditingSubscription(undefined);
+    setPendingOpenSubscriptionId(openSubscriptionId);
   }, [location.search, subscriptions, navigate, location.pathname]);
+
+  useEffect(() => {
+    if (!pendingOpenSubscriptionId) return;
+    if (!openedSubscription) return;
+
+    setEditingSubscription(openedSubscription);
+    setPendingOpenSubscriptionId(null);
+    navigate(location.pathname, { replace: true });
+  }, [openedSubscription, pendingOpenSubscriptionId, navigate, location.pathname]);
   // Listen for login/logout/account change events and trigger immediate refetch
   React.useEffect(() => {
     function triggerImmediateRefresh() {
@@ -260,12 +301,51 @@ export default function Subscriptions() {
     toast({ title: 'Exported', description: 'Subscriptions exported to CSV' });
   };
 
+  const downloadSubscriptionsImportTemplate = () => {
+    const template = [
+      {
+        ServiceName: '',
+        Vendor: '',
+        Amount: '',
+        BillingCycle: 'monthly',
+        StartDate: 'YYYY-MM-DD',
+        NextRenewal: 'YYYY-MM-DD',
+        Status: 'Draft',
+        Category: '',
+        Departments: 'IT|Finance',
+        ReminderPolicy: 'One time',
+        ReminderDays: '7',
+        Notes: '',
+      },
+    ];
+    const csv = Papa.unparse(template);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'subscriptions_import_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: 'Template Downloaded', description: 'Use this template to import subscriptions' });
+  };
+
   const triggerImport = () => fileInputRef.current?.click();
 
   // IMPORT from CSV -> create subscriptions
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const normalizeServiceName = (value: unknown) => String(value ?? '').trim().replace(/\s+/g, ' ');
+    const existingServiceNames = new Set(
+      (Array.isArray(subscriptions) ? subscriptions : [])
+        .map((s) => normalizeServiceName((s as any)?.serviceName))
+        .filter(Boolean)
+        .map((s) => s.toLowerCase())
+    );
+
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
@@ -276,10 +356,32 @@ export default function Subscriptions() {
           return;
         }
         let success = 0; let failed = 0;
+        const seenInFile = new Set<string>();
+        const errorSamples: string[] = [];
         for (const row of rows) {
           try {
+            const normalizedName = normalizeServiceName(row.ServiceName || row.serviceName || '');
+            const key = normalizedName.toLowerCase();
+            if (!normalizedName) {
+              failed++;
+              if (errorSamples.length < 5) errorSamples.push('Missing ServiceName');
+              continue;
+            }
+
+            if (existingServiceNames.has(key)) {
+              failed++;
+              if (errorSamples.length < 5) errorSamples.push(`Duplicate service name already exists: ${normalizedName}`);
+              continue;
+            }
+
+            if (seenInFile.has(key)) {
+              failed++;
+              if (errorSamples.length < 5) errorSamples.push(`Duplicate service name in file: ${normalizedName}`);
+              continue;
+            }
+
             const payload: any = {
-              serviceName: row.ServiceName || row.serviceName || '',
+              serviceName: normalizedName,
               vendor: row.Vendor || row.vendor || '',
               amount: parseFloat(row.Amount) || 0,
               billingCycle: (row.BillingCycle || row.billingCycle || 'monthly').toLowerCase(),
@@ -294,15 +396,30 @@ export default function Subscriptions() {
               notes: row.Notes || ''
             };
             // Basic validation
-            if (!payload.serviceName) { failed++; continue; }
+            if (!payload.serviceName) {
+              failed++;
+              if (errorSamples.length < 5) errorSamples.push('Missing ServiceName');
+              continue;
+            }
             await apiRequest('POST', '/api/subscriptions', payload);
+            seenInFile.add(key);
+            existingServiceNames.add(key);
             success++;
           } catch (err) {
             failed++;
+            if (errorSamples.length < 5) errorSamples.push('Failed to import a row');
           }
         }
         queryClient.invalidateQueries({ queryKey: ['/api/subscriptions'] });
-        toast({ title: 'Import finished', description: `Imported ${success} row(s). Failed: ${failed}` });
+        if (failed > 0 && errorSamples.length) {
+          toast({
+            title: 'Import finished with errors',
+            description: `Imported ${success} row(s). Failed: ${failed}. ${errorSamples.join(' | ')}`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({ title: 'Import finished', description: `Imported ${success} row(s). Failed: ${failed}` });
+        }
         e.target.value = '';
       },
       error: () => {
@@ -901,6 +1018,39 @@ export default function Subscriptions() {
   return (
     <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
       <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
+        <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+          <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Select Yes to choose a file. Select No to download the template.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+                onClick={() => {
+                  // "No" -> download template
+                  downloadSubscriptionsImportTemplate();
+                  setImportConfirmOpen(false);
+                }}
+              >
+                No
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-green-600 text-white hover:bg-green-700"
+                onClick={() => {
+                  // "Yes" -> open file picker
+                  setImportConfirmOpen(false);
+                  // allow dialog close animation to finish
+                  setTimeout(() => triggerImport(), 0);
+                }}
+              >
+                Yes
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         {filtersOpen && sidebarSlotEl ? createPortal(<FiltersSidebarPanel />, sidebarSlotEl) : null}
         {/* Header Section */}
         <div className="flex items-center justify-between mb-6 shrink-0">
@@ -921,7 +1071,7 @@ export default function Subscriptions() {
                 className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add Subscription
+                Subscription
               </Button>
             </Can>
             
@@ -961,20 +1111,27 @@ export default function Subscriptions() {
                 });
               }}
               onClick={() => navigate('/subscription-history')}
-              className="w-44 bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200 hover:border-indigo-300 font-medium transition-all duration-200"
+              className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200"
             >
               <Calendar className="h-4 w-4 mr-2" />
-              History
+              Audit Log
             </Button>
             
             {/* Data Management Dropdown - third */}
-            <Select onValueChange={(value) => {
-              if (value === 'export') {
-                handleExport();
-              } else if (value === 'import') {
-                triggerImport();
-              }
-            }}>
+            <Select
+              key={dataManagementSelectKey}
+              onValueChange={(value) => {
+                if (value === 'export') {
+                  handleExport();
+                } else if (value === 'import') {
+                  setImportConfirmOpen(true);
+                }
+
+                // Important: Radix Select won't call onValueChange if the same value is selected again.
+                // Remounting clears its internal selection so Import works every time.
+                setDataManagementSelectKey((k) => k + 1);
+              }}
+            >
               <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
                 <SelectValue placeholder="Data Management" />
               </SelectTrigger>
@@ -993,26 +1150,12 @@ export default function Subscriptions() {
                 </SelectItem>
               </SelectContent>
             </Select>
-            
-            {/* Cancelled button - fourth */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (location.pathname.includes('cancelled')) {
-                  navigate('/subscriptions');
-                } else {
-                  navigate('/subscriptions/cancelled');
-                }
-              }}
-              className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200 text-orange-700 hover:from-orange-100 hover:to-orange-200 hover:border-orange-300 font-medium transition-all duration-200"
-            >
-              <XCircle className="h-4 w-4 mr-2" />
-              {location.pathname.includes('cancelled') ? 'All Subscriptions' : 'Cancelled'}
-            </Button>
           </div>
         </div>
 
+        {/* Search + Filter - hidden when modal is open */}
+        {!modalOpen && (
+          <>
         {/* Search + Filter By */}
         <div className="mb-6 bg-white border border-gray-200 rounded-2xl shadow-sm p-4 shrink-0">
           <div className="flex flex-wrap items-center gap-3">
@@ -1041,8 +1184,8 @@ export default function Subscriptions() {
           <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden h-full flex flex-col min-h-0">
             <Table containerClassName="flex-1 min-h-0 overflow-auto">
               <TableHeader>
-                <TableRow className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
-                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                <TableRow className="border-b-2 border-gray-400 bg-gray-200">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[200px]">
                     <button 
                       onClick={() => handleSort("serviceName")}
                       className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
@@ -1051,16 +1194,7 @@ export default function Subscriptions() {
                       {getSortIcon("serviceName")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    <button 
-                      onClick={() => handleSort("vendor")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
-                    >
-                      VENDOR
-                      {getSortIcon("vendor")}
-                    </button>
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
                     <button 
                       onClick={() => handleSort("amount")}
                       className="flex items-center justify-end w-full font-bold hover:text-blue-600 transition-colors cursor-pointer"
@@ -1069,7 +1203,7 @@ export default function Subscriptions() {
                       {getSortIcon("amount")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 pl-12 pr-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("billingCycle")}
                       className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
@@ -1078,7 +1212,7 @@ export default function Subscriptions() {
                       {getSortIcon("billingCycle")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
                     <button 
                       onClick={() => handleSort("nextRenewal")}
                       className="flex items-center justify-center w-full font-bold hover:text-blue-600 transition-colors cursor-pointer"
@@ -1087,22 +1221,19 @@ export default function Subscriptions() {
                       {getSortIcon("nextRenewal")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
+                    CATEGORY
+                  </TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
                     <button 
                       onClick={() => handleSort("status")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center justify-center font-bold hover:text-blue-600 transition-colors cursor-pointer w-full"
                     >
                       STATUS
                       {getSortIcon("status")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    DEPARTMENT
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    CATEGORY
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
                     ACTIONS
                   </TableHead>
                 </TableRow>
@@ -1116,7 +1247,7 @@ export default function Subscriptions() {
                         index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
                       }`}
                     >
-                      <TableCell className="px-4 py-3">
+                      <TableCell className="px-4 py-3 w-[200px]">
                         <div>
                           <button
                             onClick={() => handleEdit(subscription)}
@@ -1146,15 +1277,12 @@ export default function Subscriptions() {
                           })()}
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-3 text-sm text-gray-700">
-                        {subscription.vendor}
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-right">
+                      <TableCell className="px-3 py-3 text-right w-[140px]">
                         <span className="text-sm font-medium text-gray-900">
                           ${parseFloat(String(subscription.amount)).toFixed(2)}
                         </span>
                       </TableCell>
-                      <TableCell className="px-4 py-3">
+                      <TableCell className="pl-12 pr-4 py-3">
                         <span className="text-sm text-gray-700 capitalize">
                           {subscription.billingCycle}
                         </span>
@@ -1166,74 +1294,79 @@ export default function Subscriptions() {
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          subscription.billingCycle === 'Trial'
-                            ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                            : subscription.status === 'Active' 
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                              : subscription.status === 'Cancelled'
-                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                              : 'bg-gray-100 text-gray-800 border border-gray-200'
-                        }`}>
-                          {subscription.billingCycle === 'Trial' ? 'Trial' : subscription.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {/* If Company Level is selected, only show Company Level badge */}
-                          {(subscription.departments || []).includes('Company Level') ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap">
-                              Company Level
-                            </span>
-                          ) : (
-                            <>
-                              {(subscription.departments || []).map((dept, idx) => (
-                                <span key={dept + idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                  {dept}
-                                </span>
-                              ))}
-                              {(!subscription.departments || subscription.departments.length === 0) && (
-                                <span className="text-xs text-gray-400">-</span>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
                           {subscription.category || '-'}
                         </span>
                       </TableCell>
+                      <TableCell className="px-4 py-3 w-[140px] text-center">
+                        <span
+                          className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[100px] ${
+                            subscription.billingCycle === 'Trial'
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : subscription.status === 'Active'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : subscription.status === 'Cancelled'
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                  : 'bg-slate-50 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          {subscription.billingCycle === 'Trial' ? 'Trial' : subscription.status}
+                        </span>
+                      </TableCell>
                       <TableCell className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end space-x-1">
-                          <Can I="update" a="Subscription">
+                        {(() => {
+                          const rowId = String(subscription._id || subscription.id || "");
+                          const isOpen = !!rowId && openActionsMenuForId === rowId;
+                          const isAnotherRowOpen = !!openActionsMenuForId && openActionsMenuForId !== rowId;
+                          return (
+                            <DropdownMenu
+                              open={isOpen}
+                              onOpenChange={(open) => {
+                                if (!rowId) return;
+                                setOpenActionsMenuForId(open ? rowId : null);
+                              }}
+                            >
+                          <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleEdit(subscription)}
-                              className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                              className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+                                isAnotherRowOpen ? "invisible" : ""
+                              }`}
                             >
-                              <Edit className="h-4 w-4" />
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
-                          </Can>
-                          <Can I="delete" a="Subscription">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDelete(subscription)}
-                              className="h-8 w-8 p-0 text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
-                              disabled={deleteMutation.isPending}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </Can>
-                        </div>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="z-[1000]">
+                            <Can I="update" a="Subscription">
+                              <DropdownMenuItem
+                                onClick={() => handleEdit(subscription)}
+                                className="cursor-pointer"
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                            </Can>
+                            <Can I="delete" a="Subscription">
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(subscription)}
+                                className="cursor-pointer text-red-600 focus:text-red-600"
+                                disabled={deleteMutation.isPending}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </Can>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                          );
+                        })()}
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-32 text-center">
+                    <TableCell colSpan={7} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center text-gray-500">
                         <AlertCircle className="h-8 w-8 text-gray-300 mb-2" />
                         <p className="text-sm font-medium text-gray-900">No subscriptions found</p>
@@ -1246,6 +1379,8 @@ export default function Subscriptions() {
             </Table>
           </div>
         </div>
+          </>
+        )}
 
       
       <SubscriptionModal
@@ -1253,6 +1388,26 @@ export default function Subscriptions() {
         onOpenChange={handleCloseModal}
         subscription={editingSubscription}
       />
+
+      <Dialog
+        open={modalOpen && !editingSubscription && (isLoading || isOpenedSubscriptionLoading)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingOpenSubscriptionId(null);
+            handleCloseModal();
+          }
+        }}
+      >
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Loading subscription...</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center gap-3 text-sm text-gray-600">
+            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-indigo-600" />
+            Please wait
+          </div>
+        </DialogContent>
+      </Dialog>
       
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

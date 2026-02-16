@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "@/lib/config";
 // Type for dynamic subscription fields
 interface SubscriptionField {
@@ -53,7 +54,9 @@ type SubscriptionModalData = Partial<Subscription> & {
   name?: string;
 };
 import { z } from "zod";
-import { X, History, RefreshCw, Maximize2, Minimize2, AlertCircle, ChevronDown } from "lucide-react";
+import { X, History, RefreshCw, Maximize2, Minimize2, AlertCircle, ChevronDown, MoreVertical } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { RiFilePdf2Fill, RiFileWord2Fill, RiFileExcel2Fill, RiFileTextFill, RiFileImageFill } from "react-icons/ri";
 // Define the Category interface
 interface Category {
   name: string;
@@ -812,6 +815,8 @@ interface SubscriptionModalProps {
 export default function SubscriptionModal({ open, onOpenChange, subscription }: SubscriptionModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
   const isEditing = !!subscription && subscription.status !== 'Draft';
 
   // Prevent duplicate draft creation on slow networks by using a per-modal draft session id
@@ -1055,7 +1060,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   });
   
   // Extract existing service names for validation (excluding current subscription if editing)
-  const existingServiceNames = existingSubscriptions
+  const existingServiceNames = (Array.isArray(existingSubscriptions) ? existingSubscriptions : [])
     .filter((sub: any) => {
       if (!subscription) return true;
       // Get both possible ID formats and compare
@@ -1325,8 +1330,187 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [newOwnerRole, setNewOwnerRole] = useState<string>('');
   const [newOwnerStatus, setNewOwnerStatus] = useState<string>('active');
   const [newOwnerDepartment, setNewOwnerDepartment] = useState<string>('');
-  const [documents, setDocuments] = useState<Array<{name: string, url: string}>>([]);
+  type SubscriptionDocument = {
+    name: string;
+    url: string;
+    remark?: string;
+    updatedBy?: string;
+    updatedAt?: string;
+  };
+
+  const normalizeDocumentsInput = (input: unknown): SubscriptionDocument[] => {
+    if (!Array.isArray(input)) return [];
+
+    return input
+      .filter(Boolean)
+      .map((raw: any): SubscriptionDocument | null => {
+        const name = String(raw?.name ?? raw?.fileName ?? '').trim();
+        const url = String(raw?.url ?? raw?.dataUrl ?? raw?.content ?? '').trim();
+        if (!url) return null;
+
+        const remark = typeof raw?.remark === 'string' ? raw.remark : undefined;
+        const updatedBy = typeof raw?.updatedBy === 'string'
+          ? raw.updatedBy
+          : (typeof raw?.uploadedBy === 'string' ? raw.uploadedBy : undefined);
+        const updatedAt = typeof raw?.updatedAt === 'string'
+          ? raw.updatedAt
+          : (typeof raw?.updatedDate === 'string'
+              ? raw.updatedDate
+              : (typeof raw?.uploadedAt === 'string' ? raw.uploadedAt : undefined));
+
+        return {
+          name: name || 'Document',
+          url,
+          ...(remark ? { remark } : {}),
+          ...(updatedBy ? { updatedBy } : {}),
+          ...(updatedAt ? { updatedAt } : {}),
+        };
+      })
+      .filter((d): d is SubscriptionDocument => Boolean(d));
+  };
+
+  const [documents, setDocuments] = useState<SubscriptionDocument[]>([]);
   const [showDocumentDialog, setShowDocumentDialog] = useState<boolean>(false);
+  const [pendingDocument, setPendingDocument] = useState<SubscriptionDocument | null>(null);
+  const [pendingDocumentRemark, setPendingDocumentRemark] = useState<string>('');
+
+  const getDocumentKind = (name: string, url?: string) => {
+    const safeUrl = String(url || '');
+    if (safeUrl.startsWith('data:')) {
+      const mime = (safeUrl.slice(5).split(';')[0] || '').toLowerCase();
+      if (mime === 'application/pdf') return 'pdf';
+      if (mime === 'text/csv' || mime === 'application/csv') return 'csv';
+      if (mime.startsWith('image/')) return 'image';
+      if (
+        mime === 'application/msword' ||
+        mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      )
+        return 'word';
+      if (
+        mime === 'application/vnd.ms-excel' ||
+        mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      )
+        return 'excel';
+    }
+
+    // For non-data URLs, try parsing extension from URL path first.
+    try {
+      if (safeUrl) {
+        const u = new URL(safeUrl, window.location.origin);
+        const pathLower = (u.pathname || '').toLowerCase();
+        const urlExt = pathLower.includes('.') ? pathLower.slice(pathLower.lastIndexOf('.')) : '';
+        if (urlExt === '.pdf') return 'pdf';
+        if (urlExt === '.xls' || urlExt === '.xlsx') return 'excel';
+        if (urlExt === '.doc' || urlExt === '.docx') return 'word';
+        if (urlExt === '.jpg' || urlExt === '.jpeg' || urlExt === '.png') return 'image';
+        if (urlExt === '.csv') return 'csv';
+      }
+    } catch {
+      // ignore invalid URLs; fall back to filename
+    }
+
+    const lower = String(name || '').toLowerCase();
+    const ext = lower.includes('.') ? lower.slice(lower.lastIndexOf('.')) : '';
+    if (ext === '.pdf') return 'pdf';
+    if (ext === '.xls' || ext === '.xlsx') return 'excel';
+    if (ext === '.doc' || ext === '.docx') return 'word';
+    if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') return 'image';
+    if (ext === '.csv') return 'csv';
+    return 'other';
+  };
+
+  const renderDocumentTypeIcon = (name: string, url?: string) => {
+    const kind = getDocumentKind(name, url);
+    if (kind === 'pdf') return <RiFilePdf2Fill className="h-7 w-7 text-red-600" />;
+    if (kind === 'excel') return <RiFileExcel2Fill className="h-7 w-7 text-green-600" />;
+    if (kind === 'word') return <RiFileWord2Fill className="h-7 w-7 text-blue-600" />;
+    if (kind === 'csv') return <RiFileTextFill className="h-7 w-7 text-emerald-600" />;
+    if (kind === 'image') return <RiFileImageFill className="h-7 w-7 text-purple-600" />;
+    return <RiFileTextFill className="h-7 w-7 text-slate-600" />;
+  };
+
+  const dataUrlToBlob = (dataUrl: string): Blob | null => {
+    try {
+      const match = /^data:([^;]+);base64,(.*)$/i.exec(dataUrl);
+      if (!match) return null;
+      const mime = match[1] || 'application/octet-stream';
+      const b64 = match[2] || '';
+      const binary = atob(b64);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    } catch {
+      return null;
+    }
+  };
+
+  const openDocumentInNewTab = (doc: { name: string; url: string }) => {
+    try {
+      const url = String(doc?.url || '');
+      if (url.startsWith('data:')) {
+        const blob = dataUrlToBlob(url);
+        if (!blob) throw new Error('Invalid data url');
+        const objUrl = URL.createObjectURL(blob);
+        const w = window.open(objUrl, '_blank', 'noopener,noreferrer');
+        if (!w) {
+          // Popup blocked: fallback to same-tab navigation
+          window.location.href = objUrl;
+        }
+        // Revoke after a while (best-effort)
+        setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
+        return;
+      }
+      const w = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!w) window.location.href = url;
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to view document',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const downloadDocument = (doc: { name: string; url: string }) => {
+    try {
+      const url = String(doc?.url || '');
+      const filename = String(doc?.name || 'document');
+      if (url.startsWith('data:')) {
+        const blob = dataUrlToBlob(url);
+        if (!blob) throw new Error('Invalid data url');
+        const objUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objUrl;
+        link.download = filename;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
+      } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      toast({
+        title: 'Download Started',
+        description: `Downloading ${filename}`,
+        duration: 2000,
+        variant: 'success',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to download document',
+        variant: 'destructive',
+      });
+    }
+  };
   
   // Logo state
   const [companyLogo, setCompanyLogo] = useState<string>('');
@@ -1553,10 +1737,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       // Check if subscription has documents
       if ((subscription as any)?.documents && Array.isArray((subscription as any).documents)) {
-        setDocuments((subscription as any).documents);
+        setDocuments(normalizeDocumentsInput((subscription as any).documents));
       } else if ((subscription as any)?.document) {
         // Legacy support for single document
-        setDocuments([{name: 'Document 1', url: (subscription as any).document}]);
+        setDocuments([{ name: 'Document 1', url: String((subscription as any).document) }]);
       } else {
         setDocuments([]);
       }
@@ -1871,54 +2055,62 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     onSuccess: (result, variables, context) => {
       void variables;
       const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
-      
-      // Mark subscription as created to disable draft button
-      if (!isEditing) {
-        setSubscriptionCreated(true);
-        
-        // Dispatch subscription creation event
-        const subscriptionId = result?._id || result?.subscription?._id;
-        if (typeof window !== 'undefined' && window.dispatchEvent && subscriptionId) {
-          window.dispatchEvent(new CustomEvent('subscription-created', { 
-            detail: { ...result, _id: subscriptionId }
-          }));
+
+      // IMPORTANT: never throw from onSuccess — an exception here can blank the whole app.
+      try {
+        // Mark subscription as created to disable draft button
+        if (!isEditing) {
+          setSubscriptionCreated(true);
+
+          // Dispatch subscription creation event
+          const subscriptionId = result?._id || result?.subscription?._id;
+          if (typeof window !== 'undefined' && window.dispatchEvent && subscriptionId) {
+            window.dispatchEvent(
+              new CustomEvent('subscription-created', {
+                detail: { ...result, _id: subscriptionId },
+              })
+            );
+          }
+        } else {
+          // For updates, dispatch update event
+          if (typeof window !== 'undefined' && window.dispatchEvent) {
+            window.dispatchEvent(
+              new CustomEvent('subscription-updated', {
+                detail: result,
+              })
+            );
+          }
         }
-      } else {
-        // For updates, dispatch update event
-        if (typeof window !== 'undefined' && window.dispatchEvent) {
-          window.dispatchEvent(new CustomEvent('subscription-updated', { 
-            detail: result
-          }));
-        }
+
+        // Show success message immediately
+        toast({
+          title: "Success",
+          description: `Subscription ${isEditing ? 'updated' : 'created'} successfully`,
+          variant: "success",
+        });
+      } catch (e) {
+        console.error("onSuccess handler error:", e);
       }
-      
-      // Show success message immediately
-      toast({
-        title: "Success",
-        description: `Subscription ${isEditing ? 'updated' : 'created'} successfully`,
-        variant: "success",
-      });
-      
-      // Close modal immediately
-      onOpenChange(false);
-      
-      // Immediately refetch without tenantId to force fresh data
-      queryClient.refetchQueries({ 
-        queryKey: ["/api/subscriptions"],
-        exact: false
-      });
-      
-      // Also invalidate and refetch with tenant key
-      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions", tenantId] });
-      queryClient.refetchQueries({ 
-        queryKey: ["/api/subscriptions", tenantId],
-        type: 'active'
-      });
-      
-      // Invalidate other queries in background
-      queryClient.invalidateQueries({ queryKey: ["/api/history"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"] });
+
+      // Close modal immediately (guarded)
+      try {
+        onOpenChange(false);
+      } catch (e) {
+        console.error("Failed to close subscription modal:", e);
+      }
+
+      // Refresh queries in a non-throwing way
+      try {
+        queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"], exact: false });
+        if (tenantId) {
+          queryClient.invalidateQueries({ queryKey: ["/api/subscriptions", tenantId], exact: false });
+        }
+        queryClient.invalidateQueries({ queryKey: ["/api/history"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"], exact: false });
+        queryClient.invalidateQueries({ queryKey: ["/api/analytics/categories"], exact: false });
+      } catch (e) {
+        console.error("Query invalidation error:", e);
+      }
     },
     onError: (error: any, newData, context: any) => {
       void newData;
@@ -1961,8 +2153,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       };
       
       // If editing an existing subscription, use PUT to update, otherwise POST to create
-      if (isEditing && subscription?.id) {
-        const res = await apiRequest("PUT", `/api/subscriptions/${subscription.id}`, draftData);
+      const editingId = subscription?.id || subscription?._id;
+      if (isEditing && editingId) {
+        const res = await apiRequest("PUT", `/api/subscriptions/${editingId}`, draftData);
         if (!res.ok) {
           const error = await res.json().catch(() => ({ message: 'Failed to save draft' }));
           throw new Error(error.message || 'Failed to save draft');
@@ -1987,12 +2180,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const previousSubscriptions = queryClient.getQueryData(["/api/subscriptions", tenantId]);
       
       // Optimistically update the cache
-      if (isEditing && subscription?.id) {
+      const editingId = subscription?.id || subscription?._id;
+      if (isEditing && editingId) {
         // Update existing draft subscription
         queryClient.setQueryData(["/api/subscriptions", tenantId], (old: any) => {
           if (!old) return old;
           return old.map((sub: any) => 
-            (sub.id === subscription.id || sub._id === subscription.id) 
+            (sub.id === editingId || sub._id === editingId) 
               ? { ...sub, ...newData, updatedAt: new Date().toISOString() }
               : sub
           );
@@ -2884,8 +3078,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     setSaveDraftRequiredDialog({show: true});
                     return;
                   }
-                  
-                  window.location.href = `/subscription-user?id=${subscriptionId}&name=${encodeURIComponent(serviceName)}`;
+
+                  navigate(
+                    `/subscription-user?id=${subscriptionId}&name=${encodeURIComponent(serviceName)}`,
+                    {
+                      state: {
+                        returnOpenSubscriptionId: subscriptionId,
+                        returnPath: location.pathname,
+                      },
+                    }
+                  );
                 }}
               >
                 User
@@ -2908,8 +3110,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 className={`bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm ${!isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
                   if (isEditing && subscription?.id) {
-                    // Only pass the ID, removing serviceName to simplify filtering
-                    window.location.href = `/subscription-history?id=${subscription.id}`;
+                    const currentServiceName = form.getValues("serviceName") || subscription?.serviceName || "";
+                    window.location.href = `/subscription-history?id=${subscription.id}&name=${encodeURIComponent(currentServiceName)}`;
                   }
                 }}
                 disabled={!isEditing}
@@ -3161,7 +3363,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 {/* Total Amount excl Tax */}
                 <div className="form-item">
                   <label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">
-                    Total Amount excl Tax
+                    Total Amount Excl.Tax
                   </label>
                   <div className="relative">
                     <Input 
@@ -3203,7 +3405,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 {/* Total Amount Incl Tax */}
                 <div className="form-item">
                   <label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">
-                    Total Amount Incl Tax
+                    Total Amount Incl.Tax
                   </label>
                   <div className="relative">
                     <Input 
@@ -3264,36 +3466,43 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       { value: 'pay-as-you-go', label: 'Pay-as-you-go' },
                     ];
 
+                    const selectedOption = options.find(opt => opt.value === field.value);
+
                     const normalizedCycleSearch = cycleSearch.trim().toLowerCase();
                     const filteredOptions = normalizedCycleSearch
                       ? options.filter(opt => opt.label.toLowerCase().includes(normalizedCycleSearch) || opt.value.toLowerCase().includes(normalizedCycleSearch))
                       : options;
                     return (
                       <FormItem className="relative" ref={cycleDropdownRef}>
-                        <FormLabel className="block text-sm font-medium text-slate-700">Commitment cycle</FormLabel>
+                        <FormLabel className="block text-sm font-medium text-slate-700">Commitment Cycle</FormLabel>
                         <div className="relative">
                           <Input
-                            value={cycleOpen ? cycleSearch : (field.value || '')}
+                            value={cycleOpen ? (cycleSearch || selectedOption?.label || '') : (selectedOption?.label || '')}
                             className="w-full border-slate-300 rounded-lg p-2 text-base cursor-pointer"
                             onChange={(e) => {
                               setCycleSearch(e.target.value);
                               if (!cycleOpen) setCycleOpen(true);
                             }}
                             onFocus={() => {
-                              setCycleSearch(field.value || '');
                               setCycleOpen(true);
+                              setCycleSearch('');
                             }}
                             onClick={() => {
-                              setCycleSearch(field.value || '');
                               setCycleOpen(true);
+                              setCycleSearch('');
                             }}
                           />
                           <ChevronDown
                             className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
                             onClick={() => {
-                              if (!cycleOpen) setCycleSearch(field.value || '');
-                              setCycleOpen(!cycleOpen);
-                              if (cycleOpen) setCycleSearch('');
+                              if (!cycleOpen) {
+                                setCycleOpen(true);
+                                setCycleSearch('');
+                                return;
+                              }
+
+                              setCycleOpen(false);
+                              setCycleSearch('');
                             }}
                           />
                         </div>
@@ -5221,35 +5430,24 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       </AlertDialog>
 
       {/* Document Management Dialog */}
-      <Dialog open={showDocumentDialog} onOpenChange={setShowDocumentDialog}>
+      <Dialog
+        open={showDocumentDialog}
+        onOpenChange={(next) => {
+          setShowDocumentDialog(next);
+          if (!next) {
+            setPendingDocument(null);
+            setPendingDocumentRemark('');
+          }
+        }}
+      >
         <DialogContent className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
           <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
             <div className="flex items-start justify-between">
               <div>
                 <DialogTitle className="text-lg font-semibold text-gray-900">Documents</DialogTitle>
-                <p className="text-sm text-gray-600 mt-1">Company-wide and employee documents</p>
+                
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    // Refresh logic if needed
-                    toast({
-                      title: "Refreshed",
-                      description: "Documents refreshed",
-                      duration: 2000,
-                      variant: "success",
-                    });
-                  }}
-                  className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 border-gray-300"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Refresh
-                </Button>
                 <Button
                   type="button"
                   size="sm"
@@ -5257,7 +5455,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     const input = document.createElement('input');
                     input.type = 'file';
                     // Allowed file types: PDF (preferred), Word, Excel, and images
-                    input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png';
+                    input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.csv';
                     input.onchange = async (e: any) => {
                       const file = e.target?.files?.[0];
                       if (file) {
@@ -5270,11 +5468,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           '.exe', '.msi', '.bat', '.cmd', '.sh', '.apk', // Executables & scripts
                           '.js', '.php', '.html', '.py', '.xml', // Web & code files
                           '.zip', '.rar', '.7z', '.tar', // Archives
-                          '.env', '.sql', '.db', '.ini', '.csv' // Config / DB files
+                          '.env', '.sql', '.db', '.ini' // Config / DB files
                         ];
                         
                         // Allowed file types
-                        const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'];
+                        const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png', '.csv'];
                         
                         // Check if file type is blocked
                         if (blockedExtensions.includes(fileExt)) {
@@ -5299,6 +5497,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         }
                         
                         // Validate actual file content (magic bytes) to prevent file extension spoofing
+                        // CSV has no stable magic bytes; we do a lightweight text sanity check instead.
                         const validateFileType = async (file: File): Promise<boolean> => {
                           return new Promise((resolve) => {
                             const reader = new FileReader();
@@ -5312,6 +5511,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               let header = '';
                               for (let i = 0; i < arr.length; i++) {
                                 header += arr[i].toString(16).padStart(2, '0');
+                              }
+
+                              // CSV: allow if the first chunk doesn't look like binary
+                              if (fileExt === '.csv') {
+                                // If any NUL byte exists, it's likely binary.
+                                const hasNull = arr.some((b) => b === 0);
+                                resolve(!hasNull);
+                                return;
                               }
                               
                               // File signatures (magic bytes) for allowed types
@@ -5352,14 +5559,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           const reader = new FileReader();
                           reader.onloadend = async () => {
                             const base64String = reader.result as string;
-                            // Use the actual file name instead of generic "File 1", "File 2"
-                            setDocuments([...documents, {name: file.name, url: base64String}]);
-                            toast({
-                              title: "Success",
-                              description: `${file.name} uploaded successfully`,
-                              duration: 2000,
-                              variant: "success",
+                            // Ask remark inside the dialog (not a browser prompt)
+                            setPendingDocument({
+                              name: file.name,
+                              url: base64String,
+                              updatedBy: currentUserName || (window as any)?.user?.name || (window as any)?.user?.email || 'User',
+                              updatedAt: new Date().toISOString(),
                             });
+                            setPendingDocumentRemark('');
                           };
                           reader.readAsDataURL(file);
                         } catch (error) {
@@ -5384,145 +5591,190 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             </div>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto py-4 bg-white">
-            {/* Document List */}
-            {documents.length > 0 ? (
-              <div className="space-y-2 pr-2">
-                {documents.map((doc, index) => (
-                  <div key={index} className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all duration-200">
-                    {/* Table-like layout with columns */}
-                    <div className="grid grid-cols-12 gap-4 items-center">
-                      {/* Column 1: File Icon and Name */}
-                      <div className="col-span-4 flex items-center gap-2">
-                        <div className="h-9 w-9 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
+            {/* Documents Table */}
+            {pendingDocument || documents.length > 0 ? (
+              <div className="pr-2">
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Header */}
+                  <div className="grid grid-cols-12 gap-4 items-center px-3 py-2 bg-gray-50 border-b border-gray-200">
+                    <div className="col-span-3 text-xs font-bold text-gray-600">File Name</div>
+                    <div className="col-span-2 text-xs font-bold text-gray-600">Updated By</div>
+                    <div className="col-span-2 text-xs font-bold text-gray-600">Updated Date</div>
+                    <div className="col-span-3 text-xs font-bold text-gray-600">Remark</div>
+                    <div className="col-span-2 text-xs font-bold text-gray-600 text-right">Actions</div>
+                  </div>
+
+                  {/* Pending row */}
+                  {pendingDocument && (
+                    <div className="grid grid-cols-12 gap-4 items-center px-3 py-2 bg-blue-50 border-b border-gray-200">
+                      <div className="col-span-3 flex items-center gap-2 min-w-0">
+                        <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
+                          {renderDocumentTypeIcon(pendingDocument.name, pendingDocument.url)}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
-                        </div>
+                        <p className="text-xs font-semibold text-gray-900 truncate">{pendingDocument.name}</p>
                       </div>
-                      
-                      {/* Column 2: Uploaded by */}
-                      <div className="col-span-3 flex items-center gap-1.5">
-                        <div className="h-5 w-5 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <svg className="h-3 w-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[10px] text-gray-500">Uploaded by</p>
-                          <p className="text-xs font-medium text-gray-900 truncate">{currentUserName}</p>
-                        </div>
+                      <div className="col-span-2 text-xs font-medium text-gray-900 truncate">{pendingDocument.updatedBy || '-'}</div>
+                      <div className="col-span-2 text-xs font-medium text-gray-900 truncate">
+                        {pendingDocument.updatedAt
+                          ? new Date(pendingDocument.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : '-'}
                       </div>
-                      
-                      {/* Column 3: Uploaded date */}
-                      <div className="col-span-3 flex items-center gap-1.5">
-                        <svg className="h-4 w-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[10px] text-gray-500">Uploaded date</p>
-                          <p className="text-xs font-medium text-gray-900 truncate">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                        </div>
+                      <div className="col-span-3">
+                        <Input
+                          value={pendingDocumentRemark}
+                          onChange={(e) => setPendingDocumentRemark(e.target.value)}
+                          placeholder="Enter remark"
+                          className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
+                        />
                       </div>
-                      
-                      {/* Column 4: Actions */}
-                      <div className="col-span-2 flex items-center justify-end gap-1.5">
-                        <button
+                      <div className="col-span-2 flex items-center justify-end gap-2">
+                        <Button
                           type="button"
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
-                            try {
-                              const newWindow = window.open('', '_blank');
-                            if (newWindow) {
-                              if (doc.url.startsWith('data:application/pdf')) {
-                                newWindow.document.write(`
-                                  <html>
-                                    <head><title>${doc.name}</title></head>
-                                    <body style="margin:0">
-                                      <iframe src="${doc.url}" style="width:100%;height:100vh;border:none;"></iframe>
-                                    </body>
-                                  </html>
-                                `);
-                              } else if (doc.url.startsWith('data:image')) {
-                                newWindow.document.write(`
-                                  <html>
-                                    <head><title>${doc.name}</title></head>
-                                    <body style="margin:0;display:flex;justify-content:center;align-items:center;background:#000;">
-                                      <img src="${doc.url}" style="max-width:100%;max-height:100vh;"/>
-                                    </body>
-                                  </html>
-                                `);
-                              }
-                              }
-                            } catch (error) {
-                              toast({
-                                title: "Error",
-                                description: "Failed to view document",
-                                variant: "destructive",
-                              });
-                            }
+                            setPendingDocument(null);
+                            setPendingDocumentRemark('');
                           }}
-                          className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors flex items-center gap-1"
+                          className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700"
                         >
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                          View
-                        </button>
-                        <button
+                          Cancel
+                        </Button>
+                        <Button
                           type="button"
+                          size="sm"
                           onClick={() => {
-                            try {
-                              const link = document.createElement('a');
-                              link.href = doc.url;
-                              link.download = doc.name;
-                              link.click();
-                              toast({
-                                title: "Download Started",
-                                description: `Downloading ${doc.name}`,
-                                duration: 2000,
-                                variant: "success",
-                              });
-                            } catch (error) {
-                              toast({
-                                title: "Error",
-                                description: "Failed to download document",
-                                variant: "destructive",
-                              });
-                            }
-                          }}
-                          className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors flex items-center gap-1"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                          </svg>
-                          Download
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updatedDocs = documents.filter((_, i) => i !== index);
-                            setDocuments(updatedDocs);
+                            const remark = pendingDocumentRemark.trim();
+                            setDocuments((prev) => [
+                              ...prev,
+                              {
+                                ...pendingDocument,
+                                remark,
+                              },
+                            ]);
                             toast({
-                              title: "Document Removed",
-                              description: `${doc.name} has been removed`,
+                              title: 'Success',
+                              description: `${pendingDocument.name} uploaded successfully`,
                               duration: 2000,
-                              variant: "destructive",
+                              variant: 'success',
                             });
+                            setPendingDocument(null);
+                            setPendingDocumentRemark('');
                           }}
-                          className="px-2 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-600 hover:bg-red-50 rounded-md transition-colors flex items-center gap-1"
-                          title="Remove document"
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
                         >
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                          Save
+                        </Button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )}
+
+                  {/* Rows */}
+                  {documents.map((doc, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-12 gap-4 items-center px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b last:border-b-0 border-gray-200"
+                    >
+                      <div className="col-span-3 flex items-center gap-2 min-w-0">
+                        <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
+                          {renderDocumentTypeIcon(doc.name, doc.url)}
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
+                      </div>
+                      <div className="col-span-2 text-xs font-medium text-gray-900 truncate">{doc.updatedBy || '-'}</div>
+                      <div className="col-span-2 text-xs font-medium text-gray-900 truncate">
+                        {doc.updatedAt
+                          ? new Date(doc.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : '-'}
+                      </div>
+                      <div className="col-span-3">
+                        <Input
+                          value={doc.remark || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setDocuments((prev) =>
+                              prev.map((d, i) => (i === index ? { ...d, remark: value } : d))
+                            );
+                          }}
+                          onBlur={(e) => {
+                            const value = e.target.value;
+                            setDocuments((prev) =>
+                              prev.map((d, i) =>
+                                i === index
+                                  ? {
+                                      ...d,
+                                      remark: value,
+                                      updatedBy:
+                                        currentUserName ||
+                                        (window as any)?.user?.name ||
+                                        (window as any)?.user?.email ||
+                                        'User',
+                                      updatedAt: new Date().toISOString(),
+                                    }
+                                  : d
+                              )
+                            );
+                          }}
+                          placeholder="Enter remark"
+                          className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
+                        />
+                      </div>
+                      <div className="col-span-2 flex items-center justify-end gap-1.5">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                              aria-label="Document actions"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            side="top"
+                            sideOffset={8}
+                            className="z-[3000] bg-white text-gray-900 border-gray-200 shadow-lg"
+                          >
+                            <DropdownMenuItem
+                              onClick={() => {
+                                openDocumentInNewTab(doc);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                downloadDocument(doc);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              Download
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const updatedDocs = documents.filter((_, i) => i !== index);
+                                setDocuments(updatedDocs);
+                                toast({
+                                  title: 'Document Removed',
+                                  description: `${doc.name} has been removed`,
+                                  duration: 2000,
+                                  variant: 'destructive',
+                                });
+                              }}
+                              className="cursor-pointer text-red-600 focus:text-red-600"
+                            >
+                              Remove
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
