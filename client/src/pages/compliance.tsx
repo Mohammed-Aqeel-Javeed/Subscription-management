@@ -27,6 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import Papa from 'papaparse';
+import ExcelJS from "exceljs";
 import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
 import { parse, isValid as isValidDateFns } from "date-fns";
@@ -1807,35 +1808,171 @@ export default function Compliance() {
     if (fileInputRef.current) fileInputRef.current.click();
   };
 
-  const downloadComplianceImportTemplate = () => {
-    const templateRow = {
-      Policy: "",
-      Category: "",
-      Status: "",
-      GoverningAuthority: "",
-      StartDate: "",
-      EndDate: "",
-      SubmissionDeadline: "",
-      Frequency: "",
-      SubmissionDate: "",
-      SubmittedBy: "",
-      Amount: "",
-      PaymentDate: "",
-      ReminderDays: "",
-      ReminderPolicy: "",
-      Remarks: "",
-    };
+  const downloadComplianceImportTemplate = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "SubscriptionTracker";
 
-    const csv = Papa.unparse([templateRow]);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "compliance_import_template.csv";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+      const sheet = workbook.addWorksheet("Compliance");
+      const lookupSheet = workbook.addWorksheet("Lookup");
+      lookupSheet.state = "veryHidden";
+
+      // Must match the category names shown in the Compliance UI dropdown
+      const categoriesForTemplate = ["Tax", "Payroll", "Regulatory", "Legal", "Other"].filter(Boolean);
+
+      const authoritiesForTemplate = (
+        Array.isArray(governingAuthorities) && governingAuthorities.length > 0
+          ? governingAuthorities
+          : GOVERNING_AUTHORITIES
+      ).filter(Boolean);
+
+      lookupSheet.getCell("A1").value = "Category";
+      categoriesForTemplate.forEach((v, idx) => {
+        lookupSheet.getCell(`A${idx + 2}`).value = v;
+      });
+
+      lookupSheet.getCell("B1").value = "GoverningAuthority";
+      authoritiesForTemplate.forEach((v, idx) => {
+        lookupSheet.getCell(`B${idx + 2}`).value = v;
+      });
+
+      const frequenciesForTemplate = ["Monthly", "Quarterly", "Yearly"];
+      lookupSheet.getCell("C1").value = "Frequency";
+      frequenciesForTemplate.forEach((v, idx) => {
+        lookupSheet.getCell(`C${idx + 2}`).value = v;
+      });
+
+      const lastCategoryRow = Math.max(2, categoriesForTemplate.length + 1);
+      const lastAuthorityRow = Math.max(2, authoritiesForTemplate.length + 1);
+      const categoryRange = `Lookup!$A$2:$A$${lastCategoryRow}`;
+      const authorityRange = `Lookup!$B$2:$B$${lastAuthorityRow}`;
+      const frequencyRange = `Lookup!$C$2:$C$${frequenciesForTemplate.length + 1}`;
+
+      sheet.columns = [
+        { header: "Filing Name", key: "filingName", width: 28 },
+        { header: "Category", key: "category", width: 22 },
+        { header: "GoverningAuthority", key: "governingAuthority", width: 22 },
+        { header: "StartDate", key: "startDate", width: 14 },
+        { header: "EndDate", key: "endDate", width: 14 },
+        { header: "SubmissionDeadline", key: "submissionDeadline", width: 18 },
+        { header: "Frequency", key: "frequency", width: 12 },
+        { header: "SubmissionDate", key: "submissionDate", width: 16 },
+        { header: "Amount", key: "amount", width: 14 },
+        { header: "PaymentDate", key: "paymentDate", width: 14 },
+        { header: "ReminderDays", key: "reminderDays", width: 14 },
+        { header: "ReminderPolicy", key: "reminderPolicy", width: 16 },
+        { header: "Remarks", key: "remarks", width: 28 },
+      ];
+
+      // Header style
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { vertical: "middle" };
+      headerRow.height = 20;
+
+      // Example row (1 sample)
+      sheet.addRow({
+        filingName: "Annual Return Filing",
+        category: categoriesForTemplate[0] || "",
+        governingAuthority: authoritiesForTemplate[0] || "",
+        startDate: new Date("2026-01-15"),
+        endDate: new Date("2026-02-15"),
+        submissionDeadline: new Date("2026-02-10"),
+        frequency: "Monthly",
+        submissionDate: "",
+        amount: 1200.5,
+        paymentDate: "",
+        reminderDays: 7,
+        reminderPolicy: "One time",
+        remarks: "Example row (delete before import)",
+      });
+
+      // Amount column format (2 decimals)
+      sheet.getColumn(9).numFmt = "0.00";
+
+      // Apply validations to rows 2..500
+      for (let rowIndex = 2; rowIndex <= 500; rowIndex++) {
+        // Category dropdown (B)
+        const categoryCell = sheet.getCell(`B${rowIndex}`);
+        categoryCell.dataValidation = {
+          type: "list",
+          allowBlank: true,
+          formulae: [categoryRange],
+          showErrorMessage: true,
+          errorTitle: "Category",
+          error: "Select a category from the dropdown",
+        };
+
+        // Governing authority dropdown (C)
+        const authorityCell = sheet.getCell(`C${rowIndex}`);
+        authorityCell.dataValidation = {
+          type: "list",
+          allowBlank: true,
+          formulae: [authorityRange],
+          showErrorMessage: true,
+          errorTitle: "Governing Authority",
+          error: "Select a governing authority from the dropdown",
+        };
+
+        // Frequency dropdown (G)
+        const frequencyCell = sheet.getCell(`G${rowIndex}`);
+        frequencyCell.dataValidation = {
+          type: "list",
+          allowBlank: true,
+          formulae: [frequencyRange],
+          showErrorMessage: true,
+          errorTitle: "Frequency",
+          error: "Select a frequency from the dropdown",
+        };
+
+        // Date validations
+        for (const col of ["D", "E", "F", "H", "J"]) {
+          const dateCell = sheet.getCell(`${col}${rowIndex}`);
+          dateCell.numFmt = "yyyy-mm-dd";
+          dateCell.dataValidation = {
+            type: "date",
+            allowBlank: true,
+            operator: "between",
+            formulae: [new Date("2000-01-01"), new Date("2100-12-31")],
+            showErrorMessage: true,
+            errorTitle: "Invalid Date",
+            error: "Enter a valid date (YYYY-MM-DD)",
+          };
+        }
+
+        // Amount validation (I)
+        const amountCell = sheet.getCell(`I${rowIndex}`);
+        amountCell.numFmt = "0.00";
+        amountCell.dataValidation = {
+          type: "decimal",
+          allowBlank: true,
+          operator: "between",
+          formulae: [0, AMOUNT_MAX_10CR],
+          showErrorMessage: true,
+          errorTitle: "Invalid Amount",
+          error: "Enter a valid amount (number)",
+        };
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "compliance_import_template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({
+        title: "Template download failed",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleExportCompliance = () => {
@@ -1845,7 +1982,7 @@ export default function Compliance() {
     }
 
     const rows = filteredItems.map((item: ComplianceItem) => ({
-      Policy: item.policy,
+      "Filing Name": item.policy,
       Category: item.category,
       Status: item.status,
       GoverningAuthority: item.governingAuthority || "",
@@ -1874,105 +2011,176 @@ export default function Compliance() {
     URL.revokeObjectURL(url);
   };
   
-  // IMPORT from CSV -> create compliance items
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const normalizeExcelCellValue = (value: any) => {
+    if (value == null) return "";
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    if (typeof value === "object" && typeof value.text === "string") return value.text;
+    return String(value);
+  };
+
+  const getRowValue = (row: any, keys: string[]) => {
+    for (const key of keys) {
+      if (row && Object.prototype.hasOwnProperty.call(row, key)) {
+        const v = row[key];
+        if (v != null && String(v).trim() !== "") return v;
+      }
+    }
+    return "";
+  };
+
+  const importRows = async (rows: any[], clearFile: () => void) => {
+    if (isLoading) {
+      toast({
+        title: 'Please wait',
+        description: 'Loading existing filings so we can detect duplicate Filing Names.',
+        variant: 'destructive',
+      });
+      clearFile();
+      return;
+    }
+
+    if (!rows.length) {
+      toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive'});
+      clearFile();
+      return;
+    }
+
+    const existingPolicyNames = new Set(
+      (Array.isArray(complianceItems) ? complianceItems : [])
+        .map((it: ComplianceItem) => normalizePolicyName(it.policy))
+        .filter(Boolean)
+    );
+
+    const seenInFile = new Set<string>();
+    const errorSamples: string[] = [];
+    let invalidCount = 0;
+
+    rows.forEach((row, idx) => {
+      const rawFiling = getRowValue(row, ["Filing Name", "FilingName", "Policy", "policy"]);
+      const rawCategory = getRowValue(row, ["Category", "category"]);
+      const policyNorm = normalizePolicyName(rawFiling);
+
+      if (!policyNorm || !String(rawCategory || '').trim()) {
+        invalidCount++;
+        if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Filing Name and Category are required`);
+        return;
+      }
+
+      if (existingPolicyNames.has(policyNorm)) {
+        invalidCount++;
+        if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Duplicate Filing Name already exists: "${String(rawFiling).trim()}"`);
+        return;
+      }
+
+      if (seenInFile.has(policyNorm)) {
+        invalidCount++;
+        if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Duplicate Filing Name in file: "${String(rawFiling).trim()}"`);
+        return;
+      }
+
+      seenInFile.add(policyNorm);
+    });
+
+    if (invalidCount > 0) {
+      toast({
+        title: 'Import blocked',
+        description: `Fix ${invalidCount} issue(s) and try again.\n${errorSamples.join('\n')}`,
+        variant: 'destructive',
+      });
+      clearFile();
+      return;
+    }
+
+    let success = 0; let failed = 0;
+    for (const row of rows) {
+      try {
+        const payload: any = {
+          policy: getRowValue(row, ["Filing Name", "FilingName", "Policy", "policy"]) || '',
+          category: getRowValue(row, ["Category", "category"]) || '',
+          status: getRowValue(row, ["Status", "status"]) || 'Pending',
+          governingAuthority: getRowValue(row, ["GoverningAuthority", "Governing Authority", "governingAuthority"]) || '',
+          lastAudit: getRowValue(row, ["StartDate", "Start Date", "startDate"]) || new Date().toISOString().split('T')[0],
+          endDate: getRowValue(row, ["EndDate", "End Date", "endDate"]) || '',
+          submissionDeadline: getRowValue(row, ["SubmissionDeadline", "Submission Deadline", "submissionDeadline"]) || '',
+          frequency: getRowValue(row, ["Frequency", "frequency"]) || 'Monthly',
+          filingSubmissionDate: getRowValue(row, ["SubmissionDate", "Submission Date", "submissionDate"]) || '',
+          submittedBy: getRowValue(row, ["SubmittedBy", "Submitted By", "submittedBy"]) || '',
+          amount: getRowValue(row, ["Amount", "amount"]) || '',
+          paymentDate: getRowValue(row, ["PaymentDate", "Payment Date", "paymentDate"]) || '',
+          reminderDays: parseInt(getRowValue(row, ["ReminderDays", "Reminder Days", "reminderDays"]) as any) || 7,
+          reminderPolicy: getRowValue(row, ["ReminderPolicy", "Reminder Policy", "reminderPolicy"]) || 'One time',
+          remarks: getRowValue(row, ["Remarks", "remarks"]) || '',
+          issues: 0
+        };
+
+        if (!payload.policy || !payload.category) { failed++; continue; }
+        await apiRequest('POST', '/api/compliance/insert', payload);
+        success++;
+      } catch {
+        failed++;
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ['compliance'] });
+    toast({ title: 'Import finished', description: `Imported ${success} row(s). Failed: ${failed}` });
+    clearFile();
+  };
+
+  // IMPORT from CSV/XLSX -> create compliance items
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        const rows: any[] = results.data as any[];
-        if (!rows.length) {
-          toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive'});
-          e.target.value = '';
+    const clearFile = () => {
+      e.target.value = '';
+    };
+
+    try {
+      if (file.name.toLowerCase().endsWith('.xlsx')) {
+        const buffer = await file.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const ws = workbook.worksheets[0];
+        if (!ws) {
+          toast({ title: 'Import error', description: 'No worksheet found', variant: 'destructive'});
+          clearFile();
           return;
         }
 
-        const existingPolicyNames = new Set(
-          (Array.isArray(complianceItems) ? complianceItems : [])
-            .map((it: ComplianceItem) => normalizePolicyName(it.policy))
-            .filter(Boolean)
-        );
+        const headerValues = (ws.getRow(1).values as any[]).slice(1).map((h) => String(h || '').trim());
+        const parsedRows: any[] = [];
 
-        const seenInFile = new Set<string>();
-        const errorSamples: string[] = [];
-        let invalidCount = 0;
-
-        rows.forEach((row, idx) => {
-          const rawPolicy = row.Policy || row.policy || '';
-          const rawCategory = row.Category || row.category || '';
-          const policyNorm = normalizePolicyName(rawPolicy);
-
-          if (!policyNorm || !String(rawCategory || '').trim()) {
-            invalidCount++;
-            if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Policy and Category are required`);
-            return;
-          }
-
-          if (existingPolicyNames.has(policyNorm)) {
-            invalidCount++;
-            if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Duplicate Policy already exists: "${String(rawPolicy).trim()}"`);
-            return;
-          }
-
-          if (seenInFile.has(policyNorm)) {
-            invalidCount++;
-            if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Duplicate Policy in file: "${String(rawPolicy).trim()}"`);
-            return;
-          }
-
-          seenInFile.add(policyNorm);
+        ws.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return;
+          const obj: any = {};
+          let hasAny = false;
+          headerValues.forEach((header, idx) => {
+            const v = row.getCell(idx + 1).value;
+            const normalized = normalizeExcelCellValue(v);
+            obj[header] = normalized;
+            if (String(normalized || '').trim()) hasAny = true;
+          });
+          if (hasAny) parsedRows.push(obj);
         });
 
-        if (invalidCount > 0) {
-          toast({
-            title: 'Import blocked',
-            description: `Fix ${invalidCount} issue(s) and try again.\n${errorSamples.join('\n')}`,
-            variant: 'destructive',
-          });
-          e.target.value = '';
-          return;
-        }
-
-        let success = 0; let failed = 0;
-        for (const row of rows) {
-          try {
-            const payload: any = {
-              policy: row.Policy || row.policy || '',
-              category: row.Category || row.category || '',
-              status: row.Status || row.status || 'Pending',
-              governingAuthority: row.GoverningAuthority || row.governingAuthority || '',
-              lastAudit: row.StartDate || row.startDate || new Date().toISOString().split('T')[0],
-              endDate: row.EndDate || row.endDate || '',
-              submissionDeadline: row.SubmissionDeadline || row.submissionDeadline || '',
-              frequency: row.Frequency || row.frequency || 'Monthly',
-              filingSubmissionDate: row.SubmissionDate || row.submissionDate || '',
-              submittedBy: row.SubmittedBy || row.submittedBy || '',
-              amount: row.Amount || row.amount || '',
-              paymentDate: row.PaymentDate || row.paymentDate || '',
-              reminderDays: parseInt(row.ReminderDays) || 7,
-              reminderPolicy: row.ReminderPolicy || row.reminderPolicy || 'One time',
-              remarks: row.Remarks || row.remarks || '',
-              issues: 0
-            };
-            // Basic validation
-            if (!payload.policy || !payload.category) { failed++; continue; }
-            await apiRequest('POST', '/api/compliance/insert', payload);
-            success++;
-          } catch (err) {
-            failed++;
-          }
-        }
-        queryClient.invalidateQueries({ queryKey: ['compliance'] });
-        toast({ title: 'Import finished', description: `Imported ${success} row(s). Failed: ${failed}` });
-        e.target.value = '';
-      },
-      error: () => {
-        toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
-        e.target.value = '';
+        await importRows(parsedRows, clearFile);
+        return;
       }
-    });
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          const rows: any[] = results.data as any[];
+          await importRows(rows, clearFile);
+        },
+        error: () => {
+          toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
+          clearFile();
+        }
+      });
+    } catch {
+      toast({ title: 'Import error', description: 'Failed to import file', variant: 'destructive'});
+      clearFile();
+    }
   };
 
   const getItemStatusLabel = (item: ComplianceItem) => {
@@ -2169,7 +2377,7 @@ export default function Compliance() {
             <AlertDialogHeader>
               <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
               <AlertDialogDescription>
-                If you don’t have a file, click No to download a CSV template.
+                If you don’t have a file, click No to download an XLSX template.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -2312,7 +2520,7 @@ export default function Compliance() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-10 border-gray-200 bg-white text-gray-900 text-sm font-normal"
+                className="h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white text-sm font-semibold shadow-lg border border-white/20 ring-1 ring-black/5 hover:from-indigo-600 hover:to-blue-700 hover:shadow-xl transition-all"
                 onClick={() => setFiltersOpen((v) => !v)}
               >
                 Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
@@ -3956,7 +4164,7 @@ export default function Compliance() {
         type="file"
         ref={fileInputRef}
         onChange={handleImport}
-        accept=".csv"
+        accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         style={{ display: 'none' }}
       />
       

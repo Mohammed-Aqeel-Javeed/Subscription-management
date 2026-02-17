@@ -1,15 +1,19 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Can } from "@/components/Can";
+import { useSidebarSlot } from "@/context/SidebarSlotContext";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown, X, ArrowUpDown, ArrowUp, ArrowDown, History } from "lucide-react";
+import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown, X, ArrowUpDown, ArrowUp, ArrowDown, History, MoreVertical } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -29,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import Papa from 'papaparse';
+import ExcelJS from "exceljs";
 import { apiRequest } from "@/lib/queryClient";
 
 // Predefined Issuing Authorities (ordered to match provided screenshot)
@@ -994,8 +999,21 @@ export default function GovernmentLicense() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedRenewalStatuses, setSelectedRenewalStatuses] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const { setActive: setSidebarSlotActive, setReplaceNav: setSidebarReplaceNav } = useSidebarSlot();
+  const [sidebarSlotEl, setSidebarSlotEl] = useState<HTMLElement | null>(null);
+  const [openActionsMenuForId, setOpenActionsMenuForId] = useState<string | null>(null);
+  const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [renewalFeeMin, setRenewalFeeMin] = useState<string>("");
+  const [renewalFeeMax, setRenewalFeeMax] = useState<string>("");
+  const [issueDateFrom, setIssueDateFrom] = useState<string>("");
+  const [issueDateTo, setIssueDateTo] = useState<string>("");
+  const [expiryDateFrom, setExpiryDateFrom] = useState<string>("");
+  const [expiryDateTo, setExpiryDateTo] = useState<string>("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -2151,67 +2169,282 @@ export default function GovernmentLicense() {
     toast({ title: 'Exported', description: 'Licenses exported to CSV' });
   };
 
-  const triggerImport = () => fileInputRef.current?.click();
+  const AMOUNT_MAX_10CR = 100000000; // 10 crore
 
-  // IMPORT from CSV -> create licenses
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        const rows: any[] = results.data as any[];
-        if (!rows.length) {
-          toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive'});
-          return;
+  const downloadRenewalsImportTemplate = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "SubscriptionTracker";
+
+      const sheet = workbook.addWorksheet("Renewals");
+      const lookupSheet = workbook.addWorksheet("Lookup");
+      lookupSheet.state = "veryHidden";
+
+      const authoritiesForTemplate = (ISSUING_AUTHORITIES || []).filter(Boolean);
+
+      lookupSheet.getCell("A1").value = "IssuingAuthority";
+      authoritiesForTemplate.forEach((v, idx) => {
+        lookupSheet.getCell(`A${idx + 2}`).value = v;
+      });
+      const lastAuthorityRow = Math.max(2, authoritiesForTemplate.length + 1);
+      const authorityRange = `Lookup!$A$2:$A$${lastAuthorityRow}`;
+
+      sheet.columns = [
+        { header: "Title/Name/No.", key: "title", width: 28 },
+        { header: "IssuingAuthority", key: "issuingAuthority", width: 30 },
+        { header: "StartDate", key: "startDate", width: 14 },
+        { header: "EndDate", key: "endDate", width: 14 },
+        { header: "Amount", key: "amount", width: 14 },
+      ];
+
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { vertical: "middle" };
+      headerRow.height = 20;
+
+      sheet.addRow({
+        title: "Example Renewal (delete before import)",
+        issuingAuthority: authoritiesForTemplate[0] || "",
+        startDate: new Date(new Date().toISOString().slice(0, 10)),
+        endDate: new Date(new Date().toISOString().slice(0, 10)),
+        amount: 0,
+      });
+
+      // Formats
+      sheet.getColumn(3).numFmt = "yyyy-mm-dd";
+      sheet.getColumn(4).numFmt = "yyyy-mm-dd";
+      sheet.getColumn(5).numFmt = "0.00";
+
+      // Apply validations to rows 2..500
+      for (let rowIndex = 2; rowIndex <= 500; rowIndex++) {
+        // Issuing authority dropdown (B)
+        const authorityCell = sheet.getCell(`B${rowIndex}`);
+        authorityCell.dataValidation = {
+          type: "list",
+          allowBlank: true,
+          formulae: [authorityRange],
+          showErrorMessage: true,
+          errorTitle: "Issuing Authority",
+          error: "Select an issuing authority from the dropdown",
+        };
+
+        // Date validations (C, D)
+        for (const col of ["C", "D"]) {
+          const dateCell = sheet.getCell(`${col}${rowIndex}`);
+          dateCell.numFmt = "yyyy-mm-dd";
+          dateCell.dataValidation = {
+            type: "date",
+            allowBlank: true,
+            operator: "between",
+            formulae: [new Date("2000-01-01"), new Date("2100-12-31")],
+            showErrorMessage: true,
+            errorTitle: "Invalid Date",
+            error: "Enter a valid date (YYYY-MM-DD)",
+          };
         }
-        let success = 0; let failed = 0;
-        for (const row of rows) {
-          try {
-            const payload: any = {
-              licenseName: row.LicenseType || row.LicenseName || row.licenseName || '',
-              // licenseNo removed
-              issuingAuthorityName: row.IssuingAuthority || row.issuingAuthorityName || '',
-              startDate: row.StartDate || row.startDate || new Date().toISOString().split('T')[0],
-              endDate: row.EndDate || row.endDate || new Date().toISOString().split('T')[0],
-              renewalFee: parseFloat(row.RenewalFee) || 0,
-              renewalLeadTimeEstimated: (() => {
-                const raw = row.RenewalLeadTimeEstimated || row.renewalLeadTimeEstimated;
-                const s = raw === '' || raw === null || raw === undefined ? '' : String(raw).trim();
-                return s ? s : undefined;
-              })(),
-              responsiblePerson: row.ResponsiblePerson || row.responsiblePerson || '',
-              status: (() => {
-                const raw = String(row.Status || row.status || '').trim();
-                if (raw === 'Cancelled') return 'Cancelled';
-                const endDate = String(row.EndDate || row.endDate || '').trim();
-                return getDerivedStatus({ endDate });
-              })(),
-              issuingAuthorityEmail: row.IssuingAuthorityEmail || row.issuingAuthorityEmail || '',
-              issuingAuthorityPhone: row.IssuingAuthorityPhone || row.issuingAuthorityPhone || '',
-              details: row.Details || row.details || ''
-            };
-            // Basic validation
-            if (!payload.licenseName) { failed++; continue; }
-            await apiRequest('POST', '/api/licenses', payload);
-            success++;
-          } catch (err) {
-            failed++;
-          }
-        }
-        queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/notifications/license"] });
-        toast({ title: 'Import finished', description: `Imported ${success} license(s). Failed: ${failed}` });
-        e.target.value = '';
-      },
-      error: () => {
-        toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
+
+        // Amount validation (E)
+        const amountCell = sheet.getCell(`E${rowIndex}`);
+        amountCell.numFmt = "0.00";
+        amountCell.dataValidation = {
+          type: "decimal",
+          allowBlank: true,
+          operator: "between",
+          formulae: [0, AMOUNT_MAX_10CR],
+          showErrorMessage: true,
+          errorTitle: "Invalid Amount",
+          error: "Enter a valid amount (number)",
+        };
       }
-    });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "renewals_import_template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({
+        title: "Template download failed",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    }
   };
 
-  // Filter licenses based on search and status
+  const triggerImport = () => fileInputRef.current?.click();
+
+  const normalizeTitle = (value: any) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+  const normalizeExcelCellValue = (value: any) => {
+    if (value == null) return "";
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    if (typeof value === "object" && typeof value.text === "string") return value.text;
+    return String(value);
+  };
+
+  const getRowValue = (row: any, keys: string[]) => {
+    for (const key of keys) {
+      if (row && Object.prototype.hasOwnProperty.call(row, key)) {
+        const v = row[key];
+        if (v != null && String(v).trim() !== '') return v;
+      }
+    }
+    return '';
+  };
+
+  const importRows = async (rows: any[], clearFile: () => void) => {
+    if (!rows.length) {
+      toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive'});
+      clearFile();
+      return;
+    }
+
+    const existingTitles = new Set(
+      (Array.isArray(licenses) ? licenses : [])
+        .map((l: any) => normalizeTitle(l.licenseName))
+        .filter(Boolean)
+    );
+
+    const seenInFile = new Set<string>();
+    const errorSamples: string[] = [];
+    let invalidCount = 0;
+
+    rows.forEach((row, idx) => {
+      const rawTitle = getRowValue(row, ["Title/Name/No.", "Title", "LicenseType", "License Name", "LicenseName", "licenseName"]);
+      const rawAuthority = getRowValue(row, ["IssuingAuthority", "Issuing Authority", "IssuingAuthorityName", "issuingAuthorityName"]);
+      const titleNorm = normalizeTitle(rawTitle);
+
+      if (!titleNorm || !String(rawAuthority || '').trim()) {
+        invalidCount++;
+        if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Title/Name/No. and IssuingAuthority are required`);
+        return;
+      }
+
+      if (existingTitles.has(titleNorm)) {
+        invalidCount++;
+        if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Duplicate Title/Name/No. already exists: "${String(rawTitle).trim()}"`);
+        return;
+      }
+
+      if (seenInFile.has(titleNorm)) {
+        invalidCount++;
+        if (errorSamples.length < 5) errorSamples.push(`Row ${idx + 1}: Duplicate Title/Name/No. in file: "${String(rawTitle).trim()}"`);
+        return;
+      }
+
+      seenInFile.add(titleNorm);
+    });
+
+    if (invalidCount > 0) {
+      toast({
+        title: 'Import blocked',
+        description: `Fix ${invalidCount} issue(s) and try again.\n${errorSamples.join('\n')}`,
+        variant: 'destructive',
+      });
+      clearFile();
+      return;
+    }
+
+    let success = 0; let failed = 0;
+    for (const row of rows) {
+      try {
+        const payload: any = {
+          licenseName: getRowValue(row, ["Title/Name/No.", "Title", "LicenseType", "License Name", "LicenseName", "licenseName"]) || '',
+          issuingAuthorityName: getRowValue(row, ["IssuingAuthority", "Issuing Authority", "IssuingAuthorityName", "issuingAuthorityName"]) || '',
+          startDate: getRowValue(row, ["StartDate", "Start Date", "startDate"]) || new Date().toISOString().split('T')[0],
+          endDate: getRowValue(row, ["EndDate", "End Date", "endDate"]) || new Date().toISOString().split('T')[0],
+          renewalFee: (() => {
+            const raw = getRowValue(row, ["Amount", "RenewalFee", "Renewal Fee", "renewalFee"]);
+            const v = raw === '' || raw === null || raw === undefined ? 0 : parseFloat(String(raw));
+            return Number.isFinite(v) ? v : 0;
+          })(),
+        };
+
+        if (!String(payload.licenseName || '').trim()) { failed++; continue; }
+        await apiRequest('POST', '/api/licenses', payload);
+        success++;
+      } catch {
+        failed++;
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/notifications/license"] });
+    toast({ title: 'Import finished', description: `Imported ${success} license(s). Failed: ${failed}` });
+    clearFile();
+  };
+
+  // IMPORT from CSV -> create licenses
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const clearFile = () => {
+      e.target.value = '';
+    };
+
+    try {
+      if (file.name.toLowerCase().endsWith('.xlsx')) {
+        const buffer = await file.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const worksheet = workbook.worksheets[0];
+        if (!worksheet) {
+          toast({ title: 'Import error', description: 'No worksheet found in XLSX file', variant: 'destructive'});
+          clearFile();
+          return;
+        }
+
+        const headerRow = worksheet.getRow(1);
+        const headers: string[] = [];
+        headerRow.eachCell((cell, colNumber) => {
+          headers[colNumber - 1] = String(normalizeExcelCellValue(cell.value)).trim();
+        });
+
+        const rows: any[] = [];
+        worksheet.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return;
+          const obj: any = {};
+          headers.forEach((header, idx) => {
+            if (!header) return;
+            const cell = row.getCell(idx + 1);
+            obj[header] = normalizeExcelCellValue(cell.value);
+          });
+          const hasAny = Object.values(obj).some(v => String(v ?? '').trim() !== '');
+          if (hasAny) rows.push(obj);
+        });
+
+        await importRows(rows, clearFile);
+        return;
+      }
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          const rows: any[] = (results.data as any[]).map((r: any) => ({ ...r }));
+          await importRows(rows, clearFile);
+        },
+        error: () => {
+          toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
+          clearFile();
+        }
+      });
+    } catch {
+      toast({ title: 'Import error', description: 'Failed to import file', variant: 'destructive'});
+      clearFile();
+    }
+  };
+
+  const toDateKey = (value?: string) => (value ? String(value).slice(0, 10) : '');
+
+  // Filter licenses based on search + sidebar filters
   const filteredLicenses = licenses.filter((license) => {
     const q = (searchTerm || "").toLowerCase();
     const matchesSearch = 
@@ -2222,10 +2455,49 @@ export default function GovernmentLicense() {
       (String((license as any).secondaryPerson || "").toLowerCase().includes(q));
 
     const derivedStatus = getDerivedStatus({ endDate: license.endDate, status: license.status });
-    const matchesStatus = statusFilter === "all" || derivedStatus === statusFilter;
+    const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(derivedStatus);
+    const matchesRenewalStatus =
+      selectedRenewalStatuses.length === 0 ||
+      (license.renewalStatus ? selectedRenewalStatuses.includes(license.renewalStatus) : false);
 
-    return matchesSearch && matchesStatus;
+    const issueKey = toDateKey(license.startDate);
+    const matchesIssueDate =
+      (!issueDateFrom && !issueDateTo) ||
+      (issueKey && (!issueDateFrom || issueKey >= issueDateFrom) && (!issueDateTo || issueKey <= issueDateTo));
+
+    const expiryKey = toDateKey(license.endDate);
+    const matchesExpiryDate =
+      (!expiryDateFrom && !expiryDateTo) ||
+      (expiryKey && (!expiryDateFrom || expiryKey >= expiryDateFrom) && (!expiryDateTo || expiryKey <= expiryDateTo));
+
+    const minFee = renewalFeeMin.trim() ? Number(renewalFeeMin) : null;
+    const maxFee = renewalFeeMax.trim() ? Number(renewalFeeMax) : null;
+    const hasFeeRange = minFee !== null || maxFee !== null;
+    const feeValue = typeof license.renewalFee === 'number' ? license.renewalFee : null;
+    const matchesRenewalFee =
+      !hasFeeRange ||
+      (feeValue !== null &&
+        (minFee === null || (Number.isFinite(minFee) && feeValue >= minFee)) &&
+        (maxFee === null || (Number.isFinite(maxFee) && feeValue <= maxFee)));
+
+    return (
+      matchesSearch &&
+      matchesStatus &&
+      matchesRenewalStatus &&
+      matchesIssueDate &&
+      matchesExpiryDate &&
+      matchesRenewalFee
+    );
   });
+
+  // Filter dropdown values based on what is currently present in the table data
+  const uniqueDerivedStatuses = Array.from(
+    new Set((licenses || []).map((l) => getDerivedStatus({ endDate: l.endDate, status: l.status })))
+  ).filter(Boolean);
+
+  const uniqueRenewalStatuses = Array.from(
+    new Set((licenses || []).map((l) => l.renewalStatus).filter(Boolean) as string[])
+  );
 
   const sortedLicenses = (() => {
     const list = [...filteredLicenses];
@@ -2629,7 +2901,7 @@ export default function GovernmentLicense() {
       case "Expired":
         return "bg-rose-100 text-rose-800 border border-rose-200";
       case "Cancelled":
-        return "bg-gray-100 text-gray-800 border border-gray-200";
+        return "bg-rose-100 text-rose-800 border border-rose-200";
       default:
         return "bg-gray-100 text-gray-800 border border-gray-200";
     }
@@ -2657,6 +2929,194 @@ export default function GovernmentLicense() {
     }
   };
 
+  const getRenewalStatusLabel = (renewalStatus: string) => {
+    switch (renewalStatus) {
+      case 'Renewal Initiated':
+        return 'Initiated';
+      case 'Application Submitted':
+        return 'Submitted';
+      case 'Amendments/ Appeal Submitted':
+        return 'Amendment/Appeal';
+      default:
+        return renewalStatus;
+    }
+  };
+
+  useEffect(() => {
+    const readSlotEl = () => document.getElementById('page-sidebar-slot') as HTMLElement | null;
+    setSidebarSlotEl(readSlotEl());
+
+    const observer = new MutationObserver(() => {
+      const next = readSlotEl();
+      setSidebarSlotEl((prev) => (prev !== next ? next : prev));
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    setSidebarSlotActive(filtersOpen);
+    setSidebarReplaceNav(filtersOpen);
+
+    return () => {
+      setSidebarSlotActive(false);
+      setSidebarReplaceNav(false);
+    };
+  }, [filtersOpen, sidebarSlotEl, setSidebarSlotActive, setSidebarReplaceNav]);
+
+  const activeFilterCount =
+    selectedStatuses.length +
+    selectedRenewalStatuses.length +
+    (renewalFeeMin.trim() ? 1 : 0) +
+    (renewalFeeMax.trim() ? 1 : 0) +
+    (issueDateFrom ? 1 : 0) +
+    (issueDateTo ? 1 : 0) +
+    (expiryDateFrom ? 1 : 0) +
+    (expiryDateTo ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setSelectedStatuses([]);
+    setSelectedRenewalStatuses([]);
+    setRenewalFeeMin('');
+    setRenewalFeeMax('');
+    setIssueDateFrom('');
+    setIssueDateTo('');
+    setExpiryDateFrom('');
+    setExpiryDateTo('');
+  };
+
+  const FiltersSidebarPanel = () => (
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden">
+      <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3">
+        <div>
+          <div className="text-base font-semibold text-gray-900">Filters</div>
+          <div className="text-xs text-gray-500 mt-0.5">Refine renewals</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" className="h-9" onClick={clearAllFilters}>
+            Clear all
+          </Button>
+          <Button type="button" variant="ghost" className="h-9" onClick={() => setFiltersOpen(false)}>
+            Close
+          </Button>
+        </div>
+      </div>
+
+      <div className="p-5 max-h-[calc(100vh-260px)] overflow-auto">
+        <Accordion type="multiple" defaultValue={["status", "price", "dates"]}>
+          <AccordionItem value="price">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Price
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="flex items-center gap-2 px-1">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Min"
+                  value={renewalFeeMin}
+                  onChange={(e) => setRenewalFeeMin(e.target.value)}
+                  className="h-9"
+                />
+                <span className="text-sm text-gray-500">to</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Max"
+                  value={renewalFeeMax}
+                  onChange={(e) => setRenewalFeeMax(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="dates">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Dates
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 mb-1">Issue date</div>
+                  <div className="flex items-center gap-2">
+                    <Input type="date" value={issueDateFrom} onChange={(e) => setIssueDateFrom(e.target.value)} className="h-9" />
+                    <span className="text-sm text-gray-500">to</span>
+                    <Input type="date" value={issueDateTo} onChange={(e) => setIssueDateTo(e.target.value)} className="h-9" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 mb-1">Expiry date</div>
+                  <div className="flex items-center gap-2">
+                    <Input type="date" value={expiryDateFrom} onChange={(e) => setExpiryDateFrom(e.target.value)} className="h-9" />
+                    <span className="text-sm text-gray-500">to</span>
+                    <Input type="date" value={expiryDateTo} onChange={(e) => setExpiryDateTo(e.target.value)} className="h-9" />
+                  </div>
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="status">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Status
+            </AccordionTrigger>
+            <AccordionContent>
+              {uniqueDerivedStatuses.map((status) => {
+                const checked = selectedStatuses.includes(status);
+                return (
+                  <div key={status} className="flex items-center gap-2 py-2">
+                    <Checkbox
+                      id={`renewals-status-${encodeURIComponent(status)}`}
+                      checked={checked}
+                      onCheckedChange={(v: boolean) => {
+                        setSelectedStatuses((prev) =>
+                          v ? Array.from(new Set([...prev, status])) : prev.filter((x) => x !== status)
+                        );
+                      }}
+                    />
+                    <label htmlFor={`renewals-status-${encodeURIComponent(status)}`} className="text-sm text-gray-900 cursor-pointer">
+                      {status}
+                    </label>
+                  </div>
+                );
+              })}
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="renewal-status">
+            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
+              Renewal Status
+            </AccordionTrigger>
+            <AccordionContent>
+              {uniqueRenewalStatuses.map((status) => {
+                const checked = selectedRenewalStatuses.includes(status);
+                const inputId = `renewals-renewalstatus-${encodeURIComponent(status)}`;
+                return (
+                  <div key={status} className="flex items-center gap-2 py-2">
+                    <Checkbox
+                      id={inputId}
+                      checked={checked}
+                      onCheckedChange={(v: boolean) => {
+                        setSelectedRenewalStatuses((prev) =>
+                          v ? Array.from(new Set([...prev, status])) : prev.filter((x) => x !== status)
+                        );
+                      }}
+                    />
+                    <label htmlFor={inputId} className="text-sm text-gray-900 cursor-pointer">
+                      {getRenewalStatusLabel(status)}
+                    </label>
+                  </div>
+                );
+              })}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+    </div>
+  );
+
   const truncateText = (value: string | undefined | null, maxChars: number) => {
     const text = (value ?? '').toString();
     if (!text) return '';
@@ -2668,106 +3128,132 @@ export default function GovernmentLicense() {
   // (summary cards removed)
 
   return (
-    <div className="h-full bg-white">
+    <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
       <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
-        {/* Modern Professional Header */}
-        <div className="mb-8 shrink-0">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-4">
-              <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
-                <ShieldCheck className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Renewals Management</h1>
-              </div>
+        <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+          <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+              <AlertDialogDescription>
+                If you don’t have a file, click No to download an XLSX template.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                className="bg-red-600 text-white hover:bg-red-700"
+                onClick={() => {
+                  setImportConfirmOpen(false);
+                  downloadRenewalsImportTemplate();
+                }}
+              >
+                No
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-green-600 text-white hover:bg-green-700"
+                onClick={() => {
+                  setImportConfirmOpen(false);
+                  setTimeout(() => triggerImport(), 0);
+                }}
+              >
+                Yes
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        {filtersOpen && sidebarSlotEl ? createPortal(<FiltersSidebarPanel />, sidebarSlotEl) : null}
+        {/* Header Section */}
+        <div className="flex items-center justify-between mb-6 shrink-0">
+          <div className="flex items-center space-x-4">
+            <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center shadow-md border border-gray-200">
+              <ShieldCheck className="h-6 w-6 text-blue-600" />
             </div>
-            
-            <div className="flex items-center space-x-3">
-              <Button
-                type="button"
-                onClick={handleExport}
-                className="relative backdrop-blur-md bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-400/40 text-emerald-700 hover:from-emerald-500/30 hover:to-teal-500/30 shadow-lg hover:shadow-xl transition-all duration-300 font-medium"
-                style={{
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                }}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-              <Button
-                type="button"
-                onClick={triggerImport}
-                className="relative backdrop-blur-md bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-400/40 text-purple-700 hover:from-purple-500/30 hover:to-pink-500/30 shadow-lg hover:shadow-xl transition-all duration-300 font-medium"
-                style={{
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                }}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Import
-              </Button>
-              <Can I="create" a="License">
-                <Button
-                  onClick={handleAddNew}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Renewal
-                </Button>
-              </Can>
-              <Button
-                type="button"
-                onClick={() => navigate('/renewal-log')}
-                className="relative backdrop-blur-md bg-gradient-to-r from-orange-500/20 to-amber-500/20 border border-orange-400/40 text-orange-700 hover:from-orange-500/30 hover:to-amber-500/30 shadow-lg hover:shadow-xl transition-all duration-300 font-medium"
-                style={{
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                }}
-              >
-                <History className="h-4 w-4 mr-2" />
-                Log
-              </Button>
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Renewals Management</h1>
             </div>
           </div>
-          {/* Key Metrics Cards removed as requested */}
+
+          <div className="flex items-center space-x-3">
+            <Can I="create" a="License">
+              <Button
+                onClick={handleAddNew}
+                className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Renewal
+              </Button>
+            </Can>
+
+            <Button
+              variant="outline"
+              onClick={() => navigate('/renewal-log')}
+              className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200"
+            >
+              <Calendar className="h-4 w-4 mr-2" />
+              Audit Log
+            </Button>
+
+            <Select
+              key={dataManagementSelectKey}
+              onValueChange={(value) => {
+                if (value === 'export') {
+                  handleExport();
+                } else if (value === 'import') {
+                  setImportConfirmOpen(true);
+                }
+
+                // Radix Select won't re-fire onValueChange for the same value.
+                // Remounting clears internal selection so Export/Import always works.
+                setDataManagementSelectKey((k) => k + 1);
+              }}
+            >
+              <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                <SelectValue placeholder="Data Management" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="export" className="cursor-pointer">
+                  <div className="flex items-center">
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </div>
+                </SelectItem>
+                <SelectItem value="import" className="cursor-pointer">
+                  <div className="flex items-center">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        {/* Filters Section */}
-        <Card className="mb-6 border-slate-200 shadow-md rounded-xl shrink-0">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              {/* Search Input */}
-              <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 h-5 w-5" />
-                <Input
-                  
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-12 border-slate-300 bg-white text-slate-900 placeholder-slate-400 rounded-lg h-10"
-                />
-              </div>
-              {/* Status Filter */}
-              <div className="w-full sm:w-48">
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="border-slate-300 bg-white text-slate-900 rounded-lg h-10 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Expired">Expired</SelectItem>
-                    <SelectItem value="Cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        {/* Search + Filter */}
+        <div className="mb-6 bg-white border border-gray-200 rounded-2xl shadow-sm p-4 shrink-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Search renewals..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm rounded-lg"
+              />
             </div>
-          </CardContent>
-        </Card>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white text-sm font-semibold shadow-lg border border-white/20 ring-1 ring-black/5 hover:from-indigo-600 hover:to-blue-700 hover:shadow-xl transition-all"
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+            </Button>
+          </div>
+        </div>
 
         {/* Main Content */}
         <div className="min-w-0 flex-1 min-h-0">
-          <Card className="border-slate-200 shadow-lg rounded-2xl overflow-hidden h-full flex flex-col min-h-0">
+          <Card className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden h-full flex flex-col min-h-0">
             <CardContent className="p-0 flex flex-col min-h-0">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20">
@@ -2793,10 +3279,10 @@ export default function GovernmentLicense() {
                     <Shield className="w-12 h-12 text-slate-400" />
                   </div>
                   <h3 className="text-xl font-medium text-slate-800 mb-2">
-                    {searchTerm || statusFilter !== "all" ? "No matching renewals found" : "No renewals found"}
+                    {searchTerm || activeFilterCount > 0 ? "No matching renewals found" : "No renewals found"}
                   </h3>
                   <p className="text-slate-600 max-w-md text-center">
-                    {searchTerm || statusFilter !== "all" 
+                    {searchTerm || activeFilterCount > 0 
                       ? "Try adjusting your search or filter criteria" 
                       : "Get started by adding your first renewal"
                     }
@@ -2804,10 +3290,10 @@ export default function GovernmentLicense() {
                   {/* Add First License button removed as requested */}
                 </div>
               ) : (
-                <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar" className="w-full table-fixed">
+                <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
                   <TableHeader>
-                    <TableRow className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
-                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                    <TableRow className="border-b-2 border-gray-400 bg-gray-200">
+                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
                         <button
                           onClick={() => handleSort('licenseName')}
                           className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
@@ -2816,7 +3302,7 @@ export default function GovernmentLicense() {
                           {getSortIcon('licenseName')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
                         <button
                           onClick={() => handleSort('startDate')}
                           className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
@@ -2825,7 +3311,7 @@ export default function GovernmentLicense() {
                           {getSortIcon('startDate')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
                         <button
                           onClick={() => handleSort('endDate')}
                           className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
@@ -2834,8 +3320,8 @@ export default function GovernmentLicense() {
                           {getSortIcon('endDate')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Submission</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">
+                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Submission</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">
                         <button
                           onClick={() => handleSort('renewalFee')}
                           className="flex items-center justify-end w-full font-bold hover:text-blue-600 transition-colors cursor-pointer"
@@ -2844,9 +3330,9 @@ export default function GovernmentLicense() {
                           {getSortIcon('renewalFee')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">Status</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Renewal Status</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-50 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">ACTIONS</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">Status</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Renewal Status</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
                     <TableBody>
@@ -2900,48 +3386,69 @@ export default function GovernmentLicense() {
                             <TableCell className="px-3 py-3 text-right text-sm text-gray-700 font-semibold w-[110px]">
                               {typeof license.renewalFee === 'number' ? `$${Math.round(license.renewalFee).toLocaleString()}` : '-'}
                             </TableCell>
-                            <TableCell className="px-3 py-3 w-[110px]">
+                            <TableCell className="px-3 py-3 w-[110px] text-center">
                               {(() => {
                                 const derived = getDerivedStatus({ endDate: license.endDate, status: license.status });
                                 return (
-                                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusClassName(derived)}`}>
+                                  <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getStatusClassName(derived)}`}>
                                     {derived}
                                   </span>
                                 );
                               })()}
                             </TableCell>
-                            <TableCell className="px-3 py-3 w-[150px]">
+                            <TableCell className="px-3 py-3 w-[150px] text-center">
                               {license.renewalStatus ? (
-                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getRenewalStatusClassName(license.renewalStatus)}`}>
-                                  {license.renewalStatus}
+                                <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none min-w-[140px] ${getRenewalStatusClassName(license.renewalStatus)}`}>
+                                  {getRenewalStatusLabel(license.renewalStatus)}
                                 </span>
                               ) : (
                                 <span className="text-gray-400 text-xs">-</span>
                               )}
                             </TableCell>
                             <TableCell className="px-3 py-3 text-right w-[110px]">
-                              <div className="flex gap-2 justify-end">
-                                <Can I="update" a="License">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleEdit(license)}
-                                    className="hover:bg-indigo-50 hover:border-indigo-300"
+                              {(() => {
+                                const rowId = String(license.id || "");
+                                const isOpen = !!rowId && openActionsMenuForId === rowId;
+                                const isAnotherRowOpen = !!openActionsMenuForId && openActionsMenuForId !== rowId;
+                                return (
+                                  <DropdownMenu
+                                    open={isOpen}
+                                    onOpenChange={(open) => {
+                                      if (!rowId) return;
+                                      setOpenActionsMenuForId(open ? rowId : null);
+                                    }}
                                   >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                </Can>
-                                <Can I="delete" a="License">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDelete(license.id)}
-                                    className="hover:bg-red-50 hover:border-red-300 text-red-600"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </Can>
-                              </div>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+                                          isAnotherRowOpen ? 'invisible' : ''
+                                        }`}
+                                      >
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="z-[1000]">
+                                      <Can I="update" a="License">
+                                        <DropdownMenuItem onClick={() => handleEdit(license)} className="cursor-pointer">
+                                          <Edit className="h-4 w-4 mr-2" />
+                                          Edit
+                                        </DropdownMenuItem>
+                                      </Can>
+                                      <Can I="delete" a="License">
+                                        <DropdownMenuItem
+                                          onClick={() => handleDelete(license.id)}
+                                          className="cursor-pointer text-red-600 focus:text-red-600"
+                                        >
+                                          <Trash2 className="h-4 w-4 mr-2" />
+                                          Delete
+                                        </DropdownMenuItem>
+                                      </Can>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                );
+                              })()}
                             </TableCell>
                           </motion.tr>
                         ))}
@@ -2970,7 +3477,7 @@ export default function GovernmentLicense() {
               <div className="flex items-center gap-4">
                 <ShieldCheck className="h-6 w-6" />
                 <DialogTitle className="text-xl font-bold leading-none">
-                  {showSubmissionDetails ? 'Renewal Status' : editingLicense ? 'Edit Renewal' : 'Renewal'}
+                  {showSubmissionDetails ? 'Renewal Status' : editingLicense ? 'Edit Renewal' : 'New Renewal'}
                 </DialogTitle>
                 {(() => {
                   const derived = getDerivedStatus({ endDate: expiryDateValue, status: statusValue });
@@ -3015,7 +3522,7 @@ export default function GovernmentLicense() {
                     title="View renewal log for this license"
                   >
                     <History className="h-4 w-4" />
-                    Log
+                    Audit Log
                   </Button>
                 )}
                 {/* License No. display removed */}
@@ -3092,9 +3599,9 @@ export default function GovernmentLicense() {
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md font-inter">
-                                    <SelectItem value="Renewal Initiated" className="text-slate-900 hover:bg-blue-50 font-inter">Renewal Initiated</SelectItem>
-                                    <SelectItem value="Application Submitted" className="text-slate-900 hover:bg-blue-50 font-inter">Application Submitted</SelectItem>
-                                    <SelectItem value="Amendments/ Appeal Submitted" className="text-slate-900 hover:bg-blue-50 font-inter">Amendments/ Appeal Submitted</SelectItem>
+                                    <SelectItem value="Renewal Initiated" className="text-slate-900 hover:bg-blue-50 font-inter">Initiated</SelectItem>
+                                    <SelectItem value="Application Submitted" className="text-slate-900 hover:bg-blue-50 font-inter">Submitted</SelectItem>
+                                    <SelectItem value="Amendments/ Appeal Submitted" className="text-slate-900 hover:bg-blue-50 font-inter">Amendment/Appeal</SelectItem>
                                     <SelectItem value="Approved" className="text-slate-900 hover:bg-blue-50 font-inter">Approved</SelectItem>
                                     <SelectItem value="Rejected" className="text-slate-900 hover:bg-blue-50 font-inter">Rejected</SelectItem>
                                     <SelectItem value="Resubmitted" className="text-slate-900 hover:bg-blue-50 font-inter">Resubmitted</SelectItem>
@@ -3190,7 +3697,7 @@ export default function GovernmentLicense() {
                         <FormField
                           control={form.control}
                           name="renewalAmount"
-                          render={({ field }) => (
+                          render={() => (
                             <FormItem>
                               <FormLabel className="block text-sm font-medium text-slate-700">
                                 Renewal amount (if any):
@@ -3787,7 +4294,7 @@ export default function GovernmentLicense() {
                           className={`w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 ${
                             websiteURLError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20 bg-red-50' : ''
                           }`}
-                          onChange={(e) => {
+                          onChange={() => {
                             // Clear error on change
                             if (websiteURLError) {
                               setWebsiteURLError('');
@@ -4702,7 +5209,7 @@ export default function GovernmentLicense() {
         
         <input
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           ref={fileInputRef}
           onChange={handleImport}
           className="hidden"
