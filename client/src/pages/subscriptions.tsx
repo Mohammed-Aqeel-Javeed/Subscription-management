@@ -1071,7 +1071,7 @@ export default function Subscriptions() {
                 className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Subscription
+                New Subscription
               </Button>
             </Can>
             
@@ -1171,7 +1171,7 @@ export default function Subscriptions() {
             <Button
               type="button"
               variant="outline"
-              className="h-10 border-gray-200 bg-white text-gray-900 text-sm font-normal"
+              className="h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white text-sm font-semibold shadow-lg border border-white/20 ring-1 ring-black/5 hover:from-indigo-600 hover:to-blue-700 hover:shadow-xl transition-all"
               onClick={() => setFiltersOpen((v) => !v)}
             >
               Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}

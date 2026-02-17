@@ -112,7 +112,7 @@ export default function Chatbot() {
 
     // Renewal Status (for renewals/licenses)
     if (lowerMessage.includes("renewal status") || (lowerMessage.includes("status") && lowerMessage.includes("renewal"))) {
-      return "Renewal Status Options:\n\n• Renewal Initiated - Process started\n• Application Submitted - Sent to authority\n• Amendments/Appeal Submitted - Changes requested\n• Resubmitted - Sent again after changes\n• Rejected - Application denied\n• Cancelled - Process stopped\n• Approved - Renewal granted\n\nTracking Progress:\n1. Start: Renewal Initiated\n2. Submit: Application Submitted\n3. If issues: Amendments/Resubmitted\n4. Final: Approved or Rejected\n\nRequired fields for Rejected/Cancelled:\n• Renewal Status Reason (explain why)\n\nHelps track government license renewal progress!";
+      return "Renewal Status Options:\n\n• Initiated - Process started\n• Submitted - Sent to authority\n• Amendment/Appeal - Changes requested\n• Resubmitted - Sent again after changes\n• Rejected - Application denied\n• Cancelled - Process stopped\n• Approved - Renewal granted\n\nTracking Progress:\n1. Start: Initiated\n2. Submit: Submitted\n3. If issues: Amendment/Appeal or Resubmitted\n4. Final: Approved or Rejected\n\nRequired fields for Rejected/Cancelled:\n• Renewal Status Reason (explain why)\n\nHelps track government license renewal progress!";
       }
 
     // Documents/Attachments
