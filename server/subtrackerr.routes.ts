@@ -442,6 +442,7 @@ router.post("/api/history", async (req, res) => {
     }
     // Create history document with tenantId
     const timestamp = new Date();
+    const loggedAt = new Date();
     const resolvedChangedBy =
       typeof changedBy === 'string' && changedBy.trim()
         ? changedBy.trim()
@@ -452,6 +453,7 @@ router.post("/api/history", async (req, res) => {
       tenantId,
       action,
       timestamp,
+      loggedAt,
       data: data ? { ...data } : undefined,
       updatedFields: updatedFields ? { ...updatedFields } : undefined,
       changedBy: resolvedChangedBy,
@@ -489,8 +491,8 @@ router.get("/api/history/list", async (req, res) => {
     // Sort by timestamp and _id for consistent ordering
     const items = await collection
       .find({ tenantId })
-      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
-      .sort({ timestamp: -1, _id: -1 })
+      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
+      .sort({ loggedAt: -1, timestamp: -1, _id: -1 })
       .limit(limit)
       .toArray();
 
@@ -529,11 +531,14 @@ router.get("/api/history/list", async (req, res) => {
           status: item.updatedFields.status,
         };
       }
+
+      const derivedLoggedAt = (item as any).loggedAt ?? (item as any)?._id?.getTimestamp?.();
       
       return {
         ...item,
         _id: item._id?.toString(),
         subscriptionId: item.subscriptionId?.toString(),
+        loggedAt: derivedLoggedAt,
         data: processedData,
         updatedFields: processedUpdatedFields
       };
@@ -583,8 +588,8 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
     // Sort by timestamp descending (newest first)
     const items = await collection
       .find(filter)
-      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
-      .sort({ timestamp: -1, _id: -1 })
+      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
+      .sort({ loggedAt: -1, timestamp: -1, _id: -1 })
       .limit(limit)
       .toArray();
     
@@ -621,11 +626,14 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
           status: item.updatedFields.status,
         };
       }
+
+      const derivedLoggedAt = (item as any).loggedAt ?? (item as any)?._id?.getTimestamp?.();
       
       return {
         ...item,
         _id: item._id.toString(),
         subscriptionId: item.subscriptionId?.toString ? item.subscriptionId.toString() : item.subscriptionId,
+        loggedAt: derivedLoggedAt,
         data: processedData,
         updatedFields: processedUpdatedFields
       };
@@ -2035,6 +2043,34 @@ router.post("/api/subscriptions", async (req, res) => {
         const createdSubscription = await collection.findOne({ _id: subscriptionId, tenantId });
         if (!createdSubscription) return;
 
+        const { decryptSubscriptionData } = await import("./encryption.service.js");
+        const decryptedCreated = decryptSubscriptionData(createdSubscription);
+        const fieldsForHistory = [
+          'serviceName',
+          'vendor',
+          'ownerName',
+          'owner',
+          'startDate',
+          'nextRenewal',
+          'endDate',
+          'amount',
+          'qty',
+          'totalAmount',
+          'lcyAmount',
+          'taxAmount',
+          'totalAmountInclTax',
+          'status',
+        ];
+
+        const pick = (obj: any, keys: string[]) => {
+          const out: any = {};
+          for (const k of keys) {
+            if (obj && Object.prototype.hasOwnProperty.call(obj, k)) out[k] = obj[k];
+          }
+          return out;
+        };
+        const compactCreated = pick(decryptedCreated, fieldsForHistory);
+
         const changedBy = await resolveHistoryChangedBy(db, req.user);
 
         // History record
@@ -2043,11 +2079,12 @@ router.post("/api/subscriptions", async (req, res) => {
             subscriptionId: subscriptionId,
             tenantId,
             data: {
-              ...createdSubscription,
+              ...compactCreated,
               _id: subscriptionId,
             },
             action: 'create',
             timestamp: new Date(),
+            loggedAt: new Date(),
             serviceName: (subscription as any).serviceName,
             changedBy,
           };
@@ -2307,7 +2344,7 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     }
     
     // Import encryption functions
-    const { encryptSubscriptionData } = await import("./encryption.service.js");
+    const { encryptSubscriptionData, decryptSubscriptionData } = await import("./encryption.service.js");
     
     // Always try to create an ObjectId from the ID
     let subscriptionId;
@@ -2321,6 +2358,15 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     if (!oldDoc) {
       return res.status(404).json({ message: "Subscription not found or access denied" });
     }
+    // Extract history-only fields (do not persist on subscription document)
+    const historyActionRaw = String((req.body as any)?.historyAction ?? "").trim().toLowerCase();
+    const changeReason = (req.body as any)?.changeReason;
+    const effectiveDateRaw = (req.body as any)?.effectiveDate;
+
+    if ("historyAction" in req.body) delete (req.body as any).historyAction;
+    if ("changeReason" in req.body) delete (req.body as any).changeReason;
+    if ("effectiveDate" in req.body) delete (req.body as any).effectiveDate;
+
     // Perform the update
     // Remove tenantId from payload if present
     if ('tenantId' in req.body) {
@@ -2363,7 +2409,9 @@ router.put("/api/subscriptions/:id", async (req, res) => {
     // ENCRYPT sensitive fields in the update payload
     const encryptedPayload = encryptSubscriptionData(req.body);
     
-    const preservedInitialDate = req.body.initialDate || oldDoc.initialDate;
+    // IMPORTANT: Treat initialDate as immutable once set (renewals/edits must not reset it).
+    // Only allow setting it when the existing document doesn't have one.
+    const preservedInitialDate = oldDoc.initialDate || req.body.initialDate;
 const update = { 
       $set: { 
         ...encryptedPayload,
@@ -2381,7 +2429,7 @@ const update = {
       // Only create history record if there were actual changes
       if (result.modifiedCount > 0) {
         // Use effectiveDate if provided (and valid), otherwise use current date
-        let effectiveDate = req.body.effectiveDate ? new Date(req.body.effectiveDate) : new Date();
+        let effectiveDate = effectiveDateRaw ? new Date(effectiveDateRaw) : new Date();
         if (!(effectiveDate instanceof Date) || Number.isNaN(effectiveDate.getTime())) {
           effectiveDate = new Date();
         }
@@ -2389,26 +2437,116 @@ const update = {
         const changedBy = await resolveHistoryChangedBy(db, req.user);
         
         // Create history record with tenantId
-        const historyRecord = {
-          subscriptionId: subscriptionId,  // Store as ObjectId
-          tenantId, // Always include tenantId for filtering
-          data: {
-            ...oldDoc,
-            _id: subscriptionId
-          },
-          updatedFields: {
-            ...updatedDoc,
-            _id: subscriptionId
-          },
-          action: "update",
-          timestamp: effectiveDate, // Use effective date instead of new Date()
-          serviceName: updatedDoc?.serviceName,  // Add serviceName for easier querying
-          changedBy,
+        const pick = (obj: any, keys: string[]) => {
+          const out: any = {};
+          for (const k of keys) {
+            if (obj && Object.prototype.hasOwnProperty.call(obj, k)) out[k] = obj[k];
+          }
+          return out;
         };
-try {
-          const historyResult = await historyCollection.insertOne(historyRecord);
-} catch (err) {
-          console.error('Error inserting history record:', err);
+
+        const normalizeMoney = (value: any): number | null => {
+          if (value === null || value === undefined || value === '') return null;
+          if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+          const s = String(value).trim();
+          if (!s) return null;
+          const cleaned = s.replace(/[^0-9,.-]/g, '');
+          if (!cleaned) return null;
+          const n = Number(cleaned.replace(/,/g, ''));
+          return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+        };
+
+        const normalizeDateOnly = (value: any): string => {
+          if (!value) return '';
+          const d = new Date(String(value));
+          if (Number.isNaN(d.getTime())) return String(value).trim();
+          return d.toISOString().slice(0, 10);
+        };
+
+        const fieldsForHistory = [
+          'serviceName',
+          'vendor',
+          'ownerName',
+          'owner',
+          'startDate',
+          'nextRenewal',
+          'endDate',
+          'amount',
+          'qty',
+          'totalAmount',
+          'lcyAmount',
+          'taxAmount',
+          'totalAmountInclTax',
+          'status',
+        ];
+
+        // Decrypt docs for stable diffing + readable history payload.
+        const decryptedOld = decryptSubscriptionData(oldDoc);
+        const decryptedUpdated = decryptSubscriptionData(updatedDoc);
+
+        // Detect meaningful diffs to avoid noisy history entries when values didn't change.
+        const diffs: string[] = [];
+        for (const key of fieldsForHistory) {
+          const before = (decryptedOld as any)?.[key];
+          const after = (decryptedUpdated as any)?.[key];
+
+          if (key === 'startDate' || key === 'nextRenewal' || key === 'endDate') {
+            if (normalizeDateOnly(before) !== normalizeDateOnly(after)) diffs.push(key);
+            continue;
+          }
+
+          if (key === 'amount' || key === 'qty' || key === 'totalAmount' || key === 'lcyAmount' || key === 'taxAmount' || key === 'totalAmountInclTax') {
+            const bn = normalizeMoney(before);
+            const an = normalizeMoney(after);
+            if (bn !== an) diffs.push(key);
+            continue;
+          }
+
+          const bs = before === null || before === undefined ? '' : String(before).trim();
+          const as = after === null || after === undefined ? '' : String(after).trim();
+          if (bs !== as) diffs.push(key);
+        }
+
+        // If nothing meaningful changed, skip inserting history.
+        if (diffs.length === 0) {
+          // Still respond 200; subscription updatedAt/encryption may have changed.
+        } else {
+          const compactOld = pick(decryptedOld, fieldsForHistory);
+          const compactNew = pick(decryptedUpdated, fieldsForHistory);
+
+          // If this looks like a renewal (only date-range changed), force action=renewed.
+          const isRenewalLike = diffs.length > 0 && diffs.every((k) => k === 'startDate' || k === 'nextRenewal' || k === 'endDate');
+          const allowedActions = new Set(["renewed"]);
+          const finalAction = allowedActions.has(historyActionRaw)
+            ? historyActionRaw
+            : isRenewalLike
+              ? 'renewed'
+              : 'update';
+
+          const historyRecord = {
+            subscriptionId: subscriptionId,  // Store as ObjectId
+            tenantId, // Always include tenantId for filtering
+            data: {
+              ...compactOld,
+              _id: subscriptionId,
+            },
+            updatedFields: {
+              ...compactNew,
+              _id: subscriptionId,
+            },
+            action: finalAction,
+            timestamp: effectiveDate, // Use effective date instead of new Date()
+            loggedAt: new Date(),
+            serviceName: (decryptedUpdated as any)?.serviceName ?? updatedDoc?.serviceName,
+            changedBy,
+            ...(changeReason ? { changeReason } : {}),
+          };
+
+          try {
+            await historyCollection.insertOne(historyRecord);
+          } catch (err) {
+            console.error('Error inserting history record:', err);
+          }
         }
       } else {
 }

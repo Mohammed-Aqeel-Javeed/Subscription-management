@@ -1,21 +1,42 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { History, ArrowLeft } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface HistoryRecord {
   _id?: string;
   action: string;
   subscriptionId?: string | { toString(): string };
   timestamp: string;
+  loggedAt?: string;
   changedBy?: string;
   changeReason?: string;
   data?: Record<string, any>;
   updatedFields?: Record<string, any>;
+}
+
+function parseMoneyLike(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const s = String(value).trim();
+  if (!s) return null;
+
+  // If this looks like ciphertext/base64, don't try to parse it as a number.
+  const base64Regex = /^[A-Za-z0-9+/]+=*$/;
+  if (base64Regex.test(s) && s.length > 80) return null;
+
+  // Allow values like "AFN 5,000.00" by stripping non-numeric chars (except . , -)
+  const cleaned = s.replace(/[^0-9,.-]/g, "");
+  if (!cleaned) return null;
+
+  const num = Number(cleaned.replace(/,/g, ""));
+  return Number.isFinite(num) ? num : null;
 }
 
 function getActionBadgeColor(action: string) {
@@ -36,27 +57,61 @@ function getActionBadgeColor(action: string) {
   }
 }
 
-function formatTimestamp(timestamp: string) {
-  if (!timestamp) return { date: "N/A", time: "" };
+function formatTimestamp(timestamp: string, opts?: { forceLocal?: boolean }) {
+  if (!timestamp) return { date: "N/A", time: "00:00" };
 
-  const raw = String(timestamp);
-  // If backend stored a date-only effective date, it comes back as UTC midnight.
-  // Showing local time (e.g., 05:30) is confusing; display date only.
-  if (/T00:00:00(\.000)?Z$/.test(raw)) {
-    const ymd = raw.split("T")[0];
-    const [year, month, day] = ymd.split("-");
-    if (year && month && day) {
-      return { date: `${day}/${month}/${year}`, time: "" };
-    }
+  const raw = String(timestamp).trim();
+  const date = parseTimestampLike(raw);
+  if (!date) return { date: "N/A", time: "00:00" };
+
+  const forceLocal = Boolean(opts?.forceLocal);
+  // For effective-date timestamps (often date-only), keep UTC formatting to avoid day drift.
+  // For loggedAt (real-time audit), show local time for the viewer.
+  const useUtc =
+    !forceLocal &&
+    (/^\d{4}-\d{2}-\d{2}$/.test(raw) || /[zZ]$/.test(raw) || /[+-]\d{2}:\d{2}$/.test(raw));
+
+  const day = String(useUtc ? date.getUTCDate() : date.getDate()).padStart(2, "0");
+  const month = String((useUtc ? date.getUTCMonth() : date.getMonth()) + 1).padStart(2, "0");
+  const year = useUtc ? date.getUTCFullYear() : date.getFullYear();
+  const hours = String(useUtc ? date.getUTCHours() : date.getHours()).padStart(2, "0");
+  const minutes = String(useUtc ? date.getUTCMinutes() : date.getMinutes()).padStart(2, "0");
+  return { date: `${day}/${month}/${year}`, time: `${hours}:${minutes}` };
+}
+
+function parseTimestampLike(value: unknown): Date | null {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  // ISO or RFC-like
+  const iso = new Date(raw);
+  if (!Number.isNaN(iso.getTime())) return iso;
+
+  // YYYY-MM-DD (treat as local midnight)
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) {
+    const year = Number(ymd[1]);
+    const month = Number(ymd[2]);
+    const day = Number(ymd[3]);
+    // Interpret date-only as UTC midnight to avoid timezone drifting the day.
+    const d = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  const date = new Date(raw);
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return { date: `${day}/${month}/${year}`, time: `${hours}:${minutes}` };
+  // DD/MM/YYYY or DD/MM/YYYY HH:mm
+  const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    const year = Number(dmy[3]);
+    const hours = dmy[4] ? Number(dmy[4]) : 0;
+    const minutes = dmy[5] ? Number(dmy[5]) : 0;
+    const d = new Date(year, month - 1, day, hours, minutes, 0, 0);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  return null;
 }
 
 function prettyFieldLabel(key: string) {
@@ -80,6 +135,10 @@ function prettyFieldLabel(key: string) {
       return "Total Amount";
     case "lcyAmount":
       return "LCY Amount";
+    case "taxAmount":
+      return "Tax Amount";
+    case "totalAmountInclTax":
+      return "Total Amount (Incl. Tax)";
     case "status":
       return "Status";
     default:
@@ -135,8 +194,19 @@ function buildChangesText(record: HistoryRecord) {
     "qty",
     "totalAmount",
     "lcyAmount",
+    "taxAmount",
+    "totalAmountInclTax",
     "status",
   ];
+
+  const numericFields = new Set([
+    "amount",
+    "qty",
+    "totalAmount",
+    "lcyAmount",
+    "taxAmount",
+    "totalAmountInclTax",
+  ]);
 
   const lines: string[] = [];
   for (const key of fieldsToCompare) {
@@ -148,7 +218,20 @@ function buildChangesText(record: HistoryRecord) {
     const beforeText = isDateField ? formatDateDdMmYyyy(before) : formatValue(before);
     const afterText = isDateField ? formatDateDdMmYyyy(after) : formatValue(after);
 
-    if (beforeText === afterText) continue;
+    if (numericFields.has(key)) {
+      const beforeNum = parseMoneyLike(before);
+      const afterNum = parseMoneyLike(after);
+      if (beforeNum !== null && afterNum !== null) {
+        const beforeRounded = Math.round(beforeNum * 100) / 100;
+        const afterRounded = Math.round(afterNum * 100) / 100;
+        if (beforeRounded === afterRounded) continue;
+      } else {
+        // If we can't parse as numbers, fall back to text comparison.
+        if (beforeText === afterText) continue;
+      }
+    } else {
+      if (beforeText === afterText) continue;
+    }
     lines.push(`${prettyFieldLabel(key)}: ${beforeText} → ${afterText}`);
   }
 
@@ -157,18 +240,46 @@ function buildChangesText(record: HistoryRecord) {
   return [main, reason].filter(Boolean).join("\n");
 }
 
+function inferDisplayAction(record: HistoryRecord): string {
+  const action = String(record.action || "").toLowerCase();
+  if (action !== "update" && action !== "updated") return record.action;
+
+  const oldData = record.data || {};
+  const newData = record.updatedFields || {};
+
+  // Heuristic: if only startDate + nextRenewal changed, treat as renewal.
+  const changedKeys: string[] = [];
+  const keysToCheck = ["serviceName", "vendor", "ownerName", "owner", "startDate", "nextRenewal", "amount", "qty", "totalAmount", "lcyAmount", "status"];
+  for (const k of keysToCheck) {
+    if (!(k in newData)) continue;
+    const before = oldData[k];
+    const after = newData[k];
+    const beforeText = (k === "startDate" || k === "nextRenewal") ? formatDateDdMmYyyy(before) : formatValue(before);
+    const afterText = (k === "startDate" || k === "nextRenewal") ? formatDateDdMmYyyy(after) : formatValue(after);
+    if (beforeText !== afterText) changedKeys.push(k);
+  }
+
+  if (changedKeys.length > 0 && changedKeys.every((k) => k === "startDate" || k === "nextRenewal")) {
+    return "renewed";
+  }
+
+  return record.action;
+}
+
 export default function SubscriptionHistory() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const subscriptionId = searchParams.get("id");
   const subscriptionNameParam = searchParams.get("name");
 
+  const queryClient = useQueryClient();
+
   const endpoint = subscriptionId ? `/api/history/${subscriptionId}` : `/api/history/list`;
   const queryKey = subscriptionId
     ? ["/api/history", "subscription", subscriptionId]
     : ["/api/history", "list"];
 
-  const { data: history = [], isLoading } = useQuery<HistoryRecord[]>({
+  const { data: history = [], isLoading, refetch } = useQuery<HistoryRecord[]>({
     queryKey,
     staleTime: 0,
     refetchOnMount: "always",
@@ -184,11 +295,35 @@ export default function SubscriptionHistory() {
     },
   });
 
+  useEffect(() => {
+    const refresh = () => {
+      // Invalidate both list and per-subscription keys.
+      queryClient.invalidateQueries({ queryKey: ["/api/history"], exact: false });
+      void refetch();
+    };
+
+    const events = [
+      "subscription-created",
+      "subscription-updated",
+      "subscription-deleted",
+      "subscription-renewed",
+      "account-changed",
+      "login",
+      "logout",
+    ];
+    events.forEach((ev) => window.addEventListener(ev, refresh));
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, refresh));
+    };
+  }, [queryClient, refetch]);
+
   const sortedHistory = useMemo(() => {
     const items = Array.isArray(history) ? [...history] : [];
     items.sort((a, b) => {
-      const aTimeRaw = new Date(a.timestamp).getTime();
-      const bTimeRaw = new Date(b.timestamp).getTime();
+      const aStamp = a.loggedAt || a.timestamp;
+      const bStamp = b.loggedAt || b.timestamp;
+      const aTimeRaw = parseTimestampLike(aStamp)?.getTime() ?? NaN;
+      const bTimeRaw = parseTimestampLike(bStamp)?.getTime() ?? NaN;
       const aTime = Number.isFinite(aTimeRaw) ? aTimeRaw : 0;
       const bTime = Number.isFinite(bTimeRaw) ? bTimeRaw : 0;
       if (bTime !== aTime) return bTime - aTime;
@@ -253,7 +388,8 @@ export default function SubscriptionHistory() {
                   </thead>
                   <tbody className="bg-white">
                     {sortedHistory.map((item: any, index: number) => {
-                      const timestamp = formatTimestamp(item.timestamp);
+                      const stampToShow = item.loggedAt || item.timestamp;
+                      const timestamp = formatTimestamp(stampToShow, { forceLocal: Boolean(item.loggedAt) });
                       const name = item?.updatedFields?.serviceName || item?.data?.serviceName || "N/A";
                       const changedBy =
                         item?.changedBy ||
@@ -262,6 +398,7 @@ export default function SubscriptionHistory() {
                         item?.data?.owner ||
                         "System";
                       const changesText = buildChangesText(item);
+                      const displayAction = inferDisplayAction(item);
 
                       return (
                         <tr key={item._id || index} className="hover:bg-slate-50 border-b border-slate-100">
@@ -271,8 +408,8 @@ export default function SubscriptionHistory() {
                             <div className="whitespace-pre-line leading-relaxed">{changesText || "No changes recorded"}</div>
                           </td>
                           <td className="align-top py-3 px-4">
-                            <Badge className={`${getActionBadgeColor(item.action)} px-2 py-1 text-xs font-medium border capitalize`}>
-                              {item.action}
+                            <Badge className={`${getActionBadgeColor(displayAction)} px-2 py-1 text-xs font-medium border capitalize`}>
+                              {displayAction}
                             </Badge>
                           </td>
                           <td className="text-sm text-slate-500 align-top py-3 px-4">

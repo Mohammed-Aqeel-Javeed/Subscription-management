@@ -15,6 +15,8 @@ import CancelledSubscriptionsPage from "@/pages/cancelled-subscriptions";
 import Notifications from "@/pages/notifications";
 import Configuration from "@/pages/configuration";
 import Reports from "@/pages/reports";
+import UpcomingRenewalReport from "@/pages/upcoming-renewal-report";
+import SpendingAnalysisReport from "@/pages/spending-analysis-report";
 import SubscriptionHistory from "@/pages/subscription-history";
 import GovernmentLicense from "@/pages/government-license";
 import RenewalLog from "@/pages/renewal-log";
@@ -47,7 +49,7 @@ function App() {
 
 function AppWithSidebar() {
   const hideSidebarPaths = ["/", "/login", "/signup", "/auth", "/landing"];
-  const hideChatbotPaths = ["/", "/login", "/signup", "/auth", "/landing", "/dashboard", "/notifications", "/reports"];
+  const hideChatbotPaths = ["/", "/login", "/signup", "/auth", "/landing", "/dashboard", "/notifications", "/reports", "/reports/upcoming-renewal", "/reports/spending-analysis"];
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -134,6 +136,8 @@ function AppWithSidebar() {
             <Route path="/configuration" element={<Configuration />} />
             <Route path="/reminders" element={<Configuration />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/reports/upcoming-renewal" element={<UpcomingRenewalReport />} />
+            <Route path="/reports/spending-analysis" element={<SpendingAnalysisReport />} />
             <Route path="/subscription-history" element={<SubscriptionHistory />} />
             {/* <Route path="/users" element={<Users />} /> */}
             <Route path="/compliance-dashboard" element={<ComplianceDashboard />} />

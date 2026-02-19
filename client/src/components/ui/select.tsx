@@ -83,11 +83,12 @@ const SelectContent = React.forwardRef<React.ElementRef<typeof SelectPrimitive.C
         className
       )}
       position={position}
+      {...props}
     >
       {!hideScrollButtons && <SelectScrollUpButton />}
       <SelectPrimitive.Viewport
         className={cn(
-          "p-1 custom-scrollbar",
+          "p-1 max-h-44 overflow-y-auto overscroll-contain custom-scrollbar",
           position === "popper" &&
             "w-full min-w-[var(--radix-select-trigger-width)]"
         )}
