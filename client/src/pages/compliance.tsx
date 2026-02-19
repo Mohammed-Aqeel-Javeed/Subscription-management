@@ -2620,7 +2620,7 @@ export default function Compliance() {
                         index % 2 === 0 ? "bg-white" : "bg-gray-50/30"
                       }`}
                     >
-                      <TableCell className="px-4 py-3 w-[200px]">
+                      <TableCell className="px-3 py-3 font-medium text-gray-800 w-[200px] min-w-0 overflow-hidden text-left">
                         <button
                           onClick={() => {
                             const index = (complianceItems as ComplianceItem[]).findIndex(
@@ -2658,7 +2658,8 @@ export default function Compliance() {
                               departments: depts,
                             });
                           }}
-                          className="text-sm font-medium text-gray-900 hover:text-blue-600 underline hover:no-underline transition-all duration-200 cursor-pointer text-left whitespace-normal break-words"
+                          title={item.policy}
+                          className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap text-left"
                         >
                           {item.policy}
                         </button>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "@/lib/config";
 // Type for dynamic subscription fields
@@ -826,6 +826,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
   // Prevent duplicate *active subscription* creation on slow networks / retries.
   const createIdempotencyKeyRef = useRef<string | null>(null);
+
+  // Track the maximum text length seen per field during this modal session.
+  // This prevents fields from shrinking when text is cleared.
+  const fieldMaxLenRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    if (open) {
+      fieldMaxLenRef.current = {};
+    }
+  }, [open, subscription?.id]);
+
+  const getStableColSpan = useCallback((key: string, value: unknown, threshold: number) => {
+    const len = String(value ?? "").length;
+    const prev = fieldMaxLenRef.current[key] ?? 0;
+    if (len > prev) fieldMaxLenRef.current[key] = len;
+    return (fieldMaxLenRef.current[key] ?? 0) > threshold ? "md:col-span-2" : "";
+  }, []);
   
   // Get tenant ID for API calls
   const tenantId = (window as any).currentTenantId || (window as any).user?.tenantId || null;
@@ -2586,6 +2603,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         startDate: newStartDate,
         nextRenewal: newEndDate,
         effectiveDate: effectiveDate, // Add effective date for renewal
+        historyAction: 'renewed',
+        changeReason: 'Renewed',
         amount:
           formValues.amount !== undefined && formValues.amount !== ""
             ? Number(formValues.amount)
@@ -3109,9 +3128,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 variant="outline"
                 className={`bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm ${!isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
-                  if (isEditing && subscription?.id) {
+                  const historyId = (subscription as any)?._id || (subscription as any)?.id;
+                  if (isEditing && historyId) {
                     const currentServiceName = form.getValues("serviceName") || subscription?.serviceName || "";
-                    window.location.href = `/subscription-history?id=${subscription.id}&name=${encodeURIComponent(currentServiceName)}`;
+                    window.location.href = `/subscription-history?id=${historyId}&name=${encodeURIComponent(currentServiceName)}`;
                   }
                 }}
                 disabled={!isEditing}
@@ -3165,7 +3185,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   control={form.control}
                   name="serviceName"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className={getStableColSpan("serviceName", field.value, 22)}>
                       <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Service Name</FormLabel>
                       <FormControl>
                         <Input 
@@ -3220,7 +3240,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="vendor"
                   render={({ field }) => {
                     return (
-                      <FormItem>
+                      <FormItem className={getStableColSpan("vendor", field.value, 22)}>
                         <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Vendor</FormLabel>
                         <SearchableStringDropdown
                           value={field.value || ""}
@@ -3243,7 +3263,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       : [];
                     
                     return (
-                      <FormItem>
+                      <FormItem className={getStableColSpan("currency", field.value, 10)}>
                         <FormLabel className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Currency</FormLabel>
                         <SearchableStringDropdown
                           value={field.value || ""}
@@ -3473,7 +3493,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       ? options.filter(opt => opt.label.toLowerCase().includes(normalizedCycleSearch) || opt.value.toLowerCase().includes(normalizedCycleSearch))
                       : options;
                     return (
-                      <FormItem className="relative" ref={cycleDropdownRef}>
+                      <FormItem
+                        className={`relative ${getStableColSpan("billingCycle", selectedOption?.label ?? "", 14)}`}
+                        ref={cycleDropdownRef}
+                      >
                         <FormLabel className="block text-sm font-medium text-slate-700">Commitment Cycle</FormLabel>
                         <div className="relative">
                           <Input
@@ -3564,7 +3587,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       : []; // Empty for trial and pay-as-you-go
                     
                     return (
-                      <FormItem>
+                      <FormItem className={getStableColSpan("paymentFrequency", field.value, 14)}>
                         <FormLabel className="block text-sm font-medium text-slate-700">Payment Frequency</FormLabel>
                         <SearchableStringDropdown
                           value={field.value || ""}
@@ -3594,7 +3617,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     const allCategories = Array.from(new Set([...dbCategories, ...DEFAULT_CATEGORY_SUGGESTIONS]));
 
                     return (
-                      <FormItem>
+                      <FormItem className={getStableColSpan("category", field.value, 18)}>
                         <FormLabel className="block text-sm font-medium text-slate-700">Category</FormLabel>
                         <SearchableStringDropdown
                           value={field.value || ""}
@@ -3737,7 +3760,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       : [];
 
                     return (
-                      <FormItem>
+                      <FormItem className={getStableColSpan("paymentMethod", field.value, 18)}>
                         <FormLabel className="block text-sm font-medium text-slate-700">
                           Payment Method <span className="text-red-500">*</span>
                         </FormLabel>
@@ -3762,7 +3785,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="owner"
                   render={({ field }) => {
                     return (
-                      <FormItem>
+                      <FormItem className={getStableColSpan("owner", field.value, 18)}>
                         <FormLabel className="block text-sm font-medium text-slate-700">Owner</FormLabel>
                         <EmployeeSearchDropdown
                           value={field.value || ""}
@@ -3789,7 +3812,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   control={form.control}
                   name="ownerEmail"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className={getStableColSpan("ownerEmail", field.value, 22)}>
                       <FormLabel className="block text-sm font-medium text-slate-700">Owner Email</FormLabel>
                       <FormControl>
                         <Input 
@@ -3809,8 +3832,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   name="website"
                   render={({ field }) => {
                     // Calculate column span based on URL length
-                    const urlLength = field.value?.length || 0;
-                    const colSpan = urlLength > 40 ? 'md:col-span-2' : '';
+                    const colSpan = getStableColSpan("website", field.value, 40);
                     
                     return (
                       <FormItem className={colSpan}>
@@ -3895,7 +3917,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         control={form.control}
                         name={field.name as keyof FormData}
                         render={({ field: formField }) => (
-                          <FormItem>
+                          <FormItem className={getStableColSpan(`dynamic:${field.name}`, formField.value, 22)}>
                             <FormLabel className="block text-sm font-medium text-slate-700">{field.name}</FormLabel>
                             <FormControl>
                               {field.type === 'number' ? (

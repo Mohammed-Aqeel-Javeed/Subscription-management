@@ -557,6 +557,19 @@ export default function Subscriptions() {
     
     return 0;
   }) : [];
+
+  // Category badge sizing: use the longest category label (clamped) so all category badges are the same width.
+  // Use `width` (not `minWidth`) so it can shrink to fit the column and won't get clipped.
+  const categoryBadgeWidthCh = (() => {
+    let maxLen = 0;
+    for (const sub of filteredSubscriptions) {
+      const val = String((sub as any)?.category ?? "").trim();
+      if (val.length > maxLen) maxLen = val.length;
+    }
+
+    // Clamp so badges don't get too tiny or too wide.
+    return Math.min(Math.max(maxLen, 6), 28);
+  })();
   
   // Toggle sort function
   const handleSort = (field: "serviceName" | "vendor" | "amount" | "billingCycle" | "nextRenewal" | "status") => {
@@ -1182,10 +1195,10 @@ export default function Subscriptions() {
         {/* Professional Data Table */}
         <div className="min-w-0 flex-1 min-h-0">
           <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden h-full flex flex-col min-h-0">
-            <Table containerClassName="flex-1 min-h-0 overflow-auto">
+            <Table containerClassName="flex-1 min-h-0 overflow-auto" className="table-fixed">
               <TableHeader>
                 <TableRow className="border-b-2 border-gray-400 bg-gray-200">
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[200px]">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">
                     <button 
                       onClick={() => handleSort("serviceName")}
                       className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
@@ -1193,6 +1206,21 @@ export default function Subscriptions() {
                       SERVICE
                       {getSortIcon("serviceName")}
                     </button>
+                  </TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">
+                    CATEGORY
+                  </TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                    <button 
+                      onClick={() => handleSort("billingCycle")}
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                    >
+                      BILLING
+                      {getSortIcon("billingCycle")}
+                    </button>
+                  </TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[90px]">
+                    QTY
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
                     <button 
@@ -1203,26 +1231,14 @@ export default function Subscriptions() {
                       {getSortIcon("amount")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 pl-12 pr-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    <button 
-                      onClick={() => handleSort("billingCycle")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
-                    >
-                      BILLING
-                      {getSortIcon("billingCycle")}
-                    </button>
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[170px]">
                     <button 
                       onClick={() => handleSort("nextRenewal")}
-                      className="flex items-center justify-center w-full font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
                       NEXT RENEWAL
                       {getSortIcon("nextRenewal")}
                     </button>
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">
-                    CATEGORY
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
                     <button 
@@ -1247,11 +1263,12 @@ export default function Subscriptions() {
                         index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
                       }`}
                     >
-                      <TableCell className="px-4 py-3 w-[200px]">
+                      <TableCell className="px-3 py-3 font-medium text-gray-800 w-[220px] max-w-[220px] overflow-hidden text-left">
                         <div>
                           <button
                             onClick={() => handleEdit(subscription)}
-                            className="text-sm font-medium text-gray-900 hover:text-blue-600 underline hover:no-underline transition-all duration-200 cursor-pointer text-left"
+                            title={subscription.serviceName}
+                            className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap text-left"
                           >
                             {subscription.serviceName}
                           </button>
@@ -1277,26 +1294,102 @@ export default function Subscriptions() {
                           })()}
                         </div>
                       </TableCell>
+                      <TableCell className="px-3 py-3 w-[220px] max-w-[220px] overflow-hidden text-center">
+                        {(() => {
+                          const categoryValue = String((subscription as any)?.category ?? "").trim();
+                          if (!categoryValue) {
+                            return (
+                              <span
+                                className="inline-flex items-center justify-center text-gray-400 text-xs"
+                                style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
+                              >
+                                -
+                              </span>
+                            );
+                          }
+
+                          const raw = categoryValue;
+                          const normalized = raw.toLowerCase();
+
+                          // Distinct pastel colors per category (softer tones), plus deterministic fallback.
+                          const categoryClassMap: Record<string, string> = {
+                            "productivity & collaboration": "bg-blue-100 text-blue-800 border-blue-300",
+                            "accounting & finance": "bg-emerald-100 text-emerald-800 border-emerald-300",
+                            "crm & sales": "bg-indigo-100 text-indigo-800 border-indigo-300",
+                            "development & hosting": "bg-purple-100 text-purple-800 border-purple-300",
+                            "design & creative tools": "bg-orange-100 text-orange-800 border-orange-300",
+                            "marketing & seo": "bg-amber-100 text-amber-800 border-amber-300",
+                            "communication tools": "bg-sky-100 text-sky-800 border-sky-300",
+                            "security & compliance": "bg-rose-100 text-rose-800 border-rose-300",
+                            "hr & admin": "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300",
+                            "subscription infrastructure": "bg-cyan-100 text-cyan-800 border-cyan-300",
+                            "office infrastructure": "bg-teal-100 text-teal-800 border-teal-300",
+                            "games": "bg-violet-100 text-violet-800 border-violet-300",
+                          };
+
+                          const fallbackPalette: string[] = [
+                            "bg-blue-100 text-blue-800 border-blue-300",
+                            "bg-emerald-100 text-emerald-800 border-emerald-300",
+                            "bg-indigo-100 text-indigo-800 border-indigo-300",
+                            "bg-purple-100 text-purple-800 border-purple-300",
+                            "bg-orange-100 text-orange-800 border-orange-300",
+                            "bg-amber-100 text-amber-800 border-amber-300",
+                            "bg-sky-100 text-sky-800 border-sky-300",
+                            "bg-rose-100 text-rose-800 border-rose-300",
+                            "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300",
+                            "bg-cyan-100 text-cyan-800 border-cyan-300",
+                            "bg-teal-100 text-teal-800 border-teal-300",
+                            "bg-violet-100 text-violet-800 border-violet-300",
+                            "bg-slate-100 text-slate-800 border-slate-300",
+                            "bg-pink-100 text-pink-800 border-pink-300",
+                          ];
+
+                          const hashString = (value: string) => {
+                            let hash = 0;
+                            for (let i = 0; i < value.length; i++) {
+                              hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+                            }
+                            return hash;
+                          };
+
+                          const badgeClass =
+                            categoryClassMap[normalized] ??
+                            fallbackPalette[Math.abs(hashString(normalized)) % fallbackPalette.length];
+
+                          return (
+                            <span
+                              className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border max-w-full ${badgeClass}`}
+                              style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
+                            >
+                              <span className="truncate whitespace-nowrap" title={raw}>
+                                {raw}
+                              </span>
+                            </span>
+                          );
+                        })()}
+                      </TableCell>
+
+                      <TableCell className="px-3 py-3 text-sm text-gray-600 w-[140px]">
+                        {subscription.billingCycle}
+                      </TableCell>
+
+                      <TableCell className="px-4 py-3 text-center w-[90px]">
+                        <span className="text-sm font-medium text-gray-900">
+                          {Number((subscription as any)?.qty ?? 1) || 1}
+                        </span>
+                      </TableCell>
+
                       <TableCell className="px-3 py-3 text-right w-[140px]">
                         <span className="text-sm font-medium text-gray-900">
                           ${parseFloat(String(subscription.amount)).toFixed(2)}
                         </span>
                       </TableCell>
-                      <TableCell className="pl-12 pr-4 py-3">
-                        <span className="text-sm text-gray-700 capitalize">
-                          {subscription.billingCycle}
-                        </span>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center text-sm text-gray-700">
+
+                      <TableCell className="px-4 py-3 text-left w-[170px]">
+                        <div className="flex items-center justify-start text-sm text-gray-700">
                           <Calendar className="h-3 w-3 text-gray-400 mr-1" />
                           {formatDate(subscription.nextRenewal)}
                         </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                          {subscription.category || '-'}
-                        </span>
                       </TableCell>
                       <TableCell className="px-4 py-3 w-[140px] text-center">
                         <span

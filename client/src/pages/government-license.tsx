@@ -3372,7 +3372,7 @@ export default function GovernmentLicense() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                title="Renewel Submit"
+                                title="Renewal Submit"
                                 onClick={() => {
                                   handleEdit(license);
                                   setSubmissionOpenedFromTable(true);
@@ -3380,7 +3380,7 @@ export default function GovernmentLicense() {
                                 }}
                                 className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
                               >
-                                Renewel Submit
+                                Renewal Submit
                               </Button>
                             </TableCell>
                             <TableCell className="px-3 py-3 text-right text-sm text-gray-700 font-semibold w-[110px]">
