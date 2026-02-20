@@ -1,9 +1,10 @@
 import React from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, FileText, Calendar, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Edit, Trash2, FileText, Calendar, CheckCircle, XCircle, Clock, ArrowLeft, History } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 // Helper to format date as dd/mm/yyyy
 const formatDate = (dateStr?: string): string => {
@@ -84,16 +85,37 @@ const getStatusInfo = (status: string) => {
   }
 };
 
+const getCategoryPillClasses = (category?: string) => {
+  const value = String(category || "").trim();
+  if (!value) return "bg-slate-100 text-slate-700 border-slate-200";
+
+  const palette = [
+    "bg-blue-50 text-blue-700 border-blue-200",
+    "bg-emerald-50 text-emerald-700 border-emerald-200",
+    "bg-purple-50 text-purple-700 border-purple-200",
+    "bg-amber-50 text-amber-800 border-amber-200",
+    "bg-rose-50 text-rose-700 border-rose-200",
+    "bg-cyan-50 text-cyan-700 border-cyan-200",
+  ];
+
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) hash = (hash + value.charCodeAt(i)) % 100000;
+  return palette[hash % palette.length];
+};
+
 export default function ComplianceLedger() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   // Read all ledger records from MongoDB
   const [ledgerItems, setLedgerItems] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
-  
-  // Get compliance id from URL
-  const getComplianceIdFromUrl = () => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("id");
-  };
+
+  const complianceId = searchParams.get("id");
+  const complianceNameParam = searchParams.get("name");
+
+  const isFilteredById = Boolean(complianceId);
+  const tableColumnCount = isFilteredById ? 6 : 7;
   
   const fetchLedger = async () => {
     setLoading(true);
@@ -101,7 +123,6 @@ export default function ComplianceLedger() {
       const res = await fetch("/api/ledger/list");
       if (!res.ok) throw new Error("Failed to fetch ledger data");
       const data = await res.json();
-      const complianceId = getComplianceIdFromUrl();
       // Filter ledger items by compliance id if present
       let filteredData = data;
       if (complianceId) {
@@ -116,10 +137,7 @@ export default function ComplianceLedger() {
   
   React.useEffect(() => {
     fetchLedger();
-    // Re-fetch if URL changes
-    window.addEventListener('popstate', fetchLedger);
-    return () => window.removeEventListener('popstate', fetchLedger);
-  }, []);
+  }, [complianceId]);
   
   const displayedLedgerItems = ledgerItems;
   
@@ -136,45 +154,59 @@ export default function ComplianceLedger() {
     }
   };
   
+  const derivedName = displayedLedgerItems?.[0]?.filingName || displayedLedgerItems?.[0]?.policy;
+  const headerName = complianceNameParam ? decodeURIComponent(complianceNameParam) : derivedName;
+  const headerTitle = isFilteredById && headerName ? `${headerName} History Log` : "Compliance History Log";
+
   return (
-    <div className="min-h-screen p-6 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Compliance General Ledger</h2>
+    <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 font-['Inter']">
+      <div className="flex-1 overflow-hidden flex flex-col p-6">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-4">
+              <div className="h-12 w-12 bg-gradient-to-br from-orange-500 to-amber-600 rounded-lg flex items-center justify-center shadow-lg">
+                <History className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{headerTitle}</h1>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => navigate("/compliance")}
+                variant="outline"
+                className="flex items-center gap-2 bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Compliance
+              </Button>
             </div>
           </div>
         </div>
-        
-        <Card className="shadow-lg border-0 overflow-hidden bg-white/80 backdrop-blur-sm">
-          <CardHeader className="bg-gradient-to-r from-indigo-100 to-blue-100 border-b border-gray-200">
-            <CardTitle className="flex items-center gap-2 text-xl font-semibold text-gray-800">
-              <FileText className="w-5 h-5 text-indigo-600" />
-              Compliance Records
-              <Badge className="ml-2 bg-indigo-100 text-indigo-800">
-                {displayedLedgerItems.length} {displayedLedgerItems.length === 1 ? 'Record' : 'Records'}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
+
+        <Card className="shadow-lg border-0 overflow-hidden bg-white/80 backdrop-blur-sm flex-1 min-h-0">
+          <CardContent className="p-0 h-full">
+            <div className="overflow-auto h-full">
               <Table>
-                <TableHeader className="bg-gray-50">
-                  <TableRow>
-                    <TableHead className="font-semibold text-gray-700">Filing Name</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Category</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Start Date</TableHead>
-                    <TableHead className="font-semibold text-gray-700">End Date</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Submission Date</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Status</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-right">Actions</TableHead>
+                <TableHeader className="bg-gray-200">
+                  <TableRow className="border-b border-gray-300">
+                    {!isFilteredById && (
+                      <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200">Filing Name</TableHead>
+                    )}
+                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">Category</TableHead>
+                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">Start Date</TableHead>
+                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">End Date</TableHead>
+                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">Submission Date</TableHead>
+                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">Status</TableHead>
+                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12">
+                      <TableCell colSpan={tableColumnCount} className="text-center py-12">
                         <div className="flex flex-col items-center justify-center">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-3"></div>
                           <p className="text-gray-600">Loading compliance records...</p>
@@ -183,7 +215,7 @@ export default function ComplianceLedger() {
                     </TableRow>
                   ) : displayedLedgerItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12">
+                      <TableCell colSpan={tableColumnCount} className="text-center py-12">
                         <div className="flex flex-col items-center justify-center">
                           <FileText className="w-12 h-12 text-gray-400 mb-3" />
                           <p className="text-lg font-medium text-gray-900">No records found</p>
@@ -207,11 +239,17 @@ export default function ComplianceLedger() {
                       const statusInfo = getStatusInfo(displayStatus);
                       return (
                         <TableRow key={item._id} className="hover:bg-gray-50 transition-colors">
-                          <TableCell className="font-medium text-gray-900">{item.filingName}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center">
-                              <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                                {item.filingComplianceCategory}
+                          {!isFilteredById && (
+                            <TableCell className="font-medium text-gray-900">{item.filingName}</TableCell>
+                          )}
+                          <TableCell className="text-left">
+                            <div className="flex items-center justify-start">
+                              <span
+                                className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getCategoryPillClasses(
+                                  item.filingComplianceCategory
+                                )}`}
+                              >
+                                {item.filingComplianceCategory || "-"}
                               </span>
                             </div>
                           </TableCell>

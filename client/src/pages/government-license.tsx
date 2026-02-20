@@ -35,6 +35,7 @@ import {
 import Papa from 'papaparse';
 import ExcelJS from "exceljs";
 import { apiRequest } from "@/lib/queryClient";
+import { RiFileExcel2Fill, RiFileImageFill, RiFilePdf2Fill, RiFileTextFill, RiFileWord2Fill } from "react-icons/ri";
 
 // Predefined Issuing Authorities (ordered to match provided screenshot)
 const ISSUING_AUTHORITIES = [
@@ -50,7 +51,16 @@ const ISSUING_AUTHORITIES = [
 ];
 
 // License interface
-type RenewalAttachment = { name: string; url: string; uploadedBy?: string; uploadedAt?: string };
+type RenewalAttachment = {
+  name: string;
+  url: string;
+  remark?: string;
+  updatedBy?: string;
+  updatedAt?: string;
+  // Back-compat for older stored values
+  uploadedBy?: string;
+  uploadedAt?: string;
+};
 
 interface Department {
   name: string;
@@ -477,7 +487,19 @@ const licenseSchema = z
     return isNaN(Number(num)) ? undefined : Number(num);
   }, z.number().optional()),
   renewalStatusReason: z.string().optional(),
-  renewalAttachments: z.array(z.object({ name: z.string(), url: z.string() })).optional(),
+  renewalAttachments: z
+    .array(
+      z.object({
+        name: z.string(),
+        url: z.string(),
+        remark: z.string().optional(),
+        updatedBy: z.string().optional(),
+        updatedAt: z.string().optional(),
+        uploadedBy: z.string().optional(),
+        uploadedAt: z.string().optional(),
+      })
+    )
+    .optional(),
   reminderDays: z.union([z.string(), z.number()]).optional(),
   reminderPolicy: z.string().optional(),
 })
@@ -1039,6 +1061,11 @@ export default function GovernmentLicense() {
   });
 
   const [showRenewalDocumentsModal, setShowRenewalDocumentsModal] = useState(false);
+  const [pendingRenewalAttachment, setPendingRenewalAttachment] = useState<RenewalAttachment | null>(null);
+  const [pendingRenewalAttachmentRemark, setPendingRenewalAttachmentRemark] = useState("");
+  const [cancelRenewalConfirmOpen, setCancelRenewalConfirmOpen] = useState(false);
+  const [reactivateCancelledConfirmOpen, setReactivateCancelledConfirmOpen] = useState(false);
+  const pendingReactivateSubmitRef = useRef<LicenseFormData | null>(null);
   const [showRenewalStatusReasonModal, setShowRenewalStatusReasonModal] = useState(false);
   const [renewalStatusReasonDraft, setRenewalStatusReasonDraft] = useState('');
   const [, setPendingRenewalStatus] = useState<string>('');
@@ -1064,6 +1091,155 @@ export default function GovernmentLicense() {
   
   // Get current user name (used for default Submitted By)
   const [currentUserName, setCurrentUserName] = useState<string>('');
+
+  const getDocumentKind = (name: string, url?: string): 'pdf' | 'excel' | 'word' | 'image' | 'csv' | 'other' => {
+    const safeUrl = typeof url === 'string' ? url : '';
+
+    if (safeUrl.startsWith('data:')) {
+      const mime = safeUrl.slice(5, safeUrl.indexOf(';')).toLowerCase();
+      if (mime === 'application/pdf') return 'pdf';
+      if (mime.startsWith('image/')) return 'image';
+      if (
+        mime === 'application/msword' ||
+        mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      )
+        return 'word';
+      if (
+        mime === 'application/vnd.ms-excel' ||
+        mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      )
+        return 'excel';
+    }
+
+    try {
+      if (safeUrl) {
+        const u = new URL(safeUrl, window.location.origin);
+        const pathLower = (u.pathname || '').toLowerCase();
+        const urlExt = pathLower.includes('.') ? pathLower.slice(pathLower.lastIndexOf('.')) : '';
+        if (urlExt === '.pdf') return 'pdf';
+        if (urlExt === '.xls' || urlExt === '.xlsx') return 'excel';
+        if (urlExt === '.doc' || urlExt === '.docx') return 'word';
+        if (urlExt === '.jpg' || urlExt === '.jpeg' || urlExt === '.png') return 'image';
+        if (urlExt === '.csv') return 'csv';
+      }
+    } catch {
+      // ignore
+    }
+
+    const lower = String(name || '').toLowerCase();
+    const ext = lower.includes('.') ? lower.slice(lower.lastIndexOf('.')) : '';
+    if (ext === '.pdf') return 'pdf';
+    if (ext === '.xls' || ext === '.xlsx') return 'excel';
+    if (ext === '.doc' || ext === '.docx') return 'word';
+    if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') return 'image';
+    if (ext === '.csv') return 'csv';
+    return 'other';
+  };
+
+  const renderDocumentTypeIcon = (name: string, url?: string) => {
+    const kind = getDocumentKind(name, url);
+    if (kind === 'pdf') return <RiFilePdf2Fill className="h-7 w-7 text-red-600" />;
+    if (kind === 'excel') return <RiFileExcel2Fill className="h-7 w-7 text-green-600" />;
+    if (kind === 'word') return <RiFileWord2Fill className="h-7 w-7 text-blue-600" />;
+    if (kind === 'csv') return <RiFileTextFill className="h-7 w-7 text-emerald-600" />;
+    if (kind === 'image') return <RiFileImageFill className="h-7 w-7 text-purple-600" />;
+    return <RiFileTextFill className="h-7 w-7 text-slate-600" />;
+  };
+
+  const dataUrlToBlob = (dataUrl: string): Blob | null => {
+    try {
+      const match = /^data:([^;]+);base64,(.*)$/i.exec(dataUrl);
+      if (!match) return null;
+      const mime = match[1] || 'application/octet-stream';
+      const b64 = match[2] || '';
+      const binary = atob(b64);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    } catch {
+      return null;
+    }
+  };
+
+  const openDocumentInNewTab = (doc: { name: string; url: string }) => {
+    try {
+      const url = String(doc?.url || '');
+      if (!url) {
+        toast({
+          title: 'Error',
+          description: 'Document URL is missing',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (url.startsWith('data:')) {
+        const blob = dataUrlToBlob(url);
+        if (!blob) throw new Error('Invalid data url');
+        const objUrl = URL.createObjectURL(blob);
+        const w = window.open(objUrl, '_blank', 'noopener,noreferrer');
+        if (!w) window.location.href = objUrl;
+        setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
+        return;
+      }
+      const w = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!w) window.location.href = url;
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to view document',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const downloadDocument = (doc: { name: string; url: string }) => {
+    try {
+      const url = String(doc?.url || '');
+      const filename = String(doc?.name || 'document');
+      if (!url) {
+        toast({
+          title: 'Error',
+          description: 'Document URL is missing',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (url.startsWith('data:')) {
+        const blob = dataUrlToBlob(url);
+        if (!blob) throw new Error('Invalid data url');
+        const objUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objUrl;
+        link.download = filename;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
+      } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      toast({
+        title: 'Download Started',
+        description: `Downloading ${filename}`,
+        duration: 2000,
+        variant: 'success',
+      });
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to download document',
+        variant: 'destructive',
+      });
+    }
+  };
   
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -1322,20 +1498,13 @@ export default function GovernmentLicense() {
         const reader = new FileReader();
         reader.onloadend = async () => {
           const base64String = reader.result as string;
-          const existing = (form.getValues('renewalAttachments') || []) as any[];
-          const uploadedAt = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          form.setValue('renewalAttachments', [...existing, { 
-            name: file.name, 
+          setPendingRenewalAttachment({
+            name: file.name,
             url: base64String,
-            uploadedBy: currentUserName || 'User',
-            uploadedAt: uploadedAt
-          }], { shouldDirty: true });
-          toast({
-            title: 'Success',
-            description: `${file.name} uploaded successfully`,
-            duration: 2000,
-            variant: 'success',
+            updatedBy: currentUserName || (window as any)?.user?.name || (window as any)?.user?.email || 'User',
+            updatedAt: new Date().toISOString(),
           });
+          setPendingRenewalAttachmentRemark('');
         };
         reader.readAsDataURL(file);
       } catch (error) {
@@ -2565,6 +2734,27 @@ export default function GovernmentLicense() {
     if (current !== next) form.setValue('status', next);
   }, [isModalOpen, expiryDateValue, form]);
 
+  const submitLicense = (data: LicenseFormData, opts?: { forceStatus?: 'Active' | 'Expired' | 'Cancelled' }) => {
+    // On normal Save/Update, status is based on expiry date (Active/Expired).
+    // Cancelled is only set via the "Cancel Renewal" action.
+    const derivedStatus =
+      opts?.forceStatus ?? getDerivedStatus({ endDate: String(data.endDate || ''), status: '' });
+
+    // Calculate lcyAmount if not already set
+    const lcyAmountValue = lcyAmount ? parseFloat(lcyAmount) : undefined;
+
+    const payload: LicenseFormData = {
+      ...data,
+      status: derivedStatus,
+      departments: selectedDepartments,
+      department: JSON.stringify(selectedDepartments),
+      currency: currency || undefined,
+      lcyAmount: lcyAmountValue,
+    };
+    form.setValue('status', derivedStatus);
+    licenseMutation.mutate(payload);
+  };
+
   // Handle form submission
   const onSubmit = (data: LicenseFormData) => {
     // Check for license name validation errors
@@ -2640,23 +2830,14 @@ export default function GovernmentLicense() {
       }
     }
     
-    // On normal Save/Update, status is based on expiry date (Active/Expired).
-    // Cancelled is only set via the "Cancel License" action.
-    const derivedStatus = getDerivedStatus({ endDate: String(data.endDate || ''), status: '' });
-    
-    // Calculate lcyAmount if not already set
-    const lcyAmountValue = lcyAmount ? parseFloat(lcyAmount) : undefined;
-    
-    const payload: LicenseFormData = {
-      ...data,
-      status: derivedStatus,
-      departments: selectedDepartments,
-      department: JSON.stringify(selectedDepartments),
-      currency: currency || undefined,
-      lcyAmount: lcyAmountValue,
-    };
-    form.setValue('status', derivedStatus);
-    licenseMutation.mutate(payload);
+    const currentStatus = String(form.getValues('status') || data.status || '').trim();
+    if (editingLicense && currentStatus === 'Cancelled') {
+      pendingReactivateSubmitRef.current = data;
+      setReactivateCancelledConfirmOpen(true);
+      return;
+    }
+
+    submitLicense(data);
   };
 
   // Handle edit
@@ -2752,6 +2933,8 @@ export default function GovernmentLicense() {
   setLcyAmount('');
   setEndDateManuallySet(false);
   setShowRenewalDocumentsModal(false);
+  setPendingRenewalAttachment(null);
+  setPendingRenewalAttachmentRemark('');
   setShowRenewalStatusReasonModal(false);
   setRenewalStatusReasonDraft('');
   setPendingRenewalStatus('');
@@ -2824,6 +3007,8 @@ export default function GovernmentLicense() {
       setRenewalAmountText('');
       setEndDateManuallySet(false);
       setShowRenewalDocumentsModal(false);
+      setPendingRenewalAttachment(null);
+      setPendingRenewalAttachmentRemark('');
       setShowRenewalStatusReasonModal(false);
       setRenewalStatusReasonDraft('');
       setPendingRenewalStatus('');
@@ -3189,7 +3374,7 @@ export default function GovernmentLicense() {
               className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200"
             >
               <Calendar className="h-4 w-4 mr-2" />
-              Audit Log
+              History
             </Button>
 
             <Select
@@ -3320,7 +3505,7 @@ export default function GovernmentLicense() {
                           {getSortIcon('endDate')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Submission</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Renewal Submit</TableHead>
                       <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">
                         <button
                           onClick={() => handleSort('renewalFee')}
@@ -3386,19 +3571,19 @@ export default function GovernmentLicense() {
                             <TableCell className="px-3 py-3 text-right text-sm text-gray-700 font-semibold w-[110px]">
                               {typeof license.renewalFee === 'number' ? `$${Math.round(license.renewalFee).toLocaleString()}` : '-'}
                             </TableCell>
-                            <TableCell className="px-3 py-3 w-[110px] text-center">
+                            <TableCell className="px-3 py-3 w-[110px] text-left">
                               {(() => {
                                 const derived = getDerivedStatus({ endDate: license.endDate, status: license.status });
                                 return (
-                                  <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getStatusClassName(derived)}`}>
+                                  <span className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getStatusClassName(derived)}`}>
                                     {derived}
                                   </span>
                                 );
                               })()}
                             </TableCell>
-                            <TableCell className="px-3 py-3 w-[150px] text-center">
+                            <TableCell className="px-3 py-3 w-[150px] text-left">
                               {license.renewalStatus ? (
-                                <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none min-w-[140px] ${getRenewalStatusClassName(license.renewalStatus)}`}>
+                                <span className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none min-w-[140px] ${getRenewalStatusClassName(license.renewalStatus)}`}>
                                   {getRenewalStatusLabel(license.renewalStatus)}
                                 </span>
                               ) : (
@@ -3429,7 +3614,10 @@ export default function GovernmentLicense() {
                                         <MoreVertical className="h-4 w-4" />
                                       </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="z-[1000]">
+                                    <DropdownMenuContent
+                                      align="end"
+                                      className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+                                    >
                                       <Can I="update" a="License">
                                         <DropdownMenuItem onClick={() => handleEdit(license)} className="cursor-pointer">
                                           <Edit className="h-4 w-4 mr-2" />
@@ -3505,7 +3693,7 @@ export default function GovernmentLicense() {
                     }}
                     className="relative overflow-hidden px-3 py-1 text-sm rounded-lg font-semibold transition-all duration-300 bg-gradient-to-r from-emerald-500/70 to-green-600/70 text-white border border-emerald-300/60 hover:from-emerald-500 hover:to-green-600 hover:shadow-[0_8px_16px_rgba(16,185,129,0.25)]"
                   >
-                    Submission
+                    Renewal Submit
                   </Button>
                 )}
                 {/* Log Button - Navigate to renewal log page */}
@@ -3516,13 +3704,14 @@ export default function GovernmentLicense() {
                     className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
                     onClick={() => {
                       if (editingLicense?.id) {
-                        window.location.href = `/renewal-log?id=${editingLicense.id}`;
+                        const currentName = form.getValues("licenseName") || editingLicense?.licenseName || "";
+                        window.location.href = `/renewal-log?id=${editingLicense.id}&name=${encodeURIComponent(currentName)}`;
                       }
                     }}
-                    title="View renewal log for this license"
+                    title="History"
                   >
                     <History className="h-4 w-4" />
-                    Audit Log
+                    History
                   </Button>
                 )}
                 {/* License No. display removed */}
@@ -4399,16 +4588,12 @@ export default function GovernmentLicense() {
                       variant="destructive" 
                       className="font-semibold px-6 py-3 border-2 border-red-600 text-white bg-red-600 hover:bg-red-700 shadow-lg mr-auto rounded-lg transition-all duration-200 hover:shadow-red-500/25"
                       onClick={() => {
-                        form.setValue('status', 'Cancelled');
-                        const current = form.getValues();
-                        const payload: LicenseFormData = {
-                          ...current,
-                          status: 'Cancelled',
-                        };
-                        licenseMutation.mutate(payload);
+                        setCancelRenewalConfirmOpen(true);
                       }}
+                      disabled={licenseMutation.isPending || String(form.watch('status') || '').trim() === 'Cancelled'}
+                      title={String(form.watch('status') || '').trim() === 'Cancelled' ? 'Already cancelled' : undefined}
                     >
-                      Cancel
+                      Cancel Renewal
                     </Button>
                   )}
                   <Button 
@@ -4416,6 +4601,7 @@ export default function GovernmentLicense() {
                     variant="outline" 
                     className="border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
                     onClick={requestExit}
+                    disabled={licenseMutation.isPending}
                   >
                     Exit
                   </Button>
@@ -4435,13 +4621,22 @@ export default function GovernmentLicense() {
         {/* All modals moved outside main Dialog to prevent nesting issues */}
         
         {/* Renewal Documents Modal (like Subscription Documents dialog) */}
-        <Dialog open={showRenewalDocumentsModal} onOpenChange={setShowRenewalDocumentsModal}>
+        <Dialog
+          open={showRenewalDocumentsModal}
+          onOpenChange={(open) => {
+            setShowRenewalDocumentsModal(open);
+            if (!open) {
+              setPendingRenewalAttachment(null);
+              setPendingRenewalAttachmentRemark('');
+            }
+          }}
+        >
               <DialogContent className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
                 <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
                   <div className="flex items-start justify-between">
                     <div>
                       <DialogTitle className="text-lg font-semibold text-gray-900">Documents</DialogTitle>
-                      <p className="text-sm text-gray-600 mt-1">Company-wide and employee documents</p>
+                      
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -4466,7 +4661,17 @@ export default function GovernmentLicense() {
                       <Button
                         type="button"
                         size="sm"
-                        onClick={() => handleRenewalAttachmentUpload()}
+                        onClick={() => {
+                          if (pendingRenewalAttachment) {
+                            toast({
+                              title: 'Pending Upload',
+                              description: 'Please Save or Cancel the current upload first.',
+                              duration: 2000,
+                            });
+                            return;
+                          }
+                          handleRenewalAttachmentUpload();
+                        }}
                         className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                       >
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4479,145 +4684,174 @@ export default function GovernmentLicense() {
                 </DialogHeader>
 
                 <div className="flex-1 overflow-y-auto py-4 bg-white">
-                  {/* Document List */}
-                  {((form.watch('renewalAttachments') || []) as any[]).length > 0 ? (
-                    <div className="space-y-2 pr-2">
-                      {((form.watch('renewalAttachments') || []) as RenewalAttachment[]).map((doc, index) => (
-                        <div key={index} className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all duration-200">
-                          {/* Table-like layout with columns */}
-                          <div className="grid grid-cols-12 gap-4 items-center">
-                            {/* Column 1: File Icon and Name */}
-                            <div className="col-span-4 flex items-center gap-2">
-                              <div className="h-9 w-9 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
-                              </div>
-                            </div>
-                            
-                            {/* Column 2: Uploaded by */}
-                            <div className="col-span-3 flex items-center gap-1.5">
-                              <div className="h-5 w-5 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                <svg className="h-3 w-3 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[10px] text-gray-500">Uploaded by</p>
-                                <p className="text-xs font-medium text-gray-900 truncate">{doc.uploadedBy || currentUserName}</p>
-                              </div>
-                            </div>
-                            
-                            {/* Column 3: Uploaded date */}
-                            <div className="col-span-3 flex items-center gap-1.5">
-                              <svg className="h-4 w-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[10px] text-gray-500">Uploaded date</p>
-                                <p className="text-xs font-medium text-gray-900 truncate">{doc.uploadedAt || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                              </div>
-                            </div>
-                            
-                            {/* Column 4: Actions */}
-                            <div className="col-span-2 flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  try {
-                                    const newWindow = window.open('', '_blank');
-                                    if (newWindow) {
-                                      if (doc.url.startsWith('data:application/pdf')) {
-                                        newWindow.document.write(`
-                                          <html>
-                                            <head><title>${doc.name}</title></head>
-                                            <body style="margin:0">
-                                              <iframe src="${doc.url}" style="width:100%;height:100vh;border:none;"></iframe>
-                                            </body>
-                                          </html>
-                                        `);
-                                      } else if (doc.url.startsWith('data:image')) {
-                                        newWindow.document.write(`
-                                          <html>
-                                            <head><title>${doc.name}</title></head>
-                                            <body style="margin:0;display:flex;justify-content:center;align-items:center;background:#000;">
-                                              <img src="${doc.url}" style="max-width:100%;max-height:100vh;"/>
-                                            </body>
-                                          </html>
-                                        `);
-                                      }
-                                    }
-                                  } catch (error) {
-                                    toast({
-                                      title: "Error",
-                                      description: "Failed to view document",
-                                      variant: "destructive",
-                                    });
-                                  }
-                                }}
-                                className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors flex items-center gap-1"
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                                View
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  try {
-                                    const link = document.createElement('a');
-                                    link.href = doc.url;
-                                    link.download = doc.name;
-                                    link.click();
-                                    toast({
-                                      title: "Download Started",
-                                      description: `Downloading ${doc.name}`,
-                                      duration: 2000,
-                                      variant: "success",
-                                    });
-                                  } catch (error) {
-                                    toast({
-                                      title: "Error",
-                                      description: "Failed to download document",
-                                      variant: "destructive",
-                                    });
-                                  }
-                                }}
-                                className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors flex items-center gap-1"
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                                Download
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updatedDocs = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
-                                  form.setValue('renewalAttachments', updatedDocs.filter((_, i) => i !== index), { shouldDirty: true });
-                                  toast({
-                                    title: "Document Removed",
-                                    description: `${doc.name} has been removed`,
-                                    duration: 2000,
-                                    variant: "destructive",
-                                  });
-                                }}
-                                className="px-2 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-600 hover:bg-red-50 rounded-md transition-colors flex items-center gap-1"
-                                title="Remove document"
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                  {(pendingRenewalAttachment || ((form.watch('renewalAttachments') || []) as any[]).length > 0) ? (
+                    <div className="pr-2">
+                      <Table className="w-full table-fixed">
+                        <TableHeader>
+                          <TableRow className="border-b border-gray-200 bg-gray-50">
+                            <TableHead className="h-10 px-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wide w-[260px]">File Name</TableHead>
+                            <TableHead className="h-10 px-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wide w-[140px]">Updated By</TableHead>
+                            <TableHead className="h-10 px-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wide w-[140px]">Updated Date</TableHead>
+                            <TableHead className="h-10 px-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wide">Remark</TableHead>
+                            <TableHead className="h-10 px-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wide w-[220px]">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {pendingRenewalAttachment && (
+                            <TableRow className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
+                              <TableCell className="px-3 py-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                    {renderDocumentTypeIcon(pendingRenewalAttachment.name, pendingRenewalAttachment.url)}
+                                  </div>
+                                  <p className="text-xs font-semibold text-gray-900 truncate">{pendingRenewalAttachment.name}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-xs font-medium text-gray-900 truncate">
+                                {pendingRenewalAttachment.updatedBy || pendingRenewalAttachment.uploadedBy || '-'}
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-xs font-medium text-gray-900 truncate">
+                                {pendingRenewalAttachment.updatedAt
+                                  ? new Date(pendingRenewalAttachment.updatedAt).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric',
+                                    })
+                                  : (pendingRenewalAttachment.uploadedAt || '-')}
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
+                                <Input
+                                  value={pendingRenewalAttachmentRemark}
+                                  onChange={(e) => setPendingRenewalAttachmentRemark(e.target.value)}
+                                  placeholder="Enter remark"
+                                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
+                                />
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setPendingRenewalAttachment(null);
+                                      setPendingRenewalAttachmentRemark('');
+                                    }}
+                                    className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700"
+                                  >
+                                  Cancel 
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => {
+                                      const remark = pendingRenewalAttachmentRemark.trim();
+                                      const existing = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
+                                      form.setValue(
+                                        'renewalAttachments',
+                                        [
+                                          ...existing,
+                                          {
+                                            ...pendingRenewalAttachment,
+                                            remark,
+                                          },
+                                        ],
+                                        { shouldDirty: true }
+                                      );
+                                      toast({
+                                        title: 'Success',
+                                        description: `${pendingRenewalAttachment.name} uploaded successfully`,
+                                        duration: 2000,
+                                        variant: 'success',
+                                      });
+                                      setPendingRenewalAttachment(null);
+                                      setPendingRenewalAttachmentRemark('');
+                                    }}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                  >
+                                    Save
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+
+                          {((form.watch('renewalAttachments') || []) as RenewalAttachment[]).map((doc, index) => (
+                            <TableRow key={index} className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b last:border-b-0 border-gray-200">
+                              <TableCell className="px-3 py-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                    {renderDocumentTypeIcon(doc.name, doc.url)}
+                                  </div>
+                                  <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-3 py-2 text-xs font-medium text-gray-900 truncate">{doc.updatedBy || doc.uploadedBy || currentUserName || '-'}</TableCell>
+                              <TableCell className="px-3 py-2 text-xs font-medium text-gray-900 truncate">
+                                {doc.updatedAt
+                                  ? new Date(doc.updatedAt).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric',
+                                    })
+                                  : (doc.uploadedAt || '-')}
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
+                                <Input
+                                  value={doc.remark || ''}
+                                  onChange={(e) => {
+                                    const updatedDocs = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
+                                    updatedDocs[index] = {
+                                      ...updatedDocs[index],
+                                      remark: e.target.value,
+                                      updatedBy: currentUserName || updatedDocs[index]?.updatedBy || updatedDocs[index]?.uploadedBy,
+                                      updatedAt: new Date().toISOString(),
+                                    };
+                                    form.setValue('renewalAttachments', updatedDocs, { shouldDirty: true });
+                                  }}
+                                  placeholder="Enter remark"
+                                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
+                                />
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => openDocumentInNewTab({ name: doc.name, url: doc.url })}
+                                    className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                                  >
+                                    View
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadDocument({ name: doc.name, url: doc.url })}
+                                    className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                  >
+                                    Download
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updatedDocs = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
+                                      form.setValue('renewalAttachments', updatedDocs.filter((_, i) => i !== index), { shouldDirty: true });
+                                      toast({
+                                        title: 'Document Removed',
+                                        description: `${doc.name} has been removed`,
+                                        duration: 2000,
+                                        variant: 'destructive',
+                                      });
+                                    }}
+                                    className="px-2 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                    title="Remove document"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -4640,14 +4874,22 @@ export default function GovernmentLicense() {
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setShowRenewalDocumentsModal(false)}
+                      onClick={() => {
+                        setShowRenewalDocumentsModal(false);
+                        setPendingRenewalAttachment(null);
+                        setPendingRenewalAttachmentRemark('');
+                      }}
                       className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 text-sm px-4 py-1.5"
                     >
                       Close
                     </Button>
                     <Button
                       type="button"
-                      onClick={() => setShowRenewalDocumentsModal(false)}
+                      onClick={() => {
+                        setShowRenewalDocumentsModal(false);
+                        setPendingRenewalAttachment(null);
+                        setPendingRenewalAttachmentRemark('');
+                      }}
                       className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5"
                     >
                       Done
@@ -4726,6 +4968,90 @@ export default function GovernmentLicense() {
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Cancel Renewal Confirmation Dialog */}
+            <AlertDialog open={cancelRenewalConfirmOpen} onOpenChange={setCancelRenewalConfirmOpen}>
+              <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-gray-900">Cancel Renewal Confirmation</AlertDialogTitle>
+                  <AlertDialogDescription className="text-gray-700 font-medium">
+                    Are you sure you want to cancel this renewal? This will mark it as Cancelled.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel
+                    onClick={() => setCancelRenewalConfirmOpen(false)}
+                    className="border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    No, Keep It
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      setCancelRenewalConfirmOpen(false);
+                      const current = form.getValues() as LicenseFormData;
+                      submitLicense(
+                        {
+                          ...current,
+                          status: 'Cancelled',
+                        },
+                        { forceStatus: 'Cancelled' }
+                      );
+                      toast({
+                        title: 'Renewal cancelled',
+                        description: 'The renewal was marked as Cancelled.',
+                        variant: 'destructive',
+                      });
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+                  >
+                    Yes, Cancel Renewal
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Reactivate on Update Confirmation Dialog */}
+            <AlertDialog
+              open={reactivateCancelledConfirmOpen}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setReactivateCancelledConfirmOpen(false);
+                  pendingReactivateSubmitRef.current = null;
+                }
+              }}
+            >
+              <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-gray-900">Reactivate Renewal?</AlertDialogTitle>
+                  <AlertDialogDescription className="text-gray-700 font-medium">
+                    This renewal is currently Cancelled. Updating will reactivate it (Active/Expired based on expiry date). Do you want to continue?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel
+                    onClick={() => {
+                      setReactivateCancelledConfirmOpen(false);
+                      pendingReactivateSubmitRef.current = null;
+                    }}
+                    className="border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    No
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      const pending = pendingReactivateSubmitRef.current;
+                      setReactivateCancelledConfirmOpen(false);
+                      pendingReactivateSubmitRef.current = null;
+                      if (!pending) return;
+                      submitLicense(pending);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md px-6 py-2"
+                  >
+                    Yes, Reactivate & Update
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             {/* Approved - New Issue & Expiry Date Modal */}
             <Dialog

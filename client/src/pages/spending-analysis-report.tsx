@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -35,6 +36,11 @@ type HistoryRecord = {
 };
 
 type RangePreset = "last12" | "last6" | "last3";
+
+function isDraftSubscription(sub: Subscription): boolean {
+  const rawStatus = String((sub as any)?.status ?? "").trim().toLowerCase();
+  return Boolean((sub as any)?.isDraft) || rawStatus === "draft";
+}
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 // Average month length in days (365.25 / 12)
@@ -234,8 +240,8 @@ function getNormalizedDepartments(sub: Subscription): string[] {
   const raw = (sub as any)?.departments;
   const out: string[] = normalizeDepartmentTokens(raw);
 
-  const legacy = String((sub as any)?.department ?? "").trim();
-  if (legacy) out.push(legacy);
+  const legacyRaw = (sub as any)?.department;
+  out.push(...normalizeDepartmentTokens(legacyRaw));
 
   return Array.from(new Set(out.map((d) => d.trim()).filter(Boolean)));
 }
@@ -483,6 +489,7 @@ export default function SpendingAnalysisReport() {
   const departments = React.useMemo(() => {
     const set = new Set<string>();
     subscriptions.forEach((sub) => {
+      if (isDraftSubscription(sub)) return;
       getNormalizedDepartments(sub).forEach((d) => {
         // Extra safety: never add a value that looks like stringified JSON
         if (d && !d.startsWith("[") && !d.startsWith("{")) {
@@ -496,6 +503,7 @@ export default function SpendingAnalysisReport() {
   const categories = React.useMemo(() => {
     const set = new Set<string>();
     subscriptions.forEach((sub) => {
+      if (isDraftSubscription(sub)) return;
       const cat = String((sub as any)?.category ?? "").trim();
       if (cat) set.add(cat);
     });
@@ -504,6 +512,7 @@ export default function SpendingAnalysisReport() {
 
   const filtered = React.useMemo(() => {
     return subscriptions
+      .filter((sub) => !isDraftSubscription(sub))
       .filter((sub) => String((sub as any)?.status ?? "").toLowerCase() !== "cancelled")
       .filter((sub) => {
         if (selectedCategory === "all") return true;
@@ -552,12 +561,13 @@ export default function SpendingAnalysisReport() {
 
   const handleExportCsv = () => {
     const rows = filtered.map(({ sub, monthlyAvg, periodSpend }) => {
-      const department = getNormalizedDepartments(sub)[0] ?? "";
+      const departments = getNormalizedDepartments(sub);
+      const departmentJoined = departments.length > 0 ? departments.join("|") : "";
 
       return {
         Service: (sub as any)?.serviceName ?? "",
         Category: (sub as any)?.category ?? "",
-        Department: department ?? "",
+        Department: departmentJoined,
         PeriodSpend: periodSpend.toFixed(2),
         MonthlyAvg: monthlyAvg.toFixed(2),
         NextRenewal: formatNextRenewalLabel(sub),
@@ -688,7 +698,7 @@ export default function SpendingAnalysisReport() {
                 ) : (
                   <>
                     {filtered.map(({ sub, monthlyAvg, periodSpend }, index) => {
-                      const department = getNormalizedDepartments(sub)[0] ?? "";
+                      const departments = getNormalizedDepartments(sub);
                       const categoryValue = String((sub as any)?.category ?? "").trim();
                       const normalized = categoryValue.toLowerCase();
 
@@ -751,10 +761,10 @@ export default function SpendingAnalysisReport() {
                               {(sub as any)?.serviceName ?? ""}
                             </span>
                           </TableCell>
-                          <TableCell className="px-3 py-3 w-[220px] max-w-[220px] overflow-hidden text-center">
+                          <TableCell className="px-3 py-3 w-[220px] max-w-[220px] overflow-hidden text-left">
                             {categoryValue ? (
                               <span
-                                className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border max-w-full ${badgeClass}`}
+                                className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border max-w-full text-left ${badgeClass}`}
                                 style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
                               >
                                 <span className="truncate whitespace-nowrap" title={categoryValue}>
@@ -763,7 +773,7 @@ export default function SpendingAnalysisReport() {
                               </span>
                             ) : (
                               <span
-                                className="inline-flex items-center justify-center text-gray-400 text-xs"
+                                className="inline-flex items-center justify-start text-gray-400 text-xs"
                                 style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
                               >
                                 -
@@ -771,9 +781,24 @@ export default function SpendingAnalysisReport() {
                             )}
                           </TableCell>
                           <TableCell className="px-3 py-3 text-sm text-gray-800 w-[140px] max-w-[140px] overflow-hidden text-left">
-                            <span className="block w-full truncate whitespace-nowrap" title={department}>
-                              {department && department !== "[]" ? department : "-"}
-                            </span>
+                            {departments.length > 0 ? (
+                              <div
+                                className="flex flex-nowrap items-center gap-1 overflow-x-auto no-scrollbar whitespace-nowrap max-w-full"
+                                title={departments.join(", ")}
+                              >
+                                {departments.map((d) => (
+                                  <Badge
+                                    key={d}
+                                    variant="secondary"
+                                    className="rounded-full bg-indigo-100 text-indigo-800 hover:bg-indigo-200 border border-indigo-200 font-medium text-xs leading-none py-1 px-3 whitespace-nowrap flex-shrink-0"
+                                  >
+                                    {d}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
                           </TableCell>
                           <TableCell className="px-3 py-3 text-sm font-semibold text-gray-900 text-right w-[140px]">
                             {formatMoney(periodSpend)}

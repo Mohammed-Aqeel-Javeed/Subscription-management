@@ -512,10 +512,11 @@ router.get("/api/history/list", async (req, res) => {
           serviceName: item.data.serviceName ? decrypt(item.data.serviceName) : item.data.serviceName,
           vendor: item.data.vendor ? decrypt(item.data.vendor) : item.data.vendor,
           amount: item.data.amount ? decrypt(item.data.amount) : item.data.amount,
+          paymentMethod: item.data.paymentMethod ? decrypt(item.data.paymentMethod) : item.data.paymentMethod,
           owner: item.data.owner,
           ownerName: item.data.ownerName,
           status: item.data.status,
-          // Skip decrypting: description, paymentMethod, notes
+          // Skip decrypting: description, notes
         };
       }
       
@@ -526,6 +527,7 @@ router.get("/api/history/list", async (req, res) => {
           serviceName: item.updatedFields.serviceName ? decrypt(item.updatedFields.serviceName) : item.updatedFields.serviceName,
           vendor: item.updatedFields.vendor ? decrypt(item.updatedFields.vendor) : item.updatedFields.vendor,
           amount: item.updatedFields.amount ? decrypt(item.updatedFields.amount) : item.updatedFields.amount,
+          paymentMethod: item.updatedFields.paymentMethod ? decrypt(item.updatedFields.paymentMethod) : item.updatedFields.paymentMethod,
           owner: item.updatedFields.owner,
           ownerName: item.updatedFields.ownerName,
           status: item.updatedFields.status,
@@ -608,6 +610,7 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
           serviceName: item.data.serviceName ? decrypt(item.data.serviceName) : item.data.serviceName,
           vendor: item.data.vendor ? decrypt(item.data.vendor) : item.data.vendor,
           amount: item.data.amount ? decrypt(item.data.amount) : item.data.amount,
+          paymentMethod: item.data.paymentMethod ? decrypt(item.data.paymentMethod) : item.data.paymentMethod,
           owner: item.data.owner,
           ownerName: item.data.ownerName,
           status: item.data.status,
@@ -621,6 +624,7 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
           serviceName: item.updatedFields.serviceName ? decrypt(item.updatedFields.serviceName) : item.updatedFields.serviceName,
           vendor: item.updatedFields.vendor ? decrypt(item.updatedFields.vendor) : item.updatedFields.vendor,
           amount: item.updatedFields.amount ? decrypt(item.updatedFields.amount) : item.updatedFields.amount,
+          paymentMethod: item.updatedFields.paymentMethod ? decrypt(item.updatedFields.paymentMethod) : item.updatedFields.paymentMethod,
           owner: item.updatedFields.owner,
           ownerName: item.updatedFields.ownerName,
           status: item.updatedFields.status,
@@ -1943,6 +1947,11 @@ router.post("/api/subscriptions", async (req, res) => {
       return res.status(400).json({ message: 'Service name is required' });
     }
 
+    const rawPaymentMethod = String((req.body as any)?.paymentMethod || '').trim();
+    if (!rawPaymentMethod) {
+      return res.status(400).json({ message: 'Payment Method is required' });
+    }
+
     // Used to detect duplicates despite serviceName being encrypted (encryption is randomized).
     const serviceNameKey = rawServiceName.toLowerCase();
     const createIdempotencyKey = typeof (req.body as any)?.createIdempotencyKey === 'string'
@@ -2047,9 +2056,17 @@ router.post("/api/subscriptions", async (req, res) => {
         const decryptedCreated = decryptSubscriptionData(createdSubscription);
         const fieldsForHistory = [
           'serviceName',
+          'website',
           'vendor',
+          'currency',
+          'billingCycle',
+          'category',
           'ownerName',
           'owner',
+          'ownerEmail',
+          'paymentMethod',
+          'departments',
+          'department',
           'startDate',
           'nextRenewal',
           'endDate',
@@ -2059,6 +2076,12 @@ router.post("/api/subscriptions", async (req, res) => {
           'lcyAmount',
           'taxAmount',
           'totalAmountInclTax',
+          'reminderDays',
+          'reminderPolicy',
+          'paymentFrequency',
+          'notes',
+          'description',
+          'isActive',
           'status',
         ];
 
@@ -2259,6 +2282,11 @@ router.post("/api/subscriptions/draft/:id/activate", async (req, res) => {
       return res.status(404).json({ message: "Draft subscription not found" });
     }
 
+    const paymentMethodCandidate = String((req.body as any)?.paymentMethod ?? (draftSubscription as any)?.paymentMethod ?? '').trim();
+    if (!paymentMethodCandidate) {
+      return res.status(400).json({ message: 'Payment Method is required to activate a draft' });
+    }
+
     // Update draft to active subscription
     const updateData = {
       ...req.body,
@@ -2378,6 +2406,11 @@ router.put("/api/subscriptions/:id", async (req, res) => {
       delete req.body.ownerEmail;
     }
 
+    // Payment method is mandatory; never allow it to be set to blank via update.
+    if ('paymentMethod' in req.body && String((req.body as any).paymentMethod || '').trim() === '') {
+      return res.status(400).json({ message: 'Payment Method is required' });
+    }
+
     // Normalize common date fields (UI may send dd-mm-yyyy)
     if ('startDate' in req.body) req.body.startDate = normalizeDateString(req.body.startDate);
     if ('nextRenewal' in req.body) req.body.nextRenewal = normalizeDateString(req.body.nextRenewal);
@@ -2463,11 +2496,43 @@ const update = {
           return d.toISOString().slice(0, 10);
         };
 
-        const fieldsForHistory = [
+        const normalizeArrayLike = (value: any): string => {
+          if (!Array.isArray(value)) return '';
+          const items = value
+            .map((v) => (v === null || v === undefined ? '' : String(v)))
+            .map((v) => v.trim())
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b));
+          return items.join(',');
+        };
+
+        const stableStringifyShallow = (value: any): string => {
+          if (value === null || value === undefined) return '';
+          if (typeof value !== 'object') return String(value);
+          if (Array.isArray(value)) return normalizeArrayLike(value);
+          try {
+            const keys = Object.keys(value).sort((a, b) => a.localeCompare(b));
+            const out: any = {};
+            for (const k of keys) out[k] = (value as any)[k];
+            return JSON.stringify(out);
+          } catch {
+            return String(value);
+          }
+        };
+
+        const baselineFieldsForHistory = [
           'serviceName',
+          'website',
           'vendor',
+          'currency',
+          'billingCycle',
+          'category',
           'ownerName',
           'owner',
+          'ownerEmail',
+          'paymentMethod',
+          'departments',
+          'department',
           'startDate',
           'nextRenewal',
           'endDate',
@@ -2477,8 +2542,33 @@ const update = {
           'lcyAmount',
           'taxAmount',
           'totalAmountInclTax',
+          'reminderDays',
+          'reminderPolicy',
+          'paymentFrequency',
+          'notes',
+          'description',
+          'isActive',
           'status',
         ];
+
+        // Log whatever was edited (from the request body), not just a fixed allowlist.
+        // This ensures new editable fields automatically show up in Subscription History.
+        const excludedHistoryKeys = new Set([
+          '_id',
+          'id',
+          'subscriptionId',
+          'tenantId',
+          'companyId',
+          'userId',
+          'createdAt',
+          'updatedAt',
+          'loggedAt',
+          'timestamp',
+          '__v',
+        ]);
+
+        const editedKeys = Object.keys(req.body || {}).filter((k) => !excludedHistoryKeys.has(k));
+        const fieldsForHistory = Array.from(new Set([...baselineFieldsForHistory, ...editedKeys]));
 
         // Decrypt docs for stable diffing + readable history payload.
         const decryptedOld = decryptSubscriptionData(oldDoc);
@@ -2499,6 +2589,17 @@ const update = {
             const bn = normalizeMoney(before);
             const an = normalizeMoney(after);
             if (bn !== an) diffs.push(key);
+            continue;
+          }
+
+          // Arrays/objects need stable comparisons to avoid noisy history.
+          if (Array.isArray(before) || Array.isArray(after)) {
+            if (normalizeArrayLike(before) !== normalizeArrayLike(after)) diffs.push(key);
+            continue;
+          }
+
+          if (typeof before === 'object' || typeof after === 'object') {
+            if (stableStringifyShallow(before) !== stableStringifyShallow(after)) diffs.push(key);
             continue;
           }
 

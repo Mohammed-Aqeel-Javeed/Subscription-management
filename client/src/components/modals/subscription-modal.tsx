@@ -1264,7 +1264,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [isRenewing, setIsRenewing] = useState(false);
   const [lcyAmount, setLcyAmount] = useState<string>('');
   const [totalAmount, setTotalAmount] = useState<string>(''); // excl tax
-  const [taxAmount, setTaxAmount] = useState<string>('');
+  const [taxAmount, setTaxAmount] = useState<string>('0');
   const [totalAmountInclTax, setTotalAmountInclTax] = useState<string>('');
   const [originalTotalAmount, setOriginalTotalAmount] = useState<number>(0);
   const [effectiveDate, setEffectiveDate] = useState<string>('');
@@ -1274,6 +1274,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [confirmDialog, setConfirmDialog] = useState<{show: boolean}>({show: false});
   const [exitConfirmDialog, setExitConfirmDialog] = useState<{show: boolean}>({show: false});
   const [cancelRenewalConfirmDialog, setCancelRenewalConfirmDialog] = useState<{show: boolean}>({show: false});
+  const [reactivateCancelledConfirmDialog, setReactivateCancelledConfirmDialog] = useState<{show: boolean}>({show: false});
   const [saveDraftRequiredDialog, setSaveDraftRequiredDialog] = useState<{show: boolean}>({show: false});
   const [subscriptionCreated, setSubscriptionCreated] = useState<boolean>(false);
   const [departmentModal, setDepartmentModal] = useState<{show: boolean}>({show: false});
@@ -1698,7 +1699,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setServiceNameError("");
       setLcyAmount('');
       setTotalAmount('');
-      setTaxAmount('');
+      setTaxAmount('0');
       setTotalAmountInclTax('');
       setDocuments([]);
       setIsEditingWebsite(false);
@@ -1781,7 +1782,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setTotalAmount(totalAmtValue);
       
       // Set taxAmount and totalAmountInclTax state
-      const taxAmtValue = (subscription as any)?.taxAmount !== undefined && (subscription as any)?.taxAmount !== null ? Number((subscription as any).taxAmount).toFixed(2) : "";
+      const rawTaxAmt = Number((subscription as any)?.taxAmount);
+      const taxAmtValue = Number.isFinite(rawTaxAmt)
+        ? (rawTaxAmt === 0 ? "0" : rawTaxAmt.toFixed(2))
+        : "0";
       const totalInclTaxValue = (subscription as any)?.totalAmountInclTax !== undefined && (subscription as any)?.totalAmountInclTax !== null ? Number((subscription as any).totalAmountInclTax).toFixed(2) : "";
       setTaxAmount(taxAmtValue);
       setTotalAmountInclTax(totalInclTaxValue);
@@ -1871,7 +1875,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
       // Reset LCY amount for new subscriptions
       setLcyAmount('');
-      setTaxAmount('');
+      setTaxAmount('0');
       setTotalAmountInclTax('');
     }
   }, [subscription, form, companyInfo?.defaultCurrency, currencies]);
@@ -2344,6 +2348,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       return;
     }
     
+    const currentStatus = String((form.getValues() as any)?.status ?? status ?? '').trim();
+    if (isEditing && currentStatus === 'Cancelled') {
+      setReactivateCancelledConfirmDialog({ show: true });
+      return;
+    }
+
     setStatus('Active'); // Set status to Active when saving
     try {
       // Always include department as JSON string for backend
@@ -3138,7 +3148,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 title={!isEditing ? "History is available only for existing subscriptions" : undefined}
               >
                 <History className="h-4 w-4" />
-                Audit Log
+                History
               </Button>
               <Button
                 type="button"
@@ -4252,9 +4262,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   variant="destructive" 
                   className="font-semibold px-6 py-3 border-2 border-red-600 text-white bg-red-600 hover:bg-red-700 shadow-lg mr-auto rounded-lg transition-all duration-200 hover:shadow-red-500/25"
                   onClick={() => {
+                    if (status === 'Cancelled') return;
                     setCancelRenewalConfirmDialog({ show: true });
                   }}
-                  disabled={!subscription?.id}
+                  disabled={!subscription?.id || status === 'Cancelled'}
+                  title={status === 'Cancelled' ? 'Already cancelled' : undefined}
                 >
                   Cancel Renewal
                 </Button>
@@ -4519,6 +4531,46 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
             >
               Yes, Cancel Renewal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reactivate on Update Confirmation Dialog */}
+      <AlertDialog
+        open={reactivateCancelledConfirmDialog.show}
+        onOpenChange={(open) => !open && setReactivateCancelledConfirmDialog({ show: false })}
+      >
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              Reactivate Subscription?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              This subscription is currently Cancelled. Updating will reactivate it to Active. Do you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setReactivateCancelledConfirmDialog({ show: false })}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              No
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setReactivateCancelledConfirmDialog({ show: false });
+                setStatus('Active');
+                form.setValue('status', 'Active' as any, { shouldDirty: true });
+                // Re-submit after reactivating
+                Promise.resolve(form.handleSubmit(onSubmit)()).catch(() => {
+                  // no-op
+                });
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-md px-6 py-2"
+            >
+              Yes, Reactivate & Update
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

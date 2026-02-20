@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, FileSpreadsheet, BarChart3, ChevronDown, Check } from "lucide-react";
+import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, BarChart3, ChevronDown, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { API_BASE_URL } from "@/lib/config";
@@ -259,7 +260,24 @@ const [editingEmployee, setEditingEmployee] = useState<Employee | undefined>();
 const [searchTerm, setSearchTerm] = useState("");
 const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
 const [selectedEmployeeSubscriptions, setSelectedEmployeeSubscriptions] = useState<{employeeName: string; subscriptions: any[]}>({employeeName: '', subscriptions: []});
+const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
+const [importConfirmOpen, setImportConfirmOpen] = useState(false);
 const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+const downloadEmployeeTemplate = () => {
+  const template = [{ name: 'John Doe', email: 'john@example.com', department: 'IT', role: 'Manager', status: 'active' }];
+  const csv = Papa.unparse(template, { header: true });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', 'employees_import_template.csv');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  toast({ title: 'Template Downloaded', description: 'Use this template to import employees.' });
+};
 
 const [employeeDeptOpen, setEmployeeDeptOpen] = useState(false);
 const [employeeDeptSearch, setEmployeeDeptSearch] = useState("");
@@ -439,10 +457,6 @@ const confirmDelete = () => {
     setDeleteConfirmOpen(false);
     setEmployeeToDelete(null);
   }
-};
-
-const handleImport = () => {
-  fileInputRef.current?.click();
 };
 
 const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -680,20 +694,6 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl fle
       className="pl-10 w-full sm:w-64 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
     />
   </div>
-  <Button
-    onClick={handleImport}
-    className="bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 font-medium shadow-sm rounded-lg h-10 px-4"
-  >
-    <Upload className="w-4 h-4 mr-2" />
-    Import
-  </Button>
-  <Button
-    onClick={handleExport}
-    className="bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 font-medium shadow-sm rounded-lg h-10 px-4"
-  >
-    <Upload className="w-4 h-4 mr-2 rotate-180" />
-    Export
-  </Button>
   <input
     type="file"
     ref={fileInputRef}
@@ -701,6 +701,35 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl fle
     accept=".csv,.xlsx,.xls"
     onChange={handleFileUpload}
   />
+  <Select
+    key={dataManagementSelectKey}
+    onValueChange={(value) => {
+      if (value === 'export') {
+        handleExport();
+      } else if (value === 'import') {
+        setImportConfirmOpen(true);
+      }
+      setDataManagementSelectKey((k) => k + 1);
+    }}
+  >
+    <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+      <SelectValue placeholder="Data Management" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="export" className="cursor-pointer">
+        <div className="flex items-center">
+          <Download className="h-4 w-4 mr-2" />
+          Export
+        </div>
+      </SelectItem>
+      <SelectItem value="import" className="cursor-pointer">
+        <div className="flex items-center">
+          <Upload className="h-4 w-4 mr-2" />
+          Import
+        </div>
+      </SelectItem>
+    </SelectContent>
+  </Select>
 </div>
 <Dialog open={modalOpen} onOpenChange={setModalOpen}>
 <DialogTrigger asChild>
@@ -849,7 +878,7 @@ render={({ field }) => (
 <FormControl>
 <Input {...field} placeholder="e.g., Manager, Developer" className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
 </FormControl>
-<FormMessage />
+<FormMessage className="text-red-600 text-sm font-medium mt-1" />
 </FormItem>
 )}
 />
@@ -940,7 +969,8 @@ className="flex-1 min-h-0"
     <button
       type="button"
       onClick={() => handleEdit(employee)}
-      className="text-sm font-medium text-gray-900 hover:text-blue-600 underline hover:no-underline transition-all duration-200 cursor-pointer text-left"
+      className="text-sm font-medium text-gray-900 hover:text-blue-600 underline hover:no-underline transition-all duration-200 cursor-pointer text-left max-w-[200px] truncate block"
+      title={employee.name}
     >
       {employee.name}
     </button>
@@ -999,6 +1029,7 @@ className="flex-1 min-h-0"
 </motion.tr>
   );
 })}
+
 {filteredEmployees.length === 0 && (
 <tr>
   <td colSpan={7} className="text-center py-6">
@@ -1015,6 +1046,38 @@ className="flex-1 min-h-0"
 </CardContent>
 </Card>
 </motion.div>
+
+{/* Import Confirm Dialog */}
+<AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+  <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+    <AlertDialogHeader>
+      <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+      <AlertDialogDescription>
+        Select Yes to choose a file. Select No to download the template.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel
+        className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+        onClick={() => {
+          downloadEmployeeTemplate();
+          setImportConfirmOpen(false);
+        }}
+      >
+        No
+      </AlertDialogCancel>
+      <AlertDialogAction
+        className="bg-green-600 text-white hover:bg-green-700"
+        onClick={() => {
+          setImportConfirmOpen(false);
+          setTimeout(() => fileInputRef.current?.click(), 0);
+        }}
+      >
+        Yes
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
 
 {/* Employee Subscriptions Modal */}
 <Dialog open={subscriptionModalOpen} onOpenChange={setSubscriptionModalOpen}>
@@ -1118,7 +1181,7 @@ className="flex-1 min-h-0"
           return (
             <>
               <p className="text-gray-700 text-sm leading-relaxed mb-4">
-                The employee <span className="font-semibold text-gray-900">"{employeeToDelete?.name}"</span> is linked to <span className="font-semibold text-gray-900">{inUseCount}</span> subscription(s).
+                The employee <span className="font-semibold text-gray-900">"<span className="max-w-[200px] inline-block truncate align-bottom" title={employeeToDelete?.name}>{employeeToDelete?.name}</span>"</span> is linked to <span className="font-semibold text-gray-900">{inUseCount}</span> subscription(s).
               </p>
               <p className="text-gray-600 text-xs leading-relaxed">
                 You can’t delete it right now. Please reassign the subscriptions to another employee and then try again.
@@ -1129,7 +1192,7 @@ className="flex-1 min-h-0"
         return (
           <>
             <p className="text-gray-700 text-sm leading-relaxed mb-4">
-              Are you sure you want to delete the employee <span className="font-semibold text-gray-900">"{employeeToDelete?.name}"</span>?
+              Are you sure you want to delete the employee <span className="font-semibold text-gray-900">"<span className="max-w-[200px] inline-block truncate align-bottom" title={employeeToDelete?.name}>{employeeToDelete?.name}</span>"</span>?
             </p>
             <p className="text-gray-600 text-xs leading-relaxed">
               This will permanently remove this employee and all associated data from your system.
@@ -1458,7 +1521,7 @@ onClick={handleAddNew}
 className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-md rounded-lg h-10 px-4"
 >
 <UserPlus className="mr-2" size={16} />
-Add User
+New User
 </Button>
 </motion.div>
 </DialogTrigger>
@@ -1909,7 +1972,17 @@ type Category = { name: string; visible: boolean; tenantId?: string };
 const queryClient = useQueryClient();
 const { data: categories = [], isLoading: categoriesLoading, refetch: refetchCategories } = useQuery<Category[]>({
 queryKey: ["/api/company/categories"],
-initialData: [],
+queryFn: async () => {
+  const res = await fetch(`${API_BASE_URL}/api/company/categories`, { credentials: 'include' });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({} as any));
+    const msg = (json as any)?.message || 'Failed to fetch categories';
+    throw new Error(msg);
+  }
+  const data = await res.json().catch(() => []);
+  return Array.isArray(data) ? data : [];
+},
+placeholderData: [],
 refetchOnWindowFocus: false,
 refetchOnMount: false,
 staleTime: 5 * 60 * 1000,
@@ -2094,6 +2167,8 @@ const { toast } = useToast();
 
 // File input ref for Excel import
 const companyFileInputRef = React.useRef<HTMLInputElement>(null);
+const [companyImportConfirmOpen, setCompanyImportConfirmOpen] = useState(false);
+const [companyDataManagementSelectKey, setCompanyDataManagementSelectKey] = useState(0);
 
 // Fetch employees for department counts / dropdowns
 const { data: employeesData = [] } = useQuery<any[]>({
@@ -2570,7 +2645,7 @@ const [activeTab, setActiveTab] = useState(initialTab);
 
 return (
   <div className="h-screen overflow-hidden bg-white font-inter">
-    <div className="max-w-[1400px] mx-auto px-6 py-8">
+    <div className="max-w-[1400px] mx-auto px-6 py-8 h-full overflow-hidden">
       {/* Modern Professional Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-6">
@@ -2584,7 +2659,7 @@ return (
             </div>
           </div>
           
-          {/* Consolidated Excel Import/Export Buttons */}
+          {/* Consolidated Excel Import/Export - Data Management Dropdown */}
           <div className="flex items-center gap-3">
             <input
               ref={companyFileInputRef}
@@ -2593,34 +2668,77 @@ return (
               onChange={importCombinedExcel}
               className="hidden"
             />
-            <Button
-              variant="outline"
-              onClick={downloadCombinedTemplate}
-              className="border-purple-300 text-purple-700 hover:bg-purple-50 shadow-sm"
+            <Select
+              key={companyDataManagementSelectKey}
+              onValueChange={(value) => {
+                if (value === 'import') {
+                  setCompanyImportConfirmOpen(true);
+                } else if (value === 'export') {
+                  exportAllToExcel();
+                }
+
+                // Radix Select won't re-fire onValueChange for the same value.
+                // Remount to allow selecting Import/Export repeatedly.
+                setCompanyDataManagementSelectKey((k) => k + 1);
+              }}
             >
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Template
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => companyFileInputRef.current?.click()}
-              className="border-green-300 text-green-700 hover:bg-green-50 shadow-sm"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Import
-            </Button>
-            <Button
-              variant="outline"
-              onClick={exportAllToExcel}
-              disabled={departments.length === 0 && employeesData.length === 0 && categories.length === 0}
-              className="border-blue-300 text-blue-700 hover:bg-blue-50 shadow-sm"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
+              <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                <SelectValue placeholder="Data Management" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="import" className="cursor-pointer">
+                  <div className="flex items-center">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import
+                  </div>
+                </SelectItem>
+                <SelectItem
+                  value="export"
+                  disabled={departments.length === 0 && employeesData.length === 0 && categories.length === 0}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center">
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
+
+      {/* Import Confirm Dialog (Company Details Excel) */}
+      <AlertDialog open={companyImportConfirmOpen} onOpenChange={setCompanyImportConfirmOpen}>
+        <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Select Yes to choose a file. Select No to download the template.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+              onClick={() => {
+                downloadCombinedTemplate();
+                setCompanyImportConfirmOpen(false);
+              }}
+            >
+              No
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-600 text-white hover:bg-green-700"
+              onClick={() => {
+                setCompanyImportConfirmOpen(false);
+                setTimeout(() => companyFileInputRef.current?.click(), 0);
+              }}
+            >
+              Yes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
@@ -2697,7 +2815,7 @@ exit={{ opacity: 0, y: -20 }}
 transition={{ duration: 0.3 }}
 className="h-full"
 >
-<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden h-full flex flex-col">
+<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden flex flex-col h-full">
 {/* Professional Header with Gradient */}
 <div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-4 flex-shrink-0">
   <div className="flex items-center gap-4">
@@ -2714,11 +2832,11 @@ className="h-full"
   </div>
 </div>
 
-{/* Form Content - Scrollable */}
-<div className="flex-1 overflow-y-auto">
+{/* Form Content */}
+<div className="flex-1 overflow-y-auto no-scrollbar">
 <form onSubmit={handleSubmit} className="p-8 bg-gradient-to-br from-gray-50 to-white">
-  {/* Professional Section Header - Sticky */}
-  <div className="sticky top-0 z-10 bg-gradient-to-br from-gray-50 to-white pb-4 mb-4 -mx-8 px-8 pt-0">
+  {/* Professional Section Header */}
+  <div className="pb-4 mb-4 -mx-8 px-8 pt-0">
     <h2 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">Basic Information</h2>
     <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
   </div>
@@ -2901,8 +3019,8 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
 </div>
 )}
 
-                  {/* Save Button - Professional styling */}
-                  <div className="pt-8 flex justify-end border-t border-gray-200 mt-8">
+                  {/* Save Button - Fixed (prevents page overflow; avoids chatbot at bottom-right) */}
+                  <div className="fixed bottom-6 right-28 z-40">
                     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                       <Button
                         type="submit"
@@ -2977,7 +3095,7 @@ className="h-full"
         className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
       >
         <Plus className="w-4 h-4 mr-2" />
-        Add Department
+        New Department
       </Button>
     </motion.div>
   </DialogTrigger>
@@ -3542,7 +3660,7 @@ disabled={!newCategoryName.trim() || addCategoryMutation.isPending}
 className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
 >
 <Plus className="w-4 h-4 mr-2" />
-{addCategoryMutation.isPending ? "Adding..." : "Add Category"}
+{addCategoryMutation.isPending ? "Adding..." : "New Category"}
 </Button>
 </motion.div>
 </div>
