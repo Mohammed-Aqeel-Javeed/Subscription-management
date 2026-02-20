@@ -123,9 +123,41 @@ function prettyFieldLabel(key: string) {
     case "ownerName":
     case "owner":
       return "Owner";
+    case "ownerEmail":
+      return "Owner Email";
+    case "paymentMethod":
+      return "Payment Method";
+    case "website":
+      return "Website";
+    case "billingCycle":
+      return "Billing Cycle";
+    case "paymentFrequency":
+      return "Payment Frequency";
+    case "currency":
+      return "Currency";
+    case "category":
+      return "Category";
+    case "departments":
+      return "Departments";
+    case "department":
+      return "Department";
+    case "reminderDays":
+      return "Reminder Days";
+    case "reminderPolicy":
+      return "Reminder Policy";
+    case "notes":
+      return "Notes";
+    case "description":
+      return "Description";
+    case "isActive":
+      return "Active";
+    case "isDraft":
+      return "Draft";
     case "startDate":
       return "Start Date";
     case "nextRenewal":
+      return "End Date";
+    case "endDate":
       return "End Date";
     case "amount":
       return "Amount";
@@ -146,10 +178,86 @@ function prettyFieldLabel(key: string) {
   }
 }
 
+function getHistoryKeysToCompare(record: HistoryRecord) {
+  const newData = record.updatedFields || {};
+
+  // Keep a stable, human-friendly ordering for common fields.
+  const preferredOrder = [
+    "serviceName",
+    "vendor",
+    "website",
+    "category",
+    "departments",
+    "department",
+    "ownerName",
+    "owner",
+    "ownerEmail",
+    "paymentMethod",
+    "billingCycle",
+    "paymentFrequency",
+    "currency",
+    "startDate",
+    "nextRenewal",
+    "endDate",
+    "amount",
+    "qty",
+    "taxAmount",
+    "totalAmount",
+    "lcyAmount",
+    "totalAmountInclTax",
+    "reminderDays",
+    "reminderPolicy",
+    "notes",
+    "description",
+    "status",
+    "isActive",
+    "isDraft",
+  ];
+
+  // Avoid showing internal/system fields if they appear in updatedFields.
+  const excludedKeys = new Set([
+    "_id",
+    "id",
+    "subscriptionId",
+    "tenantId",
+    "companyId",
+    "userId",
+    "createdAt",
+    "updatedAt",
+    "createdOn",
+    "modifiedOn",
+    "loggedAt",
+    "timestamp",
+    "__v",
+  ]);
+
+  const ordered = [...preferredOrder, ...Object.keys(newData)];
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const k of ordered) {
+    if (!k) continue;
+    if (excludedKeys.has(k)) continue;
+    if (!(k in newData)) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    unique.push(k);
+  }
+  return unique;
+}
+
 function formatValue(value: any) {
   if (value === null || value === undefined || value === "") return "Not Set";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) {
+    const items = value
+      .map((v) => (v === null || v === undefined ? "" : String(v)))
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (items.length === 0) return "Not Set";
+    // Sort for stable comparisons/reads (e.g., departments arrays).
+    return items.sort((a, b) => a.localeCompare(b)).join(", ");
+  }
   if (typeof value === "string") return value;
   try {
     return JSON.stringify(value);
@@ -183,21 +291,7 @@ function buildChangesText(record: HistoryRecord) {
     return ["Deleted subscription", reason].filter(Boolean).join("\n");
   }
 
-  const fieldsToCompare = [
-    "serviceName",
-    "vendor",
-    "ownerName",
-    "owner",
-    "startDate",
-    "nextRenewal",
-    "amount",
-    "qty",
-    "totalAmount",
-    "lcyAmount",
-    "taxAmount",
-    "totalAmountInclTax",
-    "status",
-  ];
+  const fieldsToCompare = getHistoryKeysToCompare(record);
 
   const numericFields = new Set([
     "amount",
@@ -208,13 +302,15 @@ function buildChangesText(record: HistoryRecord) {
     "totalAmountInclTax",
   ]);
 
+  const dateFields = new Set(["startDate", "nextRenewal", "endDate", "initialDate"]);
+
   const lines: string[] = [];
   for (const key of fieldsToCompare) {
     if (!(key in newData)) continue;
     const before = oldData[key];
     const after = newData[key];
 
-    const isDateField = key === "startDate" || key === "nextRenewal" || key === "endDate" || key === "initialDate";
+    const isDateField = dateFields.has(key);
     const beforeText = isDateField ? formatDateDdMmYyyy(before) : formatValue(before);
     const afterText = isDateField ? formatDateDdMmYyyy(after) : formatValue(after);
 
@@ -247,19 +343,20 @@ function inferDisplayAction(record: HistoryRecord): string {
   const oldData = record.data || {};
   const newData = record.updatedFields || {};
 
-  // Heuristic: if only startDate + nextRenewal changed, treat as renewal.
+  // Heuristic: if only renewal date fields changed, treat as renewal.
   const changedKeys: string[] = [];
-  const keysToCheck = ["serviceName", "vendor", "ownerName", "owner", "startDate", "nextRenewal", "amount", "qty", "totalAmount", "lcyAmount", "status"];
+  const keysToCheck = getHistoryKeysToCompare(record);
   for (const k of keysToCheck) {
     if (!(k in newData)) continue;
     const before = oldData[k];
     const after = newData[k];
-    const beforeText = (k === "startDate" || k === "nextRenewal") ? formatDateDdMmYyyy(before) : formatValue(before);
-    const afterText = (k === "startDate" || k === "nextRenewal") ? formatDateDdMmYyyy(after) : formatValue(after);
+    const isDateField = k === "startDate" || k === "nextRenewal" || k === "endDate" || k === "initialDate";
+    const beforeText = isDateField ? formatDateDdMmYyyy(before) : formatValue(before);
+    const afterText = isDateField ? formatDateDdMmYyyy(after) : formatValue(after);
     if (beforeText !== afterText) changedKeys.push(k);
   }
 
-  if (changedKeys.length > 0 && changedKeys.every((k) => k === "startDate" || k === "nextRenewal")) {
+  if (changedKeys.length > 0 && changedKeys.every((k) => k === "startDate" || k === "nextRenewal" || k === "endDate")) {
     return "renewed";
   }
 
@@ -338,7 +435,7 @@ export default function SubscriptionHistory() {
     "Selected Subscription";
 
   const headerName = subscriptionNameParam ? decodeURIComponent(subscriptionNameParam) : firstName;
-  const headerTitle = subscriptionId ? `${headerName} Audit Log` : "Subscription Audit Log";
+  const headerTitle = subscriptionId ? `${headerName} History Log` : "Subscription History Log";
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 font-['Inter']">
@@ -356,7 +453,11 @@ export default function SubscriptionHistory() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Button onClick={() => navigate("/subscriptions")} variant="outline" className="flex items-center gap-2">
+              <Button
+                onClick={() => navigate("/subscriptions")}
+                variant="outline"
+                className="flex items-center gap-2 bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
+              >
                 <ArrowLeft className="h-4 w-4" />
                 Back to Subscriptions
               </Button>
@@ -377,13 +478,15 @@ export default function SubscriptionHistory() {
             ) : history && history.length > 0 ? (
               <div className="h-full overflow-auto">
                 <table className="w-full border-collapse">
-                  <thead className="sticky top-0 z-10 bg-slate-50">
-                    <tr className="border-b border-slate-200">
-                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[200px]">Subscription Name</th>
-                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[180px]">Changed By</th>
-                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[400px]">Changes</th>
-                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[100px]">Action</th>
-                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[140px]">Timestamp</th>
+                  <thead className="sticky top-0 z-10 bg-gray-200">
+                    <tr className="border-b border-gray-300">
+                      {!subscriptionId && (
+                        <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[200px]">Subscription Name</th>
+                      )}
+                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[180px]">Changed By</th>
+                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[400px]">Changes</th>
+                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[100px]">Action</th>
+                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[140px]">Updated On</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white">
@@ -402,7 +505,9 @@ export default function SubscriptionHistory() {
 
                       return (
                         <tr key={item._id || index} className="hover:bg-slate-50 border-b border-slate-100">
-                          <td className="font-medium text-sm text-slate-900 align-top py-3 px-4">{name}</td>
+                          {!subscriptionId && (
+                            <td className="font-medium text-sm text-slate-900 align-top py-3 px-4">{name}</td>
+                          )}
                           <td className="text-sm text-slate-700 align-top py-3 px-4">{changedBy}</td>
                           <td className="text-sm text-slate-600 align-top py-3 px-4">
                             <div className="whitespace-pre-line leading-relaxed">{changesText || "No changes recorded"}</div>

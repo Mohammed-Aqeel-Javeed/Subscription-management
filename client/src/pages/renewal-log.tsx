@@ -10,6 +10,7 @@ export default function RenewalLog() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const licenseId = searchParams.get('id');
+  const licenseNameParam = searchParams.get('name');
 
   // Fetch logs
   const { data: logs = [], isLoading } = useQuery({
@@ -78,12 +79,12 @@ export default function RenewalLog() {
                 <History className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Renewal History Log</h1>
-                {licenseId && filteredLogs.length > 0 && (
-                  <p className="text-sm text-slate-600 mt-1">
-                    Showing logs for: <span className="font-medium text-slate-900">{filteredLogs[0]?.licenseName || 'Selected Renewal'}</span>
-                  </p>
-                )}
+                {(() => {
+                  const derivedName = filteredLogs.length > 0 ? (filteredLogs[0]?.licenseName as string | undefined) : undefined;
+                  const displayName = licenseNameParam ? decodeURIComponent(licenseNameParam) : derivedName;
+                  const title = licenseId && displayName ? `${displayName} History Log` : 'Renewal History Log';
+                  return <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{title}</h1>;
+                })()}
               </div>
             </div>
             
@@ -91,7 +92,7 @@ export default function RenewalLog() {
               <Button
                 onClick={() => navigate('/government-license')}
                 variant="outline"
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back to Renewals
@@ -113,13 +114,15 @@ export default function RenewalLog() {
             ) : filteredLogs && filteredLogs.length > 0 ? (
               <div className="h-full overflow-auto">
                 <table className="w-full border-collapse">
-                  <thead className="sticky top-0 z-10 bg-slate-50">
-                    <tr className="border-b border-slate-200">
-                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[200px]">Renewal Name</th>
-                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[180px]">Changed By</th>
-                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[400px]">Changes</th>
-                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[100px]">Action</th>
-                      <th className="font-semibold text-slate-700 bg-slate-50 text-left px-4 py-3 w-[140px]">Timestamp</th>
+                  <thead className="sticky top-0 z-10 bg-gray-200">
+                    <tr className="border-b border-gray-300">
+                      {!licenseId && (
+                        <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[200px]">Renewal Name</th>
+                      )}
+                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[180px]">Changed By</th>
+                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[400px]">Changes</th>
+                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[100px]">Action</th>
+                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[140px]">Updated On</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white">
@@ -144,9 +147,11 @@ export default function RenewalLog() {
                     }
                     return (
                       <tr key={index} className="hover:bg-slate-50 border-b border-slate-100">
-                        <td className="font-medium text-sm text-slate-900 align-top py-3 px-4">
-                          {log.licenseName || 'N/A'}
-                        </td>
+                        {!licenseId && (
+                          <td className="font-medium text-sm text-slate-900 align-top py-3 px-4">
+                            {log.licenseName || 'N/A'}
+                          </td>
+                        )}
                         <td className="text-sm text-slate-700 align-top py-3 px-4">
                           {log.user || 'System'}
                         </td>

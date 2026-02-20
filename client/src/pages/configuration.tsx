@@ -9,9 +9,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ChevronDown, Check } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, FileSpreadsheet, AlertCircle, X } from "lucide-react";
+import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -306,6 +308,8 @@ export default function Configuration() {
   
   // File input refs for Excel import
   const currencyFileInputRef = useRef<HTMLInputElement>(null);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
 
   /**
    * EXCEL IMPORT/EXPORT FUNCTIONALITY
@@ -1613,7 +1617,7 @@ export default function Configuration() {
               </div>
             </div>
             
-            {/* Consolidated Excel Import/Export Buttons */}
+            {/* Consolidated Excel Import/Export - Data Management Dropdown */}
             <div className="flex items-center gap-3">
               <input
                 ref={currencyFileInputRef}
@@ -1622,34 +1626,73 @@ export default function Configuration() {
                 onChange={importCombinedExcel}
                 className="hidden"
               />
-              <Button
-                variant="outline"
-                onClick={downloadCombinedTemplate}
-                className="border-purple-300 text-purple-700 hover:bg-purple-50 shadow-sm"
+              <Select
+                key={dataManagementSelectKey}
+                onValueChange={(value) => {
+                  if (value === 'import') {
+                    setImportConfirmOpen(true);
+                  } else if (value === 'export') {
+                    exportAllToExcel();
+                  }
+
+                  // Radix Select won't re-fire onValueChange for the same value.
+                  // Remount to allow selecting Import/Export repeatedly.
+                  setDataManagementSelectKey((k) => k + 1);
+                }}
               >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Template
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => currencyFileInputRef.current?.click()}
-                className="border-green-300 text-green-700 hover:bg-green-50 shadow-sm"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Import
-              </Button>
-              <Button
-                variant="outline"
-                onClick={exportAllToExcel}
-                disabled={currencies.length === 0 && paymentMethods.length === 0}
-                className="border-blue-300 text-blue-700 hover:bg-blue-50 shadow-sm"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
+                <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                  <SelectValue placeholder="Data Management" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="import" className="cursor-pointer">
+                    <div className="flex items-center">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="export" className="cursor-pointer">
+                    <div className="flex items-center">
+                      <Download className="h-4 w-4 mr-2" />
+                      Export
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
+
+        {/* Import Confirm Dialog (Configuration Excel) */}
+        <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+          <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Select Yes to choose a file. Select No to download the template.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+                onClick={() => {
+                  downloadCombinedTemplate();
+                  setImportConfirmOpen(false);
+                }}
+              >
+                No
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-green-600 text-white hover:bg-green-700"
+                onClick={() => {
+                  setImportConfirmOpen(false);
+                  setTimeout(() => currencyFileInputRef.current?.click(), 0);
+                }}
+              >
+                Yes
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">

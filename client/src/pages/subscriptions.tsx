@@ -1127,7 +1127,7 @@ export default function Subscriptions() {
               className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200"
             >
               <Calendar className="h-4 w-4 mr-2" />
-              Audit Log
+              History
             </Button>
             
             {/* Data Management Dropdown - third */}
@@ -1240,10 +1240,10 @@ export default function Subscriptions() {
                       {getSortIcon("nextRenewal")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
                     <button 
                       onClick={() => handleSort("status")}
-                      className="flex items-center justify-center font-bold hover:text-blue-600 transition-colors cursor-pointer w-full"
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
                       STATUS
                       {getSortIcon("status")}
@@ -1294,13 +1294,13 @@ export default function Subscriptions() {
                           })()}
                         </div>
                       </TableCell>
-                      <TableCell className="px-3 py-3 w-[220px] max-w-[220px] overflow-hidden text-center">
+                      <TableCell className="px-3 py-3 w-[220px] max-w-[220px] overflow-hidden text-left">
                         {(() => {
                           const categoryValue = String((subscription as any)?.category ?? "").trim();
                           if (!categoryValue) {
                             return (
                               <span
-                                className="inline-flex items-center justify-center text-gray-400 text-xs"
+                                className="inline-flex items-center justify-start text-gray-400 text-xs"
                                 style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
                               >
                                 -
@@ -1358,7 +1358,7 @@ export default function Subscriptions() {
 
                           return (
                             <span
-                              className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border max-w-full ${badgeClass}`}
+                              className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border max-w-full text-left ${badgeClass}`}
                               style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
                             >
                               <span className="truncate whitespace-nowrap" title={raw}>
@@ -1369,7 +1369,7 @@ export default function Subscriptions() {
                         })()}
                       </TableCell>
 
-                      <TableCell className="px-3 py-3 text-sm text-gray-600 w-[140px]">
+                      <TableCell className="px-3 py-3 text-sm text-gray-600 w-[140px] capitalize">
                         {subscription.billingCycle}
                       </TableCell>
 
@@ -1391,9 +1391,9 @@ export default function Subscriptions() {
                           {formatDate(subscription.nextRenewal)}
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-3 w-[140px] text-center">
+                      <TableCell className="px-4 py-3 w-[140px] text-left">
                         <span
-                          className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[100px] ${
+                          className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[100px] ${
                             subscription.billingCycle === 'Trial'
                               ? 'bg-purple-50 text-purple-700 border-purple-200'
                               : subscription.status === 'Active'
@@ -1430,7 +1430,10 @@ export default function Subscriptions() {
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="z-[1000]">
+                          <DropdownMenuContent
+                            align="end"
+                            className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+                          >
                             <Can I="update" a="Subscription">
                               <DropdownMenuItem
                                 onClick={() => handleEdit(subscription)}

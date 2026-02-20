@@ -41,6 +41,8 @@ export default function Reports() {
         ? "Upcoming Renewal"
         : idx === 1
           ? "Spending Analysis"
+          : idx === 2
+            ? "Card Wise"
           : `Report ${idx + 1}`,
   }));
 
@@ -62,6 +64,11 @@ export default function Reports() {
 
     if (id === "sub-1") {
       navigate("/reports/spending-analysis");
+      return;
+    }
+
+    if (id === "sub-2") {
+      navigate("/reports/card-wise");
       return;
     }
 

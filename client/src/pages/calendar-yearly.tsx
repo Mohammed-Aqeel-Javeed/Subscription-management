@@ -76,7 +76,13 @@ const CalendarYearly: React.FC = () => {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-4">
-        <Button variant="outline" onClick={() => navigate("/compliance-dashboard")}>Back to Dashboard</Button>
+        <Button
+          variant="outline"
+          onClick={() => navigate("/compliance-dashboard")}
+          className="bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
+        >
+          Back to Dashboard
+        </Button>
         <div className="flex gap-2 items-center">
           <label className="font-medium mr-2">Year:</label>
           <DatePicker

@@ -10,6 +10,7 @@ const ENCRYPTED_POSITION = TAG_POSITION + TAG_LENGTH;
 
 // Cache the derived encryption key to avoid expensive scrypt calls on every decrypt
 let cachedEncryptionKey: Buffer | null = null;
+let cachedDefaultEncryptionKey: Buffer | null = null;
 
 // Get encryption key from environment or generate a strong one
 function getEncryptionKey(): Buffer {
@@ -28,6 +29,14 @@ function getEncryptionKey(): Buffer {
   // Derive a 256-bit key from the provided key (expensive operation - cache it!)
   cachedEncryptionKey = crypto.scryptSync(key, 'salt', 32);
   return cachedEncryptionKey;
+}
+
+function getDefaultEncryptionKey(): Buffer {
+  if (cachedDefaultEncryptionKey) {
+    return cachedDefaultEncryptionKey;
+  }
+  cachedDefaultEncryptionKey = crypto.scryptSync('default-key-change-this', 'salt', 32);
+  return cachedDefaultEncryptionKey;
 }
 
 /**
@@ -98,6 +107,28 @@ export function decrypt(encryptedData: string | number): string {
     const result = decrypted.toString('utf8');
     return result;
   } catch (error) {
+    // Backward-compat: if ENCRYPTION_KEY is now set but some rows were encrypted
+    // when it was missing (default key), try the default key once.
+    if (process.env.ENCRYPTION_KEY) {
+      try {
+        const combined = Buffer.from(dataStr, 'base64');
+        if (combined.length >= ENCRYPTED_POSITION) {
+          const iv = combined.subarray(SALT_LENGTH, TAG_POSITION);
+          const tag = combined.subarray(TAG_POSITION, ENCRYPTED_POSITION);
+          const encrypted = combined.subarray(ENCRYPTED_POSITION);
+
+          const fallbackKey = getDefaultEncryptionKey();
+          const decipher = crypto.createDecipheriv(ALGORITHM, fallbackKey, iv);
+          decipher.setAuthTag(tag);
+          const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+          const result = decrypted.toString('utf8');
+          return result;
+        }
+      } catch {
+        // ignore and fall through to return as-is
+      }
+    }
+
     // If decryption fails, return original (likely plain text or wrong key).
     // Avoid spamming logs on every field/record in production, which can severely hurt performance.
     const shouldLog = process.env.LOG_DECRYPT_ERRORS === 'true' || process.env.NODE_ENV !== 'production';

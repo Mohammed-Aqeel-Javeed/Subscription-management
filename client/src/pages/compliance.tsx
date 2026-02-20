@@ -2468,7 +2468,7 @@ export default function Compliance() {
                 className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200"
               >
                 <Calendar className="h-4 w-4 mr-2" />
-                Audit Log
+                History
               </Button>
 
               <Select
@@ -2547,40 +2547,40 @@ export default function Compliance() {
                   <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
                     <button
                       onClick={() => handleSort("category")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer justify-start"
                     >
                       CATEGORY
                       {getSortIcon("category")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
                     <button
                       onClick={() => handleSort("status")}
-                      className="flex items-center justify-center font-bold hover:text-blue-600 transition-colors cursor-pointer w-full"
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
                       STATUS
                       {getSortIcon("status")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
                     <button
                       onClick={() => handleSort("endDate")}
-                      className="flex items-center justify-center font-bold hover:text-blue-600 transition-colors cursor-pointer w-full"
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
                       DUE DATE
                       {getSortIcon("endDate")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
                     <button
                       onClick={() => handleSort("filingSubmissionDate")}
-                      className="flex items-center justify-center font-bold hover:text-blue-600 transition-colors cursor-pointer w-full"
+                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
                       SUBMITTED DATE
                       {getSortIcon("filingSubmissionDate")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
                     SUBMISSION
                   </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
@@ -2664,18 +2664,18 @@ export default function Compliance() {
                           {item.policy}
                         </button>
                       </TableCell>
-                      <TableCell className="px-4 py-3 w-[160px]">
+                      <TableCell className="px-4 py-3 w-[160px] text-left">
                         <span
-                          className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getCategoryPillClasses(
+                          className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getCategoryPillClasses(
                             item.category
                           )}`}
                         >
                           {item.category || "-"}
                         </span>
                       </TableCell>
-                      <TableCell className="px-4 py-3 w-[140px] text-center">
+                      <TableCell className="px-4 py-3 w-[140px] text-left">
                         <span
-                          className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[120px] whitespace-nowrap ${
+                          className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[120px] whitespace-nowrap ${
                             isDraft
                               ? "bg-amber-50 text-amber-700 border-amber-200"
                               : `${statusInfo.bgColor} ${statusInfo.color}`
@@ -2684,14 +2684,14 @@ export default function Compliance() {
                           {isDraft ? "Draft" : statusInfo.status}
                         </span>
                       </TableCell>
-                      <TableCell className="px-4 py-3 text-center w-[160px]">
-                        <div className="flex items-center justify-center text-sm text-gray-700">
+                      <TableCell className="px-4 py-3 text-left w-[160px]">
+                        <div className="flex items-center text-sm text-gray-700">
                           <Calendar className="h-3 w-3 text-gray-400 mr-1" />
                           {formatDate(item.submissionDeadline)}
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-3 text-center w-[160px]">
-                        <div className="flex items-center justify-center text-sm text-gray-700">
+                      <TableCell className="px-4 py-3 text-left w-[160px]">
+                        <div className="flex items-center text-sm text-gray-700">
                           <Calendar className="h-3 w-3 text-gray-400 mr-1" />
                           {formatDate(item.filingSubmissionDate)}
                         </div>
@@ -2771,7 +2771,10 @@ export default function Compliance() {
                                   <MoreVertical className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="z-[1000]">
+                              <DropdownMenuContent
+                                align="end"
+                                className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+                              >
                                 <Can I="update" a="Compliance">
                                   <DropdownMenuItem
                                     onClick={() => {
@@ -2920,12 +2923,16 @@ export default function Compliance() {
                     variant="default"
                     className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 flex items-center gap-2 shadow-md transition-all duration-300 rounded-xl"
                     onClick={() => {
-                      window.location.href = `/compliance-ledger?id=${complianceItems[editIndex]._id}`;
+                      const currentName =
+                        (complianceItems[editIndex] as any)?.policy ||
+                        (complianceItems[editIndex] as any)?.filingName ||
+                        "";
+                      window.location.href = `/compliance-ledger?id=${complianceItems[editIndex]._id}&name=${encodeURIComponent(String(currentName))}`;
                     }}
-                    title="View Ledger"
+                    title="History"
                   >
                     <ExternalLink size={16} />
-                    View Ledger
+                    History
                   </Button>
                 )}
                 <Button
@@ -3799,6 +3806,7 @@ export default function Compliance() {
                 type="button" 
                 variant="outline" 
                 className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
+                disabled={isSavingCompliance}
                 onClick={() => {
                   if (showSubmissionDetails) {
                     if (submissionOpenedFromTable) {
@@ -3823,6 +3831,7 @@ export default function Compliance() {
                 type="button" 
                 variant="outline" 
                 className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
+                disabled={isSavingCompliance}
                 onClick={async () => {
                   // Check for filing name validation errors
                   if (filingNameError) {
@@ -3940,6 +3949,7 @@ export default function Compliance() {
               <Button 
                 type="button" 
                 className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-6 py-2 shadow-md hover:shadow-lg"
+                disabled={isSavingCompliance}
                 onClick={async () => {
                   try {
                     if (showSubmissionDetails) {

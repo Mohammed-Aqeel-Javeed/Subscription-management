@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Calendar, Download } from "lucide-react";
@@ -12,6 +13,75 @@ import { ArrowLeft, Calendar, Download } from "lucide-react";
 import type { Subscription } from "@shared/schema";
 
 type RangePreset = "next30" | "next7" | "next90";
+
+function isDraftSubscription(sub: Subscription): boolean {
+  const rawStatus = String((sub as any)?.status ?? "").trim().toLowerCase();
+  return Boolean((sub as any)?.isDraft) || rawStatus === "draft";
+}
+
+function normalizeDepartmentTokens(value: unknown): string[] {
+  if (value == null) return [];
+
+  if (Array.isArray(value)) {
+    return value.flatMap((v) => normalizeDepartmentTokens(v));
+  }
+
+  if (typeof value !== "string") {
+    const str = String(value).trim();
+    return str ? [str] : [];
+  }
+
+  let s = value.trim();
+  if (!s) return [];
+  if (s === "[]") return [];
+
+  // Try to unwrap JSON/quoted values a few times.
+  for (let attempts = 0; attempts < 3; attempts++) {
+    if (s.startsWith("[") && s.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(s);
+        return normalizeDepartmentTokens(parsed);
+      } catch {
+        const withDoubleQuotes = s.replace(/'/g, '"');
+        try {
+          const parsed = JSON.parse(withDoubleQuotes);
+          return normalizeDepartmentTokens(parsed);
+        } catch {
+          break;
+        }
+      }
+    }
+
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+      try {
+        const parsed = JSON.parse(s);
+        if (typeof parsed === "string") {
+          s = parsed.trim();
+          continue;
+        }
+        return normalizeDepartmentTokens(parsed);
+      } catch {
+        s = s.slice(1, -1).trim();
+        continue;
+      }
+    }
+
+    break;
+  }
+
+  if (s.includes("|")) return s.split("|").map((p) => p.trim()).filter(Boolean);
+
+  if (s.startsWith("[") || s.startsWith("{")) return [];
+
+  return [s];
+}
+
+function getNormalizedDepartments(sub: Subscription): string[] {
+  const out: string[] = [];
+  out.push(...normalizeDepartmentTokens((sub as any)?.departments));
+  out.push(...normalizeDepartmentTokens((sub as any)?.department));
+  return Array.from(new Set(out.map((d) => d.trim()).filter(Boolean)));
+}
 
 function startOfDay(date: Date) {
   const d = new Date(date);
@@ -82,8 +152,8 @@ export default function UpcomingRenewalReport() {
   const departments = React.useMemo(() => {
     const set = new Set<string>();
     subscriptions.forEach((sub) => {
-      const deps = (sub as any)?.departments as string[] | undefined;
-      (deps ?? []).forEach((d) => {
+      if (isDraftSubscription(sub)) return;
+      getNormalizedDepartments(sub).forEach((d) => {
         if (d) set.add(d);
       });
     });
@@ -93,6 +163,7 @@ export default function UpcomingRenewalReport() {
   const categories = React.useMemo(() => {
     const set = new Set<string>();
     subscriptions.forEach((sub) => {
+      if (isDraftSubscription(sub)) return;
       const cat = String((sub as any)?.category ?? "").trim();
       if (cat) set.add(cat);
     });
@@ -101,6 +172,7 @@ export default function UpcomingRenewalReport() {
 
   const filtered = React.useMemo(() => {
     return subscriptions
+      .filter((sub) => !isDraftSubscription(sub))
       .filter((sub) => String((sub as any)?.status ?? "").toLowerCase() !== "cancelled")
       .filter((sub) => {
         const nr = (sub as any)?.nextRenewal;
@@ -110,8 +182,7 @@ export default function UpcomingRenewalReport() {
       })
       .filter((sub) => {
         if (selectedDepartment === "all") return true;
-        const deps = ((sub as any)?.departments ?? []) as string[];
-        return deps.includes(selectedDepartment);
+        return getNormalizedDepartments(sub).includes(selectedDepartment);
       })
       .filter((sub) => {
         if (selectedCategory === "all") return true;
@@ -126,8 +197,8 @@ export default function UpcomingRenewalReport() {
 
   const handleExportCsv = () => {
     const rows = filtered.map((sub) => {
-      const deps = ((sub as any)?.departments ?? []) as string[];
-      const department = deps[0] ?? "";
+      const deps = getNormalizedDepartments(sub);
+      const department = deps.length > 0 ? deps.join("|") : "";
       const renewalDate = (sub as any)?.nextRenewal ? new Date((sub as any).nextRenewal) : null;
 
       return {
@@ -251,8 +322,7 @@ export default function UpcomingRenewalReport() {
                 ) : (
                   <>
                     {filtered.map((sub) => {
-                      const deps = ((sub as any)?.departments ?? []) as string[];
-                      const department = deps[0] ?? "";
+                      const deps = getNormalizedDepartments(sub);
                       const renewalDate = (sub as any)?.nextRenewal ? new Date((sub as any).nextRenewal) : null;
                       const monthly = getMonthlyAmount(sub);
 
@@ -267,7 +337,26 @@ export default function UpcomingRenewalReport() {
                             </span>
                           </TableCell>
                           <TableCell className="px-3 py-3 text-sm text-gray-600">{(sub as any)?.vendor ?? ""}</TableCell>
-                          <TableCell className="px-3 py-3 text-sm text-gray-600">{department}</TableCell>
+                          <TableCell className="px-3 py-3 text-sm text-gray-600">
+                            {deps.length > 0 ? (
+                              <div
+                                className="flex flex-nowrap items-center gap-1 overflow-x-auto no-scrollbar whitespace-nowrap max-w-full"
+                                title={deps.join(", ")}
+                              >
+                                {deps.map((d) => (
+                                  <Badge
+                                    key={d}
+                                    variant="secondary"
+                                    className="rounded-full bg-indigo-100 text-indigo-800 hover:bg-indigo-200 border border-indigo-200 font-medium text-xs leading-none py-1 px-3 whitespace-nowrap flex-shrink-0"
+                                  >
+                                    {d}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell>
                           <TableCell className="px-3 py-3 text-sm text-gray-600">
                             {renewalDate ? (
                               <div className="flex items-center gap-1 whitespace-nowrap">

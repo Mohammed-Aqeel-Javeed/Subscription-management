@@ -124,6 +124,15 @@
   .custom-scrollbar::-webkit-scrollbar-corner {
     background: #f9fafb;
   }
+
+  /* Hide scrollbars but keep scroll (for single-line badge rows, etc.) */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Radix UI Select Viewport Scrollbar - Global Styles */
