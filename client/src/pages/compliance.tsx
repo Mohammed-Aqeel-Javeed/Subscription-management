@@ -637,9 +637,33 @@ export default function Compliance() {
         const blob = dataUrlToBlob(url);
         if (!blob) throw new Error('Invalid data url');
         const objUrl = URL.createObjectURL(blob);
-        const w = window.open(objUrl, '_blank', 'noopener,noreferrer');
-        if (!w) window.location.href = objUrl;
-        setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
+        
+        // Open in new tab with proper window features
+        const newWindow = window.open('', '_blank');
+        if (newWindow) {
+          newWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>${doc.name}</title>
+                <style>
+                  body { margin: 0; padding: 0; overflow: hidden; }
+                  iframe { border: none; width: 100vw; height: 100vh; }
+                </style>
+              </head>
+              <body>
+                <iframe src="${objUrl}"></iframe>
+              </body>
+            </html>
+          `);
+          newWindow.document.close();
+          
+          // Revoke after a longer delay to ensure document loads
+          setTimeout(() => URL.revokeObjectURL(objUrl), 300_000); // 5 minutes
+        } else {
+          // Popup blocked: fallback to direct navigation
+          window.location.href = objUrl;
+        }
         return;
       }
       const w = window.open(url, '_blank', 'noopener,noreferrer');
@@ -780,13 +804,21 @@ export default function Compliance() {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64String = reader.result as string;
-          setPendingSubmissionDocument({
+          // Auto-save document without confirmation
+          const newDoc = {
             name: file.name,
             url: base64String,
             updatedBy: currentUserName || (window as any)?.user?.name || (window as any)?.user?.email || 'User',
             updatedAt: new Date().toISOString(),
+            remark: '', // Empty remark by default
+          };
+          setSubmissionDocuments((prev) => [...prev, newDoc]);
+          toast({
+            title: 'Success',
+            description: `${file.name} uploaded successfully`,
+            duration: 2000,
+            variant: 'success',
           });
-          setPendingSubmissionDocumentRemark('');
         };
         reader.readAsDataURL(file);
       } catch (error) {
@@ -2506,7 +2538,7 @@ export default function Compliance() {
           </div>
 
           {/* Search and Filters Row */}
-          <div className="mb-6 bg-white border border-gray-200 rounded-2xl shadow-sm p-4 shrink-0">
+          <div className="mb-6 bg-white border border-gray-200  shadow-sm p-4 shrink-0">
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -2531,7 +2563,7 @@ export default function Compliance() {
 
         <div className="min-w-0 flex-1 min-h-0">
           {/* Professional Data Table */}
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden h-full flex flex-col min-h-0">
+          <div className="bg-white border border-gray-200  shadow-md overflow-hidden h-full flex flex-col min-h-0">
             <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full">
               <TableHeader>
                 <TableRow className="border-b-2 border-gray-400 bg-gray-200">
@@ -2861,10 +2893,10 @@ export default function Compliance() {
       
       {/* Modal */}
       <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setModalOpen(v); }}>
-        <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300 flex flex-col overflow-hidden`}>
+        <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 flex flex-col overflow-hidden`}>
           {/* Local keyframes for the sheen animation */}
           <style>{`@keyframes sheen { 0% { transform: translateX(-60%); } 100% { transform: translateX(180%); } }`}</style>
-          <DialogHeader className={`sticky top-0 z-50 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'p-4 md:p-5' : 'p-5'} rounded-t-2xl`}>
+          <DialogHeader className={`sticky top-0 z-50 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'p-4 md:p-5' : 'p-5'} `}>
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-3">
                 <DialogTitle className="text-xl font-bold flex items-center gap-3">
@@ -3004,24 +3036,26 @@ export default function Compliance() {
                             placeholder="Select employee"
                             className={`w-full border-slate-300 rounded-lg p-3 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 pr-10 ${submittedByError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                             onFocus={() => {
-                              setSubmittedBySearch(submittedByDisplayValue);
+                              setSubmittedBySearch('');
                               setSubmittedByOpen(true);
                             }}
                             onClick={() => {
-                              setSubmittedBySearch(submittedByDisplayValue);
+                              setSubmittedBySearch('');
                               setSubmittedByOpen(true);
                             }}
                             onChange={(e) => {
                               setSubmittedBySearch(e.target.value);
-                              if (!submittedByOpen) setSubmittedByOpen(true);
+                              setSubmittedByOpen(true);
                             }}
                             autoComplete="off"
                           />
                           <ChevronDown
                             className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
                             onClick={() => {
-                              setSubmittedByOpen((v) => !v);
-                              setSubmittedBySearch('');
+                              if (!submittedByOpen) {
+                                setSubmittedBySearch('');
+                              }
+                              setSubmittedByOpen(!submittedByOpen);
                             }}
                           />
                         </div>
@@ -3046,6 +3080,13 @@ export default function Compliance() {
                                     getEmployeeName(emp).toLowerCase().includes(q) ||
                                     getEmployeeEmail(emp).toLowerCase().includes(q)
                                   );
+                                })
+                                .sort((a: any, b: any) => {
+                                  const aSelected = String(form.submittedBy || '') === getEmployeeId(a);
+                                  const bSelected = String(form.submittedBy || '') === getEmployeeId(b);
+                                  if (aSelected && !bSelected) return -1;
+                                  if (!aSelected && bSelected) return 1;
+                                  return 0;
                                 })
                                 .map((emp: any) => {
                                   const id = getEmployeeId(emp);
@@ -3287,26 +3328,26 @@ export default function Compliance() {
                           placeholder="Select authority"
                           className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
                           onFocus={() => {
-                            setGoverningAuthoritySearch(form.filingGoverningAuthority || '');
+                            setGoverningAuthoritySearch('');
                             setGoverningAuthorityOpen(true);
                           }}
                           onClick={() => {
-                            setGoverningAuthoritySearch(form.filingGoverningAuthority || '');
+                            setGoverningAuthoritySearch('');
                             setGoverningAuthorityOpen(true);
                           }}
                           onChange={(e) => {
                             setGoverningAuthoritySearch(e.target.value);
-                            handleFormChange('filingGoverningAuthority', e.target.value);
-                            if (!governingAuthorityOpen) setGoverningAuthorityOpen(true);
+                            setGoverningAuthorityOpen(true);
                           }}
                           autoComplete="off"
                         />
                         <ChevronDown
                           className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
                           onClick={() => {
-                            if (!governingAuthorityOpen) setGoverningAuthoritySearch(form.filingGoverningAuthority || '');
+                            if (!governingAuthorityOpen) {
+                              setGoverningAuthoritySearch('');
+                            }
                             setGoverningAuthorityOpen(!governingAuthorityOpen);
-                            if (governingAuthorityOpen) setGoverningAuthoritySearch('');
                           }}
                         />
                       </div>
@@ -3314,25 +3355,31 @@ export default function Compliance() {
                       {governingAuthorityOpen && (
                         <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-scroll custom-scrollbar">
                           {filtered.length > 0 ? (
-                            filtered.map((authority) => {
-                              const selected = (form.filingGoverningAuthority || '') === authority;
-                              return (
-                                <div
-                                  key={authority}
-                                  className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
-                                    selected ? 'bg-blue-50 text-blue-700' : ''
-                                  }`}
-                                  onClick={() => {
-                                    handleFormChange('filingGoverningAuthority', selected ? '' : authority);
-                                    setGoverningAuthorityOpen(false);
-                                    setGoverningAuthoritySearch('');
-                                  }}
-                                >
-                                  <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
-                                  <span className="font-normal">{authority}</span>
-                                </div>
-                              );
-                            })
+                            filtered
+                              .sort((a, b) => {
+                                if (a === form.filingGoverningAuthority) return -1;
+                                if (b === form.filingGoverningAuthority) return 1;
+                                return 0;
+                              })
+                              .map((authority) => {
+                                const selected = (form.filingGoverningAuthority || '') === authority;
+                                return (
+                                  <div
+                                    key={authority}
+                                    className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                                      selected ? 'bg-blue-50 text-blue-700' : ''
+                                    }`}
+                                    onClick={() => {
+                                      handleFormChange('filingGoverningAuthority', selected ? '' : authority);
+                                      setGoverningAuthorityOpen(false);
+                                      setGoverningAuthoritySearch('');
+                                    }}
+                                  >
+                                    <Check className={`mr-2 h-4 w-4 text-blue-600 ${selected ? 'opacity-100' : 'opacity-0'}`} />
+                                    <span className="font-normal">{authority}</span>
+                                  </div>
+                                );
+                              })
                           ) : (
                             <div className="px-3 py-2.5 text-sm text-slate-500">No authorities found</div>
                           )}
@@ -3448,24 +3495,26 @@ export default function Compliance() {
                     placeholder="Select employee"
                     className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 pr-10"
                     onFocus={() => {
-                      setOwnerSearch(form.owner || '');
+                      setOwnerSearch('');
                       setOwnerOpen(true);
                     }}
                     onClick={() => {
-                      setOwnerSearch(form.owner || '');
+                      setOwnerSearch('');
                       setOwnerOpen(true);
                     }}
                     onChange={(e) => {
                       setOwnerSearch(e.target.value);
-                      if (!ownerOpen) setOwnerOpen(true);
+                      setOwnerOpen(true);
                     }}
                     autoComplete="off"
                   />
                   <ChevronDown
                     className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
                     onClick={() => {
-                      setOwnerOpen((v) => !v);
-                      setOwnerSearch('');
+                      if (!ownerOpen) {
+                        setOwnerSearch('');
+                      }
+                      setOwnerOpen(!ownerOpen);
                     }}
                   />
                 </div>
@@ -3484,6 +3533,13 @@ export default function Compliance() {
                               getEmployeeName(emp).toLowerCase().includes(q) ||
                               getEmployeeEmail(emp).toLowerCase().includes(q)
                             );
+                          })
+                          .sort((a: any, b: any) => {
+                            const aSelected = String(form.owner || '') === getEmployeeName(a);
+                            const bSelected = String(form.owner || '') === getEmployeeName(b);
+                            if (aSelected && !bSelected) return -1;
+                            if (!aSelected && bSelected) return 1;
+                            return 0;
                           })
                           .map((emp: any) => {
                             const name = getEmployeeName(emp);
@@ -3538,24 +3594,26 @@ export default function Compliance() {
                     placeholder="Select employee"
                     className="w-full border-slate-300 rounded-lg p-2 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 pr-10"
                     onFocus={() => {
-                      setOwner2Search(form.owner2 || '');
+                      setOwner2Search('');
                       setOwner2Open(true);
                     }}
                     onClick={() => {
-                      setOwner2Search(form.owner2 || '');
+                      setOwner2Search('');
                       setOwner2Open(true);
                     }}
                     onChange={(e) => {
                       setOwner2Search(e.target.value);
-                      if (!owner2Open) setOwner2Open(true);
+                      setOwner2Open(true);
                     }}
                     autoComplete="off"
                   />
                   <ChevronDown
                     className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
                     onClick={() => {
-                      setOwner2Open((v) => !v);
-                      setOwner2Search('');
+                      if (!owner2Open) {
+                        setOwner2Search('');
+                      }
+                      setOwner2Open(!owner2Open);
                     }}
                   />
                 </div>
@@ -3574,6 +3632,13 @@ export default function Compliance() {
                               getEmployeeName(emp).toLowerCase().includes(q) ||
                               getEmployeeEmail(emp).toLowerCase().includes(q)
                             );
+                          })
+                          .sort((a: any, b: any) => {
+                            const aSelected = String(form.owner2 || '') === getEmployeeName(a);
+                            const bSelected = String(form.owner2 || '') === getEmployeeName(b);
+                            if (aSelected && !bSelected) return -1;
+                            if (!aSelected && bSelected) return 1;
+                            return 0;
                           })
                           .map((emp: any) => {
                             const name = getEmployeeName(emp);
@@ -4986,7 +5051,7 @@ export default function Compliance() {
       
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+        <DialogContent className="max-w-md  border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
           {/* Header with Red Gradient Background */}
           <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
             <DialogHeader>
@@ -5083,8 +5148,8 @@ export default function Compliance() {
                   <div className="grid grid-cols-12 gap-4 items-center px-3 py-2 bg-gray-50 border-b border-gray-200">
                     <div className="col-span-3 text-xs font-bold text-gray-600">File Name</div>
                     <div className="col-span-2 text-xs font-bold text-gray-600">Updated By</div>
-                    <div className="col-span-2 text-xs font-bold text-gray-600">Updated Date</div>
-                    <div className="col-span-3 text-xs font-bold text-gray-600">Remark</div>
+                    <div className="col-span-2 text-xs font-bold text-gray-600">Updated On</div>
+                    <div className="col-span-3 text-xs font-bold text-gray-600">Remarks</div>
                     <div className="col-span-2 text-xs font-bold text-gray-600 text-right">Actions</div>
                   </div>
 
@@ -5337,8 +5402,8 @@ export default function Compliance() {
 
       {/* Validation Error Dialog */}
       <Dialog open={validationErrorOpen} onOpenChange={setValidationErrorOpen}>
-        <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
-          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+        <DialogContent className="max-w-md  border-0 shadow-2xl p-0 bg-white font-inter">
+          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 ">
             <DialogHeader>
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">

@@ -67,9 +67,9 @@ export default function SubscriptionUserPage() {
   const [showTeamMembers, setShowTeamMembers] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // On initial mount, set selectedUsers from backend
+  // On initial mount and when subscriptionUsers changes, update selectedUsers
   useEffect(() => {
-    if (Array.isArray(subscriptionUsers) && subscriptionUsers.length > 0) {
+    if (Array.isArray(subscriptionUsers)) {
       setSelectedUsers(subscriptionUsers);
     }
   }, [subscriptionUsers]);
@@ -273,35 +273,279 @@ export default function SubscriptionUserPage() {
     );
   }, [selectedUsers, searchRight]);
 
-  // Add user
-  const handleAddUser = (emp: any) => {
+  // Add user - saves immediately to backend
+  const handleAddUser = async (emp: any) => {
     const empId = emp.id || emp._id;
-    setSelectedUsers((prev) => {
-      if (prev.some((u) => (u.id || u._id) === empId)) return prev;
-      return [...prev, emp];
-    });
-  };
-
-  // Remove user
-  const handleRemoveUser = (user: any) => {
-    const userId = user.id || user._id;
-    setSelectedUsers((prev) => prev.filter((u) => (u.id || u._id) !== userId));
-  };
-
-  // Add all users
-  const handleAddAll = () => {
-    setSelectedUsers((prev) => {
-      const newUsers = availableEmployees.filter((emp) => {
-        const empId = emp.id || emp._id;
-        return !prev.some((u) => (u.id || u._id) === empId);
+    
+    // Check if already added
+    if (selectedUsers.some((u) => (u.id || u._id) === empId)) return;
+    
+    // Optimistically update UI
+    const newSelectedUsers = [...selectedUsers, emp];
+    setSelectedUsers(newSelectedUsers);
+    
+    // Save to backend immediately
+    if (!subscriptionId) {
+      toast({
+        title: "Error",
+        description: "No subscription ID available.",
+        variant: "destructive",
       });
-      return [...prev, ...newUsers];
-    });
+      return;
+    }
+    
+    try {
+      const payload = {
+        users: newSelectedUsers.map(user => ({
+          id: user.id || user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          department: user.department
+        }))
+      };
+      
+      console.log('Saving user to subscription:', subscriptionId, 'Payload:', payload);
+      
+      const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Save failed:', response.status, errorText);
+        throw new Error(`Failed to save: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('Save successful:', result);
+      
+      toast({
+        title: "Success",
+        description: `${emp.name} added successfully.`,
+        variant: "success",
+      });
+      
+      await refetchSubscriptionUsers();
+    } catch (error: unknown) {
+      console.error("Error adding user:", error);
+      // Revert on error
+      setSelectedUsers(selectedUsers);
+      toast({
+        title: "Error",
+        description: `Failed to add user: ${getErrorMessage(error)}`,
+        variant: "destructive",
+      });
+    }
   };
 
-  // Remove all
-  const handleRemoveAll = () => {
+  // Remove user - saves immediately to backend
+  const handleRemoveUser = async (user: any) => {
+    const userId = user.id || user._id;
+    
+    // Optimistically update UI
+    const newSelectedUsers = selectedUsers.filter((u) => (u.id || u._id) !== userId);
+    setSelectedUsers(newSelectedUsers);
+    
+    // Save to backend immediately
+    if (!subscriptionId) {
+      toast({
+        title: "Error",
+        description: "No subscription ID available.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      const payload = {
+        users: newSelectedUsers.map(u => ({
+          id: u.id || u._id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          department: u.department
+        }))
+      };
+      
+      const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to save: ${response.status}`);
+      }
+      
+      await response.json();
+      toast({
+        title: "Success",
+        description: `${user.name} removed successfully.`,
+        variant: "success",
+      });
+      
+      await refetchSubscriptionUsers();
+    } catch (error: unknown) {
+      console.error("Error removing user:", error);
+      // Revert on error
+      setSelectedUsers(selectedUsers);
+      toast({
+        title: "Error",
+        description: `Failed to remove user: ${getErrorMessage(error)}`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Add all users - saves immediately to backend
+  const handleAddAll = async () => {
+    if (!subscriptionId) {
+      toast({
+        title: "Error",
+        description: "No subscription ID available.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Calculate new users to add
+    const newUsers = availableEmployees.filter((emp) => {
+      const empId = emp.id || emp._id;
+      return !selectedUsers.some((u) => (u.id || u._id) === empId);
+    });
+    
+    if (newUsers.length === 0) {
+      toast({
+        title: "Info",
+        description: "No new users to add.",
+      });
+      return;
+    }
+    
+    // Optimistically update UI
+    const newSelectedUsers = [...selectedUsers, ...newUsers];
+    setSelectedUsers(newSelectedUsers);
+    
+    try {
+      const payload = {
+        users: newSelectedUsers.map(user => ({
+          id: user.id || user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          department: user.department
+        }))
+      };
+      
+      console.log('Adding all users to subscription:', subscriptionId, 'Count:', newUsers.length);
+      
+      const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Add all failed:', response.status, errorText);
+        throw new Error(`Failed to save: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('Add all successful:', result);
+      
+      toast({
+        title: "Success",
+        description: `${newUsers.length} users added successfully.`,
+        variant: "success",
+      });
+      
+      await refetchSubscriptionUsers();
+    } catch (error: unknown) {
+      console.error("Error adding all users:", error);
+      // Revert on error
+      setSelectedUsers(selectedUsers);
+      toast({
+        title: "Error",
+        description: `Failed to add users: ${getErrorMessage(error)}`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Remove all - saves immediately to backend
+  const handleRemoveAll = async () => {
+    if (!subscriptionId) {
+      toast({
+        title: "Error",
+        description: "No subscription ID available.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (selectedUsers.length === 0) {
+      return;
+    }
+    
+    // Optimistically update UI
+    const previousUsers = [...selectedUsers];
     setSelectedUsers([]);
+    
+    try {
+      const payload = {
+        users: []
+      };
+      
+      console.log('Removing all users from subscription:', subscriptionId);
+      
+      const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Remove all failed:', response.status, errorText);
+        throw new Error(`Failed to save: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('Remove all successful:', result);
+      
+      toast({
+        title: "Success",
+        description: `All users removed successfully.`,
+        variant: "success",
+      });
+      
+      await refetchSubscriptionUsers();
+    } catch (error: unknown) {
+      console.error("Error removing all users:", error);
+      // Revert on error
+      setSelectedUsers(previousUsers);
+      toast({
+        title: "Error",
+        description: `Failed to remove users: ${getErrorMessage(error)}`,
+        variant: "destructive",
+      });
+    }
   };
 
   // Save handler
@@ -404,57 +648,28 @@ if (!response.ok) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 p-4 md:p-8">
-      <div className="max-w-[100rem] mx-auto px-4">
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-indigo-50 to-blue-100 p-4 md:p-8">
+      <div className="max-w-[100rem] mx-auto px-4 h-full flex flex-col">
         {/* Header */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-10"
+          className="mb-4"
         >
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
             <div className="text-center md:text-left">
               <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
                 Manage Subscription Users
               </h1>
-             
             </div>
-            
-            {/* Import/Export Buttons */}
-            <div className="flex flex-wrap gap-2 justify-center md:justify-end">
-              <Button
-                onClick={handleDownloadTemplate}
-                variant="outline"
-                className="bg-white hover:bg-gray-50 border-gray-300 text-sm sm:text-base px-3 sm:px-4"
-              >
-                <FileSpreadsheet className="h-4 w-4 mr-1 sm:mr-2" />
-                Template
-              </Button>
-              <Button
-                onClick={handleExport}
-                variant="outline"
-                className="bg-white hover:bg-gray-50 border-gray-300 text-sm sm:text-base px-3 sm:px-4"
-              >
-                <Download className="h-4 w-4 mr-1 sm:mr-2" />
-                Export
-              </Button>
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                variant="outline"
-                className="bg-white hover:bg-gray-50 border-gray-300 text-sm sm:text-base px-3 sm:px-4"
-              >
-                <Upload className="h-4 w-4 mr-1 sm:mr-2" />
-                Import
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={handleImport}
-                className="hidden"
-              />
-            </div>
+            <Button
+              onClick={handleExport}
+              className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 px-6 py-3"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
           </div>
         </motion.div>
 
@@ -467,21 +682,42 @@ if (!response.ok) {
             className="w-full bg-white rounded-2xl shadow-xl overflow-hidden"
           >
             <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
-              <div className="flex justify-between items-center gap-4">
-                <h2 className="text-2xl font-bold text-gray-900 flex flex-nowrap items-baseline gap-2 min-w-0">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-gray-900 flex flex-nowrap items-center gap-2 min-w-0">
                   <span className="whitespace-nowrap">Users in</span>
-                  <span className="text-indigo-600 truncate">{subscriptionName}</span>
+                  <span className="text-indigo-600 truncate max-w-xs">{subscriptionName}</span>
                 </h2>
-                <div className="flex items-center gap-3">
-                  <div className="relative w-64">
-                    <Input
-                      placeholder="Search users..."
-                      value={searchRight}
-                      onChange={(e) => setSearchRight(e.target.value)}
-                      className="pl-10 h-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm"
+              </div>
+              <div className="flex gap-3">
+                <div className="relative flex-1">
+                  <Input
+                    placeholder="Search users..."
+                    value={searchRight}
+                    onChange={(e) => setSearchRight(e.target.value)}
+                    className="pl-10 h-11 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm"
+                  />
+                  <svg 
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24" 
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
                     />
+                  </svg>
+                </div>
+                {!showTeamMembers ? (
+                  <Button
+                    onClick={() => setShowTeamMembers(true)}
+                    className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 h-11 px-5 whitespace-nowrap"
+                  >
                     <svg 
-                      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" 
+                      className="w-4 h-4 mr-2" 
                       fill="none" 
                       stroke="currentColor" 
                       viewBox="0 0 24 24" 
@@ -491,45 +727,24 @@ if (!response.ok) {
                         strokeLinecap="round" 
                         strokeLinejoin="round" 
                         strokeWidth={2} 
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
+                        d="M12 6v6m0 0v6m0-6h6m-6 0H6" 
                       />
                     </svg>
-                  </div>
-                  {!showTeamMembers ? (
-                    <Button
-                      onClick={() => setShowTeamMembers(true)}
-                      className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 h-10 px-5 whitespace-nowrap"
-                    >
-                      <svg 
-                        className="w-4 h-4 mr-2" 
-                        fill="none" 
-                        stroke="currentColor" 
-                        viewBox="0 0 24 24" 
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round" 
-                          strokeWidth={2} 
-                          d="M12 6v6m0 0v6m0-6h6m-6 0H6" 
-                        />
-                      </svg>
-                      Add Team Member
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleRemoveAll}
-                      className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed h-10 px-5 whitespace-nowrap"
-                      disabled={selectedUsers.length === 0}
-                    >
-                      Remove All
-                    </Button>
-                  )}
-                </div>
+                    Add Team Member
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleRemoveAll}
+                    className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed h-11 px-5 whitespace-nowrap"
+                    disabled={selectedUsers.length === 0}
+                  >
+                    Remove All
+                  </Button>
+                )}
               </div>
             </div>
             
-            <div className="overflow-hidden max-h-[600px] overflow-y-auto">
+            <div className="overflow-hidden max-h-[350px] overflow-y-auto">
               {filteredSelectedUsers.length > 0 ? (
                 <div className="w-full">
                   <table className="w-full table-fixed">
@@ -560,7 +775,7 @@ if (!response.ok) {
                                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md flex-shrink-0">
                                   {user.name?.split(" ").map((n: string) => n[0]).join("").toUpperCase()}
                                 </div>
-                                <div className="font-medium text-gray-900 truncate text-sm">{user.name || 'Unnamed'}</div>
+                                <div className="font-medium text-gray-900 truncate text-sm max-w-[150px]">{user.name || 'Unnamed'}</div>
                               </div>
                             </td>
                             <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
@@ -605,14 +820,9 @@ if (!response.ok) {
           </motion.div>
 
           {/* Team Members Panel (conditionally shown on right) */}
-          <AnimatePresence>
-            {showTeamMembers && (
-              <motion.div 
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                transition={{ duration: 0.5 }}
-                className="w-full bg-white rounded-2xl shadow-xl overflow-hidden"
+          {showTeamMembers && (
+            <div 
+              className="w-full bg-white rounded-2xl shadow-xl overflow-hidden"
               >
                 <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-emerald-50 to-green-50">
                   <div className="flex justify-between items-center mb-4">
@@ -623,10 +833,10 @@ if (!response.ok) {
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowTeamMembers(false)}
-                      className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full h-8 w-8 p-0"
+                      className="relative h-8 w-8 p-0 rounded-xl bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm border border-red-300/50 shadow-sm transition-all duration-200 hover:scale-105"
                     >
                       <svg 
-                        className="w-5 h-5" 
+                        className="w-5 h-5 text-red-600" 
                         fill="none" 
                         stroke="currentColor" 
                         viewBox="0 0 24 24" 
@@ -674,7 +884,7 @@ if (!response.ok) {
                   </div>
                 </div>
                 
-                <div className="overflow-hidden max-h-[600px] overflow-y-auto">
+                <div className="overflow-hidden max-h-[350px] overflow-y-auto scrollbar-hide">
                   {employeesLoading ? (
                     <div className="flex justify-center items-center h-64">
                       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
@@ -709,7 +919,7 @@ if (!response.ok) {
                                     <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md flex-shrink-0">
                                       {emp.name?.split(" ").map((n: string) => n[0]).join("").toUpperCase()}
                                     </div>
-                                    <div className="font-medium text-gray-900 truncate text-sm">{emp.name || 'Unnamed'}</div>
+                                    <div className="font-medium text-gray-900 truncate text-sm max-w-[150px]">{emp.name || 'Unnamed'}</div>
                                   </div>
                                 </td>
                                 <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
@@ -755,41 +965,22 @@ if (!response.ok) {
                     </motion.div>
                   )}
                 </div>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
         </div>
 
-        {/* Bottom buttons */}
+        {/* Bottom button */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
-          className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 mt-10 px-2"
+          className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 mt-4 px-2 mr-20"
         >
           <Button
-            variant="outline"
-            className="w-full sm:w-auto border-gray-300 text-gray-700 px-6 sm:px-8 py-3 text-base sm:text-lg font-medium rounded-xl shadow-sm hover:bg-gray-50 transition-colors duration-300"
+            className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-6 sm:px-8 py-3 text-base sm:text-lg font-semibold rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105"
             onClick={handleCancel}
           >
-            Cancel
-          </Button>
-          <Button
-            className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white px-6 sm:px-8 py-3 text-base sm:text-lg font-semibold rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 disabled:opacity-75 disabled:cursor-not-allowed"
-            onClick={handleSave}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <div className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Saving...
-              </div>
-            ) : (
-              "Save Changes"
-            )}
+            Back
           </Button>
         </motion.div>
       </div>

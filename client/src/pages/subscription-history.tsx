@@ -8,6 +8,7 @@ import { History, ArrowLeft } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { useQueryClient } from "@tanstack/react-query";
+import type { Subscription } from "@shared/types";
 
 interface HistoryRecord {
   _id?: string;
@@ -251,8 +252,23 @@ function formatValue(value: any) {
   if (typeof value === "number") return String(value);
   if (Array.isArray(value)) {
     const items = value
-      .map((v) => (v === null || v === undefined ? "" : String(v)))
-      .map((v) => v.trim())
+      .map((v) => {
+        if (v === null || v === undefined) return "";
+        if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
+        if (typeof v === "object") {
+          const name = (v as any)?.name ?? (v as any)?.fullName;
+          if (typeof name === "string" && name.trim()) return name.trim();
+          const email = (v as any)?.email;
+          if (typeof email === "string" && email.trim()) return email.trim();
+          try {
+            return JSON.stringify(v);
+          } catch {
+            return String(v);
+          }
+        }
+        return String(v);
+      })
+      .map((s) => String(s).trim())
       .filter(Boolean);
     if (items.length === 0) return "Not Set";
     // Sort for stable comparisons/reads (e.g., departments arrays).
@@ -392,6 +408,35 @@ export default function SubscriptionHistory() {
     },
   });
 
+  const { data: subscriptions = [] } = useQuery<Subscription[]>({
+    queryKey: ["/api/subscriptions"],
+    enabled: !subscriptionId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("GET", "/api/subscriptions");
+        const json = await res.json().catch(() => []);
+        return Array.isArray(json) ? json : [];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const subscriptionNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const sub of subscriptions) {
+      const name = String((sub as any)?.serviceName || "").trim();
+      if (!name) continue;
+      const id = (sub as any)?.id;
+      const oid = (sub as any)?._id;
+      if (id) map.set(String(id), name);
+      if (oid) map.set(String(oid), name);
+    }
+    return map;
+  }, [subscriptions]);
+
   useEffect(() => {
     const refresh = () => {
       // Invalidate both list and per-subscription keys.
@@ -493,7 +538,13 @@ export default function SubscriptionHistory() {
                     {sortedHistory.map((item: any, index: number) => {
                       const stampToShow = item.loggedAt || item.timestamp;
                       const timestamp = formatTimestamp(stampToShow, { forceLocal: Boolean(item.loggedAt) });
-                      const name = item?.updatedFields?.serviceName || item?.data?.serviceName || "N/A";
+                      const recordSubId = item?.subscriptionId ? String(item.subscriptionId) : "";
+                      const name =
+                        item?.updatedFields?.serviceName ||
+                        item?.data?.serviceName ||
+                        item?.subscriptionName ||
+                        (recordSubId ? subscriptionNameById.get(recordSubId) : "") ||
+                        "Unknown Subscription";
                       const changedBy =
                         item?.changedBy ||
                         item?.user ||

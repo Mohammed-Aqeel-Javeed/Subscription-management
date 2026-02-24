@@ -29,16 +29,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const notificationDedupeKey = (n: any): string => {
     if (!n) return '';
-    const type = String(n.type || '').trim().toLowerCase();
-    const eventType = String(n.eventType || (n.reminderTriggerDate || n.reminderDate ? 'reminder' : '')).trim().toLowerCase();
-    const lifecycle = String(n.lifecycleEventType || '').trim().toLowerCase();
-    const entityId = String(n.subscriptionId || n.complianceId || n.licenseId || n.paymentId || '').trim().toLowerCase();
-    const trigger = String(n.reminderTriggerDate || n.reminderDate || '').trim().toLowerCase();
-    const deadline = String(n.submissionDeadline || n.subscriptionEndDate || n.endDate || '').trim().toLowerCase();
-    const reminderType = String(n.reminderType || '').trim().toLowerCase();
-    const title = String(n.filingName || n.subscriptionName || n.licenseName || n.name || '').trim().toLowerCase();
-    const message = String(n.message || '').trim().toLowerCase();
-    return [type, eventType, lifecycle, entityId, trigger, deadline, reminderType, title, message].join('|');
+
+    const norm = (v: any) => String(v ?? '').trim().toLowerCase();
+
+    const dateOnly = (raw: any): string => {
+      if (!raw) return '';
+      if (raw instanceof Date) return raw.toISOString().slice(0, 10);
+      const s = String(raw).trim();
+      if (!s) return '';
+      // ISO strings and yyyy-mm-dd are both safe for slice(0,10)
+      if (s.length >= 10) return s.slice(0, 10);
+      const d = new Date(s);
+      const t = d.getTime();
+      return Number.isFinite(t) ? d.toISOString().slice(0, 10) : '';
+    };
+
+    const type = norm(n.type);
+    const entityId = norm(n.subscriptionId || n.complianceId || n.licenseId || n.paymentId || n.id || n._id);
+    if (!type || !entityId) return '';
+
+    const eventType = norm(n.eventType);
+    const lifecycle = norm(n.lifecycleEventType);
+    const hasReminderSignals = Boolean(
+      n.reminderTriggerDate || n.reminderDate || n.reminderType || n.reminderDays || n.submissionDeadline || n.subscriptionEndDate || n.endDate
+    );
+
+    // Prefer the higher-level eventType when present (created/deleted/updated/...)
+    const kind = eventType || (lifecycle ? 'updated' : (hasReminderSignals ? 'reminder' : ''));
+
+    const parts: string[] = [type, entityId, kind];
+
+    // For update-like events, include the lifecycle detail (owner_changed, price_changed, submitted, ...)
+    if (kind === 'updated' && lifecycle) {
+      parts.push(lifecycle);
+      parts.push(dateOnly(n.timestamp || n.createdAt));
+    }
+
+    // For reminders, include trigger/deadline so different reminder dates don't collapse
+    if (kind === 'reminder' || hasReminderSignals && !eventType) {
+      parts.push(norm(n.reminderType || n.reminderPolicy));
+      parts.push(norm(n.reminderDays));
+      parts.push(dateOnly(n.reminderTriggerDate || n.reminderDate || n.timestamp || n.createdAt));
+      parts.push(dateOnly(n.submissionDeadline || n.subscriptionEndDate || n.endDate));
+    }
+
+    return parts.join('|');
   };
 
   const dedupeNotifications = (list: any[]): any[] => {
@@ -1181,9 +1216,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("❌ Error fetching user in-app notifications:", e);
       }
 
-      // Combine and sort by timestamp
-      const allNotifications = [...reminderNotifications, ...eventNotifications, ...userInAppNotifications]
-        .sort((a, b) => new Date(b.timestamp || b.createdAt || '').getTime() - new Date(a.timestamp || a.createdAt || '').getTime());
+      // Combine, dedupe, and sort by timestamp
+      const allNotifications = dedupeNotifications([
+        ...reminderNotifications,
+        ...eventNotifications,
+        ...userInAppNotifications,
+      ]).sort(
+        (a, b) =>
+          new Date(b.timestamp || b.createdAt || '').getTime() -
+          new Date(a.timestamp || a.createdAt || '').getTime()
+      );
       
       res.json(allNotifications);
     } catch (error) {

@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserProvider } from "@/context/UserContext";
 import { SidebarSlotProvider } from "@/context/SidebarSlotContext";
 import Sidebar from "@/components/layout/sidebar";
+import Header from "@/components/layout/header";
 import Chatbot from "@/pages/chatbot";
 import Dashboard from "@/pages/dashboard";
 import ComplianceLedger from "@/pages/compliance-ledger";
@@ -123,36 +124,39 @@ function AppWithSidebar() {
             onToggle={() => setSidebarOpen(!sidebarOpen)} 
           />
         )}
-        <main className="flex-1 overflow-auto">
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/landing" element={<LandingPage />} />
-            <Route path="/login" element={<AuthPage />} />
-            <Route path="/auth" element={<AuthPage />} />
-            <Route path="/signup" element={<SignupPage />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/subscriptions" element={<Subscriptions />} />
-            <Route path="/subscriptions/cancelled" element={<CancelledSubscriptionsPage />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/configuration" element={<Configuration />} />
-            <Route path="/reminders" element={<Configuration />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/reports/upcoming-renewal" element={<UpcomingRenewalReport />} />
-            <Route path="/reports/spending-analysis" element={<SpendingAnalysisReport />} />
-            <Route path="/reports/card-wise" element={<CardWiseSpendReport />} />
-            <Route path="/subscription-history" element={<SubscriptionHistory />} />
-            {/* <Route path="/users" element={<Users />} /> */}
-            <Route path="/compliance-dashboard" element={<ComplianceDashboard />} />
-            <Route path="/compliance" element={<Compliance />} />
-            <Route path="/compliance-ledger" element={<ComplianceLedger />} />
-            <Route path="/government-license" element={<GovernmentLicense />} />
-            <Route path="/renewal-log" element={<RenewalLog />} />
-            <Route path="/company-details" element={<CompanyDetails />} />
-            <Route path="/subscription-user" element={<SubscriptionUserPage />} />
-            <Route path="/calendar-monthly" element={<CalendarMonthly />} />
-            <Route path="/calendar-yearly" element={<CalendarYearly />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+        <main className="flex-1 overflow-auto flex flex-col">
+          {!hideSidebarPaths.includes(location.pathname) && <Header />}
+          <div className="flex-1 overflow-auto">
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/landing" element={<LandingPage />} />
+              <Route path="/login" element={<AuthPage />} />
+              <Route path="/auth" element={<AuthPage />} />
+              <Route path="/signup" element={<SignupPage />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/subscriptions" element={<Subscriptions />} />
+              <Route path="/subscriptions/cancelled" element={<CancelledSubscriptionsPage />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/configuration" element={<Configuration />} />
+              <Route path="/reminders" element={<Configuration />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/reports/upcoming-renewal" element={<UpcomingRenewalReport />} />
+              <Route path="/reports/spending-analysis" element={<SpendingAnalysisReport />} />
+              <Route path="/reports/card-wise" element={<CardWiseSpendReport />} />
+              <Route path="/subscription-history" element={<SubscriptionHistory />} />
+              {/* <Route path="/users" element={<Users />} /> */}
+              <Route path="/compliance-dashboard" element={<ComplianceDashboard />} />
+              <Route path="/compliance" element={<Compliance />} />
+              <Route path="/compliance-ledger" element={<ComplianceLedger />} />
+              <Route path="/government-license" element={<GovernmentLicense />} />
+              <Route path="/renewal-log" element={<RenewalLog />} />
+              <Route path="/company-details" element={<CompanyDetails />} />
+              <Route path="/subscription-user" element={<SubscriptionUserPage />} />
+              <Route path="/calendar-monthly" element={<CalendarMonthly />} />
+              <Route path="/calendar-yearly" element={<CalendarYearly />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </div>
         </main>
         {/* Chatbot - shown on all pages except dashboard, notifications, reports, and auth pages */}
         {showChatbot && <Chatbot />}

@@ -728,7 +728,6 @@ function SearchableStringDropdown(props: {
   const { value, onChange, options, placeholder, className, onAddNew } = props;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [showAll, setShowAll] = useState(false); // Flag to show all items
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -736,25 +735,15 @@ function SearchableStringDropdown(props: {
 
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        // Only save if user typed something different
-        if (search.trim() !== value) {
-          onChange(search.trim());
-        }
         setOpen(false);
         setSearch('');
-        setShowAll(false);
       }
     }
 
     const dialogEl = dropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
     function handleDialogScroll() {
-      // Only save if user typed something different
-      if (search.trim() !== value) {
-        onChange(search.trim());
-      }
       setOpen(false);
       setSearch('');
-      setShowAll(false);
     }
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -767,21 +756,16 @@ function SearchableStringDropdown(props: {
   }, [open, search, onChange, value]);
 
   const normalizedSearch = search.trim().toLowerCase();
-  // If showAll is true, show all options; otherwise filter by search
-  const filtered = (showAll || !normalizedSearch)
-    ? options
-    : options.filter((opt) => opt.toLowerCase().includes(normalizedSearch));
+  const filtered = normalizedSearch
+    ? options.filter((opt) => opt.toLowerCase().includes(normalizedSearch))
+    : options;
 
   // Sort to show selected item first
-  const sortedFiltered = value
-    ? filtered.sort((a, b) => {
-        const aIsSelected = a === value;
-        const bIsSelected = b === value;
-        if (aIsSelected && !bIsSelected) return -1;
-        if (!aIsSelected && bIsSelected) return 1;
-        return 0;
-      })
-    : filtered;
+  const sortedFiltered = filtered.sort((a, b) => {
+    if (a === value) return -1;
+    if (b === value) return 1;
+    return 0;
+  });
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -791,40 +775,26 @@ function SearchableStringDropdown(props: {
         className={className || "w-full border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer"}
         onChange={(e) => {
           setSearch(e.target.value);
-          setShowAll(false); // Start filtering when user types
-          if (!open) setOpen(true);
+          setOpen(true);
         }}
         onFocus={() => {
-          if (!open) {
-            setSearch(value || '');
-            setShowAll(true); // Show all when focusing
-            setOpen(true);
-          }
+          setSearch('');
+          setOpen(true);
         }}
         onClick={() => {
-          // Only handle click if dropdown is closed
-          if (!open) {
-            setSearch(value || '');
-            setShowAll(true); // Show all when clicking
-            setOpen(true);
-          }
+          setSearch('');
+          setOpen(true);
         }}
+        autoComplete="off"
       />
       <ChevronDown
         className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
         onClick={(e) => {
-          e.stopPropagation(); // Prevent input onClick from firing
-          if (open) {
-            // Closing dropdown
-            setOpen(false);
+          e.stopPropagation();
+          if (!open) {
             setSearch('');
-            setShowAll(false);
-          } else {
-            // Opening dropdown - show all items with selected value in field
-            setSearch(value || '');
-            setShowAll(true); // Show all items
-            setOpen(true);
           }
+          setOpen(!open);
         }}
       />
       {open && (
@@ -840,7 +810,9 @@ function SearchableStringDropdown(props: {
               sortedFiltered.map((opt) => (
                 <div
                   key={opt}
-                  className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors"
+                  className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                    value === opt ? 'bg-blue-50 text-blue-700' : ''
+                  }`}
                   onClick={() => {
                     if (value === opt) {
                       onChange('');
@@ -849,7 +821,6 @@ function SearchableStringDropdown(props: {
                     }
                     setOpen(false);
                     setSearch('');
-                    setShowAll(false);
                   }}
                 >
                   <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
@@ -868,7 +839,6 @@ function SearchableStringDropdown(props: {
               onClick={() => {
                 setOpen(false);
                 setSearch('');
-                setShowAll(false);
                 onAddNew();
               }}
             >
@@ -921,7 +891,7 @@ function MultiSelectDepartmentsDropdown(props: {
   return (
     <div className="relative" ref={deptDropdownRef}>
       <div
-        className="w-full border border-slate-300 rounded-lg p-2 text-base h-[44px] flex items-center justify-start overflow-x-auto overflow-y-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200 scrollbar-hide"
+        className="w-full border border-slate-300 rounded-lg p-2 text-base h-[44px] flex items-center justify-start overflow-x-auto overflow-y-hidden bg-white cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200 scrollbar-hide"
         onClick={() => setDeptOpen(true)}
         tabIndex={0}
         onFocus={() => setDeptOpen(true)}
@@ -1177,9 +1147,33 @@ export default function GovernmentLicense() {
         const blob = dataUrlToBlob(url);
         if (!blob) throw new Error('Invalid data url');
         const objUrl = URL.createObjectURL(blob);
-        const w = window.open(objUrl, '_blank', 'noopener,noreferrer');
-        if (!w) window.location.href = objUrl;
-        setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
+        
+        // Open in new tab with proper window features
+        const newWindow = window.open('', '_blank');
+        if (newWindow) {
+          newWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>${doc.name}</title>
+                <style>
+                  body { margin: 0; padding: 0; overflow: hidden; }
+                  iframe { border: none; width: 100vw; height: 100vh; }
+                </style>
+              </head>
+              <body>
+                <iframe src="${objUrl}"></iframe>
+              </body>
+            </html>
+          `);
+          newWindow.document.close();
+          
+          // Revoke after a longer delay to ensure document loads
+          setTimeout(() => URL.revokeObjectURL(objUrl), 300_000); // 5 minutes
+        } else {
+          // Popup blocked: fallback to direct navigation
+          window.location.href = objUrl;
+        }
         return;
       }
       const w = window.open(url, '_blank', 'noopener,noreferrer');
@@ -1498,13 +1492,22 @@ export default function GovernmentLicense() {
         const reader = new FileReader();
         reader.onloadend = async () => {
           const base64String = reader.result as string;
-          setPendingRenewalAttachment({
+          // Auto-save document without confirmation
+          const newDoc = {
             name: file.name,
             url: base64String,
             updatedBy: currentUserName || (window as any)?.user?.name || (window as any)?.user?.email || 'User',
             updatedAt: new Date().toISOString(),
+            remark: '', // Empty remark by default
+          };
+          const currentAttachments = form.getValues('renewalAttachments') || [];
+          form.setValue('renewalAttachments', [...currentAttachments, newDoc], { shouldDirty: true });
+          toast({
+            title: 'Success',
+            description: `${file.name} uploaded successfully`,
+            duration: 2000,
+            variant: 'success',
           });
-          setPendingRenewalAttachmentRemark('');
         };
         reader.readAsDataURL(file);
       } catch (error) {
@@ -3172,7 +3175,7 @@ export default function GovernmentLicense() {
   };
 
   const FiltersSidebarPanel = () => (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden">
+    <div className="bg-white border border-gray-200  shadow-md overflow-hidden">
       <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3">
         <div>
           <div className="text-base font-semibold text-gray-900">Filters</div>
@@ -3413,7 +3416,7 @@ export default function GovernmentLicense() {
         </div>
 
         {/* Search + Filter */}
-        <div className="mb-6 bg-white border border-gray-200 rounded-2xl shadow-sm p-4 shrink-0">
+        <div className="mb-6 bg-white border border-gray-200  shadow-sm p-4 shrink-0">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -3438,7 +3441,7 @@ export default function GovernmentLicense() {
 
         {/* Main Content */}
         <div className="min-w-0 flex-1 min-h-0">
-          <Card className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden h-full flex flex-col min-h-0">
+          <Card className="bg-white border border-gray-200  shadow-md overflow-hidden h-full flex flex-col min-h-0">
             <CardContent className="p-0 flex flex-col min-h-0">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20">
@@ -3569,7 +3572,7 @@ export default function GovernmentLicense() {
                               </Button>
                             </TableCell>
                             <TableCell className="px-3 py-3 text-right text-sm text-gray-700 font-semibold w-[110px]">
-                              {typeof license.renewalFee === 'number' ? `$${Math.round(license.renewalFee).toLocaleString()}` : '-'}
+                              {typeof license.renewalFee === 'number' ? `$${license.renewalFee.toFixed(2).toLocaleString()}` : '-'}
                             </TableCell>
                             <TableCell className="px-3 py-3 w-[110px] text-left">
                               {(() => {
@@ -3660,8 +3663,8 @@ export default function GovernmentLicense() {
             requestExit();
           }}
         >
-          <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto overflow-x-hidden rounded-2xl border-slate-200 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
-            <DialogHeader className={`sticky top-0 z-20 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'px-4 py-3 md:px-5 md:py-3' : 'p-5'} rounded-t-2xl flex flex-row items-center justify-between`}>
+          <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto overflow-x-hidden border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
+            <DialogHeader className={`sticky top-0 z-20 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'px-4 py-3 md:px-5 md:py-3' : 'p-5'}  flex flex-row items-center justify-between`}>
               <div className="flex items-center gap-4">
                 <ShieldCheck className="h-6 w-6" />
                 <DialogTitle className="text-xl font-bold leading-none">
@@ -3964,7 +3967,6 @@ export default function GovernmentLicense() {
                             <FormItem>
                               <FormLabel className="block text-sm font-medium text-slate-700">
                                 Attachments (if any):
-                                <span className="text-red-500"> *</span>
                               </FormLabel>
                               <FormControl>
                                 <div className="space-y-3">
@@ -3977,9 +3979,6 @@ export default function GovernmentLicense() {
                                     >
                                       Upload
                                     </Button>
-                                    <div className="text-sm text-slate-500 truncate">
-                                      {(field.value || []).length ? `${(field.value || []).length} file(s) attached` : 'No files attached'}
-                                    </div>
                                   </div>
                                 </div>
                               </FormControl>
@@ -4686,17 +4685,15 @@ export default function GovernmentLicense() {
                 <div className="flex-1 overflow-y-auto py-4 bg-white">
                   {(pendingRenewalAttachment || ((form.watch('renewalAttachments') || []) as any[]).length > 0) ? (
                     <div className="pr-2">
-                      <Table className="w-full table-fixed">
-                        <TableHeader>
-                          <TableRow className="border-b border-gray-200 bg-gray-50">
-                            <TableHead className="h-10 px-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wide w-[260px]">File Name</TableHead>
-                            <TableHead className="h-10 px-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wide w-[140px]">Updated By</TableHead>
-                            <TableHead className="h-10 px-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wide w-[140px]">Updated Date</TableHead>
-                            <TableHead className="h-10 px-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wide">Remark</TableHead>
-                            <TableHead className="h-10 px-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wide w-[220px]">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        {/* Header */}
+                        <div className="grid grid-cols-12 gap-4 items-center px-3 py-2 bg-gray-50 border-b border-gray-200">
+                           <div className="col-span-3 text-xs font-bold text-gray-600">File Name</div>
+                           <div className="col-span-2 text-xs font-bold text-gray-600">Updated By</div>
+                           <div className="col-span-2 text-xs font-bold text-gray-600">Updated On</div>
+                           <div className="col-span-3 text-xs font-bold text-gray-600">Remarks</div>
+                           <div className="col-span-2 text-xs font-bold text-gray-600 text-right">Actions</div>
+                        </div>
                           {pendingRenewalAttachment && (
                             <TableRow className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
                               <TableCell className="px-3 py-2">
@@ -4777,17 +4774,15 @@ export default function GovernmentLicense() {
                           )}
 
                           {((form.watch('renewalAttachments') || []) as RenewalAttachment[]).map((doc, index) => (
-                            <TableRow key={index} className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b last:border-b-0 border-gray-200">
-                              <TableCell className="px-3 py-2">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
-                                    {renderDocumentTypeIcon(doc.name, doc.url)}
-                                  </div>
-                                  <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
+                            <div key={index} className="grid grid-cols-12 gap-4 items-center px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b last:border-b-0 border-gray-200">
+                              <div className="col-span-3 flex items-center gap-2 min-w-0">
+                                <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                  {renderDocumentTypeIcon(doc.name, doc.url)}
                                 </div>
-                              </TableCell>
-                              <TableCell className="px-3 py-2 text-xs font-medium text-gray-900 truncate">{doc.updatedBy || doc.uploadedBy || currentUserName || '-'}</TableCell>
-                              <TableCell className="px-3 py-2 text-xs font-medium text-gray-900 truncate">
+                                <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
+                              </div>
+                              <div className="col-span-2 text-xs font-medium text-gray-900 truncate">{doc.updatedBy || doc.uploadedBy || currentUserName || '-'}</div>
+                              <div className="col-span-2 text-xs font-medium text-gray-900 truncate">
                                 {doc.updatedAt
                                   ? new Date(doc.updatedAt).toLocaleDateString('en-US', {
                                       month: 'short',
@@ -4795,8 +4790,8 @@ export default function GovernmentLicense() {
                                       year: 'numeric',
                                     })
                                   : (doc.uploadedAt || '-')}
-                              </TableCell>
-                              <TableCell className="px-3 py-2">
+                              </div>
+                              <div className="col-span-3">
                                 <Input
                                   value={doc.remark || ''}
                                   onChange={(e) => {
@@ -4812,47 +4807,60 @@ export default function GovernmentLicense() {
                                   placeholder="Enter remark"
                                   className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
                                 />
-                              </TableCell>
-                              <TableCell className="px-3 py-2">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => openDocumentInNewTab({ name: doc.name, url: doc.url })}
-                                    className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                              </div>
+                              <div className="col-span-2 flex items-center justify-end gap-1.5">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                                      aria-label="Document actions"
+                                    >
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    align="end"
+                                    side="top"
+                                    sideOffset={8}
+                                    className="z-[3000] bg-white text-gray-900 border-gray-200 shadow-lg"
                                   >
-                                    View
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => downloadDocument({ name: doc.name, url: doc.url })}
-                                    className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                                  >
-                                    Download
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const updatedDocs = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
-                                      form.setValue('renewalAttachments', updatedDocs.filter((_, i) => i !== index), { shouldDirty: true });
-                                      toast({
-                                        title: 'Document Removed',
-                                        description: `${doc.name} has been removed`,
-                                        duration: 2000,
-                                        variant: 'destructive',
-                                      });
-                                    }}
-                                    className="px-2 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-600 hover:bg-red-50 rounded-md transition-colors"
-                                    title="Remove document"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
+                                    <DropdownMenuItem
+                                      onClick={() => openDocumentInNewTab({ name: doc.name, url: doc.url })}
+                                      className="cursor-pointer"
+                                    >
+                                      View
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => downloadDocument({ name: doc.name, url: doc.url })}
+                                      className="cursor-pointer"
+                                    >
+                                      Download
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        const updatedDocs = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
+                                        form.setValue('renewalAttachments', updatedDocs.filter((_, i) => i !== index), { shouldDirty: true });
+                                        toast({
+                                          title: 'Document Removed',
+                                          description: `${doc.name} has been removed`,
+                                          duration: 2000,
+                                          variant: 'destructive',
+                                        });
+                                      }}
+                                      className="cursor-pointer text-red-600 focus:text-red-600"
+                                    >
+                                      Remove
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
                           ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                        </div>
+                      </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                       <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -5219,24 +5227,31 @@ export default function GovernmentLicense() {
                     <div className="relative" ref={deptHeadDropdownRef}>
                       <div className="relative">
                         <Input
-                          value={deptHeadSearch}
+                          value={deptHeadOpen ? deptHeadSearch : (newDepartmentHead || '')}
                           placeholder="Select employee"
                           className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10"
-                          onFocus={() => setDeptHeadOpen(true)}
-                          onClick={() => setDeptHeadOpen(true)}
+                          onFocus={() => {
+                            setDeptHeadSearch('');
+                            setDeptHeadOpen(true);
+                          }}
+                          onClick={() => {
+                            setDeptHeadSearch('');
+                            setDeptHeadOpen(true);
+                          }}
                           onChange={(e) => {
                             setDeptHeadSearch(e.target.value);
                             setDeptHeadOpen(true);
-                            setNewDepartmentHead('');
-                            setNewDepartmentEmail('');
-                            setNewDepartmentEmailError('');
-                            setIsDepartmentEmailLocked(false);
                           }}
                           autoComplete="off"
                         />
                         <ChevronDown
                           className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                          onClick={() => setDeptHeadOpen(!deptHeadOpen)}
+                          onClick={() => {
+                            if (!deptHeadOpen) {
+                              setDeptHeadSearch('');
+                            }
+                            setDeptHeadOpen(!deptHeadOpen);
+                          }}
                         />
                       </div>
 
@@ -5250,6 +5265,13 @@ export default function GovernmentLicense() {
                                 String(emp?.name || '').toLowerCase().includes(q) ||
                                 String(emp?.email || '').toLowerCase().includes(q)
                               );
+                            })
+                            .sort((a: any, b: any) => {
+                              const aSelected = newDepartmentHead === a.name;
+                              const bSelected = newDepartmentHead === b.name;
+                              if (aSelected && !bSelected) return -1;
+                              if (!aSelected && bSelected) return 1;
+                              return 0;
                             })
                             .map((emp: any) => {
                               const selected = newDepartmentHead === emp.name;

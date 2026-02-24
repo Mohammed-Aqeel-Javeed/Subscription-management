@@ -78,10 +78,8 @@ function buildHtml(params: {
   recipientDepartments?: string[];
 }): string {
   const deptLine = params.departments.length ? params.departments.join(", ") : "-";
-  const roleReason =
-    params.role === "dept_head"
-      ? `You are receiving this because you are the Department Head for: ${(params.recipientDepartments || params.departments || []).length ? (params.recipientDepartments || params.departments).join(", ") : "your department"}.`
-      : "";
+  // Removed department head reason text as requested
+  const roleReason = "";
 
   return `
   <!DOCTYPE html>

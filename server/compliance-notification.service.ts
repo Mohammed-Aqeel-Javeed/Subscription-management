@@ -537,13 +537,11 @@ async function sendEmailNotification(
     const departmentsLabel = departments.length ? departments.join(', ') : 'N/A';
 
     const roleIntro =
-      recipientRole === 'dept_head'
-        ? `<p>You are receiving this notification because you are the <strong>Department Head</strong> for: <strong>${departmentsLabel}</strong>.</p>`
-        : recipientRole === 'owner'
-          ? `<p>You are receiving this notification because you are the <strong>Compliance Owner</strong>.</p>`
-          : recipientRole === 'owner2'
-            ? `<p>You are receiving this notification because you are the <strong>Secondary Compliance Owner</strong>.</p>`
-            : `<p>You are receiving this notification because you are an <strong>Admin</strong>.</p>`;
+      recipientRole === 'owner'
+        ? `<p>You are receiving this notification because you are the <strong>Compliance Owner</strong>.</p>`
+        : recipientRole === 'owner2'
+          ? `<p>You are receiving this notification because you are the <strong>Secondary Compliance Owner</strong>.</p>`
+          : `<p>You are receiving this notification because you are an <strong>Admin</strong>.</p>`;
 
     const formatDate = (dateStr: any) => {
       if (!dateStr) return 'N/A';
