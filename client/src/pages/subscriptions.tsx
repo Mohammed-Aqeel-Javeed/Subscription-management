@@ -45,7 +45,11 @@ export default function Subscriptions() {
   // ...existing code...
   // Removed duplicate declaration of subscriptions, isLoading, and refetch
 
-  const [modalOpen, setModalOpen] = useState(false);
+  // Check if we should open modal immediately based on URL parameter
+  const searchParams = new URLSearchParams(location.search);
+  const shouldOpenModal = !!searchParams.get('open');
+  
+  const [modalOpen, setModalOpen] = useState(shouldOpenModal);
   const [editingSubscription, setEditingSubscription] = useState<Partial<SubscriptionWithExtras> | undefined>();
   const [pendingOpenSubscriptionId, setPendingOpenSubscriptionId] = useState<string | null>(null);
   const [openActionsMenuForId, setOpenActionsMenuForId] = useState<string | null>(null);
@@ -779,7 +783,7 @@ export default function Subscriptions() {
   };
 
   const FiltersSidebarPanel = () => (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden">
+    <div className="bg-white border border-gray-200  shadow-md overflow-hidden">
       <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3">
         <div>
           <div className="text-base font-semibold text-gray-900">Filters</div>
@@ -979,7 +983,7 @@ export default function Subscriptions() {
       <div className="h-full bg-gradient-to-br from-indigo-50 via-slate-50 to-indigo-100 p-4 md:p-6 relative">
         <div className="h-full w-full flex flex-col min-h-0">
           {/* Header Section */}
-          <div className="bg-white rounded-2xl shadow-xl p-4 mb-6 border border-slate-200">
+          <div className="bg-white  shadow-xl p-4 mb-6 border border-slate-200">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
               <div className="flex-1">
                 <div className="flex items-center gap-4 mb-3">
@@ -1014,7 +1018,7 @@ export default function Subscriptions() {
           </Card>
           
           {/* Table Section */}
-          <Card className="border-slate-200 shadow-lg rounded-2xl overflow-hidden">
+          <Card className="border-slate-200 shadow-lg  overflow-hidden">
             <CardContent className="p-0">
               <div className="space-y-2 p-6">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -1170,7 +1174,7 @@ export default function Subscriptions() {
         {!modalOpen && (
           <>
         {/* Search + Filter By */}
-        <div className="mb-6 bg-white border border-gray-200 rounded-2xl shadow-sm p-4 shrink-0">
+        <div className="mb-6 bg-white border border-gray-200  shadow-sm p-4 shrink-0">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -1194,7 +1198,7 @@ export default function Subscriptions() {
 
         {/* Professional Data Table */}
         <div className="min-w-0 flex-1 min-h-0">
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden h-full flex flex-col min-h-0">
+          <div className="bg-white border border-gray-200  shadow-md overflow-hidden h-full flex flex-col min-h-0">
             <Table containerClassName="flex-1 min-h-0 overflow-auto" className="table-fixed">
               <TableHeader>
                 <TableRow className="border-b-2 border-gray-400 bg-gray-200">
@@ -1494,7 +1498,7 @@ export default function Subscriptions() {
           }
         }}
       >
-        <DialogContent className="max-w-md rounded-2xl">
+        <DialogContent className="max-w-md ">
           <DialogHeader>
             <DialogTitle>Loading subscription...</DialogTitle>
           </DialogHeader>
@@ -1507,7 +1511,7 @@ export default function Subscriptions() {
       
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+        <DialogContent className="max-w-md  border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
           {/* Header with Red Gradient Background */}
           <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
             <DialogHeader>

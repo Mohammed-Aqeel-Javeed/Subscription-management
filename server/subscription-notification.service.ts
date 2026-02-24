@@ -454,12 +454,11 @@ async function sendEmailNotification(
       return currency ? `${currency} ${formatted}` : formatted;
     };
 
+    // Removed department head reason text as requested
     const roleIntro =
-      recipientRole === 'dept_head'
-        ? `<p>You are receiving this notification because you are the <strong>Department Head</strong> for: <strong>${departmentsLabel}</strong>.</p>`
-        : recipientRole === 'owner'
-          ? `<p>You are receiving this notification because you are the <strong>Subscription Owner</strong>.</p>`
-          : `<p>You are receiving this notification because you are an <strong>Admin</strong>.</p>`;
+      recipientRole === 'owner'
+        ? `<p>You are receiving this notification because you are the <strong>Subscription Owner</strong>.</p>`
+        : `<p>You are receiving this notification because you are an <strong>Admin</strong>.</p>`;
 
     switch (eventType) {
       case 'created':

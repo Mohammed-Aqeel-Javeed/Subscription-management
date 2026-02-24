@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, BarChart3, ChevronDown, Check } from "lucide-react";
+import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, BarChart3, ChevronDown, Check, MoreVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { API_BASE_URL } from "@/lib/config";
@@ -262,6 +263,7 @@ const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
 const [selectedEmployeeSubscriptions, setSelectedEmployeeSubscriptions] = useState<{employeeName: string; subscriptions: any[]}>({employeeName: '', subscriptions: []});
 const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
 const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+const [openActionsMenuForId, setOpenActionsMenuForId] = useState<string | null>(null);
 const fileInputRef = React.useRef<HTMLInputElement>(null);
 
 const downloadEmployeeTemplate = () => {
@@ -691,7 +693,7 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl fle
       placeholder="Search employees..."
       value={searchTerm}
       onChange={(e) => setSearchTerm(e.target.value)}
-      className="pl-10 w-full sm:w-64 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+      className="pl-10 w-full sm:w-64 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm"
     />
   </div>
   <input
@@ -739,13 +741,13 @@ onClick={handleAddNew}
 className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
 >
 <UserPlus className="mr-2" size={16} />
-Add Employee
+New Employee
 </Button>
 </motion.div>
 </DialogTrigger>
-<DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
+<DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
   {/* Header with Gradient Background */}
-  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 ">
     <DialogHeader>
       <div className="flex items-center gap-4">
         <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -771,7 +773,7 @@ render={({ field }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Full Name</FormLabel>
 <FormControl>
-<Input {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
+<Input {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm" />
 </FormControl>
 <FormMessage />
 </FormItem>
@@ -788,7 +790,7 @@ render={({ field, fieldState }) => (
   type="email" 
   {...field} 
   onBlur={() => form.trigger('email')}
-  className={`border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+  className={`border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm ${
     fieldState.error ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
   }`}
 />
@@ -806,21 +808,31 @@ render={({ field }) => (
   <div className="relative" ref={employeeDeptDropdownRef}>
     <div className="relative">
       <Input
-        value={employeeDeptSearch}
+        value={employeeDeptOpen ? employeeDeptSearch : (field.value || '')}
         placeholder="Select department"
-        className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10 cursor-pointer"
-        onFocus={() => setEmployeeDeptOpen(true)}
-        onClick={() => setEmployeeDeptOpen(true)}
+        className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10 cursor-pointer bg-white shadow-sm"
+        onFocus={() => {
+          setEmployeeDeptSearch('');
+          setEmployeeDeptOpen(true);
+        }}
+        onClick={() => {
+          setEmployeeDeptSearch('');
+          setEmployeeDeptOpen(true);
+        }}
         onChange={(e) => {
           setEmployeeDeptSearch(e.target.value);
           setEmployeeDeptOpen(true);
-          field.onChange('');
         }}
         autoComplete="off"
       />
       <ChevronDown
         className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-        onClick={() => setEmployeeDeptOpen(!employeeDeptOpen)}
+        onClick={() => {
+          if (!employeeDeptOpen) {
+            setEmployeeDeptSearch('');
+          }
+          setEmployeeDeptOpen(!employeeDeptOpen);
+        }}
       />
     </div>
 
@@ -831,6 +843,11 @@ render={({ field }) => (
             const q = employeeDeptSearch.trim().toLowerCase();
             if (!q) return true;
             return String(dept).toLowerCase().includes(q);
+          })
+          .sort((a, b) => {
+            if (a === field.value) return -1;
+            if (b === field.value) return 1;
+            return 0;
           })
           .map((dept) => {
             const selected = field.value === dept;
@@ -849,7 +866,7 @@ render={({ field }) => (
                     return;
                   }
                   field.onChange(dept);
-                  setEmployeeDeptSearch(dept);
+                  setEmployeeDeptSearch('');
                   setEmployeeDeptOpen(false);
                 }}
               >
@@ -876,7 +893,7 @@ render={({ field }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Role</FormLabel>
 <FormControl>
-<Input {...field} placeholder="e.g., Manager, Developer" className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
+<Input {...field} placeholder="e.g., Manager, Developer" className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm" />
 </FormControl>
 <FormMessage className="text-red-600 text-sm font-medium mt-1" />
 </FormItem>
@@ -890,7 +907,7 @@ render={({ field }) => (
 <FormLabel className="text-gray-700 font-medium text-sm">Status</FormLabel>
 <Select onValueChange={field.onChange} defaultValue={field.value}>
 <FormControl>
-<SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+<SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm">
 <SelectValue placeholder="Select status" />
 </SelectTrigger>
 </FormControl>
@@ -940,13 +957,13 @@ className="flex-1 min-h-0"
 <table className="min-w-full divide-y divide-gray-200">
 <thead>
 <tr>
-<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Employee</th>
-<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Role</th>
-<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Department</th>
-<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Email</th>
-<th className="sticky top-0 z-10 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Subscriptions</th>
-<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Status</th>
-<th className="sticky top-0 z-10 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Actions</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Employee</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Role</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Department</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Email</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Subscriptions</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Status</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Actions</th>
 </tr>
 </thead>
 <tbody className="bg-white divide-y divide-gray-200">
@@ -969,7 +986,7 @@ className="flex-1 min-h-0"
     <button
       type="button"
       onClick={() => handleEdit(employee)}
-      className="text-sm font-medium text-gray-900 hover:text-blue-600 underline hover:no-underline transition-all duration-200 cursor-pointer text-left max-w-[200px] truncate block"
+      className="text-sm font-medium text-indigo-700 hover:text-indigo-900 underline hover:no-underline transition-all duration-200 cursor-pointer text-left max-w-[200px] truncate block"
       title={employee.name}
     >
       {employee.name}
@@ -1002,28 +1019,53 @@ className="flex-1 min-h-0"
   </td>
   <td className="py-3 px-4">{getStatusBadge(employee.status)}</td>
   <td className="py-3 px-4">
-    <div className="flex justify-end space-x-2">
-      <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleEdit(employee)}
-          className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-full p-1 h-8 w-8"
-        >
-          <Edit size={16} />
-        </Button>
-      </motion.div>
-      <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleDelete(employee)}
-          disabled={deleteEmployeeMutation.isPending}
-          className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-8 w-8"
-        >
-          <Trash2 size={16} />
-        </Button>
-      </motion.div>
+    <div className="flex justify-end">
+      {(() => {
+        const rowId = String(employee._id);
+        const isOpen = !!rowId && openActionsMenuForId === rowId;
+        const isAnotherRowOpen = !!openActionsMenuForId && openActionsMenuForId !== rowId;
+        return (
+          <DropdownMenu
+            open={isOpen}
+            onOpenChange={(open) => {
+              if (!rowId) return;
+              setOpenActionsMenuForId(open ? rowId : null);
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+                  isAnotherRowOpen ? "invisible" : ""
+                }`}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+            >
+              <DropdownMenuItem
+                onClick={() => handleEdit(employee)}
+                className="cursor-pointer"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleDelete(employee)}
+                className="cursor-pointer text-red-600 focus:text-red-600"
+                disabled={deleteEmployeeMutation.isPending}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      })()}
     </div>
   </td>
 </motion.tr>
@@ -1081,9 +1123,9 @@ className="flex-1 min-h-0"
 
 {/* Employee Subscriptions Modal */}
 <Dialog open={subscriptionModalOpen} onOpenChange={setSubscriptionModalOpen}>
-  <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white">
+  <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto border-0 shadow-2xl p-0 bg-white">
     {/* Header with Gradient Background */}
-    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 ">
       <DialogHeader>
         <div className="flex items-center gap-4">
           <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -1155,7 +1197,7 @@ className="flex-1 min-h-0"
 
 {/* Delete Confirmation Dialog */}
 <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+  <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
     {/* Header with Red Gradient Background */}
     <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
       <DialogHeader>
@@ -1238,12 +1280,135 @@ const [searchTerm, setSearchTerm] = useState("");
 const [showPassword, setShowPassword] = useState(false);
 const [userDeleteConfirmOpen, setUserDeleteConfirmOpen] = useState(false);
 const [userToDelete, setUserToDelete] = useState<UserType | null>(null);
+const [openActionsMenuForId, setOpenActionsMenuForId] = useState<string | null>(null);
 const { toast } = useToast();
 const queryClient = useQueryClient();
+
+// User Management Data Management state
+const userFileInputRef = React.useRef<HTMLInputElement>(null);
+const [userImportConfirmOpen, setUserImportConfirmOpen] = useState(false);
+const [userDataManagementSelectKey, setUserDataManagementSelectKey] = useState(0);
 
 const { data: users, isLoading } = useQuery<UserType[]>({
 queryKey: ["/api/users"],
 });
+
+// User Management Data Management functions
+const downloadUserTemplate = () => {
+  const template = [{ name: 'John Doe', email: 'john@example.com', role: 'Admin' }];
+  const csv = Papa.unparse(template, { header: true });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', 'users_import_template.csv');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  toast({ title: 'Template Downloaded', description: 'Use this template to import users.' });
+};
+
+const exportUsers = () => {
+  try {
+    const exportData = (users || []).length > 0 ? (users || []).map((user: any) => ({
+      name: user.name,
+      email: user.email,
+      role: user.role
+    })) : [{
+      name: "",
+      email: "",
+      role: ""
+    }];
+
+    const csv = Papa.unparse(exportData, { header: true });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `users_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Success",
+      description: `Exported ${(users || []).length} users successfully`,
+      duration: 2000,
+    });
+  } catch (error: any) {
+    toast({
+      title: "Error",
+      description: error.message || "Failed to export users",
+      variant: "destructive",
+      duration: 2000,
+    });
+  }
+};
+
+const importUsers = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    let newUsers;
+
+    if (file.name.endsWith('.csv')) {
+      newUsers = await parseCSV(text);
+    } else {
+      newUsers = JSON.parse(text);
+    }
+
+    if (!Array.isArray(newUsers)) {
+      throw new Error('Invalid file format. Expected a list of users.');
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const user of newUsers) {
+      try {
+        if (!user.name || !user.email || !user.role) {
+          errorCount++;
+          continue;
+        }
+
+        const userData = {
+          name: user.name.trim(),
+          email: user.email.trim(),
+          role: user.role.trim()
+        };
+
+        await apiRequest("POST", "/api/users", userData);
+        successCount++;
+      } catch (error) {
+        errorCount++;
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+    
+    toast({
+      title: successCount > 0 ? "Success" : "Error",
+      description: `Imported ${successCount} users. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
+      variant: errorCount > 0 ? "destructive" : "default",
+      duration: 2000,
+    });
+  } catch (error: any) {
+    toast({
+      title: "Error",
+      description: error.message || "Failed to import users",
+      variant: "destructive",
+      duration: 2000,
+    });
+  }
+
+  if (userFileInputRef.current) {
+    userFileInputRef.current.value = '';
+  }
+};
 
 const form = useForm<InsertUser & { password: string; department?: string }>({
 // TODO: Provide a local zod schema for user validation or remove this line if not needed
@@ -1378,20 +1543,59 @@ setModalOpen(true);
 };
 
 const onSubmit = (data: InsertUser) => {
-if (editingUser) {
-if (!editingUser.id || typeof editingUser.id !== "string" || editingUser.id.length < 10) {
-toast({
-title: "Error",
-description: `Invalid user id: ${editingUser.id}`,
-variant: "destructive",
-duration: 1000,
-});
-return;
-}
-updateMutation.mutate({ id: editingUser.id, data });
-} else {
-createMutation.mutate(data);
-}
+  // Trim the data
+  const trimmedData = {
+    ...data,
+    name: data.name.trim(),
+    email: data.email.trim().toLowerCase()
+  };
+  
+  // Check for duplicate email (only if users array is available)
+  if (users) {
+    const duplicateEmail = users.find(user =>
+      user.email.trim().toLowerCase() === trimmedData.email &&
+      (!editingUser || user.id !== editingUser.id)
+    );
+    if (duplicateEmail) {
+      toast({
+        title: "Error",
+        description: "A user with the same email already exists.",
+        variant: "destructive",
+        duration: 2000,
+      });
+      return;
+    }
+    
+    // Check for duplicate name
+    const duplicateName = users.find(user =>
+      user.name.trim().toLowerCase() === trimmedData.name.toLowerCase() &&
+      (!editingUser || user.id !== editingUser.id)
+    );
+    if (duplicateName) {
+      toast({
+        title: "Error",
+        description: "A user with the same name already exists.",
+        variant: "destructive",
+        duration: 2000,
+      });
+      return;
+    }
+  }
+  
+  if (editingUser) {
+    if (!editingUser.id || typeof editingUser.id !== "string" || editingUser.id.length < 10) {
+      toast({
+        title: "Error",
+        description: `Invalid user id: ${editingUser.id}`,
+        variant: "destructive",
+        duration: 1000,
+      });
+      return;
+    }
+    updateMutation.mutate({ id: editingUser.id, data: trimmedData });
+  } else {
+    createMutation.mutate(trimmedData);
+  }
 };
 
 const getRoleBadge = (role: string) => {
@@ -1503,9 +1707,45 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-lg fle
 placeholder="Search users..."
 value={searchTerm}
 onChange={(e) => setSearchTerm(e.target.value)}
-className="pl-10 w-full sm:w-64 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+className="pl-10 w-full sm:w-64 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm"
 />
 </div>
+<input
+  type="file"
+  ref={userFileInputRef}
+  className="hidden"
+  accept=".csv,.xlsx,.xls"
+  onChange={importUsers}
+/>
+<Select
+  key={userDataManagementSelectKey}
+  onValueChange={(value) => {
+    if (value === 'export') {
+      exportUsers();
+    } else if (value === 'import') {
+      setUserImportConfirmOpen(true);
+    }
+    setUserDataManagementSelectKey((k) => k + 1);
+  }}
+>
+  <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+    <SelectValue placeholder="Data Management" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="export" className="cursor-pointer">
+      <div className="flex items-center">
+        <Download className="h-4 w-4 mr-2" />
+        Export
+      </div>
+    </SelectItem>
+    <SelectItem value="import" className="cursor-pointer">
+      <div className="flex items-center">
+        <Upload className="h-4 w-4 mr-2" />
+        Import
+      </div>
+    </SelectItem>
+  </SelectContent>
+</Select>
 <Dialog open={modalOpen} onOpenChange={(open) => {
 setModalOpen(open);
 if (!open) {
@@ -1525,9 +1765,9 @@ New User
 </Button>
 </motion.div>
 </DialogTrigger>
-<DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
+<DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
   {/* Header with Gradient Background */}
-  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 ">
     <DialogHeader>
       <div className="flex items-center gap-4">
         <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -1553,7 +1793,7 @@ render={({ field }) => (
 <FormItem>
 <FormLabel className="text-gray-700 font-medium text-sm">Full Name</FormLabel>
 <FormControl>
-<Input placeholder="" {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10" />
+<Input placeholder="" {...field} className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm" />
 </FormControl>
 <FormMessage />
 </FormItem>
@@ -1571,7 +1811,7 @@ render={({ field, fieldState }) => (
   placeholder="" 
   {...field} 
   onBlur={() => form.trigger('email')}
-  className={`border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
+  className={`border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm ${
     fieldState.error ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
   }`}
 />
@@ -1592,7 +1832,7 @@ render={({ field }) => (
 type={showPassword ? "text" : "password"} 
 placeholder="" 
 {...field} 
-className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10" 
+className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10 bg-white shadow-sm" 
 />
 <button
 type="button"
@@ -1619,7 +1859,7 @@ render={({ field }) => (
 <FormLabel className="text-gray-700 font-medium text-sm">Role</FormLabel>
 <Select onValueChange={field.onChange} value={field.value}>
 <FormControl>
-<SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+<SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm">
 <SelectValue placeholder="Select role" />
 </SelectTrigger>
 </FormControl>
@@ -1644,7 +1884,7 @@ render={({ field }) => (
 <FormLabel className="text-gray-700 font-medium text-sm">Status</FormLabel>
 <Select onValueChange={field.onChange} value={field.value}>
 <FormControl>
-<SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10">
+<SelectTrigger className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm">
 <SelectValue placeholder="Select status" />
 </SelectTrigger>
 </FormControl>
@@ -1689,7 +1929,7 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
     if (!open) setUserToDelete(null);
   }}
 >
-  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+  <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
     <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
       <DialogHeader>
         <div className="flex items-center gap-3">
@@ -1757,11 +1997,11 @@ className="flex-1 min-h-0"
 <table className="min-w-full divide-y divide-gray-200">
 <thead>
 <tr>
-<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">User</th>
-<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Email</th>
-<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Role</th>
-<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Status</th>
-<th className="sticky top-0 z-10 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-50">Actions</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">User</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Email</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Role</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Status</th>
+<th className="sticky top-0 z-10 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">Actions</th>
 </tr>
 </thead>
 <tbody className="bg-white divide-y divide-gray-200">
@@ -1779,11 +2019,12 @@ className="hover:bg-gray-50 transition-colors"
 <div className="w-10 h-10 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center shadow-sm">
 <User className="text-indigo-600" size={18} />
 </div>
-<div>
+<div className="max-w-[200px]">
   <button
     type="button"
     onClick={() => handleEdit(user)}
-    className="text-sm font-medium text-gray-900 hover:text-blue-600 underline hover:no-underline transition-all duration-200 cursor-pointer text-left"
+    className="text-sm font-medium text-indigo-700 hover:text-indigo-900 underline hover:no-underline transition-all duration-200 cursor-pointer text-left truncate block w-full"
+    title={user.name}
   >
     {user.name}
   </button>
@@ -1794,28 +2035,53 @@ className="hover:bg-gray-50 transition-colors"
 <td className="py-3 px-4">{getRoleBadge(user.role)}</td>
 <td className="py-3 px-4">{getStatusBadge(user.status)}</td>
 <td className="py-3 px-4">
-<div className="flex justify-end space-x-2">
-<motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-<Button
-variant="ghost"
-size="sm"
-onClick={() => handleEdit(user)}
-className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-full p-1 h-8 w-8"
+<div className="flex justify-end">
+{(() => {
+const rowId = String(user.id);
+const isOpen = !!rowId && openActionsMenuForId === rowId;
+const isAnotherRowOpen = !!openActionsMenuForId && openActionsMenuForId !== rowId;
+return (
+<DropdownMenu
+open={isOpen}
+onOpenChange={(open) => {
+if (!rowId) return;
+setOpenActionsMenuForId(open ? rowId : null);
+}}
 >
-<Edit size={16} />
-</Button>
-</motion.div>
-<motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+<DropdownMenuTrigger asChild>
 <Button
 variant="ghost"
 size="sm"
+className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+isAnotherRowOpen ? "invisible" : ""
+}`}
+>
+<MoreVertical className="h-4 w-4" />
+</Button>
+</DropdownMenuTrigger>
+<DropdownMenuContent
+align="end"
+className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+>
+<DropdownMenuItem
+onClick={() => handleEdit(user)}
+className="cursor-pointer"
+>
+<Edit className="h-4 w-4 mr-2" />
+Edit
+</DropdownMenuItem>
+<DropdownMenuItem
 onClick={() => handleDelete(user.id)}
-className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-8 w-8"
+className="cursor-pointer text-red-600 focus:text-red-600"
 disabled={deleteMutation.isPending}
 >
-<Trash2 size={16} />
-</Button>
-</motion.div>
+<Trash2 className="h-4 w-4 mr-2" />
+Delete
+</DropdownMenuItem>
+</DropdownMenuContent>
+</DropdownMenu>
+);
+})()}
 </div>
 </td>
 </motion.tr>
@@ -1837,6 +2103,38 @@ disabled={deleteMutation.isPending}
 </CardContent>
 </Card>
 </motion.div>
+
+{/* User Import Confirm Dialog */}
+<AlertDialog open={userImportConfirmOpen} onOpenChange={setUserImportConfirmOpen}>
+  <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+    <AlertDialogHeader>
+      <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+      <AlertDialogDescription>
+        Select Yes to choose a file. Select No to download the template.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel
+        className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+        onClick={() => {
+          downloadUserTemplate();
+          setUserImportConfirmOpen(false);
+        }}
+      >
+        No
+      </AlertDialogCancel>
+      <AlertDialogAction
+        className="bg-green-600 text-white hover:bg-green-700"
+        onClick={() => {
+          setUserImportConfirmOpen(false);
+          setTimeout(() => userFileInputRef.current?.click(), 0);
+        }}
+      >
+        Yes
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
 </motion.div>
 );
 }
@@ -2029,13 +2327,7 @@ type Department = {
 const departmentSchema = z.object({
   name: z.string().min(1, "Department name is required"),
   departmentHead: z.string().min(1, "Department head is required"),
-  email: z.string().min(1, "Email is required").refine((email) => {
-    const result = validateEmail(email);
-    return result.valid;
-  }, (email) => {
-    const result = validateEmail(email);
-    return { message: result.error || "Invalid email address" };
-  }),
+  email: z.string().optional(),
 });
 
 type DepartmentFormValues = z.infer<typeof departmentSchema>;
@@ -2062,7 +2354,7 @@ staleTime: 5 * 60 * 1000,
 gcTime: 10 * 60 * 1000,
 });
 const addDepartmentMutation = useMutation({
-mutationFn: async (newDepartment: { name: string; departmentHead: string; email: string }) => {
+mutationFn: async (newDepartment: { name: string; departmentHead: string; email?: string }) => {
   const normalizedNewName = newDepartment.name.trim().toLowerCase();
   const exists = (Array.isArray(departments) ? departments : []).some(
     (d: any) => String(d?.name || '').trim().toLowerCase() === normalizedNewName
@@ -2098,7 +2390,7 @@ duration: 1000,
 });
 
 const updateDepartmentMutation = useMutation({
-mutationFn: async ({ id, data }: { id: string; data: { name: string; departmentHead: string; email: string } }) => {
+mutationFn: async ({ id, data }: { id: string; data: { name: string; departmentHead: string; email?: string } }) => {
 return await apiRequest("PUT", `/api/company/departments/${id}`, data);
 },
 onSuccess: () => {
@@ -2169,6 +2461,16 @@ const { toast } = useToast();
 const companyFileInputRef = React.useRef<HTMLInputElement>(null);
 const [companyImportConfirmOpen, setCompanyImportConfirmOpen] = useState(false);
 const [companyDataManagementSelectKey, setCompanyDataManagementSelectKey] = useState(0);
+
+// Department tab Data Management
+const departmentFileInputRef = React.useRef<HTMLInputElement>(null);
+const [departmentImportConfirmOpen, setDepartmentImportConfirmOpen] = useState(false);
+const [departmentDataManagementSelectKey, setDepartmentDataManagementSelectKey] = useState(0);
+
+// Subscription Category tab Data Management
+const categoryFileInputRef = React.useRef<HTMLInputElement>(null);
+const [categoryImportConfirmOpen, setCategoryImportConfirmOpen] = useState(false);
+const [categoryDataManagementSelectKey, setCategoryDataManagementSelectKey] = useState(0);
 
 // Fetch employees for department counts / dropdowns
 const { data: employeesData = [] } = useQuery<any[]>({
@@ -2453,6 +2755,7 @@ const importCombinedExcel = async (event: React.ChangeEvent<HTMLInputElement>) =
 
 // Department form
 const departmentForm = useForm<DepartmentFormValues>({
+  mode: 'onSubmit',
   resolver: zodResolver(departmentSchema),
   defaultValues: {
     name: "",
@@ -2486,6 +2789,236 @@ useEffect(() => {
     setIsDepartmentEmailLocked(false);
   }
 }, [selectedDepartmentHead, employeesData, departmentModalOpen]);
+
+// Individual Department Functions
+const downloadDepartmentTemplate = () => {
+  const template = [{ 'Department Name': 'IT', 'Department Head': 'John Doe', 'Email': 'john.doe@company.com' }];
+  const csv = Papa.unparse(template, { header: true });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', 'departments_import_template.csv');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  toast({ title: 'Template Downloaded', description: 'Use this template to import departments.' });
+};
+
+const exportDepartments = () => {
+  try {
+    const exportData = departments.length > 0 ? departments.map(dept => ({
+      'Department Name': dept.name,
+      'Department Head': dept.departmentHead || '',
+      'Email': dept.email || ''
+    })) : [{
+      'Department Name': "",
+      'Department Head': "",
+      'Email': ""
+    }];
+
+    const csv = Papa.unparse(exportData, { header: true });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `departments_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Success",
+      description: `Exported ${departments.length} departments successfully`,
+      duration: 2000,
+    });
+  } catch (error: any) {
+    toast({
+      title: "Error",
+      description: error.message || "Failed to export departments",
+      variant: "destructive",
+      duration: 2000,
+    });
+  }
+};
+
+const importDepartments = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    let newDepartments;
+
+    if (file.name.endsWith('.csv')) {
+      newDepartments = await parseCSV(text);
+    } else {
+      newDepartments = JSON.parse(text);
+    }
+
+    if (!Array.isArray(newDepartments)) {
+      throw new Error('Invalid file format. Expected a list of departments.');
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const dept of newDepartments) {
+      try {
+        if (!dept['Department Name'] || !dept['Department Head'] || !dept['Email']) {
+          errorCount++;
+          continue;
+        }
+
+        const departmentData = {
+          name: dept['Department Name'].trim(),
+          departmentHead: dept['Department Head'].trim(),
+          email: dept['Email'].trim(),
+          visible: true
+        };
+
+        await apiRequest("POST", "/api/company/departments", departmentData);
+        successCount++;
+      } catch (error) {
+        errorCount++;
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["/api/company/departments"] });
+    refetchDepartments();
+    
+    toast({
+      title: successCount > 0 ? "Success" : "Error",
+      description: `Imported ${successCount} departments. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
+      variant: errorCount > 0 ? "destructive" : "default",
+      duration: 2000,
+    });
+  } catch (error: any) {
+    toast({
+      title: "Error",
+      description: error.message || "Failed to import departments",
+      variant: "destructive",
+      duration: 2000,
+    });
+  }
+
+  if (departmentFileInputRef.current) {
+    departmentFileInputRef.current.value = '';
+  }
+};
+
+// Individual Subscription Category Functions
+const downloadCategoryTemplate = () => {
+  const template = [{ 'Category Name': 'Cloud Services' }];
+  const csv = Papa.unparse(template, { header: true });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', 'categories_import_template.csv');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  toast({ title: 'Template Downloaded', description: 'Use this template to import categories.' });
+};
+
+const exportCategories = () => {
+  try {
+    const exportData = categories.length > 0 ? categories.map(cat => ({
+      'Category Name': cat.name
+    })) : [{
+      'Category Name': ""
+    }];
+
+    const csv = Papa.unparse(exportData, { header: true });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `categories_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Success",
+      description: `Exported ${categories.length} categories successfully`,
+      duration: 2000,
+    });
+  } catch (error: any) {
+    toast({
+      title: "Error",
+      description: error.message || "Failed to export categories",
+      variant: "destructive",
+      duration: 2000,
+    });
+  }
+};
+
+const importCategories = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    let newCategories;
+
+    if (file.name.endsWith('.csv')) {
+      newCategories = await parseCSV(text);
+    } else {
+      newCategories = JSON.parse(text);
+    }
+
+    if (!Array.isArray(newCategories)) {
+      throw new Error('Invalid file format. Expected a list of categories.');
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const cat of newCategories) {
+      try {
+        if (!cat['Category Name']) {
+          errorCount++;
+          continue;
+        }
+
+        await apiRequest("POST", "/api/company/categories", {
+          name: cat['Category Name'].trim(),
+          visible: true
+        });
+        successCount++;
+      } catch (error) {
+        errorCount++;
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["/api/company/categories"] });
+    refetchCategories();
+    
+    toast({
+      title: successCount > 0 ? "Success" : "Error",
+      description: `Imported ${successCount} categories. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
+      variant: errorCount > 0 ? "destructive" : "default",
+      duration: 2000,
+    });
+  } catch (error: any) {
+    toast({
+      title: "Error",
+      description: error.message || "Failed to import categories",
+      variant: "destructive",
+      duration: 2000,
+    });
+  }
+
+  if (categoryFileInputRef.current) {
+    categoryFileInputRef.current.value = '';
+  }
+};
 
 const addNewCategory = () => {
 if (
@@ -2658,53 +3191,6 @@ return (
               {/* Description removed as requested */}
             </div>
           </div>
-          
-          {/* Consolidated Excel Import/Export - Data Management Dropdown */}
-          <div className="flex items-center gap-3">
-            <input
-              ref={companyFileInputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={importCombinedExcel}
-              className="hidden"
-            />
-            <Select
-              key={companyDataManagementSelectKey}
-              onValueChange={(value) => {
-                if (value === 'import') {
-                  setCompanyImportConfirmOpen(true);
-                } else if (value === 'export') {
-                  exportAllToExcel();
-                }
-
-                // Radix Select won't re-fire onValueChange for the same value.
-                // Remount to allow selecting Import/Export repeatedly.
-                setCompanyDataManagementSelectKey((k) => k + 1);
-              }}
-            >
-              <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
-                <SelectValue placeholder="Data Management" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="import" className="cursor-pointer">
-                  <div className="flex items-center">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Import
-                  </div>
-                </SelectItem>
-                <SelectItem
-                  value="export"
-                  disabled={departments.length === 0 && employeesData.length === 0 && categories.length === 0}
-                  className="cursor-pointer"
-                >
-                  <div className="flex items-center">
-                    <Download className="h-4 w-4 mr-2" />
-                    Export
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
       </div>
 
@@ -2809,9 +3295,9 @@ text-gray-600 hover:text-gray-900 hover:bg-gray-100"
 <AnimatePresence mode="wait">
 <TabsContent value="company" className="mt-6 h-[calc(100vh-240px)] overflow-hidden">
 <motion.div
-initial={{ opacity: 0, y: 20 }}
-animate={{ opacity: 1, y: 0 }}
-exit={{ opacity: 0, y: -20 }}
+initial={{ opacity: 0 }}
+animate={{ opacity: 1 }}
+exit={{ opacity: 0 }}
 transition={{ duration: 0.3 }}
 className="h-full"
 >
@@ -2833,40 +3319,44 @@ className="h-full"
 </div>
 
 {/* Form Content */}
-<div className="flex-1 overflow-y-auto no-scrollbar">
-<form onSubmit={handleSubmit} className="p-8 bg-gradient-to-br from-gray-50 to-white">
+<div className="flex-1 overflow-hidden">
+<form onSubmit={handleSubmit} className="p-8 bg-gradient-to-br from-gray-50 to-white h-full">
   {/* Professional Section Header */}
-  <div className="pb-4 mb-4 -mx-8 px-8 pt-0">
+  <div className="pb-4 mb-6 -mx-8 px-8 pt-0">
     <h2 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">Basic Information</h2>
     <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
   </div>
 {companyLoading ? (
-<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 <div className="space-y-2">
 <Skeleton className="h-4 w-24" />
-<Skeleton className="h-10 w-full" />
+<Skeleton className="h-12 w-full" />
 </div>
 <div className="space-y-2">
 <Skeleton className="h-4 w-24" />
 <div className="flex items-center gap-4">
 <Skeleton className="w-20 h-20 rounded-xl" />
 <div>
-<Skeleton className="h-10 w-32" />
+<Skeleton className="h-12 w-32" />
 <Skeleton className="h-3 w-24 mt-1" />
 </div>
 </div>
 </div>
 <div className="space-y-2">
 <Skeleton className="h-4 w-16" />
-<Skeleton className="h-10 w-full" />
+<Skeleton className="h-12 w-full" />
 </div>
 <div className="space-y-2">
 <Skeleton className="h-4 w-16" />
-<Skeleton className="h-10 w-full" />
+<Skeleton className="h-12 w-full" />
 </div>
 <div className="space-y-2">
 <Skeleton className="h-4 w-32" />
-<Skeleton className="h-10 w-full" />
+<Skeleton className="h-12 w-full" />
+</div>
+<div className="space-y-2">
+<Skeleton className="h-4 w-32" />
+<Skeleton className="h-12 w-full" />
 </div>
 </div>
   ) : (
@@ -2880,7 +3370,7 @@ className="h-full"
         value={companyInfo.companyName}
         onChange={handleInputChange}
         placeholder=""
-        className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm"
+        className="w-full border-gray-300 rounded-lg h-12 px-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
       />
     </div>
 
@@ -2889,7 +3379,7 @@ className="h-full"
       <Label htmlFor="logo" className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">Company Logo</Label>
 <div className="flex items-center gap-4">
 {companyInfo.companyLogo ? (
-<div className="w-20 h-20 rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">
+<div className="w-20 h-20 rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm flex-shrink-0">
 <img
 src={companyInfo.companyLogo}
 alt="Company Logo"
@@ -2897,15 +3387,15 @@ className="w-full h-full object-cover"
 />
 </div>
 ) : (
-<div className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
+<div className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center bg-white flex-shrink-0">
 <Upload className="w-6 h-6 text-gray-400" />
 </div>
 )}
-<div>
+<div className="flex-1">
 <Button
 type="button"
 variant="outline"
-className="relative overflow-hidden rounded-lg h-11 px-4 text-base font-medium bg-white shadow-sm border-gray-300 hover:bg-gray-50 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+className="relative overflow-hidden rounded-lg h-12 px-4 text-base font-medium bg-white shadow-sm border-gray-300 hover:bg-gray-50 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 w-full"
 onClick={() => document.getElementById('logo-upload')?.click()}
 >
 <Upload className="w-4 h-4 mr-2" />
@@ -2932,7 +3422,7 @@ name="address"
 value={companyInfo.address}
 onChange={handleInputChange}
 placeholder=""
-className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+className="w-full bg-white border border-gray-300 rounded-lg h-12 px-3 text-base font-medium shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
 />
 </div>
 
@@ -2945,7 +3435,7 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
     value={companyInfo.country}
     onChange={handleInputChange}
     placeholder=""
-    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+    className="w-full bg-white border border-gray-300 rounded-lg h-12 px-3 text-base font-medium shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
   />
 </div>
 
@@ -2963,7 +3453,7 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
           setCompanyInfo(prev => ({ ...prev, defaultCurrency: val }));
         }}
       >
-        <SelectTrigger className="w-full bg-white border border-gray-300 rounded-lg p-3 h-12 text-base font-medium shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200">
+        <SelectTrigger className="w-full bg-white border border-gray-300 rounded-lg h-12 px-3 text-base font-medium shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200">
           <SelectValue placeholder={currenciesLoading ? 'Loading…' : 'Select currency'} />
         </SelectTrigger>
         <SelectContent className="dropdown-content">
@@ -3013,7 +3503,7 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
     type="date"
     value={companyInfo.financialYearEnd}
     onChange={handleInputChange}
-    className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+    className="w-full border-gray-300 rounded-lg h-12 px-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
   />
 </div>
 </div>
@@ -3040,9 +3530,9 @@ className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded
 
 <TabsContent value="department" className="mt-6 h-[calc(100vh-240px)] overflow-hidden">
 <motion.div
-initial={{ opacity: 0, y: 20 }}
-animate={{ opacity: 1, y: 0 }}
-exit={{ opacity: 0, y: -20 }}
+initial={{ opacity: 0 }}
+animate={{ opacity: 1 }}
+exit={{ opacity: 0 }}
 transition={{ duration: 0.3 }}
 className="h-full"
 >
@@ -3067,14 +3557,52 @@ className="h-full"
 <div className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-50 to-white">
 {/* Search and Add Department - Sticky */}
 <div className="sticky top-0 z-10 bg-white shadow-sm -mx-0 px-8 py-6 flex items-center justify-between space-x-4 mb-6 border-b border-gray-200">
+<div className="flex items-center gap-4">
 <div className="relative flex-1 max-w-sm">
   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
   <Input
     placeholder="Search departments..."
     value={departmentSearchTerm}
     onChange={(e) => setDepartmentSearchTerm(e.target.value)}
-    className="pl-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+    className="pl-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm"
   />
+</div>
+<input
+  type="file"
+  ref={departmentFileInputRef}
+  className="hidden"
+  accept=".csv,.xlsx,.xls"
+  onChange={importDepartments}
+/>
+<Select
+  key={departmentDataManagementSelectKey}
+  onValueChange={(value) => {
+    if (value === 'export') {
+      exportDepartments();
+    } else if (value === 'import') {
+      setDepartmentImportConfirmOpen(true);
+    }
+    setDepartmentDataManagementSelectKey((k) => k + 1);
+  }}
+>
+  <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+    <SelectValue placeholder="Data Management" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="export" className="cursor-pointer">
+      <div className="flex items-center">
+        <Download className="h-4 w-4 mr-2" />
+        Export
+      </div>
+    </SelectItem>
+    <SelectItem value="import" className="cursor-pointer">
+      <div className="flex items-center">
+        <Upload className="h-4 w-4 mr-2" />
+        Import
+      </div>
+    </SelectItem>
+  </SelectContent>
+</Select>
 </div>
 <Dialog open={departmentModalOpen} onOpenChange={setDepartmentModalOpen}>
   <DialogTrigger asChild>
@@ -3099,9 +3627,9 @@ className="h-full"
       </Button>
     </motion.div>
   </DialogTrigger>
-  <DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
+  <DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
     {/* Header with Gradient Background */}
-    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6">
       <DialogHeader>
         <div className="flex items-center gap-4">
           <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -3130,7 +3658,7 @@ className="h-full"
                 <FormControl>
                   <Input
                     {...field}
-                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10"
+                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm"
                   />
                 </FormControl>
                 <FormMessage className="text-red-600" />
@@ -3148,21 +3676,31 @@ className="h-full"
                 <div className="relative" ref={deptHeadDropdownRef}>
                   <div className="relative">
                     <Input
-                      value={deptHeadSearch}
+                      value={deptHeadOpen ? deptHeadSearch : (field.value || '')}
                       placeholder="Select employee"
-                      className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10 cursor-pointer"
-                      onFocus={() => setDeptHeadOpen(true)}
-                      onClick={() => setDeptHeadOpen(true)}
+                      className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10 cursor-pointer bg-white shadow-sm"
+                      onFocus={() => {
+                        setDeptHeadSearch('');
+                        setDeptHeadOpen(true);
+                      }}
+                      onClick={() => {
+                        setDeptHeadSearch('');
+                        setDeptHeadOpen(true);
+                      }}
                       onChange={(e) => {
                         setDeptHeadSearch(e.target.value);
                         setDeptHeadOpen(true);
-                        field.onChange('');
                       }}
                       autoComplete="off"
                     />
                     <ChevronDown
                       className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                      onClick={() => setDeptHeadOpen(!deptHeadOpen)}
+                      onClick={() => {
+                        if (!deptHeadOpen) {
+                          setDeptHeadSearch('');
+                        }
+                        setDeptHeadOpen(!deptHeadOpen);
+                      }}
                     />
                   </div>
 
@@ -3176,6 +3714,14 @@ className="h-full"
                             String(emp?.name || '').toLowerCase().includes(q) ||
                             String(emp?.email || '').toLowerCase().includes(q)
                           );
+                        })
+                        .sort((a: any, b: any) => {
+                          // Sort selected employee to the top
+                          const aSelected = field.value === a.name;
+                          const bSelected = field.value === b.name;
+                          if (aSelected && !bSelected) return -1;
+                          if (!aSelected && bSelected) return 1;
+                          return 0;
                         })
                         .map((emp: any) => {
                           const duplicateNames = employeesData.filter((e: any) => e.name === emp.name);
@@ -3229,14 +3775,8 @@ className="h-full"
                   <Input
                     {...field}
                     type="email"
-                    readOnly={isDepartmentEmailLocked}
-                    onBlur={() => {
-                      // Trigger validation when field loses focus
-                      departmentForm.trigger('email');
-                    }}
-                    className={`border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 ${
-                      fieldState.error ? 'border-red-500 focus:border-red-500 focus:ring-red-500 bg-red-50' : ''
-                    } ${isDepartmentEmailLocked ? 'bg-slate-50 cursor-not-allowed' : ''}`}
+                    readOnly={true}
+                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-slate-50 cursor-not-allowed shadow-sm"
                   />
                 </FormControl>
                 <FormMessage className="text-red-600 text-sm font-medium mt-1" />
@@ -3269,7 +3809,7 @@ className="h-full"
               <Building2 className="w-4 h-4 mr-2" />
               {addDepartmentMutation.isPending || updateDepartmentMutation.isPending
                 ? (editingDepartment ? 'Updating...' : 'Creating...') 
-                : (editingDepartment ? 'Update Department' : 'Create Department')
+                : (editingDepartment ? 'Update ' : 'Create ')
               }
             </Button>
           </div>
@@ -3382,7 +3922,7 @@ return (
   setDeptDeleteOpen(open);
   if (!open) setDeptToDelete(null);
 }}>
-  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+  <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
     <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
       <DialogHeader>
         <div className="flex items-center gap-3">
@@ -3456,9 +3996,9 @@ return (
 
 {/* Department Details Modal */}
 <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
-  <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white">
+  <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto border-0 shadow-2xl p-0 bg-white">
     {/* Header with Gradient Background */}
-    <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-8 py-6 rounded-t-2xl">
+    <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-8 py-6 ">
       <DialogHeader>
         <div className="flex items-center gap-4">
           <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -3530,9 +4070,9 @@ return (
 
 {/* Employee Subscriptions Modal */}
 <Dialog open={subscriptionModalOpen} onOpenChange={setSubscriptionModalOpen}>
-  <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white">
+  <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto border-0 shadow-2xl p-0 bg-white">
     {/* Header with Gradient Background */}
-    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 ">
       <DialogHeader>
         <div className="flex items-center gap-4">
           <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -3602,6 +4142,38 @@ return (
     </div>
   </DialogContent>
 </Dialog>
+
+{/* Department Import Confirm Dialog */}
+<AlertDialog open={departmentImportConfirmOpen} onOpenChange={setDepartmentImportConfirmOpen}>
+  <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+    <AlertDialogHeader>
+      <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+      <AlertDialogDescription>
+        Select Yes to choose a file. Select No to download the template.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel
+        className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+        onClick={() => {
+          downloadDepartmentTemplate();
+          setDepartmentImportConfirmOpen(false);
+        }}
+      >
+        No
+      </AlertDialogCancel>
+      <AlertDialogAction
+        className="bg-green-600 text-white hover:bg-green-700"
+        onClick={() => {
+          setDepartmentImportConfirmOpen(false);
+          setTimeout(() => departmentFileInputRef.current?.click(), 0);
+        }}
+      >
+        Yes
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
 </div>
 </Card>
 </motion.div>
@@ -3609,9 +4181,9 @@ return (
 
 <TabsContent value="employee" className="mt-6">
 <motion.div
-initial={{ opacity: 0, y: 20 }}
-animate={{ opacity: 1, y: 0 }}
-exit={{ opacity: 0, y: -20 }}
+initial={{ opacity: 0 }}
+animate={{ opacity: 1 }}
+exit={{ opacity: 0 }}
 transition={{ duration: 0.3 }}
 >
 <EmployeeManagementTab departments={visibleDepartments.map(d => d.name)} />
@@ -3620,9 +4192,9 @@ transition={{ duration: 0.3 }}
 
 <TabsContent value="subscription" className="mt-6">
 <motion.div
-initial={{ opacity: 0, y: 20 }}
-animate={{ opacity: 1, y: 0 }}
-exit={{ opacity: 0, y: -20 }}
+initial={{ opacity: 0 }}
+animate={{ opacity: 1 }}
+exit={{ opacity: 0 }}
 transition={{ duration: 0.3 }}
 >
 <Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden">
@@ -3644,20 +4216,56 @@ transition={{ duration: 0.3 }}
 
 {/* Content */}
 <div className="p-8 bg-gradient-to-br from-gray-50 to-white">
-{/* Add New Category */}
-<div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
+{/* Add New Category and Data Management */}
+<div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
 <Input
 placeholder=""
 value={newCategoryName}
 onChange={(e) => setNewCategoryName(e.target.value)}
-className="w-full border-gray-300 rounded-lg p-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+className="flex-1 border-gray-300 rounded-lg h-12 px-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
 onKeyPress={(e) => e.key === 'Enter' && addNewCategory()}
 />
+<input
+  type="file"
+  ref={categoryFileInputRef}
+  className="hidden"
+  accept=".csv,.xlsx,.xls"
+  onChange={importCategories}
+/>
+<Select
+  key={categoryDataManagementSelectKey}
+  onValueChange={(value) => {
+    if (value === 'export') {
+      exportCategories();
+    } else if (value === 'import') {
+      setCategoryImportConfirmOpen(true);
+    }
+    setCategoryDataManagementSelectKey((k) => k + 1);
+  }}
+>
+  <SelectTrigger className="w-52 h-12 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-semibold transition-all duration-200 shadow-sm">
+    <SelectValue placeholder="Data Management" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="export" className="cursor-pointer">
+      <div className="flex items-center">
+        <Download className="h-4 w-4 mr-2" />
+        Export
+      </div>
+    </SelectItem>
+    <SelectItem value="import" className="cursor-pointer">
+      <div className="flex items-center">
+        <Upload className="h-4 w-4 mr-2" />
+        Import
+      </div>
+    </SelectItem>
+  </SelectContent>
+</Select>
 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
 <Button
 onClick={addNewCategory}
 disabled={!newCategoryName.trim() || addCategoryMutation.isPending}
-className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
+className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md h-12 px-6 rounded-lg whitespace-nowrap"
 >
 <Plus className="w-4 h-4 mr-2" />
 {addCategoryMutation.isPending ? "Adding..." : "New Category"}
@@ -3713,6 +4321,38 @@ title="Delete Category"
 </div>
 </div>
 </div>
+
+{/* Category Import Confirm Dialog */}
+<AlertDialog open={categoryImportConfirmOpen} onOpenChange={setCategoryImportConfirmOpen}>
+  <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+    <AlertDialogHeader>
+      <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+      <AlertDialogDescription>
+        Select Yes to choose a file. Select No to download the template.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel
+        className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+        onClick={() => {
+          downloadCategoryTemplate();
+          setCategoryImportConfirmOpen(false);
+        }}
+      >
+        No
+      </AlertDialogCancel>
+      <AlertDialogAction
+        className="bg-green-600 text-white hover:bg-green-700"
+        onClick={() => {
+          setCategoryImportConfirmOpen(false);
+          setTimeout(() => categoryFileInputRef.current?.click(), 0);
+        }}
+      >
+        Yes
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
 </Card>
 </motion.div>
 </TabsContent>
@@ -3722,7 +4362,7 @@ title="Delete Category"
   setCategoryDeleteOpen(open);
   if (!open) setCategoryToDelete(null);
 }}>
-  <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+  <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
     <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
       <DialogHeader>
         <div className="flex items-center gap-3">
@@ -3795,9 +4435,9 @@ title="Delete Category"
 
 <TabsContent value="users" className="mt-6">
 <motion.div
-initial={{ opacity: 0, y: 20 }}
-animate={{ opacity: 1, y: 0 }}
-exit={{ opacity: 0, y: -20 }}
+initial={{ opacity: 0 }}
+animate={{ opacity: 1 }}
+exit={{ opacity: 0 }}
 transition={{ duration: 0.3 }}
 >
 <UserManagementTab />

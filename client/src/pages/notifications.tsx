@@ -35,13 +35,6 @@ type NotificationItem = {
 	[key: string]: any;
 };
 
-// Helper to check if a date string is valid
-function isValidDate(date: any) {
-	if (!date) return false;
-	const d = new Date(date);
-	return d instanceof Date && !isNaN(d.getTime());
-}
-
 export default function Notifications() {
 // State to force daily refresh
 const [, setToday] = useState(new Date());
@@ -123,7 +116,73 @@ const filteredNotifications = notifications.filter(n => {
 	return triggerDate <= todayDate;
 });
 
-const toEpochMs = (raw: any): number => {
+const dateOnly = (raw: any): string => {
+	if (!raw) return '';
+	if (raw instanceof Date) return raw.toISOString().slice(0, 10);
+	const s = String(raw).trim();
+	if (!s) return '';
+	return s.length >= 10 ? s.slice(0, 10) : '';
+};
+
+const notificationDedupeKey = (n: NotificationItem): string => {
+	const type = String(n.type || '').trim().toLowerCase();
+	const entityId = String(n.subscriptionId || n.complianceId || n.licenseId || n.id || '').trim().toLowerCase();
+	if (!type || !entityId) return '';
+
+	const eventType = String(n.eventType || '').trim().toLowerCase();
+	const lifecycle = String((n as any).lifecycleEventType || '').trim().toLowerCase();
+	const hasReminderSignals = Boolean(
+		n.reminderTriggerDate || (n as any).reminderDate || (n as any).reminderType || (n as any).reminderDays || n.submissionDeadline || n.subscriptionEndDate
+	);
+	const kind = eventType || (lifecycle ? 'updated' : (hasReminderSignals ? 'reminder' : ''));
+
+	const parts: string[] = [type, entityId, kind];
+	if (kind === 'updated' && lifecycle) {
+		parts.push(lifecycle);
+		parts.push(dateOnly(n.timestamp || n.createdAt));
+	}
+	if (kind === 'reminder' || (hasReminderSignals && !eventType)) {
+		parts.push(String((n as any).reminderType || (n as any).reminderPolicy || '').trim().toLowerCase());
+		parts.push(String((n as any).reminderDays || '').trim().toLowerCase());
+		parts.push(dateOnly(n.reminderTriggerDate || (n as any).reminderDate || n.timestamp || n.createdAt));
+		parts.push(dateOnly(n.submissionDeadline || n.subscriptionEndDate));
+	}
+
+	return parts.join('|');
+};
+
+const dedupedNotifications = (() => {
+	const score = (n: NotificationItem): number => {
+		let s = 0;
+		if ((n as any).recipientRole) s += 2;
+		if (Array.isArray((n as any).recipientDepartments) && (n as any).recipientDepartments.length) s += 1;
+		if ((n as any).message) s += 1;
+		if (n.reminderTriggerDate) s += 1;
+		if (n.filingName || n.subscriptionName || n.licenseName) s += 1;
+		if ((n as any).lifecycleEventType) s += 1;
+		return s;
+	};
+
+	const pickBetter = (a: NotificationItem, b: NotificationItem): NotificationItem => {
+		const sa = score(a);
+		const sb = score(b);
+		if (sa !== sb) return sa > sb ? a : b;
+		const ta = toEpochMs(a.timestamp || a.createdAt || a.reminderTriggerDate);
+		const tb = toEpochMs(b.timestamp || b.createdAt || b.reminderTriggerDate);
+		return tb > ta ? b : a;
+	};
+
+	const map = new Map<string, NotificationItem>();
+	for (const n of filteredNotifications) {
+		const key = notificationDedupeKey(n) || String(n.id || '');
+		if (!key) continue;
+		const existing = map.get(key);
+		map.set(key, existing ? pickBetter(existing, n) : n);
+	}
+	return Array.from(map.values());
+})();
+
+function toEpochMs(raw: any): number {
 	if (!raw) return 0;
 	const value = String(raw).trim();
 	let parsedDate: Date;
@@ -274,7 +333,7 @@ return (
 ) : (
 <>
 <div className="space-y-3">
-{[...filteredNotifications]
+{[...dedupedNotifications]
 .sort((a, b) => {
 // Sort newest first using time-aware fields first.
 // reminderTriggerDate is date-only, so it should be a fallback.
@@ -446,13 +505,7 @@ return (
 										}
 									})()}
 									</Badge>
-									{notification.type === 'subscription' && String((notification as any).recipientRole || '') === 'dept_head' ? (
-									<span className="w-full text-xs text-gray-500 mt-1">
-										You are receiving this because you are the Department Head for: {Array.isArray((notification as any).recipientDepartments) && (notification as any).recipientDepartments.length
-											? (notification as any).recipientDepartments.join(', ')
-											: 'your department'}.
-									</span>
-								) : null}
+									{/* Removed department head reason text as requested */}
 				</div>
 			</div>
 		</div>

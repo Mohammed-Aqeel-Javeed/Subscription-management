@@ -1470,13 +1470,33 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         const blob = dataUrlToBlob(url);
         if (!blob) throw new Error('Invalid data url');
         const objUrl = URL.createObjectURL(blob);
-        const w = window.open(objUrl, '_blank', 'noopener,noreferrer');
-        if (!w) {
-          // Popup blocked: fallback to same-tab navigation
+        
+        // Open in new tab with proper window features
+        const newWindow = window.open('', '_blank');
+        if (newWindow) {
+          newWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>${doc.name}</title>
+                <style>
+                  body { margin: 0; padding: 0; overflow: hidden; }
+                  iframe { border: none; width: 100vw; height: 100vh; }
+                </style>
+              </head>
+              <body>
+                <iframe src="${objUrl}"></iframe>
+              </body>
+            </html>
+          `);
+          newWindow.document.close();
+          
+          // Revoke after a longer delay to ensure document loads
+          setTimeout(() => URL.revokeObjectURL(objUrl), 300_000); // 5 minutes
+        } else {
+          // Popup blocked: fallback to direct navigation
           window.location.href = objUrl;
         }
-        // Revoke after a while (best-effort)
-        setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
         return;
       }
       const w = window.open(url, '_blank', 'noopener,noreferrer');
@@ -3060,8 +3080,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     <>
       <style>{animationStyles}</style>
       <Dialog open={open} onOpenChange={(v) => { if (!v) setIsFullscreen(false); onOpenChange(v); }}>
-        <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'} rounded-2xl border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter flex flex-col overflow-hidden`}> 
-          <DialogHeader className="sticky top-0 z-50 bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white p-6 rounded-t-2xl flex flex-row items-center shadow-sm">
+        <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'}  border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter flex flex-col overflow-hidden`}> 
+          <DialogHeader className="sticky top-0 z-50 bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white p-6  flex flex-row items-center shadow-sm">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               {companyLogo && (
                 <img 
@@ -3074,8 +3094,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   }}
                 />
               )}
-              <div className="flex items-center gap-4 flex-wrap">
-                <DialogTitle className="text-xl font-bold tracking-tight text-white">
+              <div className="flex items-center gap-4 flex-wrap min-w-0">
+                <DialogTitle className="text-xl font-bold tracking-tight text-white truncate max-w-xs">
                   {isEditing ? (subscription?.serviceName || 'Edit Subscription') : 'Subscription'}
                 </DialogTitle>
                 <span
@@ -3666,7 +3686,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
                         <div className="relative">
                           <div
-                            className="w-full border border-slate-300 rounded-lg p-2 text-base h-[44px] flex items-center justify-start overflow-x-auto overflow-y-hidden bg-gray-50 cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200 scrollbar-hide"
+                            className="w-full border border-slate-300 rounded-lg p-2 text-base h-[44px] flex items-center justify-start overflow-x-auto overflow-y-hidden bg-white cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200 scrollbar-hide"
                             onClick={() => setDeptOpen(true)}
                             tabIndex={0}
                             onFocus={() => setDeptOpen(true)}
@@ -4919,7 +4939,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
       {/* Category Creation Modal */}
       <AlertDialog open={categoryModal.show} onOpenChange={(open) => !open && setCategoryModal({ show: false })}>
-        <AlertDialogContent className="sm:max-w-[460px] rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+        <AlertDialogContent className="sm:max-w-[460px]  border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
           <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-5">
             <AlertDialogHeader>
               <div className="flex items-center gap-3">
@@ -5633,14 +5653,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           const reader = new FileReader();
                           reader.onloadend = async () => {
                             const base64String = reader.result as string;
-                            // Ask remark inside the dialog (not a browser prompt)
-                            setPendingDocument({
+                            // Auto-save document without confirmation
+                            const newDoc = {
                               name: file.name,
                               url: base64String,
                               updatedBy: currentUserName || (window as any)?.user?.name || (window as any)?.user?.email || 'User',
                               updatedAt: new Date().toISOString(),
+                              remark: '', // Empty remark by default
+                            };
+                            setDocuments((prev) => [...prev, newDoc]);
+                            toast({
+                              title: 'Success',
+                              description: `${file.name} uploaded successfully`,
+                              duration: 2000,
+                              variant: 'success',
                             });
-                            setPendingDocumentRemark('');
                           };
                           reader.readAsDataURL(file);
                         } catch (error) {
@@ -5673,8 +5700,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   <div className="grid grid-cols-12 gap-4 items-center px-3 py-2 bg-gray-50 border-b border-gray-200">
                     <div className="col-span-3 text-xs font-bold text-gray-600">File Name</div>
                     <div className="col-span-2 text-xs font-bold text-gray-600">Updated By</div>
-                    <div className="col-span-2 text-xs font-bold text-gray-600">Updated Date</div>
-                    <div className="col-span-3 text-xs font-bold text-gray-600">Remark</div>
+                    <div className="col-span-2 text-xs font-bold text-gray-600">Updated On</div>
+                    <div className="col-span-3 text-xs font-bold text-gray-600">Remarks</div>
                     <div className="col-span-2 text-xs font-bold text-gray-600 text-right">Actions</div>
                   </div>
 
@@ -5889,9 +5916,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       {/* Validation Error Dialog */}
       <Dialog open={validationErrorOpen} onOpenChange={setValidationErrorOpen}>
-        <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
+        <DialogContent className="max-w-md  border-0 shadow-2xl p-0 bg-white font-inter">
           {/* Header with Red Gradient Background */}
-          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 rounded-t-2xl">
+          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5 ">
             <DialogHeader>
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">

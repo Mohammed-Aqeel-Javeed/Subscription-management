@@ -13,7 +13,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ChevronDown, Check } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X, MoreVertical } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -54,6 +55,7 @@ export default function Configuration() {
   const [addCurrencyOpen, setAddCurrencyOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isUpdateMode, setIsUpdateMode] = useState(false);
+  const [isUpdatingCurrencyRates, setIsUpdatingCurrencyRates] = useState(false);
   const [editingRates, setEditingRates] = useState<{ [key: string]: string }>({});
   // Delete payment method handler (DELETE from backend)
   const handleDeletePaymentMethod = (method: any) => {
@@ -308,8 +310,17 @@ export default function Configuration() {
   
   // File input refs for Excel import
   const currencyFileInputRef = useRef<HTMLInputElement>(null);
+  const paymentFileInputRef = useRef<HTMLInputElement>(null);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
+  
+  // Currency tab Data Management
+  const [currencyDataManagementSelectKey, setCurrencyDataManagementSelectKey] = useState(0);
+  const [currencyImportConfirmOpen, setCurrencyImportConfirmOpen] = useState(false);
+  
+  // Payment Methods tab Data Management
+  const [paymentDataManagementSelectKey, setPaymentDataManagementSelectKey] = useState(0);
+  const [paymentImportConfirmOpen, setPaymentImportConfirmOpen] = useState(false);
 
   /**
    * EXCEL IMPORT/EXPORT FUNCTIONALITY
@@ -941,7 +952,6 @@ export default function Configuration() {
 
         // Refresh data
         await fetchCurrencies();
-        queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
         queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
 
         toast({
@@ -963,6 +973,303 @@ export default function Configuration() {
     if (currencyFileInputRef.current) {
       currencyFileInputRef.current.value = '';
     }
+  };
+
+  // Individual Currency Functions
+  const downloadCurrencyTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    const currencyTemplateData = [
+      { 'Currency Code': 'USD', 'Description': 'United States Dollar', 'Symbol': '$', 'Exchange Rate': '1.00' },
+      { 'Currency Code': 'EUR', 'Description': 'Euro', 'Symbol': '€', 'Exchange Rate': '0.85' }
+    ];
+    const ws = XLSX.utils.json_to_sheet(currencyTemplateData);
+    ws['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Currency');
+    XLSX.writeFile(wb, 'Currency_Template.xlsx');
+    toast({ title: "Template Downloaded", description: "Currency template downloaded successfully", variant: "success" });
+  };
+
+  const exportCurrencies = () => {
+    if (currencies.length === 0) {
+      toast({ title: "No data to export", description: "Add currencies first before exporting", variant: "destructive" });
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    const currencyExportData = currencies.map(currency => ({
+      'Currency Code': currency.code,
+      'Description': currency.name,
+      'Symbol': currency.symbol,
+      'Exchange Rate': currency.exchangeRate || '',
+      'Created': currency.created || '',
+      'Last Updated': currency.lastUpdated || ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(currencyExportData);
+    ws['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Currency');
+    XLSX.writeFile(wb, `Currency_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast({ title: "Export Successful", description: `Exported ${currencies.length} currencies`, variant: "success" });
+  };
+
+  const importCurrencies = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+        
+        let success = 0, failed = 0;
+        for (const row of jsonData) {
+          try {
+            const currencyData = {
+              code: row['Currency Code'],
+              name: row['Description'],
+              symbol: row['Symbol'],
+              exchangeRate: row['Exchange Rate'] || '1.00'
+            };
+            await fetch(`${API_BASE_URL}/api/currencies`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify(currencyData)
+            });
+            success++;
+          } catch { failed++; }
+        }
+        await fetchCurrencies();
+        toast({ title: "Import Complete", description: `${success} success, ${failed} failed`, variant: success > 0 ? "success" : "destructive" });
+      } catch {
+        toast({ title: "Import Failed", description: "Failed to parse file", variant: "destructive" });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    if (currencyFileInputRef.current) currencyFileInputRef.current.value = '';
+  };
+
+  // Individual Payment Methods Functions
+  const downloadPaymentTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    const paymentTemplateData = [
+      { 'Title': 'Corporate Visa', 'Type': 'Credit', 'Description': 'Company credit card', 'Manager': 'John Doe', 'Expires At': '2025-12-31' }
+    ];
+    const ws = XLSX.utils.json_to_sheet(paymentTemplateData);
+    ws['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 20 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Payment Methods');
+    XLSX.writeFile(wb, 'Payment_Methods_Template.xlsx');
+    toast({ title: "Template Downloaded", description: "Payment methods template downloaded successfully", variant: "success" });
+  };
+
+  const exportPaymentMethods = () => {
+    if (paymentMethods.length === 0) {
+      toast({ title: "No data to export", description: "Add payment methods first before exporting", variant: "destructive" });
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    const paymentExportData = paymentMethods.map(method => ({
+      'Title': method.name || method.title,
+      'Type': method.type,
+      'Description': method.description || '',
+      'Manager': method.manager || '',
+      'Expires At': method.expiresAt || ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(paymentExportData);
+    ws['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 20 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Payment Methods');
+    XLSX.writeFile(wb, `Payment_Methods_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast({ title: "Export Successful", description: `Exported ${paymentMethods.length} payment methods`, variant: "success" });
+  };
+
+  const importPaymentMethods = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+        
+        let success = 0, failed = 0;
+        for (const row of jsonData) {
+          try {
+            const paymentData = {
+              name: row['Title'],
+              type: row['Type'],
+              description: row['Description'] || '',
+              manager: row['Manager'] || '',
+              expiresAt: row['Expires At'] || ''
+            };
+            await fetch(`${API_BASE_URL}/api/payment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify(paymentData)
+            });
+            success++;
+          } catch { failed++; }
+        }
+        queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
+        toast({ title: "Import Complete", description: `${success} success, ${failed} failed`, variant: success > 0 ? "success" : "destructive" });
+      } catch {
+        toast({ title: "Import Failed", description: "Failed to parse file", variant: "destructive" });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    if (paymentFileInputRef.current) paymentFileInputRef.current.value = '';
+  };
+
+  // Individual Subscription (Field Enablement) Functions
+  const downloadSubscriptionTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    const templateData = [
+      { 'Field Name': 'Custom Field 1', 'Enabled': 'true' },
+      { 'Field Name': 'Custom Field 2', 'Enabled': 'false' }
+    ];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    ws['!cols'] = [{ wch: 25 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Fields');
+    XLSX.writeFile(wb, 'subscription_fields_template.xlsx');
+    toast({ title: 'Template Downloaded', description: 'Use this template to import subscription fields.' });
+  };
+
+  const exportSubscriptionFields = () => {
+    if (fields.length === 0) {
+      toast({ title: "No data to export", description: "Add fields first before exporting", variant: "destructive" });
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    const exportData = fields.map(field => ({
+      'Field Name': field.name,
+      'Enabled': field.enabled ? 'true' : 'false'
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    ws['!cols'] = [{ wch: 25 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Fields');
+    XLSX.writeFile(wb, `subscription_fields_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast({ title: "Export Successful", description: `Exported ${fields.length} fields to Excel` });
+  };
+
+  const importSubscriptionFields = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+        
+        let success = 0, failed = 0;
+        for (const row of jsonData) {
+          try {
+            const fieldData = {
+              name: row['Field Name'],
+              enabled: row['Enabled']?.toString().toLowerCase() === 'true'
+            };
+            await fetch(`${API_BASE_URL}/api/config/fields`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify(fieldData)
+            });
+            success++;
+          } catch { failed++; }
+        }
+        // Refresh fields
+        const res = await fetch('/api/config/fields');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) setFields(data);
+        }
+        toast({ title: "Import Complete", description: `${success} success, ${failed} failed`, variant: success > 0 ? "success" : "destructive" });
+      } catch {
+        toast({ title: "Import Failed", description: "Failed to parse file", variant: "destructive" });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    if (subscriptionFileInputRef.current) subscriptionFileInputRef.current.value = '';
+  };
+
+  // Individual Compliance Functions
+  const downloadComplianceTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    const templateData = [
+      { 'Field Name': 'Compliance Field 1', 'Enabled': 'true' },
+      { 'Field Name': 'Compliance Field 2', 'Enabled': 'false' }
+    ];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    ws['!cols'] = [{ wch: 25 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Compliance Fields');
+    XLSX.writeFile(wb, 'compliance_fields_template.xlsx');
+    toast({ title: 'Template Downloaded', description: 'Use this template to import compliance fields.' });
+  };
+
+  const exportComplianceFields = () => {
+    if (complianceFields.length === 0) {
+      toast({ title: "No data to export", description: "Add compliance fields first before exporting", variant: "destructive" });
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    const exportData = complianceFields.map(field => ({
+      'Field Name': field.name,
+      'Enabled': field.enabled ? 'true' : 'false'
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    ws['!cols'] = [{ wch: 25 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Compliance Fields');
+    XLSX.writeFile(wb, `compliance_fields_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast({ title: "Export Successful", description: `Exported ${complianceFields.length} compliance fields to Excel` });
+  };
+
+  const importComplianceFields = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+        
+        let success = 0, failed = 0;
+        for (const row of jsonData) {
+          try {
+            const fieldData = {
+              name: row['Field Name'],
+              enabled: row['Enabled']?.toString().toLowerCase() === 'true'
+            };
+            await fetch(`${API_BASE_URL}/api/config/compliance-fields`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify(fieldData)
+            });
+            success++;
+          } catch { failed++; }
+        }
+        // Refresh compliance fields
+        const res = await fetch('/api/config/compliance-fields');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) setComplianceFields(data);
+        }
+        toast({ title: "Import Complete", description: `${success} success, ${failed} failed`, variant: success > 0 ? "success" : "destructive" });
+      } catch {
+        toast({ title: "Import Failed", description: "Failed to parse file", variant: "destructive" });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    if (complianceFileInputRef.current) complianceFileInputRef.current.value = '';
   };
 
   // Note: legacy single-sheet import/export helpers were removed (unused).
@@ -1008,9 +1315,11 @@ export default function Configuration() {
   }, []);
   
   const fetchCurrencies = async () => {
-    // Now handled by React Query - just invalidate both currencies and rates
-    queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/exchange-rates/batch"] });
+    // React Query: refetch immediately so tables reflect updates right away.
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ["/api/currencies"] }),
+      queryClient.refetchQueries({ queryKey: ["/api/exchange-rates/batch"] }),
+    ]);
   };
   
   const fetchCompanyInfo = async () => {
@@ -1057,8 +1366,6 @@ export default function Configuration() {
         if (res.ok) {
           await res.json();
           await fetchCurrencies(); // Refresh the list
-          // Invalidate React Query cache for currencies to update other components
-          queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
           setNewCurrency({
             name: '',
             code: '',
@@ -1109,8 +1416,6 @@ export default function Configuration() {
       
       if (res.ok) {
         await fetchCurrencies(); // Refresh the list
-        // Invalidate React Query cache for currencies to update other components
-        queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
         toast({
           title: "Currency Deleted",
           description: `Currency with code ${code} has been deleted.`,
@@ -1136,47 +1441,110 @@ export default function Configuration() {
   // Currency delete confirmation dialog state
   const [currencyDeleteOpen, setCurrencyDeleteOpen] = useState(false);
   const [currencyToDelete, setCurrencyToDelete] = useState<{ code: string; name?: string; inUseCount: number } | null>(null);
+  const [openCurrencyActionsMenuForCode, setOpenCurrencyActionsMenuForCode] = useState<string | null>(null);
 
   // Update currency rates handler
   const updateCurrencyRates = async () => {
+    if (isUpdatingCurrencyRates) return;
+    setIsUpdatingCurrencyRates(true);
     try {
       const currentTimestamp = new Date().toLocaleDateString('en-US', { 
         month: 'short', 
         day: '2-digit', 
         year: 'numeric' 
       });
-      
-      const updates = Object.entries(editingRates).map(async ([code, rate]) => {
-        const res = await fetch(`${API_BASE_URL}/api/currencies/${code}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            exchangeRate: rate,
-            lastUpdated: currentTimestamp,
-          }),
+
+      const currentRatesByCode = new Map(
+        currencies
+          .filter((c: any) => c?.code)
+          .map((c: any) => [String(c.code).toUpperCase().trim(), c.exchangeRate])
+      );
+
+      const invalidInputs: string[] = [];
+      const updatesToSend = Object.entries(editingRates)
+        .map(([codeRaw, rateRaw]) => {
+          const code = String(codeRaw || '').toUpperCase().trim();
+          const rateStr = String(rateRaw ?? '').trim();
+          if (!code) return null;
+
+          // Skip empty values (treat as unchanged)
+          if (!rateStr) return null;
+
+          const rateNum = Number(rateStr);
+          if (!Number.isFinite(rateNum) || rateNum <= 0) {
+            invalidInputs.push(code);
+            return null;
+          }
+
+          const currentNum = Number(currentRatesByCode.get(code));
+          if (Number.isFinite(currentNum) && Math.abs(rateNum - currentNum) < 1e-12) {
+            return null; // unchanged
+          }
+
+          return { code, rateNum };
+        })
+        .filter(Boolean) as Array<{ code: string; rateNum: number }>;
+
+      if (invalidInputs.length > 0) {
+        toast({
+          title: "Invalid exchange rate",
+          description: `Please enter a valid number for: ${invalidInputs.slice(0, 8).join(", ")}${invalidInputs.length > 8 ? "…" : ""}`,
+          variant: "destructive",
         });
-        return res.ok;
-      });
+        return;
+      }
 
-      const results = await Promise.all(updates);
-      const allSuccessful = results.every(result => result);
+      if (updatesToSend.length === 0) {
+        toast({
+          title: "No changes",
+          description: "No currency rates were changed.",
+          variant: "success",
+        });
+        setIsUpdateMode(false);
+        setEditingRates({});
+        return;
+      }
 
-      if (allSuccessful) {
-        await fetchCurrencies(); // Refresh the list
-        // Invalidate React Query cache for currencies to update other components
-        queryClient.invalidateQueries({ queryKey: ["/api/currencies"] });
+      const failedCodes: string[] = [];
+
+      // Run sequentially to avoid overwhelming the server and reduce flakiness.
+      for (const { code, rateNum } of updatesToSend) {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/currencies/${code}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            signal: controller.signal,
+            body: JSON.stringify({
+              exchangeRate: rateNum,
+              lastUpdated: currentTimestamp,
+            }),
+          });
+          if (!res.ok) failedCodes.push(code);
+        } catch {
+          failedCodes.push(code);
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
+      }
+
+      // Always refresh list so the UI reflects any successful updates immediately.
+      await fetchCurrencies();
+
+      if (failedCodes.length === 0) {
         setIsUpdateMode(false);
         setEditingRates({});
         toast({
           title: "Currency Rates Updated",
-          description: "All currency rates have been updated successfully",
+          description: "All changed currency rates have been updated successfully",
           variant: "success",
         });
       } else {
         toast({
           title: "Partial Update",
-          description: "Some currency rates failed to update",
+          description: `Failed to update: ${failedCodes.slice(0, 8).join(", ")}${failedCodes.length > 8 ? "…" : ""}`,
           variant: "destructive",
         });
       }
@@ -1186,6 +1554,8 @@ export default function Configuration() {
         description: "Failed to update currency rates",
         variant: "destructive",
       });
+    } finally {
+      setIsUpdatingCurrencyRates(false);
     }
   };
 
@@ -1224,6 +1594,16 @@ export default function Configuration() {
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
   const [newComplianceFieldName, setNewComplianceFieldName] = useState('');
   const [isLoadingCompliance, setIsLoadingCompliance] = useState(true);
+  
+  // Subscription (Field Enablement) tab Data Management
+  const subscriptionFileInputRef = useRef<HTMLInputElement>(null);
+  const [subscriptionImportConfirmOpen, setSubscriptionImportConfirmOpen] = useState(false);
+  const [subscriptionDataManagementSelectKey, setSubscriptionDataManagementSelectKey] = useState(0);
+  
+  // Compliance tab Data Management
+  const complianceFileInputRef = useRef<HTMLInputElement>(null);
+  const [complianceImportConfirmOpen, setComplianceImportConfirmOpen] = useState(false);
+  const [complianceDataManagementSelectKey, setComplianceDataManagementSelectKey] = useState(0);
   
   // Fetch enabled fields from backend on mount
   useEffect(() => {
@@ -1616,49 +1996,6 @@ export default function Configuration() {
                 <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Setup & Configuration</h1>
               </div>
             </div>
-            
-            {/* Consolidated Excel Import/Export - Data Management Dropdown */}
-            <div className="flex items-center gap-3">
-              <input
-                ref={currencyFileInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={importCombinedExcel}
-                className="hidden"
-              />
-              <Select
-                key={dataManagementSelectKey}
-                onValueChange={(value) => {
-                  if (value === 'import') {
-                    setImportConfirmOpen(true);
-                  } else if (value === 'export') {
-                    exportAllToExcel();
-                  }
-
-                  // Radix Select won't re-fire onValueChange for the same value.
-                  // Remount to allow selecting Import/Export repeatedly.
-                  setDataManagementSelectKey((k) => k + 1);
-                }}
-              >
-                <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
-                  <SelectValue placeholder="Data Management" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="import" className="cursor-pointer">
-                    <div className="flex items-center">
-                      <Upload className="h-4 w-4 mr-2" />
-                      Import
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="export" className="cursor-pointer">
-                    <div className="flex items-center">
-                      <Download className="h-4 w-4 mr-2" />
-                      Export
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </div>
 
@@ -1790,6 +2127,44 @@ export default function Configuration() {
                               </div>
                             </div>
                             
+                            {/* Data Management Dropdown */}
+                            <input
+                              ref={currencyFileInputRef}
+                              type="file"
+                              accept=".xlsx,.xls"
+                              onChange={importCurrencies}
+                              className="hidden"
+                            />
+                            <Select
+                              key={currencyDataManagementSelectKey}
+                              onValueChange={(value) => {
+                                if (value === 'export') {
+                                  exportCurrencies();
+                                } else if (value === 'import') {
+                                  setCurrencyImportConfirmOpen(true);
+                                }
+                                setCurrencyDataManagementSelectKey((k) => k + 1);
+                              }}
+                            >
+                              <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                                <SelectValue placeholder="Data Management" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="import" className="cursor-pointer">
+                                  <div className="flex items-center">
+                                    <Upload className="h-4 w-4 mr-2" />
+                                    Import
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="export" className="cursor-pointer">
+                                  <div className="flex items-center">
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Export
+                                  </div>
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            
                             {/* Action Buttons */}
                             <div className="flex gap-2">
                               {isUpdateMode ? (
@@ -1797,15 +2172,17 @@ export default function Configuration() {
                                   <Button
                                     variant="outline"
                                     onClick={cancelUpdateMode}
+                                    disabled={isUpdatingCurrencyRates}
                                     className="border-gray-300 text-gray-700 hover:bg-gray-50"
                                   >
                                     Cancel
                                   </Button>
                                   <Button
                                     onClick={updateCurrencyRates}
-                                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold shadow-md"
+                                    disabled={isUpdatingCurrencyRates}
+                                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold shadow-md disabled:opacity-60 disabled:pointer-events-none"
                                   >
-                                    Save Changes
+                                    {isUpdatingCurrencyRates ? "Saving..." : "Save Changes"}
                                   </Button>
                                 </>
                               ) : (
@@ -1826,7 +2203,10 @@ export default function Configuration() {
                                       setIsEditMode(false);
                                       setAddCurrencyOpen(true);
                                     }}
-                                  >Add Currency</Button>
+                                    
+                                  >
+                                  <Plus className="w-4 h-4 mr-2" />  
+                                  New Currency</Button>
                                 </>
                               )}
                             </div>
@@ -1849,9 +2229,9 @@ export default function Configuration() {
                           }
                           setAddCurrencyOpen(open);
                         }}>
-                          <DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
+                          <DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto  border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
                             {/* Header with Gradient Background */}
-                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 ">
                               <DialogHeader>
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-4">
@@ -1973,7 +2353,7 @@ export default function Configuration() {
                             if (!open) setCurrencyToDelete(null);
                           }}
                         >
-                          <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+                          <DialogContent className="max-w-md  border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
                             <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
                               <DialogHeader>
                                 <div className="flex items-center gap-3">
@@ -2050,18 +2430,18 @@ export default function Configuration() {
                           <div className="space-y-6">
                           <div className="max-h-[calc(100vh-350px)] overflow-y-auto rounded-md border shadow-lg hover:shadow-xl transition-shadow duration-300">
                             <table className="w-full">
-                              <thead className="bg-gray-50 sticky top-0 z-[5]">
-                                <tr>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900 bg-gray-50">CURRENCY</th>
-                                  <th className={`py-3 px-4 text-left text-sm font-semibold ${isUpdateMode ? 'text-blue-600 bg-blue-50' : 'text-gray-900 bg-gray-50'}`}>
+                              <thead className="sticky top-0 z-[5] bg-gray-200">
+                                <tr className="border-b-2 border-gray-400 bg-gray-200">
+                                  <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">CURRENCY</th>
+                                  <th className={`h-12 px-4 text-right text-xs font-bold uppercase tracking-wide ${isUpdateMode ? 'text-blue-600 bg-blue-50' : 'text-gray-800 bg-gray-200'}`}>
                                     Exch.Rate against 1 LCY {isUpdateMode && <span className="text-xs">(Editable)</span>}
                                   </th>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900 bg-gray-50">CREATED</th>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900 bg-gray-50">LAST UPDATED</th>
-                                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-900 bg-gray-50">ACTIONS</th>
+                                  <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">CREATED</th>
+                                  <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">LAST UPDATED</th>
+                                  <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">ACTIONS</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-gray-200 bg-white">
+                              <tbody className="divide-y divide-gray-100 bg-white">
                                 {currencies.length === 0 ? (
                                   <tr>
                                     <td colSpan={5} className="py-8 text-center text-gray-500">
@@ -2069,12 +2449,36 @@ export default function Configuration() {
                                     </td>
                                   </tr>
                                 ) : (
-                                  [...currencies].reverse().map((currency) => (
-                                  <tr key={currency.code}>
-                                    <td className="py-3 px-4 text-sm text-gray-900">
-                                      {currency.symbol} {currency.name} ({currency.code})
+                                  [...currencies].reverse().map((currency, index) => (
+                                  <tr
+                                    key={currency.code}
+                                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
+                                    }`}
+                                  >
+                                    <td className="py-3 px-4 text-sm text-gray-800">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setNewCurrency({
+                                            name: currency.name || '',
+                                            code: currency.code || '',
+                                            symbol: currency.symbol || '',
+                                            isoNumber: '', // Not used
+                                            exchangeRate: currency.exchangeRate || '',
+                                            visible: currency.visible,
+                                            created: currency.created || ''
+                                          });
+                                          setIsEditMode(true);
+                                          setAddCurrencyOpen(true);
+                                        }}
+                                        title={`${currency.symbol || ''} ${currency.name || ''} (${currency.code || ''})`.trim()}
+                                        className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap text-left"
+                                      >
+                                        {currency.symbol} {currency.name} ({currency.code})
+                                      </button>
                                     </td>
-                                    <td className="py-3 px-4 text-sm text-gray-500">
+                                    <td className="py-3 px-4 text-sm text-gray-500 text-right">
                                       {isUpdateMode ? (
                                         <Input
                                           type="number"
@@ -2082,7 +2486,7 @@ export default function Configuration() {
                                           min="0"
                                           value={editingRates[currency.code] || ''}
                                           onChange={(e) => handleRateChange(currency.code, e.target.value)}
-                                          className="w-24 h-8 text-sm border-blue-300 focus:border-blue-500 focus:ring-blue-500"
+                                          className="w-24 h-8 text-sm border-blue-300 focus:border-blue-500 focus:ring-blue-500 ml-auto text-right"
                                           placeholder="Rate"
                                         />
                                       ) : (
@@ -2101,49 +2505,70 @@ export default function Configuration() {
                                         <span className="text-gray-400">-</span>
                                       )}
                                     </td>
-                                    <td className="py-3 px-4">
-                                      {!isUpdateMode && (
-                                        <div className="flex gap-2">
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-8 w-8 p-0"
-                                            onClick={() => {
-                                              setNewCurrency({
-                                                name: currency.name || '',
-                                                code: currency.code || '',
-                                                symbol: currency.symbol || '',
-                                                isoNumber: '', // Not used
-                                                exchangeRate: currency.exchangeRate || '',
-                                                visible: currency.visible,
-                                                created: currency.created || ''
-                                              });
-                                              setIsEditMode(true);
-                                              setAddCurrencyOpen(true);
-                                            }}
+                                    <td className="py-3 px-4 text-right">
+                                      {!isUpdateMode && (() => {
+                                        const rowCode = String(currency.code || '').toUpperCase().trim();
+                                        if (!rowCode) return null;
+                                        const isOpen = openCurrencyActionsMenuForCode === rowCode;
+                                        const isAnotherRowOpen = !!openCurrencyActionsMenuForCode && openCurrencyActionsMenuForCode !== rowCode;
+                                        return (
+                                          <DropdownMenu
+                                            open={isOpen}
+                                            onOpenChange={(open) => setOpenCurrencyActionsMenuForCode(open ? rowCode : null)}
                                           >
-                                            <Edit className="h-4 w-4 text-blue-500" />
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                            onClick={() => {
-                                              const code = (currency.code || '').toUpperCase().trim();
-                                              if (!code) return;
-                                              const inUseCount = getCurrencySubscriptions(code).length;
-                                              setCurrencyToDelete({
-                                                code,
-                                                name: currency.name,
-                                                inUseCount,
-                                              });
-                                              setCurrencyDeleteOpen(true);
-                                            }}
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      )}
+                                            <DropdownMenuTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+                                                  isAnotherRowOpen ? 'invisible' : ''
+                                                }`}
+                                              >
+                                                <MoreVertical className="h-4 w-4" />
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent
+                                              align="end"
+                                              className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+                                            >
+                                              <DropdownMenuItem
+                                                onClick={() => {
+                                                  setNewCurrency({
+                                                    name: currency.name || '',
+                                                    code: currency.code || '',
+                                                    symbol: currency.symbol || '',
+                                                    isoNumber: '', // Not used
+                                                    exchangeRate: currency.exchangeRate || '',
+                                                    visible: currency.visible,
+                                                    created: currency.created || ''
+                                                  });
+                                                  setIsEditMode(true);
+                                                  setAddCurrencyOpen(true);
+                                                }}
+                                                className="cursor-pointer"
+                                              >
+                                                <Edit className="h-4 w-4 mr-2" />
+                                                Edit
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem
+                                                onClick={() => {
+                                                  const inUseCount = getCurrencySubscriptions(rowCode).length;
+                                                  setCurrencyToDelete({
+                                                    code: rowCode,
+                                                    name: currency.name,
+                                                    inUseCount,
+                                                  });
+                                                  setCurrencyDeleteOpen(true);
+                                                }}
+                                                className="cursor-pointer text-red-600 focus:text-red-600"
+                                              >
+                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                Delete
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        );
+                                      })()}
                                     </td>
                                   </tr>
                                   ))
@@ -2166,22 +2591,74 @@ export default function Configuration() {
                 >
                   <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
                     <div className="sticky top-[72px] z-10 bg-white pb-6 -mt-6 pt-6 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-gray-200">
-                      <div className="relative flex-1 max-w-md">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                        <Input
-                          value={paymentSearchTerm}
-                          onChange={(e) => setPaymentSearchTerm(e.target.value)}
-                          className="pl-10 w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-gray-50 focus:bg-white transition-all duration-200"
+                      <div className="flex items-center gap-4">
+                        <div className="relative flex-1 max-w-md">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                          <Input
+                            value={paymentSearchTerm}
+                            onChange={(e) => setPaymentSearchTerm(e.target.value)}
+                            className="pl-10 w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-gray-50 focus:bg-white transition-all duration-200"
+                          />
+                        </div>
+                        <input
+                          type="file"
+                          ref={paymentFileInputRef}
+                          className="hidden"
+                          accept=".xlsx,.xls"
+                          onChange={importPaymentMethods}
                         />
+                        <Select
+                          key={paymentDataManagementSelectKey}
+                          onValueChange={(value) => {
+                            if (value === 'export') {
+                              exportPaymentMethods();
+                            } else if (value === 'import') {
+                              setPaymentImportConfirmOpen(true);
+                            }
+                            setPaymentDataManagementSelectKey((k) => k + 1);
+                          }}
+                        >
+                          <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                            <SelectValue placeholder="Data Management" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="export" className="cursor-pointer">
+                              <div className="flex items-center">
+                                <Download className="h-4 w-4 mr-2" />
+                                Export
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="import" className="cursor-pointer">
+                              <div className="flex items-center">
+                                <Upload className="h-4 w-4 mr-2" />
+                                Import
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       
                       <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                         <Button
-                          onClick={() => setAddPaymentModalOpen(true)}
+                          onClick={() => {
+                            // Reset form when opening add payment modal
+                            setPaymentForm({
+                              title: '',
+                              type: '',
+                              owner: '',
+                              manager: '',
+                              expiresAt: '',
+                              financialInstitution: '',
+                              lastFourDigits: '',
+                            });
+                            setPmOwnerSearch('');
+                            setPmManagerSearch('');
+                            setAddPaymentModalOpen(true);
+                          }}
                           className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
                         >
                           <Plus className="w-4 h-4 mr-2" />
-                          Add Payment Method
+                          New Payment Method
                         </Button>
                       </motion.div>
                     </div>
@@ -2261,8 +2738,8 @@ export default function Configuration() {
                     
                     {/* Payment Method Subscriptions Modal */}
                     <Dialog open={paymentSubsModalOpen} onOpenChange={setPaymentSubsModalOpen}>
-                      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white font-inter">
-                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+                      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto  border-0 shadow-2xl p-0 bg-white font-inter">
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 ">
                           <DialogHeader>
                             <DialogTitle className="text-2xl font-bold tracking-tight text-white">
                               Subscriptions using {selectedPaymentSubs.paymentMethod}
@@ -2315,9 +2792,9 @@ export default function Configuration() {
                     
                     {/* Edit Payment Method Modal */}
                     <Dialog open={editPaymentModalOpen} onOpenChange={setEditPaymentModalOpen}>
-                      <DialogContent showClose={false} className={`${isEditPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
+                      <DialogContent showClose={false} className={`${isEditPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px]'} overflow-hidden border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
                         {/* Header with Gradient Background */}
-                        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-6 rounded-t-2xl">
+                        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-6 ">
                           <DialogHeader>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-4">
@@ -2346,13 +2823,13 @@ export default function Configuration() {
                                 </Button>
                                 <Button
                                   type="button"
-                                  variant="ghost"
+                                  variant="outline"
                                   size="sm"
                                   onClick={() => {
                                     setEditPaymentModalOpen(false);
                                     setIsEditPaymentFullscreen(false);
                                   }}
-                                  className="bg-white text-indigo-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
+                                  className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-indigo-200 shadow-sm"
                                   title="Close"
                                 >
                                   <X className="h-4 w-4" />
@@ -2423,21 +2900,31 @@ export default function Configuration() {
                               <div className="relative" ref={pmOwnerDropdownRef}>
                                 <div className="relative">
                                   <Input
-                                    value={pmOwnerSearch}
+                                    value={pmOwnerOpen ? pmOwnerSearch : (paymentForm.owner || '')}
                                     placeholder="Select employee"
                                     className="w-full border-gray-300 rounded-lg h-10 p-2 pr-10 text-base focus:border-indigo-500 focus:ring-indigo-500 cursor-pointer"
-                                    onFocus={() => setPmOwnerOpen(true)}
-                                    onClick={() => setPmOwnerOpen(true)}
+                                    onFocus={() => {
+                                      setPmOwnerSearch('');
+                                      setPmOwnerOpen(true);
+                                    }}
+                                    onClick={() => {
+                                      setPmOwnerSearch('');
+                                      setPmOwnerOpen(true);
+                                    }}
                                     onChange={(e) => {
                                       setPmOwnerSearch(e.target.value);
                                       setPmOwnerOpen(true);
-                                      setPaymentForm(f => ({ ...f, owner: '' }));
                                     }}
                                     autoComplete="off"
                                   />
                                   <ChevronDown
                                     className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                                    onClick={() => setPmOwnerOpen(!pmOwnerOpen)}
+                                    onClick={() => {
+                                      if (!pmOwnerOpen) {
+                                        setPmOwnerSearch('');
+                                      }
+                                      setPmOwnerOpen(!pmOwnerOpen);
+                                    }}
                                   />
                                 </div>
                                 {pmOwnerOpen && (
@@ -2450,6 +2937,13 @@ export default function Configuration() {
                                           String(emp?.name || '').toLowerCase().includes(q) ||
                                           String(emp?.email || '').toLowerCase().includes(q)
                                         );
+                                      })
+                                      .sort((a: any, b: any) => {
+                                        const aSelected = paymentForm.owner === a.name;
+                                        const bSelected = paymentForm.owner === b.name;
+                                        if (aSelected && !bSelected) return -1;
+                                        if (!aSelected && bSelected) return 1;
+                                        return 0;
                                       })
                                       .map((emp: any) => {
                                         const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
@@ -2496,21 +2990,31 @@ export default function Configuration() {
                               <div className="relative" ref={pmManagerDropdownRef}>
                                 <div className="relative">
                                   <Input
-                                    value={pmManagerSearch}
+                                    value={pmManagerOpen ? pmManagerSearch : (paymentForm.manager || '')}
                                     placeholder="Select employee"
                                     className="w-full border-gray-300 rounded-lg h-10 p-2 pr-10 text-base focus:border-indigo-500 focus:ring-indigo-500 cursor-pointer"
-                                    onFocus={() => setPmManagerOpen(true)}
-                                    onClick={() => setPmManagerOpen(true)}
+                                    onFocus={() => {
+                                      setPmManagerSearch('');
+                                      setPmManagerOpen(true);
+                                    }}
+                                    onClick={() => {
+                                      setPmManagerSearch('');
+                                      setPmManagerOpen(true);
+                                    }}
                                     onChange={(e) => {
                                       setPmManagerSearch(e.target.value);
                                       setPmManagerOpen(true);
-                                      setPaymentForm(f => ({ ...f, manager: '' }));
                                     }}
                                     autoComplete="off"
                                   />
                                   <ChevronDown
                                     className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                                    onClick={() => setPmManagerOpen(!pmManagerOpen)}
+                                    onClick={() => {
+                                      if (!pmManagerOpen) {
+                                        setPmManagerSearch('');
+                                      }
+                                      setPmManagerOpen(!pmManagerOpen);
+                                    }}
                                   />
                                 </div>
                                 {pmManagerOpen && (
@@ -2523,6 +3027,13 @@ export default function Configuration() {
                                           String(emp?.name || '').toLowerCase().includes(q) ||
                                           String(emp?.email || '').toLowerCase().includes(q)
                                         );
+                                      })
+                                      .sort((a: any, b: any) => {
+                                        const aSelected = paymentForm.manager === a.name;
+                                        const bSelected = paymentForm.manager === b.name;
+                                        if (aSelected && !bSelected) return -1;
+                                        if (!aSelected && bSelected) return 1;
+                                        return 0;
                                       })
                                       .map((emp: any) => {
                                         const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
@@ -2699,7 +3210,7 @@ export default function Configuration() {
                     
                     {/* Delete Confirmation Dialog */}
                     <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-                      <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+                      <DialogContent className="max-w-md  border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
                         {/* Header with Red Gradient Background */}
                         <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
                           <DialogHeader>
@@ -2784,7 +3295,7 @@ export default function Configuration() {
                     
                     {/* Validation Error Dialog */}
                     <Dialog open={validationErrorOpen} onOpenChange={setValidationErrorOpen}>
-                      <DialogContent className="max-w-md rounded-2xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+                      <DialogContent className="max-w-md  border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
                         {/* Header with Red Gradient Background */}
                         <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
                           <DialogHeader>
@@ -2824,9 +3335,9 @@ export default function Configuration() {
                     
                     {/* Modal for Add Payment Method */}
                     <Dialog open={addPaymentModalOpen} onOpenChange={setAddPaymentModalOpen}>
-                      <DialogContent showClose={false} className={`${isAddPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px] max-h-[85vh]'} overflow-y-auto rounded-2xl border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
+                      <DialogContent showClose={false} className={`${isAddPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px]'} overflow-hidden border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
                         {/* Header with Gradient Background */}
-                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 ">
                           <DialogHeader>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-4">
@@ -2855,13 +3366,13 @@ export default function Configuration() {
                                 </Button>
                                 <Button
                                   type="button"
-                                  variant="ghost"
+                                  variant="outline"
                                   size="sm"
                                   onClick={() => {
                                     setAddPaymentModalOpen(false);
                                     setIsAddPaymentFullscreen(false);
                                   }}
-                                  className="bg-white text-blue-600 hover:bg-gray-50 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-white shadow-sm"
+                                  className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-indigo-200 shadow-sm"
                                   title="Close"
                                 >
                                   <X className="h-4 w-4" />
@@ -2930,21 +3441,31 @@ export default function Configuration() {
                               <div className="relative" ref={pmOwnerDropdownRef}>
                                 <div className="relative">
                                   <Input
-                                    value={pmOwnerSearch}
+                                    value={pmOwnerOpen ? pmOwnerSearch : (paymentForm.owner || '')}
                                     className="w-full border-gray-300 rounded-lg h-10 p-2 pr-10 text-base focus:border-indigo-500 focus:ring-indigo-500 cursor-pointer"
                                     placeholder="Select employee"
-                                    onFocus={() => setPmOwnerOpen(true)}
-                                    onClick={() => setPmOwnerOpen(true)}
+                                    onFocus={() => {
+                                      setPmOwnerSearch('');
+                                      setPmOwnerOpen(true);
+                                    }}
+                                    onClick={() => {
+                                      setPmOwnerSearch('');
+                                      setPmOwnerOpen(true);
+                                    }}
                                     onChange={e => {
                                       setPmOwnerSearch(e.target.value);
                                       setPmOwnerOpen(true);
-                                      setPaymentForm(f => ({ ...f, owner: "" }));
                                     }}
                                     autoComplete="off"
                                   />
                                   <ChevronDown
                                     className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                                    onClick={() => setPmOwnerOpen(!pmOwnerOpen)}
+                                    onClick={() => {
+                                      if (!pmOwnerOpen) {
+                                        setPmOwnerSearch('');
+                                      }
+                                      setPmOwnerOpen(!pmOwnerOpen);
+                                    }}
                                   />
                                 </div>
 
@@ -2958,6 +3479,11 @@ export default function Configuration() {
                                           String(emp?.name || '').toLowerCase().includes(q) ||
                                           String(emp?.email || '').toLowerCase().includes(q)
                                         );
+                                      })
+                                      .sort((a: any, b: any) => {
+                                        if (a.name === paymentForm.owner) return -1;
+                                        if (b.name === paymentForm.owner) return 1;
+                                        return 0;
                                       })
                                       .map((emp: any) => {
                                         const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
@@ -2979,7 +3505,7 @@ export default function Configuration() {
                                               }
                                               const name = String(emp.name || '').trim();
                                               setPaymentForm(f => ({ ...f, owner: name }));
-                                              setPmOwnerSearch(name);
+                                              setPmOwnerSearch('');
                                               setPmOwnerOpen(false);
                                             }}
                                           >
@@ -3006,21 +3532,31 @@ export default function Configuration() {
                               <div className="relative" ref={pmManagerDropdownRef}>
                                 <div className="relative">
                                   <Input
-                                    value={pmManagerSearch}
+                                    value={pmManagerOpen ? pmManagerSearch : (paymentForm.manager || '')}
                                     className="w-full border-gray-300 rounded-lg h-10 p-2 pr-10 text-base focus:border-indigo-500 focus:ring-indigo-500 cursor-pointer"
                                     placeholder="Select employee"
-                                    onFocus={() => setPmManagerOpen(true)}
-                                    onClick={() => setPmManagerOpen(true)}
+                                    onFocus={() => {
+                                      setPmManagerSearch('');
+                                      setPmManagerOpen(true);
+                                    }}
+                                    onClick={() => {
+                                      setPmManagerSearch('');
+                                      setPmManagerOpen(true);
+                                    }}
                                     onChange={e => {
                                       setPmManagerSearch(e.target.value);
                                       setPmManagerOpen(true);
-                                      setPaymentForm(f => ({ ...f, manager: "" }));
                                     }}
                                     autoComplete="off"
                                   />
                                   <ChevronDown
                                     className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
-                                    onClick={() => setPmManagerOpen(!pmManagerOpen)}
+                                    onClick={() => {
+                                      if (!pmManagerOpen) {
+                                        setPmManagerSearch('');
+                                      }
+                                      setPmManagerOpen(!pmManagerOpen);
+                                    }}
                                   />
                                 </div>
 
@@ -3034,6 +3570,11 @@ export default function Configuration() {
                                           String(emp?.name || '').toLowerCase().includes(q) ||
                                           String(emp?.email || '').toLowerCase().includes(q)
                                         );
+                                      })
+                                      .sort((a: any, b: any) => {
+                                        if (a.name === paymentForm.manager) return -1;
+                                        if (b.name === paymentForm.manager) return 1;
+                                        return 0;
                                       })
                                       .map((emp: any) => {
                                         const duplicateNames = employeesRaw.filter((e: any) => e.name === emp.name);
@@ -3055,7 +3596,7 @@ export default function Configuration() {
                                               }
                                               const name = String(emp.name || '').trim();
                                               setPaymentForm(f => ({ ...f, manager: name }));
-                                              setPmManagerSearch(name);
+                                              setPmManagerSearch('');
                                               setPmManagerOpen(false);
                                             }}
                                           >
@@ -3208,6 +3749,38 @@ export default function Configuration() {
                         </div>
                       </DialogContent>
                     </Dialog>
+
+                    {/* Payment Import Confirm Dialog */}
+                    <AlertDialog open={paymentImportConfirmOpen} onOpenChange={setPaymentImportConfirmOpen}>
+                      <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Select Yes to choose a file. Select No to download the template.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel
+                            className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+                            onClick={() => {
+                              downloadPaymentTemplate();
+                              setPaymentImportConfirmOpen(false);
+                            }}
+                          >
+                            No
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-green-600 text-white hover:bg-green-700"
+                            onClick={() => {
+                              setPaymentImportConfirmOpen(false);
+                              setTimeout(() => paymentFileInputRef.current?.click(), 0);
+                            }}
+                          >
+                            Yes
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </Card>
                 </motion.div>
               </TabsContent>
@@ -3260,7 +3833,7 @@ export default function Configuration() {
                       </div>
                     </div>
                     <div className="space-y-6">
-                      {/* Add New Field */}
+                      {/* Add New Field and Data Management */}
                       <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
                         <Input
                           value={newFieldName}
@@ -3270,6 +3843,42 @@ export default function Configuration() {
                           disabled={fields.length >= 4}
                           placeholder={fields.length >= 4 ? "Maximum 4 fields reached" : "Enter field name"}
                         />
+                        <input
+                          type="file"
+                          ref={subscriptionFileInputRef}
+                          className="hidden"
+                          accept=".xlsx,.xls"
+                          onChange={importSubscriptionFields}
+                        />
+                        <Select
+                          key={subscriptionDataManagementSelectKey}
+                          onValueChange={(value) => {
+                            if (value === 'export') {
+                              exportSubscriptionFields();
+                            } else if (value === 'import') {
+                              setSubscriptionImportConfirmOpen(true);
+                            }
+                            setSubscriptionDataManagementSelectKey((k) => k + 1);
+                          }}
+                        >
+                          <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                            <SelectValue placeholder="Data Management" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="export" className="cursor-pointer">
+                              <div className="flex items-center">
+                                <Download className="h-4 w-4 mr-2" />
+                                Export
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="import" className="cursor-pointer">
+                              <div className="flex items-center">
+                                <Upload className="h-4 w-4 mr-2" />
+                                Import
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                           <Button
                             onClick={addNewField}
@@ -3277,7 +3886,7 @@ export default function Configuration() {
                             className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
                           >
                             <Plus className="w-4 h-4 mr-2" />
-                            {fields.length >= 4 ? 'Max 4 Fields' : 'Add Field'}
+                            {fields.length >= 4 ? 'Max 4 Fields' : 'New Field'}
                           </Button>
                         </motion.div>
                       </div>
@@ -3348,6 +3957,38 @@ export default function Configuration() {
                       
                       {/* Removed Summary and Save Configuration */}
                     </div>
+
+                    {/* Subscription Import Confirm Dialog */}
+                    <AlertDialog open={subscriptionImportConfirmOpen} onOpenChange={setSubscriptionImportConfirmOpen}>
+                      <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Select Yes to choose a file. Select No to download the template.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel
+                            className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+                            onClick={() => {
+                              downloadSubscriptionTemplate();
+                              setSubscriptionImportConfirmOpen(false);
+                            }}
+                          >
+                            No
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-green-600 text-white hover:bg-green-700"
+                            onClick={() => {
+                              setSubscriptionImportConfirmOpen(false);
+                              setTimeout(() => subscriptionFileInputRef.current?.click(), 0);
+                            }}
+                          >
+                            Yes
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </Card>
                 </motion.div>
               </TabsContent>
@@ -3374,7 +4015,7 @@ export default function Configuration() {
                       </div>
                     </div>
                     <div className="space-y-6">
-                      {/* Add New Compliance Field */}
+                      {/* Add New Compliance Field and Data Management */}
                       <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
                         <Input
                           value={newComplianceFieldName}
@@ -3382,14 +4023,50 @@ export default function Configuration() {
                           className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
                           onKeyPress={(e) => e.key === 'Enter' && addNewComplianceField()}
                         />
+                        <input
+                          type="file"
+                          ref={complianceFileInputRef}
+                          className="hidden"
+                          accept=".xlsx,.xls"
+                          onChange={importComplianceFields}
+                        />
+                        <Select
+                          key={complianceDataManagementSelectKey}
+                          onValueChange={(value) => {
+                            if (value === 'export') {
+                              exportComplianceFields();
+                            } else if (value === 'import') {
+                              setComplianceImportConfirmOpen(true);
+                            }
+                            setComplianceDataManagementSelectKey((k) => k + 1);
+                          }}
+                        >
+                          <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                            <SelectValue placeholder="Data Management" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="export" className="cursor-pointer">
+                              <div className="flex items-center">
+                                <Download className="h-4 w-4 mr-2" />
+                                Export
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="import" className="cursor-pointer">
+                              <div className="flex items-center">
+                                <Upload className="h-4 w-4 mr-2" />
+                                Import
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                         <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                           <Button
                             onClick={addNewComplianceField}
                             disabled={!newComplianceFieldName.trim()}
                             className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
                           >
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Field
+                            <Plus className="w-4 w-4 mr-2" />
+                            New Field
                           </Button>
                         </motion.div>
                       </div>
@@ -3461,6 +4138,38 @@ export default function Configuration() {
                       
                       {/* Removed Summary and Save Configuration */}
                     </div>
+
+                    {/* Compliance Import Confirm Dialog */}
+                    <AlertDialog open={complianceImportConfirmOpen} onOpenChange={setComplianceImportConfirmOpen}>
+                      <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Select Yes to choose a file. Select No to download the template.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel
+                            className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+                            onClick={() => {
+                              downloadComplianceTemplate();
+                              setComplianceImportConfirmOpen(false);
+                            }}
+                          >
+                            No
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-green-600 text-white hover:bg-green-700"
+                            onClick={() => {
+                              setComplianceImportConfirmOpen(false);
+                              setTimeout(() => complianceFileInputRef.current?.click(), 0);
+                            }}
+                          >
+                            Yes
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </Card>
                 </motion.div>
               </TabsContent>

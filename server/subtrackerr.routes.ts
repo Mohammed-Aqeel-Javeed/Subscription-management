@@ -92,16 +92,47 @@ function toEpochMsServer(raw: any): number {
 
 function notificationDedupeKey(n: any): string {
   if (!n) return '';
-  const type = String(n.type || '').trim().toLowerCase();
-  const eventType = String(n.eventType || (n.reminderTriggerDate || n.reminderDate ? 'reminder' : '')).trim().toLowerCase();
-  const lifecycle = String(n.lifecycleEventType || '').trim().toLowerCase();
-  const entityId = String(n.subscriptionId || n.complianceId || n.licenseId || n.paymentId || '').trim().toLowerCase();
-  const trigger = String(n.reminderTriggerDate || n.reminderDate || '').trim().toLowerCase();
-  const deadline = String(n.submissionDeadline || n.subscriptionEndDate || n.endDate || '').trim().toLowerCase();
-  const reminderType = String(n.reminderType || '').trim().toLowerCase();
-  const title = String(n.filingName || n.subscriptionName || n.licenseName || n.name || '').trim().toLowerCase();
-  const message = String(n.message || '').trim().toLowerCase();
-  return [type, eventType, lifecycle, entityId, trigger, deadline, reminderType, title, message].join('|');
+
+  const norm = (v: any) => String(v ?? '').trim().toLowerCase();
+
+  const dateOnly = (raw: any): string => {
+    if (!raw) return '';
+    if (raw instanceof Date) return raw.toISOString().slice(0, 10);
+    const s = String(raw).trim();
+    if (!s) return '';
+    if (s.length >= 10) return s.slice(0, 10);
+    const d = new Date(s);
+    const t = d.getTime();
+    return Number.isFinite(t) ? d.toISOString().slice(0, 10) : '';
+  };
+
+  const type = norm(n.type);
+  const entityId = norm(n.subscriptionId || n.complianceId || n.licenseId || n.paymentId || n.id || n._id);
+  if (!type || !entityId) return '';
+
+  const eventType = norm(n.eventType);
+  const lifecycle = norm(n.lifecycleEventType);
+  const hasReminderSignals = Boolean(
+    n.reminderTriggerDate || n.reminderDate || n.reminderType || n.reminderDays || n.submissionDeadline || n.subscriptionEndDate || n.endDate
+  );
+
+  const kind = eventType || (lifecycle ? 'updated' : (hasReminderSignals ? 'reminder' : ''));
+
+  const parts: string[] = [type, entityId, kind];
+
+  if (kind === 'updated' && lifecycle) {
+    parts.push(lifecycle);
+    parts.push(dateOnly(n.timestamp || n.createdAt));
+  }
+
+  if (kind === 'reminder' || hasReminderSignals && !eventType) {
+    parts.push(norm(n.reminderType || n.reminderPolicy));
+    parts.push(norm(n.reminderDays));
+    parts.push(dateOnly(n.reminderTriggerDate || n.reminderDate || n.timestamp || n.createdAt));
+    parts.push(dateOnly(n.submissionDeadline || n.subscriptionEndDate || n.endDate));
+  }
+
+  return parts.join('|');
 }
 
 function dedupeNotifications(list: any[]): any[] {
@@ -418,6 +449,35 @@ async function resolveHistoryChangedBy(db: any, reqUser: any): Promise<string> {
   return email || 'System';
 }
 
+async function resolveSubscriptionNameForHistory(
+  db: any,
+  tenantId: string,
+  subscriptionId: any,
+  data?: any,
+  updatedFields?: any
+): Promise<string> {
+  const candidate =
+    (updatedFields && (updatedFields.serviceName || updatedFields.subscriptionName)) ||
+    (data && (data.serviceName || data.subscriptionName));
+
+  const normalize = (v: any) => (typeof v === 'string' ? v.trim() : '');
+
+  try {
+    const { decrypt } = await import('./encryption.service.js');
+    const candidateStr = normalize(candidate);
+    if (candidateStr) return decrypt(candidateStr);
+
+    const subs = db.collection('subscriptions');
+    const sub = await subs.findOne({ tenantId, _id: subscriptionId });
+    if (!sub) return '';
+    const raw = (sub as any)?.serviceName ?? (sub as any)?.name ?? '';
+    const rawStr = normalize(raw);
+    return rawStr ? decrypt(rawStr) : '';
+  } catch {
+    return normalize(candidate);
+  }
+}
+
 // Add a new history record
 router.post("/api/history", async (req, res) => {
   try {
@@ -448,14 +508,30 @@ router.post("/api/history", async (req, res) => {
         ? changedBy.trim()
         : await resolveHistoryChangedBy(db, req.user);
 
+    const resolvedSubscriptionName = await resolveSubscriptionNameForHistory(
+      db,
+      tenantId,
+      subscriptionObjId,
+      data,
+      updatedFields
+    );
+
+    const dataToStore = data ? { ...data } : undefined;
+    const updatedToStore = updatedFields ? { ...updatedFields } : undefined;
+    if (resolvedSubscriptionName) {
+      if (dataToStore && !dataToStore.serviceName) dataToStore.serviceName = resolvedSubscriptionName;
+      if (updatedToStore && !updatedToStore.serviceName) updatedToStore.serviceName = resolvedSubscriptionName;
+    }
+
     const historyDoc = {
       subscriptionId: subscriptionObjId,
       tenantId,
       action,
       timestamp,
       loggedAt,
-      data: data ? { ...data } : undefined,
-      updatedFields: updatedFields ? { ...updatedFields } : undefined,
+      subscriptionName: resolvedSubscriptionName || undefined,
+      data: dataToStore,
+      updatedFields: updatedToStore,
       changedBy: resolvedChangedBy,
       changeReason: typeof changeReason === 'string' && changeReason.trim() ? changeReason.trim() : undefined
     };
@@ -491,7 +567,7 @@ router.get("/api/history/list", async (req, res) => {
     // Sort by timestamp and _id for consistent ordering
     const items = await collection
       .find({ tenantId })
-      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
+      .project({ tenantId: 1, subscriptionId: 1, subscriptionName: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
       .sort({ loggedAt: -1, timestamp: -1, _id: -1 })
       .limit(limit)
       .toArray();
@@ -540,6 +616,7 @@ router.get("/api/history/list", async (req, res) => {
         ...item,
         _id: item._id?.toString(),
         subscriptionId: item.subscriptionId?.toString(),
+        subscriptionName: (item as any).subscriptionName || processedUpdatedFields?.serviceName || processedData?.serviceName,
         loggedAt: derivedLoggedAt,
         data: processedData,
         updatedFields: processedUpdatedFields
@@ -590,7 +667,7 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
     // Sort by timestamp descending (newest first)
     const items = await collection
       .find(filter)
-      .project({ tenantId: 1, subscriptionId: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
+      .project({ tenantId: 1, subscriptionId: 1, subscriptionName: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
       .sort({ loggedAt: -1, timestamp: -1, _id: -1 })
       .limit(limit)
       .toArray();
@@ -637,6 +714,7 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
         ...item,
         _id: item._id.toString(),
         subscriptionId: item.subscriptionId?.toString ? item.subscriptionId.toString() : item.subscriptionId,
+        subscriptionName: (item as any).subscriptionName || processedUpdatedFields?.serviceName || processedData?.serviceName,
         loggedAt: derivedLoggedAt,
         data: processedData,
         updatedFields: processedUpdatedFields
@@ -1327,8 +1405,9 @@ router.delete("/api/subtrackerr/:id", async (req, res) => {
 // List all currencies
 router.get("/api/currencies", async (req, res) => {
   try {
-    // Cache for 5 minutes - currencies rarely change
-    res.setHeader('Cache-Control', 'public, max-age=300');
+    // Do not cache tenant-scoped/authenticated data in browsers/proxies.
+    // This endpoint must reflect updates immediately after PUT/POST.
+    res.setHeader('Cache-Control', 'no-store');
     
     const db = await connectToDatabase();
     const collection = db.collection("currencies");
@@ -1348,7 +1427,9 @@ router.get("/api/currencies", async (req, res) => {
 // OPTIMIZED: Batch get latest exchange rates for all currencies
 router.get("/api/exchange-rates/batch/latest", async (req, res) => {
   try {
-    res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minutes
+    // Do not cache tenant-scoped/authenticated data in browsers/proxies.
+    // This endpoint must reflect updates immediately.
+    res.setHeader('Cache-Control', 'no-store');
     
     const db = await connectToDatabase();
     const collection = db.collection("exchange_rates");
@@ -1549,9 +1630,15 @@ router.put("/api/currencies/:code", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     
+    // Ensure exchangeRate is stored as a number if provided
+    const updateData: any = { ...req.body };
+    if (updateData.exchangeRate !== undefined && updateData.exchangeRate !== null) {
+      updateData.exchangeRate = Number(updateData.exchangeRate);
+    }
+    
     const update = { 
       $set: { 
-        ...req.body,
+        ...updateData,
         updatedAt: new Date()
       } 
     };
@@ -1562,7 +1649,9 @@ router.put("/api/currencies/:code", async (req, res) => {
     );
     
     if (result.matchedCount === 1) {
-      res.status(200).json({ message: "Currency updated" });
+      // Fetch and return the updated currency to ensure frontend gets the latest data
+      const updatedCurrency = await collection.findOne({ code: code.toUpperCase(), tenantId });
+      res.status(200).json({ message: "Currency updated", currency: updatedCurrency });
     } else {
       res.status(404).json({ message: "Currency not found" });
     }
@@ -2098,6 +2187,7 @@ router.post("/api/subscriptions", async (req, res) => {
 
         // History record
         try {
+          const subscriptionName = String((subscription as any).serviceName || '').trim();
           const historyRecord = {
             subscriptionId: subscriptionId,
             tenantId,
@@ -2108,7 +2198,8 @@ router.post("/api/subscriptions", async (req, res) => {
             action: 'create',
             timestamp: new Date(),
             loggedAt: new Date(),
-            serviceName: (subscription as any).serviceName,
+            subscriptionName: subscriptionName || undefined,
+            serviceName: subscriptionName || (subscription as any).serviceName,
             changedBy,
           };
           await historyCollection.insertOne(historyRecord);
@@ -2308,13 +2399,20 @@ router.post("/api/subscriptions/draft/:id/activate", async (req, res) => {
     const activatedSubscription = await collection.findOne({ _id: subscriptionId });
 
     // Create history record for activation
+    const { decrypt } = await import("./encryption.service.js");
+    const activatedName = activatedSubscription?.serviceName
+      ? decrypt(activatedSubscription.serviceName)
+      : (activatedSubscription as any)?.name
+        ? String((activatedSubscription as any).name)
+        : '';
     const historyRecord = {
       subscriptionId: subscriptionId,
       tenantId,
-      data: activatedSubscription,
+      subscriptionName: activatedName ? String(activatedName).trim() : undefined,
+      data: activatedSubscription ? { ...activatedSubscription, serviceName: activatedName || activatedSubscription.serviceName } : activatedSubscription,
       action: "activate_draft",
       timestamp: new Date(),
-      serviceName: activatedSubscription?.serviceName,
+      serviceName: activatedName || activatedSubscription?.serviceName,
       changedBy: await resolveHistoryChangedBy(db, req.user),
     };
     await historyCollection.insertOne(historyRecord);
@@ -2638,6 +2736,7 @@ const update = {
             action: finalAction,
             timestamp: effectiveDate, // Use effective date instead of new Date()
             loggedAt: new Date(),
+            subscriptionName: (decryptedUpdated as any)?.serviceName || undefined,
             serviceName: (decryptedUpdated as any)?.serviceName ?? updatedDoc?.serviceName,
             changedBy,
             ...(changeReason ? { changeReason } : {}),
@@ -4188,11 +4287,16 @@ router.put("/api/subscriptions/:id/users", async (req, res) => {
     }
 
     // Create history record
+    const { decrypt } = await import("./encryption.service.js");
+    const subscriptionName = oldDoc?.serviceName ? decrypt(oldDoc.serviceName) : (oldDoc as any)?.name ? String((oldDoc as any).name) : "";
     await historyCollection.insertOne({
       subscriptionId,
       tenantId,
       action: "update",
       timestamp: new Date(),
+      subscriptionName: subscriptionName ? String(subscriptionName).trim() : undefined,
+      changedBy: await resolveHistoryChangedBy(db, req.user),
+      data: { serviceName: subscriptionName || undefined },
       updatedFields: { users },
       serviceName: oldDoc.serviceName || oldDoc.name || "Unknown Service"
     });
