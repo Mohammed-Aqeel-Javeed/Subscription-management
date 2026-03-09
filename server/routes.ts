@@ -7,7 +7,6 @@ import { ObjectId } from "mongodb";
 // @ts-ignore
 import {
   insertUserSchema,
-  insertSubscriptionSchema,
   insertReminderSchema
 } from "../shared/schema.js";
 import { z } from "zod";
@@ -94,10 +93,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const pickBetter = (a: any, b: any) => {
       const sa = score(a);
       const sb = score(b);
-      if (sa !== sb) return sa > sb ? a : b;
-      const ta = toEpochMsServer(a?.timestamp || a?.createdAt);
-      const tb = toEpochMsServer(b?.timestamp || b?.createdAt);
-      return tb > ta ? b : a;
+      let better;
+      if (sa !== sb) {
+        better = sa > sb ? a : b;
+      } else {
+        const ta = toEpochMsServer(a?.timestamp || a?.createdAt);
+        const tb = toEpochMsServer(b?.timestamp || b?.createdAt);
+        better = tb > ta ? b : a;
+      }
+      // Preserve isRead if either notification is marked as read
+      if (a.isRead || b.isRead) {
+        better = { ...better, isRead: true, readAt: a.readAt || b.readAt };
+      }
+      return better;
     };
 
     const map = new Map<string, any>();
@@ -554,6 +562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: dbUser._id,
         email: dbUser.email,
         fullName: dbUser.fullName || null,
+        profileImage: dbUser.profileImage || null,
         companyName: dbUser.companyName || null,
         tenantId: dbUser.tenantId || null,
         defaultCurrency: dbUser.defaultCurrency || null,
@@ -562,6 +571,175 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch user data" });
+    }
+  });
+
+  // ===== Update Current User (Profile / Password) =====
+  app.put("/api/me", async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user?.userId || !user?.tenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { fullName, email, profileImage, currentPassword, newPassword } = req.body || {};
+
+      const nextFullName = typeof fullName === "string" ? fullName.trim() : undefined;
+      const nextEmail = typeof email === "string" ? email.trim().toLowerCase() : undefined;
+      const nextProfileImage = typeof profileImage === "string" ? profileImage : undefined;
+      const nextPassword = typeof newPassword === "string" ? newPassword : undefined;
+      const providedCurrentPassword = typeof currentPassword === "string" ? currentPassword : undefined;
+
+      if (!nextFullName && !nextEmail && !nextProfileImage && !nextPassword) {
+        return res.status(400).json({ message: "Nothing to update" });
+      }
+
+      const db = await connectToDatabase();
+
+      // Resolve the tenant-specific user record by email + tenantId (token userId may belong to a different tenant)
+      const userRecord = await db.collection("login").findOne({ _id: new ObjectId(user.userId) });
+      if (!userRecord) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const oldEmail = String(userRecord.email || "").trim().toLowerCase();
+      if (!oldEmail) {
+        return res.status(500).json({ message: "Invalid user email" });
+      }
+
+      const dbUser = await db.collection("login").findOne({
+        email: userRecord.email,
+        tenantId: user.tenantId,
+      });
+
+      if (!dbUser) {
+        return res.status(404).json({ message: "Company not found for this tenant" });
+      }
+
+      const tenantId = user.tenantId;
+      const updateData: any = {};
+
+      if (nextFullName) {
+        const existingName = await db.collection("login").findOne({
+          fullName: nextFullName,
+          tenantId,
+          _id: { $ne: dbUser._id },
+        });
+        if (existingName) {
+          return res.status(400).json({ message: "User name already exists" });
+        }
+        updateData.fullName = nextFullName;
+      }
+
+      if (nextEmail) {
+        if (!isValidEmail(nextEmail)) {
+          return res.status(400).json({ message: "Invalid email" });
+        }
+
+        if (nextEmail !== oldEmail) {
+          const existing = await db.collection("login").findOne({ email: nextEmail });
+          if (existing) {
+            return res.status(400).json({ message: "Email already exists" });
+          }
+
+          // Update across all tenants for this user (all docs that share the old email)
+          await db.collection("login").updateMany(
+            { email: oldEmail },
+            { $set: { email: nextEmail } }
+          );
+        }
+      }
+
+      if (nextProfileImage !== undefined) {
+        // Basic sanity checks; do not accept unbounded input
+        if (nextProfileImage.length > 2_000_000) {
+          return res.status(400).json({ message: "Profile image is too large" });
+        }
+        if (nextProfileImage && !/^data:image\/(png|jpeg|jpg|webp);base64,/.test(nextProfileImage)) {
+          return res.status(400).json({ message: "Unsupported image format" });
+        }
+
+        updateData.profileImage = nextProfileImage || null;
+
+        // Keep it consistent across all tenant records for this user
+        const effectiveEmail = (nextEmail || oldEmail).trim().toLowerCase();
+        await db.collection("login").updateMany(
+          { email: effectiveEmail },
+          { $set: { profileImage: updateData.profileImage } }
+        );
+      }
+
+      if (nextPassword !== undefined) {
+        const effectiveRole = user.role || dbUser.role || "viewer";
+
+        // If currentPassword is not provided, only allow super_admin to reset their own password.
+        if (!providedCurrentPassword) {
+          if (effectiveRole !== "super_admin") {
+            return res.status(400).json({ message: "Current password is required" });
+          }
+        } else {
+          const isPasswordValid = await bcrypt.compare(providedCurrentPassword, dbUser.password);
+          if (!isPasswordValid) {
+            return res.status(401).json({ message: "Current password is incorrect" });
+          }
+        }
+
+        if (nextPassword.length < 6) {
+          return res.status(400).json({ message: "New password must be at least 6 characters" });
+        }
+
+        updateData.password = await bcrypt.hash(nextPassword, 10);
+      }
+
+      const updated = await db.collection("login").findOneAndUpdate(
+        { _id: dbUser._id, tenantId },
+        { $set: updateData },
+        { returnDocument: "after" }
+      );
+
+      if (!updated) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const role = user.role || updated.role || "viewer";
+      const department = user.department || updated.department || undefined;
+
+      // If email changed, issue a new JWT so req.user.email stays in sync
+      if (nextEmail && nextEmail !== oldEmail) {
+        const tokenPayload = {
+          userId: user.userId,
+          email: nextEmail,
+          tenantId: user.tenantId,
+          role,
+          department,
+        };
+        const token = jwt.sign(
+          tokenPayload,
+          process.env.JWT_SECRET || "subs_secret_key",
+          { expiresIn: "24h" }
+        );
+        res.cookie("token", token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "none",
+          path: "/",
+        });
+      }
+
+      return res.status(200).json({
+        userId: updated._id,
+        email: updated.email,
+        fullName: updated.fullName || null,
+        profileImage: updated.profileImage || null,
+        companyName: updated.companyName || null,
+        tenantId: updated.tenantId || null,
+        defaultCurrency: updated.defaultCurrency || null,
+        role,
+        department,
+      });
+    } catch (err) {
+      console.error("Failed to update current user:", err);
+      return res.status(500).json({ message: "Failed to update user" });
     }
   });
 
@@ -767,119 +945,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/users", async (req, res) => {
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
-    try {
-      const { password, name, email, role, status, department } = req.body;
-      
-      const db = await connectToDatabase();
-      
-      // Check if email already exists in login collection for this tenant
-      const existingUser = await db.collection("login").findOne({ email, tenantId });
-      if (existingUser) {
-        return res.status(400).json({ message: "Email already exists" });
-      }
-      
-      // Check if name already exists in login collection for this tenant
-      const existingName = await db.collection("login").findOne({ fullName: name, tenantId });
-      if (existingName) {
-        return res.status(400).json({ message: "User name already exists" });
-      }
-      
-      // Hash the password before storing
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const result = await db.collection("login").insertOne({
-        fullName: name,
-        email: email,
-        password: hashedPassword,
-        tenantId: tenantId,
-        role: role || "viewer",
-        status: status || "active",
-        department: department || null,
-        createdAt: new Date()
-      });
-      
-      // Return the created user without password
-      res.status(201).json({
-        _id: result.insertedId,
-        name: name,
-        email: email,
-        role: role || "viewer",
-        status: status || "active",
-        tenantId: tenantId
-      });
-    } catch (error) {
-      console.error("User creation error:", error);
-      res.status(500).json({ message: "Failed to create user" });
-    }
-  });
-
-  app.put("/api/users/:id", async (req, res) => {
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
-    try {
-      const id = req.params.id;
-      const { name, email, role, status, password } = req.body;
-      const db = await connectToDatabase();
-      
-      // Check if email is being updated and already exists (excluding current user)
-      if (email) {
-        const existingEmail = await db.collection("login").findOne({ 
-          email, 
-          tenantId,
-          _id: { $ne: new ObjectId(id) }
-        });
-        if (existingEmail) {
-          return res.status(400).json({ message: "Email already exists" });
-        }
-      }
-      
-      // Check if name is being updated and already exists (excluding current user)
-      if (name) {
-        const existingName = await db.collection("login").findOne({ 
-          fullName: name, 
-          tenantId,
-          _id: { $ne: new ObjectId(id) }
-        });
-        if (existingName) {
-          return res.status(400).json({ message: "User name already exists" });
-        }
-      }
-      
-      // Build update object
-      const updateData: any = {};
-      if (name) updateData.fullName = name;
-      if (email) updateData.email = email;
-      if (role) updateData.role = role;
-      if (status) updateData.status = status;
-      if (password) updateData.password = await bcrypt.hash(password, 10);
-      
-      // Update in login collection
-      const result = await db.collection("login").findOneAndUpdate(
-        { _id: new ObjectId(id), tenantId },
-        { $set: updateData },
-        { returnDocument: "after" }
-      );
-      
-      if (!result) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      res.json({
-        id: result._id.toString(),
-        name: result.fullName,
-        email: result.email,
-        role: result.role,
-        status: result.status,
-        tenantId: result.tenantId
-      });
-    } catch (error) {
-      console.error("Failed to update user:", error);
-      res.status(500).json({ message: "Failed to update user" });
-    }
-  });
-
   app.delete("/api/users/:id", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
@@ -905,60 +970,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== Subscriptions =====
-  app.get("/api/subscriptions", async (req, res) => {
-    // Disable caching for role-based filtering
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    
-    const tenantId = req.user?.tenantId;
-    const userRole = req.user?.role;
-    const userId = req.user?.userId;
-    const userDepartment = req.user?.department;
-    
-    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
-    try {
-      let subscriptions = await storage.getSubscriptions(tenantId);
-      
-      // Apply role-based filtering
-      if (userRole === 'contributor') {
-        // Contributors can only see items where they are the owner (match by email)
-        const userEmail = req.user?.email;
-        subscriptions = subscriptions.filter(sub => {
-          const isOwner = sub.ownerEmail === userEmail || sub.owner === userId;
-          return isOwner;
-        });
-      } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
-        // Department roles can only see items in their department
-        if (userDepartment) {
-          subscriptions = subscriptions.filter(sub => {
-            if (!sub.department) {
-              return false;
-            }
-            try {
-              const depts = JSON.parse(sub.department);
-              const hasAccess = Array.isArray(depts) && depts.includes(userDepartment);
-              return hasAccess;
-            } catch {
-              const hasAccess = sub.department === userDepartment;
-              return hasAccess;
-            }
-          });
-        }
-      }
-      
-      // Convert all IDs to strings to ensure consistent type
-      const formattedSubscriptions = subscriptions.map(sub => ({
-        ...sub,
-        id: typeof sub.id === "string" ? sub.id : String(sub.id ?? ""),
-        amount: typeof sub.amount === "number" ? sub.amount : parseFloat(sub.amount ?? "0")
-      }));
-      res.json(formattedSubscriptions);
-    } catch {
-      res.status(500).json({ message: "Failed to fetch subscriptions" });
-    }
-  });
-
   app.get("/api/subscriptions/:id", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
@@ -977,101 +988,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch {
       res.status(500).json({ message: "Failed to fetch subscription" });
-    }
-  });
-
-  app.post("/api/subscriptions", async (req, res) => {
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
-    try {
-      let subscriptionData = insertSubscriptionSchema.parse(req.body);
-      // ✅ Ensure amount is always a number
-      if (typeof subscriptionData.amount === "string") {
-        subscriptionData.amount = parseFloat(subscriptionData.amount);
-      }
-      const subscription = await storage.createSubscription(
-        subscriptionData,
-        tenantId
-      );
-      
-      // Destructure to avoid duplicate property issue
-      const { id: subId, amount, ...restWithoutId } = subscription;
-      res.status(201).json({
-        ...restWithoutId,
-        id: subId !== undefined && subId !== null ? String(subId) : "",
-        amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
-      });
-    } catch (error) {
-      console.error("❌ Error in subscription creation:", error);
-      if (error instanceof z.ZodError) {
-        return res
-          .status(400)
-          .json({ message: "Invalid subscription data", errors: error.issues });
-      }
-      res.status(500).json({ message: "Failed to create subscription", error: error instanceof Error ? error.message : String(error) });
-    }
-  });
-
-  app.put("/api/subscriptions/:id", async (req, res) => {
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
-    try {
-      const id = req.params.id ?? "";
-      let subscriptionData = insertSubscriptionSchema.partial().parse(req.body);
-      // ✅ Ensure amount is always a number
-      if (typeof subscriptionData.amount === "string") {
-        subscriptionData.amount = parseFloat(subscriptionData.amount);
-      }
-      const subscription = await storage.updateSubscription(
-        id,
-        subscriptionData,
-        tenantId
-      );
-      if (!subscription) {
-        return res.status(404).json({ message: "Subscription not found" });
-      }
-      // Destructure to avoid duplicate property issue
-      const { id: subId, amount, ...restWithoutId } = subscription;
-      res.json({
-        ...restWithoutId,
-        id: subId !== undefined && subId !== null ? String(subId) : "",
-        amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res
-          .status(400)
-          .json({ message: "Invalid subscription data", errors: error.issues });
-      }
-      res.status(500).json({ message: "Failed to update subscription" });
-    }
-  });
-
-  app.delete("/api/subscriptions/:id", async (req, res) => {
-    const tenantId = req.user?.tenantId;
-    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
-    try {
-      const id = req.params.id;
-      
-      const deleted = await storage.deleteSubscription(id, tenantId);
-      if (!deleted.success) {
-        return res.status(404).json({ message: "Subscription not found" });
-      }
-      
-      const db = await storage["getDb"]();
-      let objectId;
-      try {
-        objectId = new ObjectId(id);
-      } catch {
-        objectId = id;
-      }
-      await db.collection("reminders").deleteMany({ subscriptionId: objectId });
-      await db.collection("notifications").deleteMany({ subscriptionId: objectId });
-      res.json({
-        message: deleted.message
-      });
-    } catch {
-      res.status(500).json({ message: "Failed to delete subscription" });
     }
   });
 
@@ -1129,6 +1045,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== Notifications =====
+  const isObjectIdString = (value: unknown): value is string => {
+    if (typeof value !== "string") return false;
+    return /^[a-fA-F0-9]{24}$/.test(value);
+  };
+
+  const tryParseObjectId = (value: unknown): ObjectId | null => {
+    if (!isObjectIdString(value)) return null;
+    try {
+      return new ObjectId(value);
+    } catch {
+      return null;
+    }
+  };
+
+  type DeleteNotificationTarget = {
+    id?: string;
+    dismissKey?: string;
+    type?: 'subscription' | 'compliance' | 'license';
+    eventType?: string;
+    subscriptionId?: string;
+    complianceId?: string;
+    reminderTriggerDate?: string;
+  };
+
+  const deleteNotificationTargets = async (tenantId: string, targets: DeleteNotificationTarget[]) => {
+    const db = await connectToDatabase();
+
+    let deletedCount = 0;
+    const results: Array<{ id?: string; deleted: number }> = [];
+
+    for (const target of targets) {
+      const rawId = String(target?.id || '').trim();
+      const objectId = tryParseObjectId(rawId);
+      const type = target?.type;
+      const reminderTriggerDate = String(target?.reminderTriggerDate || '').trim();
+      const subscriptionId = String(target?.subscriptionId || '').trim();
+      const complianceId = String(target?.complianceId || '').trim();
+
+      let deletedForThis = 0;
+
+      // 1) Stored notifications and events (ObjectId-based)
+      if (objectId) {
+        // In-app notifications (per-user scoped elsewhere; tenant-level delete here)
+        const notifRes = await db.collection('notifications').deleteOne({
+          tenantId,
+          _id: objectId,
+          ...(type ? { type } : {}),
+        });
+        deletedForThis += notifRes.deletedCount || 0;
+
+        const eventRes = await db.collection('notification_events').deleteOne({
+          tenantId,
+          _id: objectId,
+          ...(type ? { type } : {}),
+        });
+        deletedForThis += eventRes.deletedCount || 0;
+
+        if (type === 'subscription') {
+          const reminderRes = await db.collection('reminders').deleteOne({ tenantId, _id: objectId });
+          deletedForThis += reminderRes.deletedCount || 0;
+        }
+
+        if (type === 'compliance') {
+          const compReminderRes = await db.collection('compliance_notifications').deleteOne({ tenantId, _id: objectId });
+          deletedForThis += compReminderRes.deletedCount || 0;
+        }
+      }
+
+      // 2) Fallback for reminder-derived notifications (when id isn't a reminder doc id)
+      // Subscription reminders: try matching by subscriptionId + reminder date
+      if (deletedForThis === 0 && type === 'subscription' && subscriptionId && reminderTriggerDate) {
+        const subObjId = tryParseObjectId(subscriptionId);
+        const reminderRes = await db.collection('reminders').deleteOne({
+          tenantId,
+          $and: [
+            {
+              $or: [
+                { subscriptionId },
+                ...(subObjId ? [{ subscriptionId: subObjId }] : []),
+                { subscription_id: subscriptionId },
+              ],
+            },
+            {
+              $or: [
+                { reminderDate: reminderTriggerDate },
+                { reminderTriggerDate },
+              ],
+            },
+          ],
+        } as any);
+        deletedForThis += reminderRes.deletedCount || 0;
+      }
+
+      // Compliance reminders: try matching by complianceId + reminder date
+      if (deletedForThis === 0 && type === 'compliance' && complianceId && reminderTriggerDate) {
+        const compObjId = tryParseObjectId(complianceId);
+        const compReminderRes = await db.collection('compliance_notifications').deleteOne({
+          tenantId,
+          $and: [
+            {
+              $or: [
+                { complianceId },
+                ...(compObjId ? [{ complianceId: compObjId }] : []),
+              ],
+            },
+            {
+              $or: [
+                { reminderTriggerDate },
+                { reminderDate: reminderTriggerDate },
+              ],
+            },
+          ],
+        } as any);
+        deletedForThis += compReminderRes.deletedCount || 0;
+      }
+
+      // Legacy reminders: sometimes ids were numeric strings
+      if (deletedForThis === 0 && type === 'subscription' && rawId) {
+        const numericId = Number(rawId);
+        if (Number.isFinite(numericId)) {
+          const legacyRes = await db.collection('reminders').deleteOne({ tenantId, id: numericId } as any);
+          deletedForThis += legacyRes.deletedCount || 0;
+        } else {
+          const legacyRes = await db.collection('reminders').deleteOne({ tenantId, id: rawId } as any);
+          deletedForThis += legacyRes.deletedCount || 0;
+        }
+      }
+
+      deletedCount += deletedForThis;
+      results.push({ id: rawId || target?.id, deleted: deletedForThis });
+    }
+
+    return { deletedCount, results };
+  };
+
   app.get("/api/notifications", async (req, res) => {
     const tenantId = req.user?.tenantId;
     const userId = req.user?.userId || req.user?.id;
@@ -1217,7 +1268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Combine, dedupe, and sort by timestamp
-      const allNotifications = dedupeNotifications([
+      let allNotifications = dedupeNotifications([
         ...reminderNotifications,
         ...eventNotifications,
         ...userInAppNotifications,
@@ -1226,6 +1277,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
           new Date(b.timestamp || b.createdAt || '').getTime() -
           new Date(a.timestamp || a.createdAt || '').getTime()
       );
+
+      // Hide dismissed notifications for this user (important for derived reminders)
+      try {
+        const normalizedEmailForQuery = String(userEmail || '').trim().toLowerCase();
+        const userIdStr = userId ? String(userId) : '';
+        if (userIdStr || normalizedEmailForQuery) {
+          const db = await connectToDatabase();
+          const dismissalDocs = await db
+            .collection('notification_dismissals')
+            .find({
+              tenantId,
+              $or: [
+                ...(userIdStr ? [{ userId: userIdStr }] : []),
+                ...(normalizedEmailForQuery ? [{ userEmail: normalizedEmailForQuery }] : []),
+              ],
+            })
+            .project({ key: 1 })
+            .toArray();
+
+          const dismissed = new Set(
+            dismissalDocs
+              .map((d: any) => String(d?.key || '').trim())
+              .filter(Boolean)
+          );
+
+          if (dismissed.size > 0) {
+            allNotifications = allNotifications.filter((n: any) => {
+              const key = notificationDedupeKey(n);
+              return key ? !dismissed.has(key) : true;
+            });
+          }
+        }
+      } catch (e) {
+        console.error('❌ Error applying notification dismissals:', e);
+      }
       
       res.json(allNotifications);
     } catch (error) {
@@ -1234,95 +1320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/notifications/compliance", async (req, res) => {
-    const tenantId = req.user?.tenantId;
-    const userId = req.user?.userId || req.user?.id;
-    const userEmail = req.user?.email;
-    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
-    try {
-      // Get compliance reminder notifications
-      const reminderNotifications = await storage.getComplianceNotifications(tenantId);
-      
-      // Get user-scoped in-app compliance lifecycle notifications
-      let userInAppNotifications: any[] = [];
-      try {
-        if (userId || userEmail) {
-          const db = await connectToDatabase();
-          const normalizedEmailForQuery = String(userEmail || '').trim().toLowerCase();
-          userInAppNotifications = await db
-            .collection("notifications")
-            .find({
-              tenantId,
-              type: 'compliance', // ONLY compliance notifications
-              $or: [
-                ...(userId ? [{ userId: String(userId) }] : []),
-                ...(normalizedEmailForQuery ? [{ userEmail: normalizedEmailForQuery }] : []),
-              ],
-            })
-            .sort({ createdAt: -1 })
-            .toArray();
 
-          userInAppNotifications = userInAppNotifications.map((n) => ({
-            ...n,
-            id: n._id?.toString?.() || n.id,
-            type: 'compliance',
-          }));
-        }
-      } catch (e) {
-        console.error("❌ Error fetching user in-app compliance notifications:", e);
-      }
-      
-      // Combine reminder notifications and lifecycle notifications
-      const allNotifications = dedupeNotifications([...reminderNotifications, ...userInAppNotifications])
-        .sort((a, b) => new Date(b.timestamp || b.createdAt || '').getTime() - new Date(a.timestamp || a.createdAt || '').getTime());
-      
-      res.json(allNotifications);
-    } catch {
-      res.status(500).json({ message: "Failed to fetch compliance notifications" });
-    }
-  });
-
-  app.get("/api/notifications/license", async (req, res) => {
-    const tenantId = req.user?.tenantId;
-    const userId = req.user?.userId || req.user?.id;
-    const userEmail = req.user?.email;
-    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
-    try {
-      let userInAppNotifications: any[] = [];
-      if (userId || userEmail) {
-        const db = await connectToDatabase();
-        const normalizedEmailForQuery = String(userEmail || "").trim().toLowerCase();
-        userInAppNotifications = await db
-          .collection("notifications")
-          .find({
-            tenantId,
-            type: "license",
-            $or: [
-              ...(userId ? [{ userId: String(userId) }] : []),
-              ...(normalizedEmailForQuery ? [{ userEmail: normalizedEmailForQuery }] : []),
-            ],
-          })
-          .sort({ createdAt: -1 })
-          .toArray();
-
-        userInAppNotifications = userInAppNotifications.map((n) => ({
-          ...n,
-          id: n._id?.toString?.() || n.id,
-          type: "license",
-        }));
-      }
-
-      const allNotifications = dedupeNotifications([...userInAppNotifications]).sort(
-        (a, b) =>
-          new Date(b.timestamp || b.createdAt || "").getTime() -
-          new Date(a.timestamp || a.createdAt || "").getTime()
-      );
-
-      res.json(allNotifications);
-    } catch {
-      res.status(500).json({ message: "Failed to fetch license notifications" });
-    }
-  });
 
   // Test endpoint to manually create a notification event
   app.post("/api/notifications/test-create", async (req, res) => {
@@ -1358,21 +1356,169 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk delete notifications (supports merged notification sources)
+  app.post("/api/notifications/bulk-delete", async (req, res) => {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
+
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    const userEmail = (req.user as any)?.email;
+
+    const targets = (req.body?.notifications || req.body?.targets || []) as DeleteNotificationTarget[];
+    if (!Array.isArray(targets) || targets.length === 0) {
+      return res.status(400).json({ message: "No notifications provided" });
+    }
+
+    try {
+      const { deletedCount, results } = await deleteNotificationTargets(tenantId, targets);
+
+      // Always record dismissals for provided keys so derived reminders disappear.
+      try {
+        const normalizedEmail = String(userEmail || '').trim().toLowerCase();
+        const userIdStr = userId ? String(userId) : '';
+        const keys = targets
+          .map((t) => String(t?.dismissKey || '').trim())
+          .filter(Boolean);
+
+        if (keys.length > 0 && (userIdStr || normalizedEmail)) {
+          const db = await connectToDatabase();
+          const now = new Date();
+          const ops = keys.map((key) => ({
+            updateOne: {
+              filter: {
+                tenantId,
+                key,
+                ...(userIdStr ? { userId: userIdStr } : {}),
+                ...(normalizedEmail ? { userEmail: normalizedEmail } : {}),
+              },
+              update: {
+                $setOnInsert: {
+                  tenantId,
+                  key,
+                  ...(userIdStr ? { userId: userIdStr } : {}),
+                  ...(normalizedEmail ? { userEmail: normalizedEmail } : {}),
+                  createdAt: now,
+                },
+              },
+              upsert: true,
+            },
+          }));
+
+          await db.collection('notification_dismissals').bulkWrite(ops, { ordered: false });
+        }
+      } catch (e) {
+        console.error('❌ Error recording notification dismissals:', e);
+      }
+
+      res.json({ success: true, deletedCount, results });
+    } catch (error) {
+      console.error("❌ Error bulk deleting notifications:", error);
+      res.status(500).json({ success: false, message: "Failed to delete notifications" });
+    }
+  });
+
   app.delete("/api/notifications/:id", async (req, res) => {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
+
     const { id } = req.params;
     try {
-      const deleted = await storage.deleteReminder(id);
-      if (deleted) {
-        res.status(200).json({ success: true });
-      } else {
-        res
-          .status(404)
-          .json({ success: false, message: "Notification not found" });
-      }
-    } catch {
-      res
-        .status(500)
-        .json({ success: false, message: "Error deleting notification" });
+      const { deletedCount } = await deleteNotificationTargets(tenantId, [{ id }]);
+      if (deletedCount > 0) return res.status(200).json({ success: true, deletedCount });
+      return res.status(404).json({ success: false, message: "Notification not found" });
+    } catch (error) {
+      console.error("❌ Error deleting notification:", error);
+      res.status(500).json({ success: false, message: "Error deleting notification" });
+    }
+  });
+
+  // Mark notifications as read
+  app.post("/api/notifications/mark-read", async (req, res) => {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
+
+    const { notificationIds } = req.body;
+    if (!Array.isArray(notificationIds) || notificationIds.length === 0) {
+      return res.status(400).json({ message: "notificationIds array is required" });
+    }
+
+    try {
+      const db = await connectToDatabase();
+      const { ObjectId } = await import("mongodb");
+      
+      console.log('📝 Mark as read request - IDs:', notificationIds);
+      
+      // Convert IDs to ObjectIds where possible, keep both formats for matching
+      const objectIds: any[] = [];
+      const stringIds: string[] = [];
+      
+      notificationIds.forEach(id => {
+        const idStr = String(id);
+        stringIds.push(idStr); // Always add string version
+        try {
+          const oid = new ObjectId(idStr);
+          objectIds.push(oid);
+        } catch {
+          // Not a valid ObjectId format, that's ok
+        }
+      });
+
+      console.log('📝 ObjectIds:', objectIds.length, 'StringIds:', stringIds.length);
+
+      // Build query that checks both _id (as ObjectId) and id (as string)
+      const buildQuery = () => {
+        const conditions: any[] = [];
+        if (objectIds.length > 0) {
+          conditions.push({ _id: { $in: objectIds } });
+        }
+        if (stringIds.length > 0) {
+          conditions.push({ id: { $in: stringIds } });
+        }
+        return conditions.length > 0 ? { tenantId, $or: conditions } : { tenantId, _id: { $in: [] } };
+      };
+
+      const query = buildQuery();
+      console.log('📝 Query:', JSON.stringify(query, null, 2));
+
+      // First, let's check what notifications exist with these IDs
+      const notificationsCheck = await db.collection("notifications").find(query).toArray();
+      const eventsCheck = await db.collection("notification_events").find(query).toArray();
+      const complianceCheck = await db.collection("compliance_notifications").find(query).toArray();
+      
+      console.log('📝 Found before update:');
+      console.log('  - notifications collection:', notificationsCheck.length, notificationsCheck.map(n => ({ id: n._id?.toString(), name: n.subscriptionName || n.filingName, isRead: n.isRead })));
+      console.log('  - notification_events collection:', eventsCheck.length, eventsCheck.map(n => ({ id: n._id?.toString(), name: n.subscriptionName || n.filingName, isRead: n.isRead })));
+      console.log('  - compliance_notifications collection:', complianceCheck.length, complianceCheck.map(n => ({ id: n._id?.toString(), name: n.filingName, isRead: n.isRead })));
+
+      // Update notifications in all collections
+      const updatePromises = [
+        db.collection("notifications").updateMany(
+          query,
+          { $set: { isRead: true, readAt: new Date() } }
+        ),
+        db.collection("notification_events").updateMany(
+          query,
+          { $set: { isRead: true, readAt: new Date() } }
+        ),
+        db.collection("compliance_notifications").updateMany(
+          query,
+          { $set: { isRead: true, readAt: new Date() } }
+        )
+      ];
+
+      const results = await Promise.all(updatePromises);
+      const totalModified = results.reduce((sum, r) => sum + (r.modifiedCount || 0), 0);
+
+      console.log(`✅ Marked ${totalModified} notification(s) as read (notifications: ${results[0].modifiedCount}, events: ${results[1].modifiedCount}, compliance: ${results[2].modifiedCount})`);
+
+      res.status(200).json({ 
+        success: true, 
+        modifiedCount: totalModified,
+        message: `Marked ${totalModified} notification(s) as read`
+      });
+    } catch (error) {
+      console.error("❌ Error marking notifications as read:", error);
+      res.status(500).json({ success: false, message: "Error marking notifications as read" });
     }
   });
 

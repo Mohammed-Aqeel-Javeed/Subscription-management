@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import React from "react";
@@ -23,8 +23,19 @@ import { API_BASE_URL } from "@/lib/config";
 import * as XLSX from 'xlsx';
 export default function Configuration() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+  const exitConfirmActionRef = useRef<null | (() => void)>(null);
+  const currencySnapshotRef = useRef<string>("");
+  const paymentSnapshotRef = useRef<string>("");
+
+  const requestExitConfirm = (action: () => void) => {
+    exitConfirmActionRef.current = action;
+    setExitConfirmOpen(true);
+  };
   
   // Fetch employees for Managed by dropdown
   const { data: employeesRaw = [] } = useQuery({
@@ -128,7 +139,7 @@ export default function Configuration() {
     console.log('Trimmed owner:', ownerValue);
     console.log('Trimmed manager:', managerValue);
     
-    setPaymentForm({
+    const nextPaymentForm = {
       title: method.title || method.name || '',
       type: method.type || '',
       owner: ownerValue,
@@ -136,7 +147,10 @@ export default function Configuration() {
       expiresAt: method.expiresAt || '',
       financialInstitution: method.financialInstitution || '',
       lastFourDigits: method.lastFourDigits || '',
-    });
+    };
+
+    setPaymentForm(nextPaymentForm);
+    paymentSnapshotRef.current = JSON.stringify(nextPaymentForm);
     setEditPaymentModalOpen(true);
     setEditingPaymentId(method._id);
   };
@@ -196,7 +210,7 @@ export default function Configuration() {
       .then(res => res.json())
       .then(() => {
         // Close modal and show toast immediately
-        setEditPaymentModalOpen(false);
+        closeEditPaymentModal();
         setEditingPaymentId(null);
         toast({
           title: "Payment Method Updated",
@@ -212,6 +226,18 @@ export default function Configuration() {
   // Edit Payment Method Modal state
   const [editPaymentModalOpen, setEditPaymentModalOpen] = useState(false);
   
+  // Helper function to close edit modal and navigate back if needed
+  const closeEditPaymentModal = () => {
+    setEditPaymentModalOpen(false);
+    
+    // Check if we should return to notifications
+    const shouldReturnToNotifications = localStorage.getItem('returnToNotifications') === 'true';
+    if (shouldReturnToNotifications) {
+      localStorage.removeItem('returnToNotifications');
+      navigate('/notifications');
+    }
+  };
+  
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<any>(null);
@@ -221,7 +247,7 @@ export default function Configuration() {
   const [validationErrorMessage, setValidationErrorMessage] = useState("");
   
   // Fetch payment methods using React Query
-  const { data: paymentMethods = [] } = useQuery({
+  const { data: paymentMethods = [], isSuccess: isPaymentMethodsLoaded } = useQuery({
     queryKey: ["/api/payment"],
     queryFn: async () => {
       const res = await fetch("/api/payment", { credentials: 'include' });
@@ -232,6 +258,45 @@ export default function Configuration() {
     staleTime: 0,
     refetchOnMount: true,
   });
+
+  // Auto-switch to payment tab if coming from payment expiry notification
+  useEffect(() => {
+    const shouldOpenPayment = localStorage.getItem('openPaymentMethods') === 'true';
+    const paymentIdToOpen = localStorage.getItem('openPaymentId');
+    
+    if (shouldOpenPayment) {
+      setActiveTab('payment');
+      localStorage.removeItem('openPaymentMethods');
+      
+      // If we have a specific payment ID, open its edit modal
+      if (paymentIdToOpen && isPaymentMethodsLoaded && paymentMethods.length > 0) {
+        // Mark that we came from notifications
+        localStorage.setItem('returnToNotifications', 'true');
+        
+        // Use requestAnimationFrame for immediate execution after render
+        requestAnimationFrame(() => {
+          const payment = paymentMethods.find(
+            (pm: any) => String(pm._id) === paymentIdToOpen || String(pm.id) === paymentIdToOpen
+          );
+          
+          if (payment) {
+            console.log('Auto-opening payment method edit modal for:', payment);
+            openEditPayment(payment);
+          }
+          
+          localStorage.removeItem('openPaymentId');
+        });
+      } else if (!paymentIdToOpen) {
+        // Just scroll to payment methods section
+        requestAnimationFrame(() => {
+          const paymentSection = document.getElementById('payment-methods-section');
+          if (paymentSection) {
+            paymentSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      }
+    }
+  }, [isPaymentMethodsLoaded, paymentMethods]);
 
   // Fetch subscriptions to count payment method usage
   const { data: subscriptions = [] } = useQuery({
@@ -312,7 +377,6 @@ export default function Configuration() {
   const currencyFileInputRef = useRef<HTMLInputElement>(null);
   const paymentFileInputRef = useRef<HTMLInputElement>(null);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
-  const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
   
   // Currency tab Data Management
   const [currencyDataManagementSelectKey, setCurrencyDataManagementSelectKey] = useState(0);
@@ -736,31 +800,25 @@ export default function Configuration() {
         'Currency Code': 'USD',
         'Description': 'United States Dollar',
         'Symbol': '$',
-        'Exchange Rate': '1.00',
-        'Created': '',
-        'Last Updated': ''
+        'Exchange Rate': '1.00'
       },
       {
         'Currency Code': 'EUR',
         'Description': 'Euro',
         'Symbol': '€',
-        'Exchange Rate': '0.85',
-        'Created': '',
-        'Last Updated': ''
+        'Exchange Rate': '0.85'
       },
       {
         'Currency Code': 'GBP',
         'Description': 'British Pound Sterling',
         'Symbol': '£',
-        'Exchange Rate': '0.73',
-        'Created': '',
-        'Last Updated': ''
+        'Exchange Rate': '0.73'
       }
     ];
     
     const wsCurrency = XLSX.utils.json_to_sheet(currencyTemplateData);
     wsCurrency['!cols'] = [
-      { wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+      { wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }
     ];
     XLSX.utils.book_append_sheet(wb, wsCurrency, 'Currency');
     
@@ -807,188 +865,6 @@ export default function Configuration() {
     });
   };
 
-  // Export All Data (Currency + Payment Methods)
-  const exportAllToExcel = () => {
-    const wb = XLSX.utils.book_new();
-    
-    // Currency Sheet
-    const currencyExportData = currencies.map(currency => ({
-      'Currency Code': currency.code,
-      'Description': currency.name,
-      'Symbol': currency.symbol,
-      'Exchange Rate': currency.exchangeRate || '',
-      'Created': currency.created || '',
-      'Last Updated': currency.lastUpdated || ''
-    }));
-    
-    const wsCurrency = XLSX.utils.json_to_sheet(currencyExportData);
-    wsCurrency['!cols'] = [
-      { wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
-    ];
-    XLSX.utils.book_append_sheet(wb, wsCurrency, 'Currency');
-    
-    // Payment Methods Sheet
-    const paymentExportData = paymentMethods.map(method => ({
-      'Title': method.name || method.title,
-      'Type': method.type,
-      'Owner': method.owner || '',
-      'Manager': method.manager || '',
-      'Financial Institution': method.financialInstitution || '',
-      'Expires At': method.expiresAt || '',
-      'Last 4 Digits': method.lastFourDigits || ''
-    }));
-    
-    const wsPayment = XLSX.utils.json_to_sheet(paymentExportData);
-    wsPayment['!cols'] = [
-      { wch: 20 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 15 }, { wch: 15 }
-    ];
-    XLSX.utils.book_append_sheet(wb, wsPayment, 'Payment Methods');
-    
-    XLSX.writeFile(wb, `Configuration_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
-    
-    toast({
-      title: "Export Successful",
-      description: `Exported ${currencies.length} currencies and ${paymentMethods.length} payment methods to Excel`,
-      variant: "success",
-    });
-  };
-
-  // Import Combined Excel (Currency + Payment Methods)
-  const importCombinedExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        let currencySuccess = 0;
-        let currencyError = 0;
-        let paymentSuccess = 0;
-        let paymentError = 0;
-
-        // Import Currency Sheet
-        if (workbook.SheetNames.includes('Currency')) {
-          const currencySheet = workbook.Sheets['Currency'];
-          const currencyData = XLSX.utils.sheet_to_json(currencySheet) as any[];
-
-          for (const row of currencyData) {
-            try {
-              const currencyData = {
-                code: (row['Currency Code'] || '').toString().trim().toUpperCase(),
-                name: (row['Description'] || '').toString().trim(),
-                symbol: (row['Symbol'] || '').toString().trim(),
-                exchangeRate: (row['Exchange Rate'] || '').toString().trim(),
-              };
-
-              if (!currencyData.code || !currencyData.name || !currencyData.symbol) {
-                currencyError++;
-                continue;
-              }
-
-              const exists = currencies.find(c => c.code === currencyData.code);
-              const method = exists ? 'PUT' : 'POST';
-              const url = exists 
-                ? `${API_BASE_URL}/api/currencies/${currencyData.code}` 
-                : `${API_BASE_URL}/api/currencies`;
-
-              const res = await fetch(url, {
-                method,
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify(currencyData),
-              });
-
-              if (res.ok) {
-                currencySuccess++;
-              } else {
-                currencyError++;
-              }
-            } catch (error) {
-              currencyError++;
-            }
-          }
-        }
-
-        // Import Payment Methods Sheet
-        if (workbook.SheetNames.includes('Payment Methods')) {
-          const paymentSheet = workbook.Sheets['Payment Methods'];
-          const paymentData = XLSX.utils.sheet_to_json(paymentSheet) as any[];
-
-          for (const row of paymentData) {
-            try {
-              const paymentData = {
-                name: (row['Title'] || '').toString().trim(),
-                type: (row['Type'] || '').toString().trim(),
-                description: (row['Description'] || '').toString().trim(),
-                icon: (row['Icon'] || '').toString().trim(),
-                manager: (row['Manager'] || '').toString().trim(),
-                expiresAt: (row['Expires At'] || '').toString().trim(),
-              };
-
-              if (!paymentData.name || !paymentData.type) {
-                paymentError++;
-                continue;
-              }
-
-              const res = await fetch("/api/payment", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(paymentData),
-              });
-
-              if (res.ok) {
-                paymentSuccess++;
-              } else {
-                paymentError++;
-              }
-            } catch (error) {
-              paymentError++;
-            }
-          }
-        }
-
-        // Refresh data
-        await fetchCurrencies();
-        queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
-
-        toast({
-          title: "Import Complete",
-          description: `Currencies: ${currencySuccess} success, ${currencyError} failed. Payment Methods: ${paymentSuccess} success, ${paymentError} failed.`,
-          variant: (currencyError > 0 || paymentError > 0) ? "destructive" : "success",
-        });
-      } catch (error) {
-        toast({
-          title: "Import Failed",
-          description: "Failed to parse Excel file. Please check the file format.",
-          variant: "destructive",
-        });
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    
-    // Reset file input
-    if (currencyFileInputRef.current) {
-      currencyFileInputRef.current.value = '';
-    }
-  };
-
-  // Individual Currency Functions
-  const downloadCurrencyTemplate = () => {
-    const wb = XLSX.utils.book_new();
-    const currencyTemplateData = [
-      { 'Currency Code': 'USD', 'Description': 'United States Dollar', 'Symbol': '$', 'Exchange Rate': '1.00' },
-      { 'Currency Code': 'EUR', 'Description': 'Euro', 'Symbol': '€', 'Exchange Rate': '0.85' }
-    ];
-    const ws = XLSX.utils.json_to_sheet(currencyTemplateData);
-    ws['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Currency');
-    XLSX.writeFile(wb, 'Currency_Template.xlsx');
-    toast({ title: "Template Downloaded", description: "Currency template downloaded successfully", variant: "success" });
-  };
-
   const exportCurrencies = () => {
     if (currencies.length === 0) {
       toast({ title: "No data to export", description: "Add currencies first before exporting", variant: "destructive" });
@@ -999,12 +875,10 @@ export default function Configuration() {
       'Currency Code': currency.code,
       'Description': currency.name,
       'Symbol': currency.symbol,
-      'Exchange Rate': currency.exchangeRate || '',
-      'Created': currency.created || '',
-      'Last Updated': currency.lastUpdated || ''
+      'Exchange Rate': currency.exchangeRate || ''
     }));
     const ws = XLSX.utils.json_to_sheet(currencyExportData);
-    ws['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+    ws['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Currency');
     XLSX.writeFile(wb, `Currency_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: "Export Successful", description: `Exported ${currencies.length} currencies`, variant: "success" });
@@ -1023,25 +897,57 @@ export default function Configuration() {
         const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
         
         let success = 0, failed = 0;
+        const errors: string[] = [];
+        
         for (const row of jsonData) {
           try {
+            const currencyCode = row['Currency Code'];
+            
+            // Check if currency already exists
+            const existingCurrency = currencies.find(c => c.code === currencyCode);
+            if (existingCurrency) {
+              failed++;
+              errors.push(`Currency ${currencyCode} already exists`);
+              continue;
+            }
+            
             const currencyData = {
-              code: row['Currency Code'],
+              code: currencyCode,
               name: row['Description'],
               symbol: row['Symbol'],
               exchangeRate: row['Exchange Rate'] || '1.00'
             };
-            await fetch(`${API_BASE_URL}/api/currencies`, {
+            
+            const res = await fetch(`${API_BASE_URL}/api/currencies`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
               body: JSON.stringify(currencyData)
             });
-            success++;
-          } catch { failed++; }
+            
+            if (res.ok) {
+              success++;
+            } else {
+              failed++;
+              errors.push(`Failed to import ${currencyCode}`);
+            }
+          } catch { 
+            failed++;
+            errors.push(`Error importing currency`);
+          }
         }
+        
         await fetchCurrencies();
-        toast({ title: "Import Complete", description: `${success} success, ${failed} failed`, variant: success > 0 ? "success" : "destructive" });
+        
+        if (errors.length > 0) {
+          toast({ 
+            title: "Import Complete with Errors", 
+            description: `${success} success, ${failed} failed. ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}`, 
+            variant: failed > 0 ? "destructive" : "success" 
+          });
+        } else {
+          toast({ title: "Import Complete", description: `${success} currencies imported successfully`, variant: "success" });
+        }
       } catch {
         toast({ title: "Import Failed", description: "Failed to parse file", variant: "destructive" });
       }
@@ -1096,26 +1002,62 @@ export default function Configuration() {
         const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
         
         let success = 0, failed = 0;
+        const errors: string[] = [];
+        
         for (const row of jsonData) {
           try {
+            const paymentTitle = row['Title'];
+            
+            // Check if payment method with same name already exists
+            const existingPayment = paymentMethods.find(
+              p => (p.name?.toLowerCase().trim() === paymentTitle?.toLowerCase().trim()) ||
+                   (p.title?.toLowerCase().trim() === paymentTitle?.toLowerCase().trim())
+            );
+            
+            if (existingPayment) {
+              failed++;
+              errors.push(`Payment method "${paymentTitle}" already exists`);
+              continue;
+            }
+            
             const paymentData = {
-              name: row['Title'],
+              name: paymentTitle,
               type: row['Type'],
               description: row['Description'] || '',
               manager: row['Manager'] || '',
               expiresAt: row['Expires At'] || ''
             };
-            await fetch(`${API_BASE_URL}/api/payment`, {
+            
+            const res = await fetch(`${API_BASE_URL}/api/payment`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
               body: JSON.stringify(paymentData)
             });
-            success++;
-          } catch { failed++; }
+            
+            if (res.ok) {
+              success++;
+            } else {
+              failed++;
+              errors.push(`Failed to import "${paymentTitle}"`);
+            }
+          } catch { 
+            failed++;
+            errors.push(`Error importing payment method`);
+          }
         }
+        
         queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
-        toast({ title: "Import Complete", description: `${success} success, ${failed} failed`, variant: success > 0 ? "success" : "destructive" });
+        
+        if (errors.length > 0) {
+          toast({ 
+            title: "Import Complete with Errors", 
+            description: `${success} success, ${failed} failed. ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}`, 
+            variant: failed > 0 ? "destructive" : "success" 
+          });
+        } else {
+          toast({ title: "Import Complete", description: `${success} payment methods imported successfully`, variant: "success" });
+        }
       } catch {
         toast({ title: "Import Failed", description: "Failed to parse file", variant: "destructive" });
       }
@@ -1943,6 +1885,35 @@ export default function Configuration() {
     lastFourDigits: '',
   });
 
+  const isPaymentDirty = () => {
+    if (!paymentSnapshotRef.current) return false;
+    return JSON.stringify(paymentForm) !== paymentSnapshotRef.current;
+  };
+
+  const closeAddPaymentModalNow = () => {
+    setAddPaymentModalOpen(false);
+    setIsAddPaymentFullscreen(false);
+    setPaymentForm({
+      title: '',
+      type: '',
+      owner: '',
+      manager: '',
+      expiresAt: '',
+      financialInstitution: '',
+      lastFourDigits: '',
+    });
+    setPmOwnerSearch('');
+    setPmManagerSearch('');
+    paymentSnapshotRef.current = '';
+  };
+
+  const closeEditPaymentModalNow = () => {
+    closeEditPaymentModal();
+    setIsEditPaymentFullscreen(false);
+    setEditingPaymentId(null);
+    paymentSnapshotRef.current = '';
+  };
+
   // Payment Method tab: Category-style dropdowns for Owner / Managed by
   const [pmOwnerOpen, setPmOwnerOpen] = useState(false);
   const [pmOwnerSearch, setPmOwnerSearch] = useState('');
@@ -2026,6 +1997,43 @@ export default function Configuration() {
                 }}
               >
                 Yes
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Exit Confirmation Dialog */}
+        <AlertDialog open={exitConfirmOpen} onOpenChange={(open) => !open && setExitConfirmOpen(false)}>
+          <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+                Confirm Exit
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-700 font-medium">
+                All filled data will be deleted if you exit. Do you want to cancel or exit?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                onClick={() => {
+                  setExitConfirmOpen(false);
+                  exitConfirmActionRef.current = null;
+                }}
+                className="border-gray-300 text-gray-700 hover:bg-gray-100"
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setExitConfirmOpen(false);
+                  const action = exitConfirmActionRef.current;
+                  exitConfirmActionRef.current = null;
+                  action?.();
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+              >
+                Exit
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -2214,20 +2222,45 @@ export default function Configuration() {
                         </div>
                         
                         <Dialog open={addCurrencyOpen} onOpenChange={(open) => {
-                          if (!open) {
-                            // Reset form when modal closes
-                            setNewCurrency({
-                              name: '',
-                              code: '',
-                              symbol: '',
-                              isoNumber: '',
-                              exchangeRate: '',
-                              visible: true,
-                              created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-                            });
-                            setIsEditMode(false);
+                          if (open) {
+                            currencySnapshotRef.current = JSON.stringify(newCurrency);
+                            setAddCurrencyOpen(true);
+                            return;
                           }
-                          setAddCurrencyOpen(open);
+
+                          const isDirty = !!currencySnapshotRef.current && JSON.stringify(newCurrency) !== currencySnapshotRef.current;
+                          if (isDirty) {
+                            requestExitConfirm(() => {
+                              setNewCurrency({
+                                name: '',
+                                code: '',
+                                symbol: '',
+                                isoNumber: '',
+                                exchangeRate: '',
+                                visible: true,
+                                created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+                              });
+                              setIsEditMode(false);
+                              setAddCurrencyOpen(false);
+                              currencySnapshotRef.current = '';
+                            });
+                            setAddCurrencyOpen(true);
+                            return;
+                          }
+
+                          // Reset form when modal closes
+                          setNewCurrency({
+                            name: '',
+                            code: '',
+                            symbol: '',
+                            isoNumber: '',
+                            exchangeRate: '',
+                            visible: true,
+                            created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+                          });
+                          setIsEditMode(false);
+                          setAddCurrencyOpen(false);
+                          currencySnapshotRef.current = '';
                         }}>
                           <DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto  border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
                             {/* Header with Gradient Background */}
@@ -2582,7 +2615,71 @@ export default function Configuration() {
                     </motion.div>
                   </TabsContent>
               
-              <TabsContent value="payment" className="mt-6">
+              {/* Currency Import Confirmation Dialog */}
+              <AlertDialog open={currencyImportConfirmOpen} onOpenChange={setCurrencyImportConfirmOpen}>
+                <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Select Yes to choose a file. Select No to download the template with examples.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel
+                      className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+                      onClick={() => {
+                        // Download template with examples
+                        const wb = XLSX.utils.book_new();
+                        const templateData = [
+                          {
+                            'Currency Code': 'USD',
+                            'Description': 'United States Dollar',
+                            'Symbol': '$',
+                            'Exchange Rate': '1.00'
+                          },
+                          {
+                            'Currency Code': 'EUR',
+                            'Description': 'Euro',
+                            'Symbol': '€',
+                            'Exchange Rate': '0.85'
+                          },
+                          {
+                            'Currency Code': 'GBP',
+                            'Description': 'British Pound Sterling',
+                            'Symbol': '£',
+                            'Exchange Rate': '0.73'
+                          }
+                        ];
+                        const ws = XLSX.utils.json_to_sheet(templateData);
+                        ws['!cols'] = [
+                          { wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }
+                        ];
+                        XLSX.utils.book_append_sheet(wb, ws, 'Currency');
+                        XLSX.writeFile(wb, 'Currency_Template.xlsx');
+                        toast({
+                          title: "Template Downloaded",
+                          description: "Currency template with examples downloaded successfully",
+                          variant: "success",
+                        });
+                        setCurrencyImportConfirmOpen(false);
+                      }}
+                    >
+                      No
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-green-600 text-white hover:bg-green-700"
+                      onClick={() => {
+                        setCurrencyImportConfirmOpen(false);
+                        setTimeout(() => currencyFileInputRef.current?.click(), 0);
+                      }}
+                    >
+                      Yes
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              <TabsContent value="payment" className="mt-6" id="payment-methods-section">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -2642,7 +2739,7 @@ export default function Configuration() {
                         <Button
                           onClick={() => {
                             // Reset form when opening add payment modal
-                            setPaymentForm({
+                            const nextPaymentForm = {
                               title: '',
                               type: '',
                               owner: '',
@@ -2650,7 +2747,9 @@ export default function Configuration() {
                               expiresAt: '',
                               financialInstitution: '',
                               lastFourDigits: '',
-                            });
+                            };
+                            setPaymentForm(nextPaymentForm);
+                            paymentSnapshotRef.current = JSON.stringify(nextPaymentForm);
                             setPmOwnerSearch('');
                             setPmManagerSearch('');
                             setAddPaymentModalOpen(true);
@@ -2791,7 +2890,17 @@ export default function Configuration() {
                     </Dialog>
                     
                     {/* Edit Payment Method Modal */}
-                    <Dialog open={editPaymentModalOpen} onOpenChange={setEditPaymentModalOpen}>
+                    <Dialog open={editPaymentModalOpen} onOpenChange={(open) => {
+                      if (open) {
+                        setEditPaymentModalOpen(true);
+                        return;
+                      }
+                      if (isPaymentDirty()) {
+                        requestExitConfirm(closeEditPaymentModalNow);
+                        return;
+                      }
+                      closeEditPaymentModalNow();
+                    }}>
                       <DialogContent showClose={false} className={`${isEditPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px]'} overflow-hidden border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
                         {/* Header with Gradient Background */}
                         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-6 ">
@@ -2826,8 +2935,11 @@ export default function Configuration() {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => {
-                                    setEditPaymentModalOpen(false);
-                                    setIsEditPaymentFullscreen(false);
+                                    if (isPaymentDirty()) {
+                                      requestExitConfirm(closeEditPaymentModalNow);
+                                      return;
+                                    }
+                                    closeEditPaymentModalNow();
                                   }}
                                   className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-indigo-200 shadow-sm"
                                   title="Close"
@@ -3191,7 +3303,7 @@ export default function Configuration() {
                               <Button 
                                 type="button" 
                                 variant="outline" 
-                                onClick={() => setEditPaymentModalOpen(false)} 
+                                onClick={() => closeEditPaymentModal()} 
                                 className="h-9 px-6 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-lg transition-all duration-200"
                               >
                                 Cancel
@@ -3334,7 +3446,17 @@ export default function Configuration() {
                     </Dialog>
                     
                     {/* Modal for Add Payment Method */}
-                    <Dialog open={addPaymentModalOpen} onOpenChange={setAddPaymentModalOpen}>
+                    <Dialog open={addPaymentModalOpen} onOpenChange={(open) => {
+                      if (open) {
+                        setAddPaymentModalOpen(true);
+                        return;
+                      }
+                      if (isPaymentDirty()) {
+                        requestExitConfirm(closeAddPaymentModalNow);
+                        return;
+                      }
+                      closeAddPaymentModalNow();
+                    }}>
                       <DialogContent showClose={false} className={`${isAddPaymentFullscreen ? 'max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh]' : 'max-w-3xl min-w-[600px]'} overflow-hidden border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter`}>
                         {/* Header with Gradient Background */}
                         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 ">
@@ -3369,8 +3491,11 @@ export default function Configuration() {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => {
-                                    setAddPaymentModalOpen(false);
-                                    setIsAddPaymentFullscreen(false);
+                                    if (isPaymentDirty()) {
+                                      requestExitConfirm(closeAddPaymentModalNow);
+                                      return;
+                                    }
+                                    closeAddPaymentModalNow();
                                   }}
                                   className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-indigo-200 shadow-sm"
                                   title="Close"
@@ -4065,7 +4190,7 @@ export default function Configuration() {
                             disabled={!newComplianceFieldName.trim()}
                             className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
                           >
-                            <Plus className="w-4 w-4 mr-2" />
+                            <Plus className="w-4 h-4 mr-2" />
                             New Field
                           </Button>
                         </motion.div>

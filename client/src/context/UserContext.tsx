@@ -7,6 +7,7 @@ interface User {
   userId: string;
   email: string;
   fullName: string | null;
+  profileImage?: string | null;
   companyName: string | null;
   tenantId: string | null;
   defaultCurrency: string | null;

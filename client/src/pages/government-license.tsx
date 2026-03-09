@@ -1706,6 +1706,32 @@ export default function GovernmentLicense() {
     },
   });
 
+  // Auto-open license modal if coming from notifications
+  // Auto-open license modal if coming from notifications
+  useEffect(() => {
+    const openLicenseId = localStorage.getItem('openLicenseId');
+    if (openLicenseId && licenses.length > 0 && !isModalOpen) {
+      // Find the license by ID
+      const license = licenses.find((lic: License) => 
+        String(lic.id) === openLicenseId || String((lic as any)._id) === openLicenseId
+      );
+      
+      if (license) {
+        // Mark that we came from notifications
+        localStorage.setItem('returnToNotifications', 'true');
+        
+        // Open the modal with this license
+        handleEdit(license);
+        
+        // Clear the stored ID
+        localStorage.removeItem('openLicenseId');
+      } else {
+        // ID not found, clear it
+        localStorage.removeItem('openLicenseId');
+      }
+    }
+  }, [licenses, isModalOpen]);
+
   // Query for employees (owners)
   const { data: employeesRaw = [], refetch: refetchEmployees } = useQuery({
     queryKey: ["/api/employees"],
@@ -3001,6 +3027,13 @@ export default function GovernmentLicense() {
     setIsModalOpen(false);
     setExitConfirmOpen(false);
 
+    // Check if we should return to notifications
+    const shouldReturnToNotifications = localStorage.getItem('returnToNotifications') === 'true';
+    if (shouldReturnToNotifications) {
+      localStorage.removeItem('returnToNotifications');
+      navigate('/notifications');
+    }
+
     setTimeout(() => {
       setIsFullscreen(false);
       setShowSubmissionDetails(false);
@@ -3665,10 +3698,23 @@ export default function GovernmentLicense() {
         >
           <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} overflow-y-auto overflow-x-hidden border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300`}>
             <DialogHeader className={`sticky top-0 z-20 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'px-4 py-3 md:px-5 md:py-3' : 'p-5'}  flex flex-row items-center justify-between`}>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
                 <ShieldCheck className="h-6 w-6" />
-                <DialogTitle className="text-xl font-bold leading-none">
-                  {showSubmissionDetails ? 'Renewal Status' : editingLicense ? 'Edit Renewal' : 'New Renewal'}
+                <DialogTitle
+                  className="text-xl font-bold leading-none truncate max-w-xs"
+                  title={
+                    showSubmissionDetails
+                      ? 'Renewal Status'
+                      : editingLicense
+                        ? (form.getValues("licenseName") || editingLicense?.licenseName || 'Renewal')
+                        : 'New Renewal'
+                  }
+                >
+                  {showSubmissionDetails
+                    ? 'Renewal Status'
+                    : editingLicense
+                      ? (form.getValues("licenseName") || editingLicense?.licenseName || 'Renewal')
+                      : 'New Renewal'}
                 </DialogTitle>
                 {(() => {
                   const derived = getDerivedStatus({ endDate: expiryDateValue, status: statusValue });
@@ -3679,7 +3725,7 @@ export default function GovernmentLicense() {
                         ? 'bg-rose-500 text-white'
                         : 'bg-gray-500 text-white';
                   return (
-                    <span className={`ml-4 px-4 py-2 rounded-full text-sm font-semibold shadow-sm tracking-wide ${cls}`}>{derived}</span>
+                    <span className={`ml-4 shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-semibold shadow-sm tracking-wide ${cls}`}>{derived}</span>
                   );
                 })()}
               </div>
@@ -3963,7 +4009,7 @@ export default function GovernmentLicense() {
                         <FormField
                           control={form.control}
                           name="renewalAttachments"
-                          render={({ field }) => (
+                          render={() => (
                             <FormItem>
                               <FormLabel className="block text-sm font-medium text-slate-700">
                                 Attachments (if any):

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -309,6 +310,8 @@ const formatDate = (dateStr?: string): string => {
   return `${dd}/${mm}/${yyyy}`;
 };
 export default function Compliance() {
+  const navigate = useNavigate();
+  
   // --- Dynamic Compliance Fields ---
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
   const [isLoadingComplianceFields, setIsLoadingComplianceFields] = useState(true);
@@ -1611,6 +1614,62 @@ export default function Compliance() {
     refetchOnMount: true,
   });
   
+  // Auto-open compliance modal if coming from notifications
+  useEffect(() => {
+    const openComplianceId = localStorage.getItem('openComplianceId');
+    if (openComplianceId && complianceItems.length > 0 && !modalOpen) {
+      // Find the compliance item by ID
+      const index = complianceItems.findIndex((item: ComplianceItem) => 
+        String(item.id) === openComplianceId || String(item._id) === openComplianceId
+      );
+      
+      if (index !== -1) {
+        // Mark that we came from notifications
+        localStorage.setItem('returnToNotifications', 'true');
+        
+        // Open the modal with this item
+        setEditIndex(index);
+        setShowSubmissionDetails(false);
+        setModalOpen(true);
+        
+        const currentItem = complianceItems[index] as ComplianceItem;
+        const depts = parseDepartments(currentItem.department);
+        setSelectedDepartments(depts);
+        setForm({
+          filingName: currentItem.policy,
+          filingFrequency: currentItem.frequency || "Monthly",
+          filingComplianceCategory: currentItem.category,
+          filingGoverningAuthority: currentItem.governingAuthority || "",
+          filingStartDate: currentItem.lastAudit || "",
+          filingEndDate: currentItem.endDate || "",
+          filingSubmissionDeadline: currentItem.submissionDeadline || "",
+          filingSubmissionStatus: currentItem.status || "Pending",
+          filingRecurringFrequency: (currentItem as any).recurringFrequency || "",
+          filingRemarks: currentItem.remarks || "",
+          submissionNotes: "",
+          filingSubmissionDate: "",
+          reminderDays: String(currentItem.reminderDays ?? "7"),
+          reminderPolicy: currentItem.reminderPolicy || "One time",
+          submittedBy: (currentItem as any).submittedBy || "",
+          owner: (currentItem as any).owner || "",
+          owner2: (currentItem as any).owner2 || "",
+          amount: "",
+          paymentDate: "",
+          submissionAmount: "",
+          paymentMethod: "",
+          department: "",
+          departments: depts,
+        });
+        
+        // Clear the stored ID
+        localStorage.removeItem('openComplianceId');
+      } else {
+        // ID not found, clear it
+        localStorage.removeItem('openComplianceId');
+      }
+    }
+  }, [complianceItems, modalOpen]);
+  
   useEffect(() => {
     const invalidateCompliance = () => {
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
@@ -1796,6 +1855,13 @@ export default function Compliance() {
   const handleExitConfirm = () => {
     setModalOpen(false);
     setExitConfirmOpen(false);
+
+    // Check if we should return to notifications
+    const shouldReturnToNotifications = localStorage.getItem('returnToNotifications') === 'true';
+    if (shouldReturnToNotifications) {
+      localStorage.removeItem('returnToNotifications');
+      navigate('/notifications');
+    }
 
     setTimeout(() => {
       setFilingNameError("");
@@ -2564,7 +2630,7 @@ export default function Compliance() {
         <div className="min-w-0 flex-1 min-h-0">
           {/* Professional Data Table */}
           <div className="bg-white border border-gray-200  shadow-md overflow-hidden h-full flex flex-col min-h-0">
-            <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full">
+            <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
               <TableHeader>
                 <TableRow className="border-b-2 border-gray-400 bg-gray-200">
                   <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[200px]">
@@ -2896,41 +2962,56 @@ export default function Compliance() {
         <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 flex flex-col overflow-hidden`}>
           {/* Local keyframes for the sheen animation */}
           <style>{`@keyframes sheen { 0% { transform: translateX(-60%); } 100% { transform: translateX(180%); } }`}</style>
-          <DialogHeader className={`sticky top-0 z-50 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'p-4 md:p-5' : 'p-5'} `}>
-            <div className="flex items-center justify-between w-full">
-              <div className="flex items-center gap-3">
-                <DialogTitle className="text-xl font-bold flex items-center gap-3">
-                  <FileText className="h-6 w-6" />
-                  {showSubmissionDetails ? "Submission" : (editIndex !== null ? (form.filingName || 'Edit Compliance') : "Compliance")}
-                </DialogTitle>
-                {/* Dynamic Status Badge - hidden when in Submission view */}
-                {!showSubmissionDetails && (() => {
-                  // Check if it's a draft first
-                  const isDraft = editIndex !== null && (complianceItems[editIndex]?.isDraft || complianceItems[editIndex]?.status === "Draft");
-                  if (isDraft) {
-                    return (
-                      <span className="px-4 py-2 rounded-full text-sm font-medium text-amber-800 bg-amber-100 transition-all duration-300">
-                        Draft
-                      </span>
-                    );
-                  }
-                  
-                  const statusInfo = getComplianceStatus(form.filingEndDate, form.filingSubmissionDeadline);
-                  const isLate = statusInfo.status === "Late";
+          <DialogHeader className={`sticky top-0 z-50 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'p-4 md:p-5' : 'p-5'} flex flex-row items-center`}>
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <FileText className="h-6 w-6 shrink-0" />
+              <DialogTitle
+                className="text-xl font-bold tracking-tight text-white flex-1 min-w-0 truncate max-w-xs"
+                title={
+                  showSubmissionDetails
+                    ? "Submission"
+                    : editIndex !== null
+                      ? form.filingName || "Edit Compliance"
+                      : "Compliance"
+                }
+              >
+                {showSubmissionDetails
+                  ? "Submission"
+                  : editIndex !== null
+                    ? form.filingName || "Edit Compliance"
+                    : "Compliance"}
+              </DialogTitle>
+
+              {/* Dynamic Status Badge - hidden when in Submission view */}
+              {!showSubmissionDetails && (() => {
+                const isDraft = editIndex !== null && (complianceItems[editIndex]?.isDraft || complianceItems[editIndex]?.status === "Draft");
+                if (isDraft) {
                   return (
-                    <span className={`px-4 py-2 rounded-full text-sm font-medium ${statusInfo.color} ${statusInfo.bgColor} ${
-                      isLate ? 'animate-bounce relative' : ''
-                    } transition-all duration-300`}>
-                      {isLate && (
-                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
-                      )}
-                      {statusInfo.status}
+                    <span className="shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium text-amber-800 bg-amber-100 transition-all duration-300">
+                      Draft
                     </span>
                   );
-                })()}
-              </div>
-              {/* Right side controls */}
-              <div className="flex items-center gap-3 pr-1">
+                }
+
+                const statusInfo = getComplianceStatus(form.filingEndDate, form.filingSubmissionDeadline);
+                const isLate = statusInfo.status === "Late";
+                return (
+                  <span
+                    className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium ${statusInfo.color} ${statusInfo.bgColor} ${
+                      isLate ? 'animate-bounce relative' : ''
+                    } transition-all duration-300`}
+                  >
+                    {isLate && (
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
+                    )}
+                    {statusInfo.status}
+                  </span>
+                );
+              })()}
+            </div>
+
+            {/* Right side controls */}
+            <div className="flex items-center gap-3 pr-1 shrink-0">
                 {/* Submission Toggle Button - highlighted in green theme, now on right */}
                 {!showSubmissionDetails && (
                   <Button
@@ -3001,7 +3082,6 @@ export default function Compliance() {
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-            </div>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto">
           <form className={`${isFullscreen ? 'p-4 md:p-6 lg:p-8' : 'p-6'}`}>

@@ -25,6 +25,17 @@ export default function Chatbot() {
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const handleOpen = () => {
+      setIsOpen(true);
+    };
+
+    window.addEventListener("open-chatbot", handleOpen);
+    return () => {
+      window.removeEventListener("open-chatbot", handleOpen);
+    };
+  }, []);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };

@@ -192,7 +192,6 @@ function getHistoryKeysToCompare(record: HistoryRecord) {
     "department",
     "ownerName",
     "owner",
-    "ownerEmail",
     "paymentMethod",
     "billingCycle",
     "paymentFrequency",
@@ -218,6 +217,8 @@ function getHistoryKeysToCompare(record: HistoryRecord) {
   // Avoid showing internal/system fields if they appear in updatedFields.
   const excludedKeys = new Set([
     "_id",
+    "ownerEmail",
+    "users",
     "id",
     "subscriptionId",
     "tenantId",
@@ -230,6 +231,7 @@ function getHistoryKeysToCompare(record: HistoryRecord) {
     "loggedAt",
     "timestamp",
     "__v",
+    "isDraft", // Exclude draft status from history display
   ]);
 
   const ordered = [...preferredOrder, ...Object.keys(newData)];
@@ -274,11 +276,25 @@ function formatValue(value: any) {
     // Sort for stable comparisons/reads (e.g., departments arrays).
     return items.sort((a, b) => a.localeCompare(b)).join(", ");
   }
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    // Truncate very long strings
+    if (value.length > 30) {
+      return value.substring(0, 27) + "...";
+    }
+    return value;
+  }
   try {
-    return JSON.stringify(value);
+    const jsonStr = JSON.stringify(value);
+    if (jsonStr.length > 30) {
+      return jsonStr.substring(0, 27) + "...";
+    }
+    return jsonStr;
   } catch {
-    return String(value);
+    const str = String(value);
+    if (str.length > 30) {
+      return str.substring(0, 27) + "...";
+    }
+    return str;
   }
 }
 
@@ -290,6 +306,57 @@ function formatDateDdMmYyyy(value: any) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = date.getFullYear();
   return `${day}/${month}/${year}`;
+}
+
+function hasActualChanges(record: HistoryRecord): boolean {
+  const action = String(record.action || "").toLowerCase();
+  
+  // Always show create and delete actions
+  if (action === "create" || action === "created" || action === "delete" || action === "deleted") {
+    return true;
+  }
+
+  const oldData = record.data || {};
+  const newData = record.updatedFields || {};
+  const fieldsToCompare = getHistoryKeysToCompare(record);
+
+  const numericFields = new Set([
+    "amount",
+    "qty",
+    "totalAmount",
+    "lcyAmount",
+    "taxAmount",
+    "totalAmountInclTax",
+  ]);
+
+  const dateFields = new Set(["startDate", "nextRenewal", "endDate", "initialDate"]);
+
+  // Check if there are any actual field changes
+  for (const key of fieldsToCompare) {
+    if (!(key in newData)) continue;
+    const before = oldData[key];
+    const after = newData[key];
+
+    const isDateField = dateFields.has(key);
+    const beforeText = isDateField ? formatDateDdMmYyyy(before) : formatValue(before);
+    const afterText = isDateField ? formatDateDdMmYyyy(after) : formatValue(after);
+
+    if (numericFields.has(key)) {
+      const beforeNum = parseMoneyLike(before);
+      const afterNum = parseMoneyLike(after);
+      if (beforeNum !== null && afterNum !== null) {
+        const beforeRounded = Math.round(beforeNum * 100) / 100;
+        const afterRounded = Math.round(afterNum * 100) / 100;
+        if (beforeRounded !== afterRounded) return true;
+      } else {
+        if (beforeText !== afterText) return true;
+      }
+    } else {
+      if (beforeText !== afterText) return true;
+    }
+  }
+
+  return false;
 }
 
 function buildChangesText(record: HistoryRecord) {
@@ -319,16 +386,23 @@ function buildChangesText(record: HistoryRecord) {
   ]);
 
   const dateFields = new Set(["startDate", "nextRenewal", "endDate", "initialDate"]);
+  
+  // Check if this is a renewal action
+  const isRenewal = action === "renewed" || inferDisplayAction(record) === "renewed";
 
   const lines: string[] = [];
   for (const key of fieldsToCompare) {
     if (!(key in newData)) continue;
+    
+    // For renewals, only show date fields that actually changed
+    if (isRenewal && !dateFields.has(key)) continue;
+    
     const before = oldData[key];
     const after = newData[key];
 
     const isDateField = dateFields.has(key);
-    const beforeText = isDateField ? formatDateDdMmYyyy(before) : formatValue(before);
-    const afterText = isDateField ? formatDateDdMmYyyy(after) : formatValue(after);
+    let beforeText = isDateField ? formatDateDdMmYyyy(before) : formatValue(before);
+    let afterText = isDateField ? formatDateDdMmYyyy(after) : formatValue(after);
 
     if (numericFields.has(key)) {
       const beforeNum = parseMoneyLike(before);
@@ -344,11 +418,19 @@ function buildChangesText(record: HistoryRecord) {
     } else {
       if (beforeText === afterText) continue;
     }
+    
+    // Ensure truncation for display (extra safety for long values)
+    if (!isDateField && beforeText.length > 30) {
+      beforeText = beforeText.substring(0, 27) + "...";
+    }
+    if (!isDateField && afterText.length > 30) {
+      afterText = afterText.substring(0, 27) + "...";
+    }
+    
     lines.push(`${prettyFieldLabel(key)}: ${beforeText} → ${afterText}`);
   }
 
-  const fallbackLabel = record.action ? String(record.action) : "Updated";
-  const main = lines.length > 0 ? lines.join("\n") : fallbackLabel;
+  const main = lines.join("\n");
   return [main, reason].filter(Boolean).join("\n");
 }
 
@@ -461,7 +543,11 @@ export default function SubscriptionHistory() {
 
   const sortedHistory = useMemo(() => {
     const items = Array.isArray(history) ? [...history] : [];
-    items.sort((a, b) => {
+    
+    // Filter out records that have no actual changes
+    const filtered = items.filter(hasActualChanges);
+    
+    filtered.sort((a, b) => {
       const aStamp = a.loggedAt || a.timestamp;
       const bStamp = b.loggedAt || b.timestamp;
       const aTimeRaw = parseTimestampLike(aStamp)?.getTime() ?? NaN;
@@ -471,7 +557,7 @@ export default function SubscriptionHistory() {
       if (bTime !== aTime) return bTime - aTime;
       return String(b._id || "").localeCompare(String(a._id || ""));
     });
-    return items;
+    return filtered;
   }, [history]);
 
   const firstName =
@@ -524,17 +610,17 @@ export default function SubscriptionHistory() {
               <div className="h-full overflow-auto">
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 z-10 bg-gray-200">
-                    <tr className="border-b border-gray-300">
+                    <tr className="border-b-2 border-gray-400">
                       {!subscriptionId && (
-                        <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[200px]">Subscription Name</th>
+                        <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[200px]">Subscription Name</th>
                       )}
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[180px]">Changed By</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[400px]">Changes</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[100px]">Action</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[140px]">Updated On</th>
+                      <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[180px]">Changed By</th>
+                      <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[400px]">Changes</th>
+                      <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[100px]">Action</th>
+                      <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[140px]">Updated On</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white">
+                  <tbody className="bg-white divide-y divide-gray-100">
                     {sortedHistory.map((item: any, index: number) => {
                       const stampToShow = item.loggedAt || item.timestamp;
                       const timestamp = formatTimestamp(stampToShow, { forceLocal: Boolean(item.loggedAt) });
@@ -555,23 +641,29 @@ export default function SubscriptionHistory() {
                       const displayAction = inferDisplayAction(item);
 
                       return (
-                        <tr key={item._id || index} className="hover:bg-slate-50 border-b border-slate-100">
+                        <tr key={item._id || index} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
                           {!subscriptionId && (
-                            <td className="font-medium text-sm text-slate-900 align-top py-3 px-4">{name}</td>
+                            <td className="px-4 py-3 font-medium text-gray-800 w-[200px] max-w-[200px]">
+                              <div className="truncate" title={name}>{name}</div>
+                            </td>
                           )}
-                          <td className="text-sm text-slate-700 align-top py-3 px-4">{changedBy}</td>
-                          <td className="text-sm text-slate-600 align-top py-3 px-4">
-                            <div className="whitespace-pre-line leading-relaxed">{changesText || "No changes recorded"}</div>
+                          <td className="px-4 py-3 text-sm text-gray-800 w-[180px] max-w-[180px]">
+                            <div className="truncate" title={changedBy}>{changedBy}</div>
                           </td>
-                          <td className="align-top py-3 px-4">
+                          <td className="px-4 py-3 text-sm text-gray-700 w-[400px] max-w-[400px]">
+                            <div className="whitespace-pre-wrap break-words leading-relaxed" title={changesText || "No changes recorded"}>
+                              {changesText || "No changes recorded"}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
                             <Badge className={`${getActionBadgeColor(displayAction)} px-2 py-1 text-xs font-medium border capitalize`}>
                               {displayAction}
                             </Badge>
                           </td>
-                          <td className="text-sm text-slate-500 align-top py-3 px-4">
+                          <td className="px-4 py-3 text-sm text-gray-500">
                             <div className="flex flex-col">
                               <span className="font-medium">{timestamp.date}</span>
-                              {timestamp.time && <span className="text-xs text-slate-400">{timestamp.time}</span>}
+                              {timestamp.time && <span className="text-xs text-gray-400">{timestamp.time}</span>}
                             </div>
                           </td>
                         </tr>

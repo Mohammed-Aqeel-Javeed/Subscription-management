@@ -51,6 +51,15 @@ function getActivityTimeMsFromHistory(record: HistoryRecord): number {
   return fallback ? fallback.getTime() : 0;
 }
 
+// For report calculations we prefer `timestamp` because the server uses it as an
+// *effective date* (can be backdated). `loggedAt` is the insert time.
+function getEffectiveTimeMsFromHistory(record: HistoryRecord): number {
+  const primary = parseDateLike(record?.timestamp ?? record?.loggedAt);
+  if (primary) return primary.getTime();
+  const fallback = parseDateLike(record?.loggedAt);
+  return fallback ? fallback.getTime() : 0;
+}
+
 function getSubscriptionFallbackActivityMs(sub: Subscription): number {
   const candidates = [
     parseDateLike((sub as any)?.updatedAt),
@@ -206,6 +215,89 @@ function getHistoryPaymentMethodValue(container: any): string | null {
   return s ? s : null;
 }
 
+function getHistoryAmountValue(container: any): number | null {
+  if (!container) return null;
+  return parseMoneyLike(container.amount);
+}
+
+type CycleSegment = { startMs: number; endMs: number; card: string; amountMonthly: number };
+
+function getCycleMonthsFromBillingCycle(cycleRaw: unknown): number {
+  const cycle = String(cycleRaw ?? "").trim().toLowerCase();
+  if (cycle === "monthly") return 1;
+  if (cycle === "quarterly") return 3;
+  if (cycle === "yearly" || cycle === "annual") return 12;
+  if (cycle === "weekly") return (7 * MS_PER_DAY) / MS_PER_MONTH;
+  return 1;
+}
+
+function buildCycleSegmentsFromHistory(params: {
+  sub: Subscription;
+  events: HistoryRecord[];
+  fromMs: number;
+  toMs: number;
+  toMonthly: (amount: number) => number;
+}): CycleSegment[] {
+  const { sub, events, fromMs, toMs, toMonthly } = params;
+  const baseCard = getCardLabel(sub)?.trim() ? getCardLabel(sub).trim() : "Unknown";
+  const baseAmount = parseMoneyLike((sub as any)?.amount) ?? 0;
+
+  const segments: CycleSegment[] = [];
+  for (const ev of events) {
+    const start =
+      parseDateLike(ev?.updatedFields?.startDate) ??
+      parseDateLike(ev?.updatedFields?.currentCycleStart) ??
+      parseDateLike(ev?.data?.startDate) ??
+      parseDateLike(ev?.data?.currentCycleStart);
+
+    const end =
+      parseDateLike(ev?.updatedFields?.endDate) ??
+      parseDateLike(ev?.updatedFields?.nextRenewal) ??
+      parseDateLike(ev?.data?.endDate) ??
+      parseDateLike(ev?.data?.nextRenewal);
+
+    if (!start || !end) continue;
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) continue;
+
+    // Only consider segments that overlap the requested window.
+    if (endMs <= fromMs || startMs >= toMs) continue;
+
+    const card =
+      getHistoryPaymentMethodValue(ev?.updatedFields) ??
+      getHistoryPaymentMethodValue(ev?.data) ??
+      baseCard;
+
+    const amountRaw =
+      getHistoryAmountValue(ev?.updatedFields) ??
+      getHistoryAmountValue(ev?.data) ??
+      baseAmount;
+
+    segments.push({
+      startMs,
+      endMs,
+      card: String(card || "Unknown").trim() || "Unknown",
+      amountMonthly: toMonthly(amountRaw),
+    });
+  }
+
+  // Sort by cycle start. If there are duplicates for the same cycle,
+  // prefer the longer segment (more complete range).
+  segments.sort((a, b) => a.startMs - b.startMs || b.endMs - a.endMs);
+
+  const deduped: CycleSegment[] = [];
+  const seen = new Set<string>();
+  for (const seg of segments) {
+    const key = `${seg.startMs}::${seg.endMs}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(seg);
+  }
+
+  return deduped;
+}
+
 type CardWiseRow = {
   sub: Subscription;
   card: string;
@@ -248,7 +340,9 @@ export default function CardWiseSpendReport() {
   }, [rangePreset]);
 
   const { periodStart, periodEnd } = React.useMemo(() => {
-    const end = startOfDay(new Date());
+    // Use "now" as the range end so same-day changes (e.g. card updates)
+    // are included in the computed spend split.
+    const end = new Date();
     const start = startOfDay(addMonths(end, -monthsInRange));
     return { periodStart: start, periodEnd: end };
   }, [monthsInRange]);
@@ -265,8 +359,8 @@ export default function CardWiseSpendReport() {
 
     map.forEach((arr) => {
       arr.sort((a, b) => {
-        const at = a?.timestamp ? new Date(String(a.timestamp)).getTime() : 0;
-        const bt = b?.timestamp ? new Date(String(b.timestamp)).getTime() : 0;
+        const at = getActivityTimeMsFromHistory(a);
+        const bt = getActivityTimeMsFromHistory(b);
         return at - bt;
       });
     });
@@ -322,14 +416,58 @@ export default function CardWiseSpendReport() {
       const events = subscriptionId ? historyBySubscriptionId.get(subscriptionId) ?? [] : [];
 
       const cycle = String((sub as any).billingCycle ?? "").toLowerCase();
+      const cycleMonths = getCycleMonthsFromBillingCycle(cycle);
       const toMonthly = (amount: number) => {
         if (!Number.isFinite(amount)) return 0;
-        if (cycle === "monthly") return amount;
-        if (cycle === "yearly") return amount / 12;
-        if (cycle === "quarterly") return amount / 3;
-        if (cycle === "weekly") return (amount * 52) / 12;
-        return amount;
+        if (cycleMonths <= 0) return 0;
+        return amount / cycleMonths;
       };
+
+      // Preferred path: use renewal/cycle date ranges from history (start/end/nextRenewal)
+      // so we can allocate spend across months even when history timestamps are all today's.
+      const cycleSegments = buildCycleSegmentsFromHistory({
+        sub,
+        events,
+        fromMs,
+        toMs,
+        toMonthly,
+      });
+
+      if (cycleSegments.length > 0) {
+        const byCard = new Map<string, { spend: number; months: number }>();
+
+        for (const seg of cycleSegments) {
+          const segStart = Math.max(fromMs, seg.startMs);
+          const segEnd = Math.min(toMs, seg.endMs);
+          const segMs = segEnd - segStart;
+          if (segMs <= 0) continue;
+
+          const cycleMs = seg.endMs - seg.startMs;
+          const overlapFraction = cycleMs > 0 ? segMs / cycleMs : 0;
+          if (!Number.isFinite(overlapFraction) || overlapFraction <= 0) continue;
+
+          // seg.amountMonthly is the monthly-equivalent amount.
+          // Convert to per-cycle cost, then allocate by overlap fraction.
+          const cycleCost = seg.amountMonthly * cycleMonths;
+          const spend = cycleCost * overlapFraction;
+          const months = cycleMonths * overlapFraction;
+          const cardKey = seg.card?.trim() ? seg.card.trim() : "Unknown";
+          const prev = byCard.get(cardKey) ?? { spend: 0, months: 0 };
+          byCard.set(cardKey, { spend: prev.spend + spend, months: prev.months + months });
+        }
+
+        return Array.from(byCard.entries())
+          .map(([card, v]) => {
+            const spend = Math.max(0, v.spend);
+            const months = Math.max(0, v.months);
+            return {
+              card,
+              periodSpend: spend,
+              monthlyAvg: months > 0 ? spend / months : 0,
+            };
+          })
+          .filter((r) => r.periodSpend > 0 || r.monthlyAvg > 0);
+      }
 
       // Amount change points
       const baseAmount = parseMoneyLike((sub as any)?.amount) ?? 0;
@@ -340,7 +478,7 @@ export default function CardWiseSpendReport() {
       const cardChanges: Array<{ t: number; before: string | null; after: string | null }> = [];
 
       for (const ev of events) {
-        const ts = ev?.timestamp ? new Date(String(ev.timestamp)).getTime() : NaN;
+        const ts = getEffectiveTimeMsFromHistory(ev);
         if (!Number.isFinite(ts)) continue;
 
         const afterAmount = parseMoneyLike(ev?.updatedFields?.amount);
@@ -523,10 +661,8 @@ export default function CardWiseSpendReport() {
 
   return (
     <div className="p-8">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-4xl font-bold text-gray-900">Card Wise Spend Report</h2>
-        </div>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h2 className="text-4xl font-bold text-gray-900">Card Wise Spend Report</h2>
 
         <Button
           type="button"
@@ -623,10 +759,11 @@ export default function CardWiseSpendReport() {
                     {filtered.map(({ sub, card, periodSpend, monthlyAvg }, index) => {
                       const serviceName = String((sub as any)?.serviceName ?? "");
                       const category = String((sub as any)?.category ?? "").trim();
+                      const subscriptionId = normalizeId((sub as any)?.id ?? (sub as any)?._id ?? serviceName);
 
                       return (
                         <TableRow
-                          key={String((sub as any)?.id ?? (sub as any)?._id ?? serviceName)}
+                          key={`${subscriptionId}::${String(card || "").trim()}`}
                           className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
                             index % 2 === 0 ? "bg-white" : "bg-gray-50/30"
                           }`}

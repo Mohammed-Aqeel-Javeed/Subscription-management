@@ -19,6 +19,14 @@ import Reports from "@/pages/reports";
 import UpcomingRenewalReport from "@/pages/upcoming-renewal-report";
 import SpendingAnalysisReport from "@/pages/spending-analysis-report";
 import CardWiseSpendReport from "@/pages/card-wise-spend-report";
+import UpcomingFilingsReport from "@/pages/upcoming-filings-report";
+import ComplianceSpendAuditHistoryReport from "@/pages/compliance-spend-audit-history-report";
+import DepartmentalComplianceScorecardReport from "@/pages/departmental-compliance-scorecard-report";
+import DepartmentWiseRenewalsReport from "@/pages/department-wise-renewals-report";
+import RenewalLeadTimeAnalysisReport from "@/pages/renewal-lead-time-analysis-report";
+import RenewalResponsibilityReport from "@/pages/renewal-responsibility-report";
+import ExpiredRenewalsReport from "@/pages/expired-renewals-report";
+import UpcomingRenewalsReport from "@/pages/upcoming-renewals-report";
 import SubscriptionHistory from "@/pages/subscription-history";
 import GovernmentLicense from "@/pages/government-license";
 import RenewalLog from "@/pages/renewal-log";
@@ -33,6 +41,7 @@ import CompanyDetails from "@/pages/company-details";
 import CalendarMonthly from "@/pages/calendar-monthly";
 import CalendarYearly from "@/pages/calendar-yearly";
 import LandingPage from "@/pages/landing";
+import Profile from "@/pages/profile";
 
 function App() {
   return (
@@ -51,7 +60,7 @@ function App() {
 
 function AppWithSidebar() {
   const hideSidebarPaths = ["/", "/login", "/signup", "/auth", "/landing"];
-  const hideChatbotPaths = ["/", "/login", "/signup", "/auth", "/landing", "/dashboard", "/notifications", "/reports", "/reports/upcoming-renewal", "/reports/spending-analysis", "/reports/card-wise"];
+  const hideChatbotPaths = ["/", "/login", "/signup", "/auth", "/landing", "/dashboard", "/notifications", "/reports", "/reports/upcoming-renewal", "/reports/spending-analysis", "/reports/card-wise", "/reports/upcoming-filings", "/reports/compliance-spend", "/reports/departmental-scorecard", "/reports/department-wise-renewals", "/reports/renewal-lead-time-analysis", "/reports/renewal-responsibility", "/reports/expired-renewals", "/reports/upcoming-renewals"];
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -143,6 +152,14 @@ function AppWithSidebar() {
               <Route path="/reports/upcoming-renewal" element={<UpcomingRenewalReport />} />
               <Route path="/reports/spending-analysis" element={<SpendingAnalysisReport />} />
               <Route path="/reports/card-wise" element={<CardWiseSpendReport />} />
+              <Route path="/reports/upcoming-filings" element={<UpcomingFilingsReport />} />
+              <Route path="/reports/compliance-spend" element={<ComplianceSpendAuditHistoryReport />} />
+              <Route path="/reports/departmental-scorecard" element={<DepartmentalComplianceScorecardReport />} />
+              <Route path="/reports/department-wise-renewals" element={<DepartmentWiseRenewalsReport />} />
+              <Route path="/reports/renewal-lead-time-analysis" element={<RenewalLeadTimeAnalysisReport />} />
+              <Route path="/reports/renewal-responsibility" element={<RenewalResponsibilityReport />} />
+              <Route path="/reports/expired-renewals" element={<ExpiredRenewalsReport />} />
+              <Route path="/reports/upcoming-renewals" element={<UpcomingRenewalsReport />} />
               <Route path="/subscription-history" element={<SubscriptionHistory />} />
               {/* <Route path="/users" element={<Users />} /> */}
               <Route path="/compliance-dashboard" element={<ComplianceDashboard />} />
@@ -152,6 +169,7 @@ function AppWithSidebar() {
               <Route path="/renewal-log" element={<RenewalLog />} />
               <Route path="/company-details" element={<CompanyDetails />} />
               <Route path="/subscription-user" element={<SubscriptionUserPage />} />
+              <Route path="/profile" element={<Profile />} />
               <Route path="/calendar-monthly" element={<CalendarMonthly />} />
               <Route path="/calendar-yearly" element={<CalendarYearly />} />
               <Route path="*" element={<NotFound />} />

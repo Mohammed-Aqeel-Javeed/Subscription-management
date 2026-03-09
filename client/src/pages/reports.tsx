@@ -48,13 +48,23 @@ export default function Reports() {
 
   const complianceReports: ReportItem[] = Array.from({ length: 5 }).map((_, idx) => ({
     id: `comp-${idx}`,
-    label: `Report ${idx + 1}`,
+    label:
+      idx === 0
+        ? "Upcoming Filing"
+        : idx === 1
+          ? "Compliance Spend & Audit History"
+          : idx === 2
+            ? "Departmental Compliance Scorecard"
+          : `Report ${idx + 1}`,
   }));
 
-  const renewalReports: ReportItem[] = Array.from({ length: 5 }).map((_, idx) => ({
-    id: `ren-${idx}`,
-    label: `Report ${idx + 1}`,
-  }));
+  const renewalReports: ReportItem[] = [
+    { id: "ren-0", label: "Department-wise Renewals Report" },
+    { id: "ren-1", label: "Renewal Lead Time Analysis" },
+    { id: "ren-2", label: "Renewal Responsibility Report" },
+    { id: "ren-3", label: "Expired Renewals Report" },
+    { id: "ren-4", label: "Upcoming Renewals Report" },
+  ];
 
   const openReport = (id: string) => {
     if (id === "sub-0") {
@@ -69,6 +79,46 @@ export default function Reports() {
 
     if (id === "sub-2") {
       navigate("/reports/card-wise");
+      return;
+    }
+
+    if (id === "comp-0") {
+      navigate("/reports/upcoming-filings");
+      return;
+    }
+
+    if (id === "comp-1") {
+      navigate("/reports/compliance-spend");
+      return;
+    }
+
+    if (id === "comp-2") {
+      navigate("/reports/departmental-scorecard");
+      return;
+    }
+
+    if (id === "ren-0") {
+      navigate("/reports/department-wise-renewals");
+      return;
+    }
+
+    if (id === "ren-1") {
+      navigate("/reports/renewal-lead-time-analysis");
+      return;
+    }
+
+    if (id === "ren-2") {
+      navigate("/reports/renewal-responsibility");
+      return;
+    }
+
+    if (id === "ren-3") {
+      navigate("/reports/expired-renewals");
+      return;
+    }
+
+    if (id === "ren-4") {
+      navigate("/reports/upcoming-renewals");
       return;
     }
 
