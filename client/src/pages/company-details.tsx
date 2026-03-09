@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, BarChart3, ChevronDown, Check, MoreVertical } from "lucide-react";
+import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, BarChart3, ChevronDown, Check, MoreVertical, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -257,6 +257,8 @@ type Employee = {
 type EmployeeFormValues = z.infer<typeof employeeSchema>;
 function EmployeeManagementTab({ departments }: { departments: string[] }) {
 const [modalOpen, setModalOpen] = useState(false);
+const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+const exitConfirmActionRef = React.useRef<null | (() => void)>(null);
 const [editingEmployee, setEditingEmployee] = useState<Employee | undefined>();
 const [searchTerm, setSearchTerm] = useState("");
 const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
@@ -331,6 +333,27 @@ status: "active",
 role: "",
 },
 });
+
+const requestExitConfirm = (action: () => void) => {
+  exitConfirmActionRef.current = action;
+  setExitConfirmOpen(true);
+};
+
+const closeEmployeeDialogNow = () => {
+  setModalOpen(false);
+  form.reset();
+  setEditingEmployee(undefined);
+};
+
+const requestCloseEmployeeDialog = () => {
+  if (form.formState.isDirty) {
+    requestExitConfirm(() => {
+      closeEmployeeDialogNow();
+    });
+    return;
+  }
+  closeEmployeeDialogNow();
+};
 
 useEffect(() => {
   if (!modalOpen) return;
@@ -733,7 +756,13 @@ className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl fle
     </SelectContent>
   </Select>
 </div>
-<Dialog open={modalOpen} onOpenChange={setModalOpen}>
+<Dialog open={modalOpen} onOpenChange={(open) => {
+  if (open) {
+    setModalOpen(true);
+    return;
+  }
+  requestCloseEmployeeDialog();
+}}>
 <DialogTrigger asChild>
 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
 <Button
@@ -921,7 +950,7 @@ render={({ field }) => (
 )}
 />
 <div className="flex justify-end space-x-3 pt-6 col-span-2">
-<Button type="button" variant="outline" onClick={() => setModalOpen(false)} className="border-gray-300 text-gray-700 rounded-lg h-10 px-4">
+<Button type="button" variant="outline" onClick={requestCloseEmployeeDialog} className="border-gray-300 text-gray-700 rounded-lg h-10 px-4">
 Cancel
 </Button>
 <Button
@@ -941,6 +970,43 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 </div>
 </DialogContent>
 </Dialog>
+
+{/* Exit Confirmation Dialog */}
+<AlertDialog open={exitConfirmOpen} onOpenChange={(open) => !open && setExitConfirmOpen(false)}>
+  <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+    <AlertDialogHeader>
+      <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+        <AlertCircle className="h-5 w-5 text-amber-600" />
+        Confirm Exit
+      </AlertDialogTitle>
+      <AlertDialogDescription className="text-gray-700 font-medium">
+        All filled data will be deleted if you exit. Do you want to cancel or exit?
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel
+        onClick={() => {
+          setExitConfirmOpen(false);
+          exitConfirmActionRef.current = null;
+        }}
+        className="border-gray-300 text-gray-700 hover:bg-gray-100"
+      >
+        Cancel
+      </AlertDialogCancel>
+      <AlertDialogAction
+        onClick={() => {
+          setExitConfirmOpen(false);
+          const action = exitConfirmActionRef.current;
+          exitConfirmActionRef.current = null;
+          action?.();
+        }}
+        className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+      >
+        Exit
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
 </div>
 </div>
 
@@ -1275,6 +1341,8 @@ className="flex-1 min-h-0"
 }
 function UserManagementTab() {
 const [modalOpen, setModalOpen] = useState(false);
+const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+const exitConfirmActionRef = React.useRef<null | (() => void)>(null);
 const [editingUser, setEditingUser] = useState<UserType | undefined>();
 const [searchTerm, setSearchTerm] = useState("");
 const [showPassword, setShowPassword] = useState(false);
@@ -1422,6 +1490,28 @@ status: "active",
 department: "",
 },
 });
+
+const requestExitConfirm = (action: () => void) => {
+  exitConfirmActionRef.current = action;
+  setExitConfirmOpen(true);
+};
+
+const closeUserDialogNow = () => {
+  setModalOpen(false);
+  setShowPassword(false);
+  form.reset();
+  setEditingUser(undefined);
+};
+
+const requestCloseUserDialog = () => {
+  if (form.formState.isDirty) {
+    requestExitConfirm(() => {
+      closeUserDialogNow();
+    });
+    return;
+  }
+  closeUserDialogNow();
+};
 
 const createMutation = useMutation({
 mutationFn: (data: InsertUser) => apiRequest("POST", "/api/users", data),
@@ -1747,12 +1837,11 @@ className="pl-10 w-full sm:w-64 border-gray-300 focus:border-indigo-500 focus:ri
   </SelectContent>
 </Select>
 <Dialog open={modalOpen} onOpenChange={(open) => {
-setModalOpen(open);
-if (!open) {
-setShowPassword(false);
-form.reset();
-setEditingUser(undefined);
-}
+  if (open) {
+    setModalOpen(true);
+    return;
+  }
+  requestCloseUserDialog();
 }}>
 <DialogTrigger asChild>
 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
@@ -1898,7 +1987,7 @@ render={({ field }) => (
 )}
 />
 <div className="flex justify-end space-x-3 pt-6 col-span-2">
-<Button type="button" variant="outline" onClick={() => setModalOpen(false)} className="border-gray-300 text-gray-700 rounded-lg h-10 px-4">
+<Button type="button" variant="outline" onClick={requestCloseUserDialog} className="border-gray-300 text-gray-700 rounded-lg h-10 px-4">
 Cancel
 </Button>
 <Button
@@ -1918,6 +2007,43 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 </div>
 </DialogContent>
 </Dialog>
+
+{/* Exit Confirmation Dialog */}
+<AlertDialog open={exitConfirmOpen} onOpenChange={(open) => !open && setExitConfirmOpen(false)}>
+  <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+    <AlertDialogHeader>
+      <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+        <AlertCircle className="h-5 w-5 text-amber-600" />
+        Confirm Exit
+      </AlertDialogTitle>
+      <AlertDialogDescription className="text-gray-700 font-medium">
+        All filled data will be deleted if you exit. Do you want to cancel or exit?
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel
+        onClick={() => {
+          setExitConfirmOpen(false);
+          exitConfirmActionRef.current = null;
+        }}
+        className="border-gray-300 text-gray-700 hover:bg-gray-100"
+      >
+        Cancel
+      </AlertDialogCancel>
+      <AlertDialogAction
+        onClick={() => {
+          setExitConfirmOpen(false);
+          const action = exitConfirmActionRef.current;
+          exitConfirmActionRef.current = null;
+          action?.();
+        }}
+        className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+      >
+        Exit
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
 </div>
 </div>
 
@@ -2445,6 +2571,8 @@ const [deptHeadOpen, setDeptHeadOpen] = useState(false);
 const [deptHeadSearch, setDeptHeadSearch] = useState('');
 const deptHeadDropdownRef = useRef<HTMLDivElement>(null);
 const [isDepartmentEmailLocked, setIsDepartmentEmailLocked] = useState(false);
+const [departmentExitConfirmOpen, setDepartmentExitConfirmOpen] = useState(false);
+const departmentExitConfirmActionRef = React.useRef<null | (() => void)>(null);
 const [departmentSearchTerm, setDepartmentSearchTerm] = useState('');
 const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [deptDeleteOpen, setDeptDeleteOpen] = useState(false);
@@ -2460,7 +2588,6 @@ const { toast } = useToast();
 // File input ref for Excel import
 const companyFileInputRef = React.useRef<HTMLInputElement>(null);
 const [companyImportConfirmOpen, setCompanyImportConfirmOpen] = useState(false);
-const [companyDataManagementSelectKey, setCompanyDataManagementSelectKey] = useState(0);
 
 // Department tab Data Management
 const departmentFileInputRef = React.useRef<HTMLInputElement>(null);
@@ -2566,51 +2693,6 @@ const downloadCombinedTemplate = () => {
   toast({
     title: "Template Downloaded",
     description: "Excel template with Departments, Employees, and Categories downloaded successfully",
-  });
-};
-
-// Export All Data (Departments, Employees, Subscription Categories)
-const exportAllToExcel = () => {
-  const wb = XLSX.utils.book_new();
-  
-  // Departments Sheet
-  const departmentExportData = departments.map(dept => ({
-    'Department Name': dept.name,
-    'Department Head': dept.departmentHead || '',
-    'Email': dept.email || '',
-  }));
-  
-  const wsDept = XLSX.utils.json_to_sheet(departmentExportData);
-  wsDept['!cols'] = [{ wch: 20 }, { wch: 25 }, { wch: 30 }];
-  XLSX.utils.book_append_sheet(wb, wsDept, 'Departments');
-  
-  // Employees Sheet
-  const employeeExportData = employeesData.map((emp: any) => ({
-    'Name': emp.name,
-    'Email': emp.email,
-    'Department': emp.department,
-    'Role': emp.role,
-    'Status': emp.status
-  }));
-  
-  const wsEmp = XLSX.utils.json_to_sheet(employeeExportData);
-  wsEmp['!cols'] = [{ wch: 20 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 10 }];
-  XLSX.utils.book_append_sheet(wb, wsEmp, 'Employees');
-  
-  // Subscription Categories Sheet
-  const categoryExportData = categories.map(cat => ({
-    'Category Name': cat.name
-  }));
-  
-  const wsCat = XLSX.utils.json_to_sheet(categoryExportData);
-  wsCat['!cols'] = [{ wch: 25 }];
-  XLSX.utils.book_append_sheet(wb, wsCat, 'Subscription Categories');
-  
-  XLSX.writeFile(wb, `CompanyDetails_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
-  
-  toast({
-    title: "Export Successful",
-    description: `Exported ${departments.length} departments, ${employeesData.length} employees, and ${categories.length} categories to Excel`,
   });
 };
 
@@ -2789,6 +2871,42 @@ useEffect(() => {
     setIsDepartmentEmailLocked(false);
   }
 }, [selectedDepartmentHead, employeesData, departmentModalOpen]);
+
+const requestDepartmentExitConfirm = (action: () => void) => {
+  departmentExitConfirmActionRef.current = action;
+  setDepartmentExitConfirmOpen(true);
+};
+
+const closeDepartmentDialogNow = () => {
+  setDepartmentModalOpen(false);
+  setEditingDepartment(undefined);
+  departmentForm.reset({
+    name: '',
+    departmentHead: '',
+    email: '',
+  });
+  setDeptHeadSearch('');
+  setDeptHeadOpen(false);
+  setIsDepartmentEmailLocked(false);
+};
+
+const requestCloseDepartmentDialog = () => {
+  if (departmentForm.formState.isDirty) {
+    requestDepartmentExitConfirm(() => {
+      closeDepartmentDialogNow();
+    });
+    return;
+  }
+  closeDepartmentDialogNow();
+};
+
+const handleDepartmentModalOpenChange = (open: boolean) => {
+  if (open) {
+    setDepartmentModalOpen(true);
+    return;
+  }
+  requestCloseDepartmentDialog();
+};
 
 // Individual Department Functions
 const downloadDepartmentTemplate = () => {
@@ -3226,6 +3344,51 @@ return (
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Exit Confirmation Dialog (Departments) */}
+      <AlertDialog open={departmentExitConfirmOpen} onOpenChange={(open) => !open && setDepartmentExitConfirmOpen(false)}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              Confirm Exit
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              All filled data will be deleted if you exit. Do you want to cancel or exit?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setDepartmentExitConfirmOpen(false);
+                departmentExitConfirmActionRef.current = null;
+              }}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setDepartmentExitConfirmOpen(false);
+                const action = departmentExitConfirmActionRef.current;
+                departmentExitConfirmActionRef.current = null;
+                action?.();
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+            >
+              Exit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <input
+        ref={companyFileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={importCombinedExcel}
+      />
+
       <div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
 <TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6">
@@ -3319,8 +3482,8 @@ className="h-full"
 </div>
 
 {/* Form Content */}
-<div className="flex-1 overflow-hidden">
-<form onSubmit={handleSubmit} className="p-8 bg-gradient-to-br from-gray-50 to-white h-full">
+<div className="flex-1 overflow-y-auto">
+<form onSubmit={handleSubmit} className="p-8 bg-gradient-to-br from-gray-50 to-white">
   {/* Professional Section Header */}
   <div className="pb-4 mb-6 -mx-8 px-8 pt-0">
     <h2 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">Basic Information</h2>
@@ -3509,8 +3672,7 @@ className="w-full bg-white border border-gray-300 rounded-lg h-12 px-3 text-base
 </div>
 )}
 
-                  {/* Save Button - Fixed (prevents page overflow; avoids chatbot at bottom-right) */}
-                  <div className="fixed bottom-6 right-28 z-40">
+                  <div className="mt-8 pt-6 border-t border-gray-200 flex justify-end">
                     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                       <Button
                         type="submit"
@@ -3604,7 +3766,7 @@ className="h-full"
   </SelectContent>
 </Select>
 </div>
-<Dialog open={departmentModalOpen} onOpenChange={setDepartmentModalOpen}>
+<Dialog open={departmentModalOpen} onOpenChange={handleDepartmentModalOpenChange}>
   <DialogTrigger asChild>
     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
       <Button
@@ -3768,15 +3930,19 @@ className="h-full"
           <FormField
             control={departmentForm.control}
             name="email"
-            render={({ field, fieldState }) => (
+            render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-gray-700 font-medium text-sm">Email Address</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
                     type="email"
-                    readOnly={true}
-                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-slate-50 cursor-not-allowed shadow-sm"
+                    readOnly={isDepartmentEmailLocked}
+                    className={
+                      isDepartmentEmailLocked
+                        ? 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-slate-50 cursor-not-allowed shadow-sm'
+                        : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm'
+                    }
                   />
                 </FormControl>
                 <FormMessage className="text-red-600 text-sm font-medium mt-1" />
@@ -3789,14 +3955,7 @@ className="h-full"
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                setDepartmentModalOpen(false);
-                setEditingDepartment(undefined);
-                departmentForm.reset();
-                setDeptHeadSearch('');
-                setDeptHeadOpen(false);
-                setIsDepartmentEmailLocked(false);
-              }}
+              onClick={requestCloseDepartmentDialog}
               className="border-gray-300 text-gray-700 rounded-lg h-10 px-4"
             >
               Cancel

@@ -586,10 +586,8 @@ export default function SpendingAnalysisReport() {
 
   return (
     <div className="p-8">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-4xl font-bold text-gray-900">Spending Analysis</h2>
-        </div>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h2 className="text-4xl font-bold text-gray-900">Spending Analysis</h2>
 
         <Button
           type="button"

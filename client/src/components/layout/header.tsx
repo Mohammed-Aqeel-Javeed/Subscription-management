@@ -3,6 +3,16 @@ import { Bell, Search, LogOut, User, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useUser } from "@/context/UserContext";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+
+type NotificationItem = {
+  eventType?: 'created' | 'deleted' | 'updated' | 'reminder' | 'payment_method_expiring';
+  reminderTriggerDate?: string;
+  createdAt?: string;
+  timestamp?: string;
+  isRead?: boolean;
+  [key: string]: any;
+};
 
 // Define all available pages for search - matching sidebar exactly
 const pages = [
@@ -24,6 +34,31 @@ export default function Header() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+
+  const { data: subscriptionNotifications = [] } = useQuery<NotificationItem[]>({
+    queryKey: ['/api/notifications'],
+    refetchInterval: 60_000,
+  });
+  const { data: complianceNotifications = [] } = useQuery<NotificationItem[]>({
+    queryKey: ['/api/notifications/compliance'],
+    refetchInterval: 60_000,
+  });
+  const { data: licenseNotifications = [] } = useQuery<NotificationItem[]>({
+    queryKey: ['/api/notifications/license'],
+    refetchInterval: 60_000,
+  });
+
+  const unreadCount = (() => {
+    const notifications = [...subscriptionNotifications, ...complianceNotifications, ...licenseNotifications];
+    const todayDate = new Date();
+    const dueFiltered = notifications.filter((n) => {
+      if (n?.eventType === 'created' || n?.eventType === 'deleted' || n?.eventType === 'updated') return true;
+      if (!n?.reminderTriggerDate) return true;
+      const triggerDate = new Date(n.reminderTriggerDate);
+      return triggerDate <= todayDate;
+    });
+    return dueFiltered.filter((n) => !(n as any)?.isRead).length;
+  })();
 
   // Filter pages based on search query
   const filteredPages = searchQuery.trim()
@@ -134,69 +169,93 @@ export default function Header() {
           className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <Bell className="h-5 w-5 text-gray-600" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 bg-white rounded-full px-1 py-0.5 text-[11px] leading-none font-semibold text-red-600">
+              {unreadCount}
+            </span>
+          )}
         </button>
 
         {/* User Profile Dropdown */}
         <div className="relative" ref={profileRef}>
           <button
             onClick={() => setShowProfileMenu(!showProfileMenu)}
-            className="flex items-center gap-3 px-3 py-2 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+            className="flex items-center gap-2 p-1 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 bg-emerald-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                {getInitials(getUserName())}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-semibold text-gray-900 leading-tight">
-                  {getUserName()}
-                </span>
-                <span className="text-xs text-gray-600 leading-tight uppercase">
-                  {getUserRole()}
-                </span>
-              </div>
+            <div className="h-10 w-10 bg-emerald-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+              {getInitials(getUserName())}
             </div>
             <ChevronDown className="h-4 w-4 text-gray-600" />
           </button>
 
           {/* Profile Dropdown Menu */}
           {showProfileMenu && (
-            <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden z-50">
-              {/* Profile Header */}
-              <div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-6 py-4">
+            <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden z-50">
+              {/* Account Section Header */}
+              <div className="px-4 py-3 border-b border-gray-200">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Account</h3>
+              </div>
+
+              {/* User Info */}
+              <div className="px-4 py-3 border-b border-gray-200">
                 <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 bg-white/20 rounded-full flex items-center justify-center text-white text-lg font-bold">
+                  <div className="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
                     {getInitials(getUserName())}
                   </div>
-                  <div>
-                    <div className="text-white font-semibold text-base">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-gray-900 truncate">
                       {getUserName()}
                     </div>
-                    <div className="text-white/80 text-sm">
+                    <div className="text-xs text-gray-500 truncate">
                       {user?.email || ""}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Profile Details */}
-              <div className="px-6 py-4 border-b border-gray-200">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <User className="h-4 w-4 text-gray-400" />
-                    <span className="text-gray-600">Role:</span>
-                    <span className="font-medium text-gray-900 uppercase">{getUserRole()}</span>
-                  </div>
-                </div>
+              {/* Menu */}
+              <div className="border-b border-gray-200">
+                <button
+                  onClick={() => {
+                    navigate("/profile");
+                    setShowProfileMenu(false);
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Profile
+                </button>
+
+                <button
+                  onClick={() => {
+                    navigate("/configuration");
+                    setShowProfileMenu(false);
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Settings
+                </button>
               </div>
 
-              {/* Logout Button */}
-              <div className="p-3">
+              {/* Additional Options */}
+              <div className="border-b border-gray-200">
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new Event("open-chatbot"));
+                    setShowProfileMenu(false);
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Help
+                </button>
+              </div>
+
+              {/* Logout */}
+              <div className="p-2">
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white rounded-lg transition-all font-medium"
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded transition-colors"
                 >
-                  <LogOut className="h-4 w-4" />
-                  Logout
+                  Log out
                 </button>
               </div>
             </div>

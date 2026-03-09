@@ -2452,36 +2452,39 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       </button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-md bg-white">
-          <button
-            onClick={() => setIsOpen(false)}
-            className="absolute right-4 top-4 rounded-lg p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors z-50"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-gray-900">
-              <FileSpreadsheet className="w-5 h-5" />
-              Unified Import/Export
-            </DialogTitle>
+        <DialogContent showClose={false} className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden">
+          <DialogHeader className="px-6 py-5 border-b border-gray-100">
+            <div className="flex items-start justify-between gap-4">
+              <DialogTitle className="flex items-center gap-2 text-gray-900 text-lg font-semibold">
+                <FileSpreadsheet className="w-5 h-5" />
+                Unified Import/Export
+              </DialogTitle>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="rounded-lg p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </DialogHeader>
-          
-          <div className="space-y-4 py-4 bg-white">
+
+          <div className="px-6 py-5 space-y-4 bg-white">
             <p className="text-sm text-gray-600">
               Import or export all your data (subscriptions, categories, departments, employees, currencies, payment methods) in one Excel file.
             </p>
-            
+
             <div className="space-y-3">
               <Button
                 variant="outline"
                 onClick={downloadTemplate}
-                className="w-full justify-start gap-2 border-purple-300 text-purple-700 hover:bg-purple-50 bg-white"
+                className="w-full h-11 justify-center gap-2 border-purple-300 text-purple-700 hover:bg-purple-50 bg-white"
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 Download Template
               </Button>
-              
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -2492,17 +2495,16 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
               <Button
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full justify-start gap-2 border-green-300 text-green-700 hover:bg-green-50 bg-white"
+                className="w-full h-11 justify-center gap-2 border-green-300 text-green-700 hover:bg-green-50 bg-white"
               >
                 <Upload className="w-4 h-4" />
-                
                 Import Data
               </Button>
-              
+
               <Button
                 variant="outline"
                 onClick={exportAllData}
-                className="w-full justify-start gap-2 border-blue-300 text-blue-700 hover:bg-blue-50 bg-white"
+                className="w-full h-11 justify-center gap-2 border-blue-300 text-blue-700 hover:bg-blue-50 bg-white"
               >
                 <Download className="w-4 h-4" />
                 Export All Data

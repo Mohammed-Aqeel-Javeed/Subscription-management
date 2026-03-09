@@ -153,10 +153,19 @@ function dedupeNotifications(list: any[]): any[] {
   const pickBetter = (a: any, b: any) => {
     const sa = score(a);
     const sb = score(b);
-    if (sa !== sb) return sa > sb ? a : b;
-    const ta = toEpochMsServer(a?.timestamp || a?.createdAt);
-    const tb = toEpochMsServer(b?.timestamp || b?.createdAt);
-    return tb > ta ? b : a;
+    let better;
+    if (sa !== sb) {
+      better = sa > sb ? a : b;
+    } else {
+      const ta = toEpochMsServer(a?.timestamp || a?.createdAt);
+      const tb = toEpochMsServer(b?.timestamp || b?.createdAt);
+      better = tb > ta ? b : a;
+    }
+    // Preserve isRead if either notification is marked as read
+    if (a.isRead || b.isRead) {
+      better = { ...better, isRead: true, readAt: a.readAt || b.readAt };
+    }
+    return better;
   };
 
   const map = new Map<string, any>();
@@ -3405,13 +3414,47 @@ router.get("/api/notifications/compliance", async (req, res) => {
       return !!(n?.filingName && n.filingName !== "Compliance Filing");
     };
 
-    const allNotifications = dedupeNotifications([...legacyEventNotifications, ...reminderNotifications, ...userInAppNotifications])
+    let allNotifications = dedupeNotifications([...legacyEventNotifications, ...reminderNotifications, ...userInAppNotifications])
       .filter(notDemo)
       .sort(
         (a: any, b: any) =>
           new Date(b.timestamp || b.createdAt || "").getTime() -
           new Date(a.timestamp || a.createdAt || "").getTime()
       );
+
+    // Hide dismissed notifications for this user
+    try {
+      const normalizedEmailForQuery = String(userEmail || "").trim().toLowerCase();
+      const userIdStr = userId ? String(userId) : "";
+      if (userIdStr || normalizedEmailForQuery) {
+        const dismissalDocs = await db
+          .collection('notification_dismissals')
+          .find({
+            tenantId,
+            $or: [
+              ...(userIdStr ? [{ userId: userIdStr }] : []),
+              ...(normalizedEmailForQuery ? [{ userEmail: normalizedEmailForQuery }] : []),
+            ],
+          })
+          .project({ key: 1 })
+          .toArray();
+
+        const dismissed = new Set(
+          dismissalDocs
+            .map((d: any) => String(d?.key || '').trim())
+            .filter(Boolean)
+        );
+
+        if (dismissed.size > 0) {
+          allNotifications = allNotifications.filter((n: any) => {
+            const key = notificationDedupeKey(n);
+            return key ? !dismissed.has(key) : true;
+          });
+        }
+      }
+    } catch {
+      // ignore dismissal filtering errors
+    }
 
     res.status(200).json(allNotifications);
   } catch (error) {
@@ -3483,7 +3526,7 @@ router.get("/api/notifications/license", async (req, res) => {
         .toArray();
     }
 
-    const userInAppNotifications = raw.map((n: any) => ({
+    let userInAppNotifications = raw.map((n: any) => ({
       ...n,
       id: n._id?.toString?.() || n.id,
       type: "license",
@@ -3491,7 +3534,43 @@ router.get("/api/notifications/license", async (req, res) => {
       createdAt: n.createdAt || n.timestamp,
     }));
 
-    res.status(200).json(dedupeNotifications(userInAppNotifications));
+    let allNotifications = dedupeNotifications(userInAppNotifications);
+
+    // Hide dismissed notifications for this user
+    try {
+      const normalizedEmailForQuery = String(userEmail || "").trim().toLowerCase();
+      const userIdStr = userId ? String(userId) : "";
+      if (tenantId && (userIdStr || normalizedEmailForQuery)) {
+        const dismissalDocs = await db
+          .collection('notification_dismissals')
+          .find({
+            tenantId,
+            $or: [
+              ...(userIdStr ? [{ userId: userIdStr }] : []),
+              ...(normalizedEmailForQuery ? [{ userEmail: normalizedEmailForQuery }] : []),
+            ],
+          })
+          .project({ key: 1 })
+          .toArray();
+
+        const dismissed = new Set(
+          dismissalDocs
+            .map((d: any) => String(d?.key || '').trim())
+            .filter(Boolean)
+        );
+
+        if (dismissed.size > 0) {
+          allNotifications = allNotifications.filter((n: any) => {
+            const key = notificationDedupeKey(n);
+            return key ? !dismissed.has(key) : true;
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    res.status(200).json(allNotifications);
   } catch (error) {
     console.error('[LICENSE NOTIFICATIONS] Error:', error);
     res.status(500).json({ message: "Failed to fetch license notifications" });

@@ -1016,6 +1016,7 @@ export class MongoStorage implements IStorage {
     
     return events.map(event => ({
       id: event._id.toString(),
+      _id: event._id,
       type: event.type,
       eventType: event.eventType,
       subscriptionId: event.subscriptionId,
@@ -1024,7 +1025,8 @@ export class MongoStorage implements IStorage {
       filingName: event.filingName,
       category: event.category || event.complianceCategory,
       message: event.message,
-      read: event.read,
+      isRead: event.isRead || event.read, // Support both field names
+      readAt: event.readAt,
       timestamp: event.timestamp,
       createdAt: event.createdAt,
       reminderTriggerDate: event.reminderTriggerDate
