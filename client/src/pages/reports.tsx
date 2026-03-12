@@ -16,11 +16,11 @@ function ReportRow({
   onOpen: (id: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3">
+    <div className="flex items-center gap-3 px-4 py-3 min-w-0">
       <button
         type="button"
         onClick={() => onOpen(item.id)}
-        className="flex-1 h-9 flex items-center text-left text-sm font-medium text-indigo-700 hover:text-indigo-900 underline underline-offset-2 truncate whitespace-nowrap"
+        className="flex-1 min-w-0 h-9 flex items-center text-left text-sm font-medium text-indigo-700 hover:text-indigo-900 underline underline-offset-2 truncate whitespace-nowrap"
       >
         {item.label}
       </button>

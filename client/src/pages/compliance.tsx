@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -311,6 +311,7 @@ const formatDate = (dateStr?: string): string => {
 };
 export default function Compliance() {
   const navigate = useNavigate();
+  const location = useLocation();
   
   // --- Dynamic Compliance Fields ---
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
@@ -1613,6 +1614,71 @@ export default function Compliance() {
     staleTime: 0,
     refetchOnMount: true,
   });
+
+  // Auto-open compliance modal when deep-linked via URL: /compliance?open=<id>
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const openToken = searchParams.get('openToken');
+    const openComplianceId = searchParams.get('open');
+    if (!openToken && !openComplianceId) return;
+    if (modalOpen) return;
+    if (!Array.isArray(complianceItems) || complianceItems.length === 0) return;
+
+    const resolveToken = async (token: string) => {
+      const qs = new URLSearchParams({ token }).toString();
+      const res = await fetch(`/api/deeplink/resolve?${qs}`, { credentials: 'include' });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { id?: string };
+      return data?.id ? String(data.id) : null;
+    };
+
+    void (async () => {
+      const resolvedId = openToken ? await resolveToken(openToken) : openComplianceId;
+      // Clear the query param (whether found or not)
+      navigate(location.pathname, { replace: true, state: location.state });
+
+      if (!resolvedId) return;
+
+      const index = complianceItems.findIndex((item: ComplianceItem) =>
+        String(item.id) === resolvedId || String(item._id) === resolvedId
+      );
+
+      if (index === -1) return;
+
+      setEditIndex(index);
+      setShowSubmissionDetails(false);
+      setModalOpen(true);
+
+      const currentItem = complianceItems[index] as ComplianceItem;
+      const depts = parseDepartments(currentItem.department);
+      setSelectedDepartments(depts);
+      setForm({
+        filingName: currentItem.policy,
+        filingFrequency: currentItem.frequency || "Monthly",
+        filingComplianceCategory: currentItem.category,
+        filingGoverningAuthority: currentItem.governingAuthority || "",
+        filingStartDate: currentItem.lastAudit || "",
+        filingEndDate: currentItem.endDate || "",
+        filingSubmissionDeadline: currentItem.submissionDeadline || "",
+        filingSubmissionStatus: currentItem.status || "Pending",
+        filingRecurringFrequency: (currentItem as any).recurringFrequency || "",
+        filingRemarks: currentItem.remarks || "",
+        submissionNotes: "",
+        filingSubmissionDate: "",
+        reminderDays: String(currentItem.reminderDays ?? "7"),
+        reminderPolicy: currentItem.reminderPolicy || "One time",
+        submittedBy: (currentItem as any).submittedBy || "",
+        owner: (currentItem as any).owner || "",
+        owner2: (currentItem as any).owner2 || "",
+        amount: "",
+        paymentDate: "",
+        submissionAmount: "",
+        paymentMethod: "",
+        department: "",
+        departments: depts,
+      });
+    })();
+  }, [location.search, location.pathname, complianceItems, modalOpen, navigate]);
   
   // Auto-open compliance modal if coming from notifications
   useEffect(() => {
@@ -1853,15 +1919,22 @@ export default function Compliance() {
   };
 
   const handleExitConfirm = () => {
+    // If opened from Calendar, return there on exit
+    const returnTo = (location.state as any)?.returnTo;
+    if (typeof returnTo === 'string' && returnTo.length > 0) {
+      navigate(returnTo, { replace: true });
+      return;
+    } else {
+      // Check if we should return to notifications
+      const shouldReturnToNotifications = localStorage.getItem('returnToNotifications') === 'true';
+      if (shouldReturnToNotifications) {
+        localStorage.removeItem('returnToNotifications');
+        navigate('/notifications');
+      }
+    }
+
     setModalOpen(false);
     setExitConfirmOpen(false);
-
-    // Check if we should return to notifications
-    const shouldReturnToNotifications = localStorage.getItem('returnToNotifications') === 'true';
-    if (shouldReturnToNotifications) {
-      localStorage.removeItem('returnToNotifications');
-      navigate('/notifications');
-    }
 
     setTimeout(() => {
       setFilingNameError("");
@@ -2958,7 +3031,34 @@ export default function Compliance() {
       </div>
       
       {/* Modal */}
-      <Dialog open={modalOpen} onOpenChange={(v) => { if (!v) setIsFullscreen(false); setModalOpen(v); }}>
+      <Dialog
+        open={modalOpen}
+        onOpenChange={(nextOpen) => {
+          // Treat X/overlay/Esc like clicking Exit
+          if (!nextOpen) {
+            setIsFullscreen(false);
+
+            if (showSubmissionDetails) {
+              if (submissionOpenedFromTable) {
+                handleExitConfirm();
+                return;
+              }
+              setShowSubmissionDetails(false);
+              return;
+            }
+
+            if (hasMeaningfulFormData()) {
+              setExitConfirmOpen(true);
+              return;
+            }
+
+            handleExitConfirm();
+            return;
+          }
+
+          setModalOpen(true);
+        }}
+      >
         <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[95vw] w-[95vw] h-[92vh] max-h-[92vh]' : 'max-w-4xl min-w-[400px] max-h-[80vh]'} border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 flex flex-col overflow-hidden`}>
           {/* Local keyframes for the sheen animation */}
           <style>{`@keyframes sheen { 0% { transform: translateX(-60%); } 100% { transform: translateX(180%); } }`}</style>
@@ -3040,7 +3140,31 @@ export default function Compliance() {
                         (complianceItems[editIndex] as any)?.policy ||
                         (complianceItems[editIndex] as any)?.filingName ||
                         "";
-                      window.location.href = `/compliance-ledger?id=${complianceItems[editIndex]._id}&name=${encodeURIComponent(String(currentName))}`;
+                      const id = String(complianceItems[editIndex]._id);
+                      void (async () => {
+                        try {
+                          const res = await fetch('/api/deeplink/token', {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ entityType: 'compliance', id }),
+                          });
+                          if (!res.ok) throw new Error('Failed to create deeplink token');
+                          const data = (await res.json()) as { token?: string };
+                          if (!data?.token) throw new Error('Invalid deeplink token response');
+                          const qs = new URLSearchParams({
+                            openToken: String(data.token),
+                            name: String(currentName),
+                          }).toString();
+                          window.location.href = `/compliance-ledger?${qs}`;
+                        } catch {
+                          const qs = new URLSearchParams({
+                            id,
+                            name: String(currentName),
+                          }).toString();
+                          window.location.href = `/compliance-ledger?${qs}`;
+                        }
+                      })();
                     }}
                     title="History"
                   >

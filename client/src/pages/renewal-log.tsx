@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -6,11 +7,74 @@ import { History, ArrowLeft } from "lucide-react";
 import { API_BASE_URL } from "@/lib/config";
 import { Badge } from "../components/ui/badge";
 
+function sanitizeId(raw: string | null) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 200) return null;
+  return trimmed;
+}
+
+function sanitizeName(raw: string | null) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return "";
+  return trimmed.slice(0, 200);
+}
+
+function sanitizeToken(raw: string | null) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return null;
+  if (trimmed.length < 20 || trimmed.length > 10000) return null;
+  return trimmed;
+}
+
 export default function RenewalLog() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const licenseId = searchParams.get('id');
-  const licenseNameParam = searchParams.get('name');
+  const idParam = useMemo(() => sanitizeId(searchParams.get('id')), [searchParams]);
+  const openToken = useMemo(() => sanitizeToken(searchParams.get('openToken')), [searchParams]);
+  const licenseNameParam = useMemo(() => sanitizeName(searchParams.get('name')), [searchParams]);
+
+  const [resolvedLicenseId, setResolvedLicenseId] = useState<string | null>(idParam);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (idParam) {
+      setTokenError(null);
+      setResolvedLicenseId(idParam);
+      return;
+    }
+
+    if (!openToken) {
+      setTokenError(null);
+      setResolvedLicenseId(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const qs = new URLSearchParams({ token: openToken }).toString();
+        const res = await fetch(`/api/deeplink/resolve?${qs}`, { credentials: "include" });
+        if (!res.ok) throw new Error('Failed to resolve token');
+        const data = (await res.json()) as { id?: string };
+        const resolved = sanitizeId(data?.id ? String(data.id) : null);
+        if (!resolved) throw new Error('Invalid token payload');
+        if (!cancelled) {
+          setTokenError(null);
+          setResolvedLicenseId(resolved);
+        }
+      } catch {
+        if (!cancelled) {
+          setResolvedLicenseId(null);
+          setTokenError('Invalid or expired link');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [idParam, openToken]);
 
   // Fetch logs
   const { data: logs = [], isLoading } = useQuery({
@@ -26,6 +90,7 @@ export default function RenewalLog() {
 
   // Filter logs by license ID if provided
   // Try to match by licenseId first (new logs), fallback to licenseName (old logs)
+  const licenseId = resolvedLicenseId;
   const filteredLogs = licenseId 
     ? logs.filter((log: any) => {
         // First try to match by licenseId (for new logs)
@@ -85,6 +150,7 @@ export default function RenewalLog() {
                   const title = licenseId && displayName ? `${displayName} History Log` : 'Renewal History Log';
                   return <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{title}</h1>;
                 })()}
+                {tokenError ? <p className="text-sm text-red-600 mt-1">{tokenError}</p> : null}
               </div>
             </div>
             

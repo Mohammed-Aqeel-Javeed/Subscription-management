@@ -76,11 +76,7 @@ return () => clearInterval(timer);
 }, []);
 
 const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
-const [selectedCompliance, setSelectedCompliance] = useState<ComplianceItem | null>(null);
-const [selectedLicense, setSelectedLicense] = useState<any>(null);
 const [isModalOpen, setIsModalOpen] = useState(false);
-const [isComplianceModalOpen, setIsComplianceModalOpen] = useState(false);
-const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
 const [modalJustClosed, setModalJustClosed] = useState(false);
 
 const { data: subscriptionNotifications = [], isLoading: isLoadingSubscription, refetch: refetchSubscription } = useQuery<NotificationItem[]>({

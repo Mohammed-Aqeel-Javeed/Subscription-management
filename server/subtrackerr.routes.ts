@@ -61,9 +61,90 @@ import bcrypt from "bcrypt";
 import type { User } from "./types";
 import { sendSubscriptionNotifications, detectSubscriptionChanges } from "./subscription-notification.service.js";
 import { sendComplianceNotifications, detectComplianceChanges } from "./compliance-notification.service.js";
+import { encrypt, decrypt } from "./encryption.service.js";
+import { z } from "zod";
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 
 const router = Router();
+
+// --- Secure deep-link token API ---
+// Avoids exposing raw record IDs in URLs (e.g. ?open=123). Tokens are:
+// - Encrypted server-side (AES-256-GCM)
+// - Bound to tenantId
+// - Short-lived
+type DeeplinkEntityType = 'subscription' | 'compliance' | 'license';
+
+const isDeeplinkEntityType = (v: any): v is DeeplinkEntityType =>
+  v === 'subscription' || v === 'compliance' || v === 'license';
+
+const isLikelyToken = (token: string) => {
+  if (!token) return false;
+  if (token.length < 20 || token.length > 10000) return false;
+  return /^[A-Za-z0-9+/=]+$/.test(token);
+};
+
+router.post('/api/deeplink/token', (req, res) => {
+  const tenantId = (req as any).user?.tenantId;
+  if (!tenantId) return res.status(401).json({ message: 'Unauthorized' });
+
+  const entityType = req.body?.entityType;
+  const id = String(req.body?.id ?? '').trim();
+  if (!isDeeplinkEntityType(entityType) || !id) {
+    return res.status(400).json({ message: 'Invalid payload' });
+  }
+
+  const now = Date.now();
+  const ttlMs = 10 * 60 * 1000; // 10 minutes
+  const payload = {
+    v: 1,
+    tenantId,
+    entityType,
+    id,
+    exp: now + ttlMs,
+  };
+
+  const token = encrypt(JSON.stringify(payload));
+  return res.json({ token, exp: payload.exp });
+});
+
+router.get('/api/deeplink/resolve', (req, res) => {
+  const tenantId = (req as any).user?.tenantId;
+  if (!tenantId) return res.status(401).json({ message: 'Unauthorized' });
+
+  const token = String(req.query?.token ?? '').trim();
+  if (!isLikelyToken(token)) {
+    return res.status(400).json({ message: 'Invalid token' });
+  }
+
+  try {
+    const raw = decrypt(token);
+    const parsed = JSON.parse(raw);
+
+    if (!parsed || typeof parsed !== 'object') {
+      return res.status(400).json({ message: 'Invalid token' });
+    }
+
+    if (String(parsed.tenantId) !== String(tenantId)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    if (!isDeeplinkEntityType(parsed.entityType)) {
+      return res.status(400).json({ message: 'Invalid token' });
+    }
+
+    const exp = Number(parsed.exp);
+    if (!Number.isFinite(exp) || exp <= Date.now()) {
+      return res.status(400).json({ message: 'Token expired' });
+    }
+
+    const id = String(parsed.id ?? '').trim();
+    if (!id) return res.status(400).json({ message: 'Invalid token' });
+
+    return res.json({ entityType: parsed.entityType, id });
+  } catch {
+    return res.status(400).json({ message: 'Invalid token' });
+  }
+});
 
 // Helper to normalize incoming date strings (supports dd-mm-yyyy and yyyy-mm-dd)
 function normalizeDateString(value: any): any {
@@ -570,8 +651,11 @@ router.get("/api/history/list", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    const rawLimit = Number(req.query.limit);
-    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 2000) : 200;
+    const limitSchema = z
+      .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(2000))
+      .optional();
+    const parsedLimit = limitSchema.safeParse(req.query.limit);
+    const limit = parsedLimit.success ? parsedLimit.data ?? 200 : 200;
 
     // Sort by timestamp and _id for consistent ordering
     const items = await collection
@@ -650,7 +734,11 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
     
     const db = await connectToDatabase();
     const collection = db.collection("history");
-    const { subscriptionId } = req.params;
+    const subIdRaw = String(req.params.subscriptionId ?? '').trim();
+    if (!subIdRaw || subIdRaw.length > 200) {
+      return res.status(400).json({ message: "Invalid subscriptionId" });
+    }
+    const subscriptionId = subIdRaw;
 
     // Try to convert to ObjectId, but don't fail if it's not a valid ObjectId
     let subObjId;
@@ -670,8 +758,11 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
       { subscriptionId: subObjId, tenantId } :
       { subscriptionId: subscriptionId, tenantId };
 
-    const rawLimit = Number(req.query.limit);
-    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 2000) : 200;
+    const limitSchema = z
+      .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(2000))
+      .optional();
+    const parsedLimit = limitSchema.safeParse(req.query.limit);
+    const limit = parsedLimit.success ? parsedLimit.data ?? 200 : 200;
 
     // Sort by timestamp descending (newest first)
     const items = await collection

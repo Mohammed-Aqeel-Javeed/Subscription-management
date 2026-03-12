@@ -60,7 +60,7 @@
   body {
     @apply antialiased bg-gray-50 text-gray-900 min-h-screen;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.6;
     letter-spacing: -0.01em;
     font-weight: 400;
@@ -97,6 +97,25 @@
   /* Reusable drag-style scrollbar */
   .custom-scrollbar {
     scrollbar-width: thin;
+    /* Thin scrollbar (use on sidebars, long panels) */
+    .thin-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: #9ca3af transparent;
+    }
+    .thin-scrollbar::-webkit-scrollbar {
+      width: 4px !important;
+      height: 4px !important;
+    }
+    .thin-scrollbar::-webkit-scrollbar-track {
+      background: transparent !important;
+    }
+    .thin-scrollbar::-webkit-scrollbar-thumb {
+      background: #9ca3af !important;
+      border-radius: 9999px;
+    }
+    .thin-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #6b7280 !important;
+    }
     scrollbar-color: #d1d5db #f9fafb;
     overflow-y: scroll !important;
   }

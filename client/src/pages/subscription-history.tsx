@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -78,6 +77,26 @@ function formatTimestamp(timestamp: string, opts?: { forceLocal?: boolean }) {
   const hours = String(useUtc ? date.getUTCHours() : date.getHours()).padStart(2, "0");
   const minutes = String(useUtc ? date.getUTCMinutes() : date.getMinutes()).padStart(2, "0");
   return { date: `${day}/${month}/${year}`, time: `${hours}:${minutes}` };
+}
+
+function sanitizeId(raw: string | null) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 200) return null;
+  return trimmed;
+}
+
+function sanitizeName(raw: string | null) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return "";
+  return trimmed.slice(0, 200);
+}
+
+function sanitizeToken(raw: string | null) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return null;
+  if (trimmed.length < 20 || trimmed.length > 10000) return null;
+  return trimmed;
 }
 
 function parseTimestampLike(value: unknown): Date | null {
@@ -464,14 +483,58 @@ function inferDisplayAction(record: HistoryRecord): string {
 export default function SubscriptionHistory() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const subscriptionId = searchParams.get("id");
-  const subscriptionNameParam = searchParams.get("name");
+  const idParam = sanitizeId(searchParams.get("id"));
+  const openToken = sanitizeToken(searchParams.get("openToken"));
+  const subscriptionNameParam = sanitizeName(searchParams.get("name"));
+
+  const [resolvedSubscriptionId, setResolvedSubscriptionId] = useState<string | null>(idParam);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (idParam) {
+      setTokenError(null);
+      setResolvedSubscriptionId(idParam);
+      return;
+    }
+
+    if (!openToken) {
+      setTokenError(null);
+      setResolvedSubscriptionId(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const qs = new URLSearchParams({ token: openToken }).toString();
+        const res = await fetch(`/api/deeplink/resolve?${qs}`, { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to resolve token");
+        const data = (await res.json()) as { id?: string };
+        const resolved = sanitizeId(data?.id ? String(data.id) : null);
+        if (!resolved) throw new Error("Invalid token payload");
+        if (!cancelled) {
+          setTokenError(null);
+          setResolvedSubscriptionId(resolved);
+        }
+      } catch {
+        if (!cancelled) {
+          setResolvedSubscriptionId(null);
+          setTokenError("Invalid or expired link");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [idParam, openToken]);
 
   const queryClient = useQueryClient();
 
-  const endpoint = subscriptionId ? `/api/history/${subscriptionId}` : `/api/history/list`;
-  const queryKey = subscriptionId
-    ? ["/api/history", "subscription", subscriptionId]
+  const effectiveSubscriptionId = resolvedSubscriptionId;
+  const endpoint = effectiveSubscriptionId ? `/api/history/${effectiveSubscriptionId}` : `/api/history/list`;
+  const queryKey = effectiveSubscriptionId
+    ? ["/api/history", "subscription", effectiveSubscriptionId]
     : ["/api/history", "list"];
 
   const { data: history = [], isLoading, refetch } = useQuery<HistoryRecord[]>({
@@ -492,7 +555,7 @@ export default function SubscriptionHistory() {
 
   const { data: subscriptions = [] } = useQuery<Subscription[]>({
     queryKey: ["/api/subscriptions"],
-    enabled: !subscriptionId,
+    enabled: !effectiveSubscriptionId,
     staleTime: 0,
     refetchOnMount: "always",
     queryFn: async () => {
@@ -565,8 +628,8 @@ export default function SubscriptionHistory() {
     (sortedHistory?.[0]?.data?.serviceName as string) ||
     "Selected Subscription";
 
-  const headerName = subscriptionNameParam ? decodeURIComponent(subscriptionNameParam) : firstName;
-  const headerTitle = subscriptionId ? `${headerName} History Log` : "Subscription History Log";
+  const headerName = subscriptionNameParam || firstName;
+  const headerTitle = effectiveSubscriptionId ? `${headerName} History Log` : "Subscription History Log";
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 font-['Inter']">
@@ -580,6 +643,7 @@ export default function SubscriptionHistory() {
               </div>
               <div>
                 <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{headerTitle}</h1>
+                {tokenError ? <p className="text-sm text-red-600 mt-1">{tokenError}</p> : null}
               </div>
             </div>
 
@@ -611,7 +675,7 @@ export default function SubscriptionHistory() {
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 z-10 bg-gray-200">
                     <tr className="border-b-2 border-gray-400">
-                      {!subscriptionId && (
+                      {!effectiveSubscriptionId && (
                         <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[200px]">Subscription Name</th>
                       )}
                       <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[180px]">Changed By</th>
@@ -642,7 +706,7 @@ export default function SubscriptionHistory() {
 
                       return (
                         <tr key={item._id || index} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
-                          {!subscriptionId && (
+                          {!effectiveSubscriptionId && (
                             <td className="px-4 py-3 font-medium text-gray-800 w-[200px] max-w-[200px]">
                               <div className="truncate" title={name}>{name}</div>
                             </td>
@@ -680,10 +744,10 @@ export default function SubscriptionHistory() {
                   </div>
                   <div>
                     <p className="text-slate-600 font-medium">
-                      {subscriptionId ? "No history records found for this subscription" : "No history records found"}
+                      {effectiveSubscriptionId ? "No history records found for this subscription" : "No history records found"}
                     </p>
                     <p className="text-sm text-slate-500 mt-1">
-                      {subscriptionId
+                      {effectiveSubscriptionId
                         ? "This subscription has no recorded changes yet"
                         : "Logs will appear here when subscriptions are created, updated, renewed, or deleted"}
                     </p>

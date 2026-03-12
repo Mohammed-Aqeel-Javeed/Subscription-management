@@ -104,7 +104,7 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
             />
           </div>
           <div className="mb-2 text-xs font-semibold text-gray-600 px-2">Your Companies</div>
-          <div className="max-h-64 overflow-y-auto">
+                <div className="max-h-64 overflow-y-auto thin-scrollbar">
             {isLoading ? (
               <div className="text-center py-4 text-gray-500 text-sm">Loading...</div>
             ) : filteredCompanies.length === 0 ? (
@@ -259,7 +259,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         </div>
 
         {/* Collapsed Navigation Icons */}
-        <nav className="flex-1 p-2 overflow-y-auto">
+        <nav className="flex-1 p-2 overflow-y-auto thin-scrollbar">
           <ul className="space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -425,7 +425,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           onClose={() => setShowCompanySwitcherDialog(false)} 
         />
       )}
-      <nav className="flex-1 p-4 overflow-y-auto">
+      <nav className="flex-1 p-4 overflow-y-auto thin-scrollbar">
         {/* Default navigation (hidden when a page wants to fully use the sidebar) */}
         {pageSlotActive && pageSlotReplaceNav ? null : (
           <>

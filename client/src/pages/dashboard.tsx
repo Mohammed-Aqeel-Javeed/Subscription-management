@@ -1,22 +1,21 @@
 import React, { useState } from "react";
 import { apiFetch } from "../lib/api";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CalendarDays, TrendingUp, RefreshCw, Bell, Plus, Edit, BellRing, Users, Clock, LogOut, X } from "lucide-react";
+import { CalendarDays, TrendingUp, RefreshCw, Bell, Users, Clock, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import TrendsChart from "@/components/charts/trends-chart";
 import CategoryChart from "@/components/charts/category-chart";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, RecentActivity, Subscription } from "@shared/types";
+import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, Subscription } from "@shared/types";
 
 // Error boundary wrapper
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
-  const [error, setError] = useState<Error | null>(null);
+  const [error] = useState<Error | null>(null);
   return error ? (
     <div style={{ color: 'red', padding: 32 }}>
       <h2>Dashboard Error</h2>
@@ -30,7 +29,6 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
 export default function Dashboard() {
   const location = window.location.pathname;
   const navigate = useNavigate();
-  const [authError, setAuthError] = useState<string | null>(null);
   const [activeSubscriptionsModalOpen, setActiveSubscriptionsModalOpen] = useState(false);
   const [upcomingRenewalsModalOpen, setUpcomingRenewalsModalOpen] = useState(false);
   
@@ -39,7 +37,7 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState("6months");
   
   // Use dashboard metrics query for auth check and data
-  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery<DashboardMetrics>({
+  const { isLoading: metricsLoading, error: metricsError } = useQuery<DashboardMetrics>({
     queryKey: ["/api/analytics/dashboard"],
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/dashboard");
@@ -110,19 +108,17 @@ export default function Dashboard() {
     );
   }
 
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/logout", { method: "POST", credentials: "include" });
-    } catch {}
-    navigate("/login");
-  };
   // Tab navigation handler
-  const handleTabClick = (tab: 'subscription' | 'compliance') => {
+  const handleTabClick = (tab: 'subscription' | 'calendar' | 'compliance') => {
     if (tab === 'subscription') {
       navigate('/dashboard');
-    } else {
-      navigate('/compliance-dashboard');
+      return;
     }
+    if (tab === 'calendar') {
+      navigate('/calendar');
+      return;
+    }
+    navigate('/compliance-dashboard');
   };
 
   // Filter active subscriptions
@@ -219,12 +215,6 @@ export default function Dashboard() {
     return <TrendingUp className="w-4 h-4 rotate-180" />;
   };
 
-  const getGrowthColor = (growth: number) => {
-    if (growth > 0) return "text-red-600";
-    if (growth < 0) return "text-green-600";
-    return "text-gray-600";
-  };
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-white">
@@ -242,20 +232,30 @@ export default function Dashboard() {
                 </div>
               </div>
               
-              <div className="flex items-center space-x-3">
+              <div className="flex flex-col items-end gap-2">
+                <div className="flex items-center gap-2">
+                  <Button
+                    className={`${location === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
+                    variant="outline"
+                    onClick={() => handleTabClick('subscription')}
+                  >
+                    Subscription
+                  </Button>
+                  <Button
+                    className={`${location === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
+                    variant="outline"
+                    onClick={() => handleTabClick('compliance')}
+                  >
+                    Compliance
+                  </Button>
+                </div>
+
                 <Button
-                  className={location === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+                  className={`${location === '/calendar' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
                   variant="outline"
-                  onClick={() => handleTabClick('subscription')}
+                  onClick={() => handleTabClick('calendar')}
                 >
-                  Subscription
-                </Button>
-                <Button
-                  className={location === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
-                  variant="outline"
-                  onClick={() => handleTabClick('compliance')}
-                >
-                  Compliance
+                  Calendar
                 </Button>
               </div>
             </div>

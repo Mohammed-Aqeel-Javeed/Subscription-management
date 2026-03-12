@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, CheckCircle, Clock, FileCheck, Shield, Users, TrendingUp, Calendar, LogOut } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, TrendingUp, ArrowLeft } from "lucide-react";
 import ComplianceTrendsChart from "@/components/charts/compliance-trends-chart";
 import ComplianceCategoryChart from "@/components/charts/compliance-category-chart";
 import { useNavigate } from "react-router-dom";
@@ -139,12 +139,16 @@ export default function ComplianceDashboard() {
   };
 
   // Tab navigation handler
-  const handleTabClick = (tab: 'subscription' | 'compliance') => {
+  const handleTabClick = (tab: 'subscription' | 'calendar' | 'compliance') => {
     if (tab === 'subscription') {
       navigate('/dashboard');
-    } else {
-      navigate('/compliance-dashboard');
+      return;
     }
+    if (tab === 'calendar') {
+      navigate('/calendar');
+      return;
+    }
+    navigate('/compliance-dashboard');
   };
 
   if (complianceLoading) {
@@ -167,11 +171,26 @@ export default function ComplianceDashboard() {
     <ErrorBoundary>
       <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">        
         {/* Top tab buttons */}
-        <div className="flex justify-end items-center gap-4 mb-8">
-          <div className="flex gap-4">
+        <div className="flex items-center justify-between gap-4 mb-8">
+          <Button
+            variant="outline"
+            className="bg-white"
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1);
+                return;
+              }
+              navigate('/dashboard');
+            }}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+
+          <div className="flex items-center gap-2">
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
               <Button
-                className={window.location.pathname === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+                className={`${window.location.pathname === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
                 variant="outline"
                 onClick={() => handleTabClick('subscription')}
               >
@@ -180,7 +199,16 @@ export default function ComplianceDashboard() {
             </motion.div>
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
               <Button
-                className={window.location.pathname === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'}
+                className={`${window.location.pathname === '/calendar' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
+                variant="outline"
+                onClick={() => handleTabClick('calendar')}
+              >
+                Calendar
+              </Button>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+              <Button
+                className={`${window.location.pathname === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
                 variant="outline"
                 onClick={() => handleTabClick('compliance')}
               >
@@ -233,7 +261,7 @@ export default function ComplianceDashboard() {
         </motion.div>
         
         {/* Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mb-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -281,50 +309,6 @@ export default function ComplianceDashboard() {
                   <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
                     <AlertTriangle className="text-orange-600" />
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-          
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5, duration: 0.5 }}
-            whileHover={{ y: -5 }}
-            className="md:col-span-2 lg:col-span-2"
-          >
-            <Card className="h-full transition-all duration-300 hover:shadow-lg">
-              <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row gap-4 h-full">
-                  <motion.div 
-                    className="flex-1"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <Button 
-                      variant="outline" 
-                      className="w-full h-full flex flex-col items-center justify-center p-6 transition-all duration-300 border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50"
-                      onClick={() => navigate("/calendar-monthly")}
-                    >
-                      <Calendar className="h-8 w-8 text-blue-500 mb-2" />
-                      <span className="text-lg font-medium">Monthly Calendar</span>
-                    </Button>
-                  </motion.div>
-                  
-                  <motion.div 
-                    className="flex-1"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <Button 
-                      variant="outline" 
-                      className="w-full h-full flex flex-col items-center justify-center p-6 transition-all duration-300 border-2 border-dashed border-purple-300 hover:border-purple-500 hover:bg-purple-50"
-                      onClick={() => navigate("/calendar-yearly")}
-                    >
-                      <Calendar className="h-8 w-8 text-purple-500 mb-2" />
-                      <span className="text-lg font-medium">Yearly Calendar</span>
-                    </Button>
-                  </motion.div>
                 </div>
               </CardContent>
             </Card>

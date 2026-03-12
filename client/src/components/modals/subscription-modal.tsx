@@ -3128,15 +3128,47 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     return;
                   }
 
-                  navigate(
-                    `/subscription-user?id=${subscriptionId}&name=${encodeURIComponent(serviceName)}`,
-                    {
-                      state: {
-                        returnOpenSubscriptionId: subscriptionId,
-                        returnPath: location.pathname,
-                      },
+                  const mintDeeplinkToken = async (id: string) => {
+                    const res = await fetch('/api/deeplink/token', {
+                      method: 'POST',
+                      credentials: 'include',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ entityType: 'subscription', id }),
+                    });
+                    if (!res.ok) throw new Error('Failed to create deeplink token');
+                    const data = (await res.json()) as { token?: string };
+                    if (!data?.token) throw new Error('Invalid deeplink token response');
+                    return String(data.token);
+                  };
+
+                  void (async () => {
+                    try {
+                      const token = await mintDeeplinkToken(String(subscriptionId));
+                      const qs = new URLSearchParams({
+                        openToken: token,
+                        name: String(serviceName),
+                      }).toString();
+                      navigate(`/subscription-user?${qs}`, {
+                        state: {
+                          ...(location.state as any),
+                          returnOpenSubscriptionId: subscriptionId,
+                          returnPath: location.pathname,
+                        },
+                      });
+                    } catch {
+                      const qs = new URLSearchParams({
+                        id: String(subscriptionId),
+                        name: String(serviceName),
+                      }).toString();
+                      navigate(`/subscription-user?${qs}`, {
+                        state: {
+                          ...(location.state as any),
+                          returnOpenSubscriptionId: subscriptionId,
+                          returnPath: location.pathname,
+                        },
+                      });
                     }
-                  );
+                  })();
                 }}
               >
                 User
@@ -3161,7 +3193,30 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   const historyId = (subscription as any)?._id || (subscription as any)?.id;
                   if (isEditing && historyId) {
                     const currentServiceName = form.getValues("serviceName") || subscription?.serviceName || "";
-                    window.location.href = `/subscription-history?id=${historyId}&name=${encodeURIComponent(currentServiceName)}`;
+                    void (async () => {
+                      try {
+                        const res = await fetch('/api/deeplink/token', {
+                          method: 'POST',
+                          credentials: 'include',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ entityType: 'subscription', id: String(historyId) }),
+                        });
+                        if (!res.ok) throw new Error('Failed to create deeplink token');
+                        const data = (await res.json()) as { token?: string };
+                        if (!data?.token) throw new Error('Invalid deeplink token response');
+                        const qs = new URLSearchParams({
+                          openToken: String(data.token),
+                          name: String(currentServiceName),
+                        }).toString();
+                        window.location.href = `/subscription-history?${qs}`;
+                      } catch {
+                        const qs = new URLSearchParams({
+                          id: String(historyId),
+                          name: String(currentServiceName),
+                        }).toString();
+                        window.location.href = `/subscription-history?${qs}`;
+                      }
+                    })();
                   }
                 }}
                 disabled={!isEditing}
