@@ -47,7 +47,7 @@ export default function Subscriptions() {
 
   // Check if we should open modal immediately based on URL parameter
   const searchParams = new URLSearchParams(location.search);
-  const shouldOpenModal = !!searchParams.get('open');
+  const shouldOpenModal = !!searchParams.get('open') || !!searchParams.get('openToken');
   
   const [modalOpen, setModalOpen] = useState(shouldOpenModal);
   const [editingSubscription, setEditingSubscription] = useState<Partial<SubscriptionWithExtras> | undefined>();
@@ -133,25 +133,44 @@ export default function Subscriptions() {
   // Handle URL parameter to open specific subscription modal (placed after subscriptions declaration)
   React.useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
+    const openToken = searchParams.get('openToken');
     const openSubscriptionId = searchParams.get('open');
 
-    if (!openSubscriptionId) return;
+    const resolveToken = async (token: string) => {
+      const qs = new URLSearchParams({ token }).toString();
+      const res = await fetch(`/api/deeplink/resolve?${qs}`, { credentials: 'include' });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { id?: string };
+      return data?.id ? String(data.id) : null;
+    };
+
+    if (!openToken && !openSubscriptionId) return;
 
     // Open immediately (avoid showing the table while data loads)
     setModalOpen(true);
 
-    // If we already have it in the list, use it right away.
-    const fromList = subscriptions?.find(sub => sub.id === openSubscriptionId || sub._id === openSubscriptionId);
-    if (fromList) {
-      setPendingOpenSubscriptionId(null);
-      setEditingSubscription(fromList);
-      navigate(location.pathname, { replace: true });
-      return;
-    }
+    void (async () => {
+      const resolvedId = openToken ? await resolveToken(openToken) : openSubscriptionId;
+      if (!resolvedId) {
+        // Clear the query param and stop
+        navigate(location.pathname, { replace: true, state: location.state });
+        return;
+      }
 
-    // Otherwise fetch the single subscription by id.
-    setEditingSubscription(undefined);
-    setPendingOpenSubscriptionId(openSubscriptionId);
+      // If we already have it in the list, use it right away.
+      const fromList = subscriptions?.find(sub => sub.id === resolvedId || sub._id === resolvedId);
+      if (fromList) {
+        setPendingOpenSubscriptionId(null);
+        setEditingSubscription(fromList);
+        navigate(location.pathname, { replace: true, state: location.state });
+        return;
+      }
+
+      // Otherwise fetch the single subscription by id.
+      setEditingSubscription(undefined);
+      setPendingOpenSubscriptionId(resolvedId);
+      navigate(location.pathname, { replace: true, state: location.state });
+    })();
   }, [location.search, subscriptions, navigate, location.pathname]);
 
   useEffect(() => {
@@ -160,7 +179,7 @@ export default function Subscriptions() {
 
     setEditingSubscription(openedSubscription);
     setPendingOpenSubscriptionId(null);
-    navigate(location.pathname, { replace: true });
+    navigate(location.pathname, { replace: true, state: location.state });
   }, [openedSubscription, pendingOpenSubscriptionId, navigate, location.pathname]);
   // Listen for login/logout/account change events and trigger immediate refetch
   React.useEffect(() => {
@@ -250,6 +269,12 @@ export default function Subscriptions() {
   };
   
   const handleCloseModal = () => {
+    const returnTo = (location.state as any)?.returnTo;
+    if (typeof returnTo === 'string' && returnTo.length > 0) {
+      navigate(returnTo, { replace: true });
+      return;
+    }
+
     setModalOpen(false);
     setEditingSubscription(undefined);
   };

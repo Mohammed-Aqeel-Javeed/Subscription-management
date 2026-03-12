@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Upload, FileSpreadsheet } from "lucide-react";
+import { Download } from "lucide-react";
 import Papa from 'papaparse';
 
 // Dummy fallback for company name
@@ -22,20 +22,98 @@ function getErrorMessage(error: unknown): string {
   }
 }
 
-// Get subscription name from query param (e.g. /subscription-user?name=ChatGPT&id=123)
-function getSubscriptionFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  return {
-    name: params.get("name") || "Subscription",
-    id: params.get("id") || null
-  };
+function sanitizeId(raw: string | null) {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 200) return null;
+  return trimmed;
+}
+
+function sanitizeName(raw: string | null) {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return 'Subscription';
+  return trimmed.slice(0, 200);
+}
+
+function sanitizeToken(raw: string | null) {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return null;
+  if (trimmed.length < 20 || trimmed.length > 10000) return null;
+  return trimmed;
 }
 
 export default function SubscriptionUserPage() {
-  const { name: subscriptionName, id: subscriptionId } = getSubscriptionFromUrl();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const subscriptionName = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return sanitizeName(params.get('name'));
+  }, [location.search]);
+
+  const openToken = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return sanitizeToken(params.get('openToken'));
+  }, [location.search]);
+
+  const idParam = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return sanitizeId(params.get('id'));
+  }, [location.search]);
+
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(idParam);
+
+  useEffect(() => {
+    // Prefer raw id if present (backwards compatibility)
+    if (idParam) {
+      setSubscriptionId(idParam);
+      return;
+    }
+
+    if (!openToken) {
+      setSubscriptionId(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const qs = new URLSearchParams({ token: openToken }).toString();
+        const res = await fetch(`/api/deeplink/resolve?${qs}`, { credentials: 'include' });
+        if (!res.ok) throw new Error('Failed to resolve token');
+        const data = (await res.json()) as { id?: string };
+        const resolved = sanitizeId(data?.id ? String(data.id) : null);
+        if (!cancelled) setSubscriptionId(resolved);
+      } catch {
+        if (!cancelled) {
+          setSubscriptionId(null);
+          toast({
+            title: 'Invalid link',
+            description: 'This link is invalid or has expired.',
+            variant: 'destructive',
+          });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [idParam, openToken, toast]);
+
+  const mintDeeplinkToken = async (id: string) => {
+    const res = await fetch('/api/deeplink/token', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityType: 'subscription', id }),
+    });
+    if (!res.ok) throw new Error('Failed to create deeplink token');
+    const data = (await res.json()) as { token?: string };
+    if (!data?.token) throw new Error('Invalid deeplink token response');
+    return String(data.token);
+  };
 
   // Fetch all employees
   const { data: employees = [], isLoading: employeesLoading } = useQuery({
@@ -63,9 +141,7 @@ export default function SubscriptionUserPage() {
   const [selectedUsers, setSelectedUsers] = useState<any[]>([]);
   const [searchLeft, setSearchLeft] = useState("");
   const [searchRight, setSearchRight] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
   const [showTeamMembers, setShowTeamMembers] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // On initial mount and when subscriptionUsers changes, update selectedUsers
   useEffect(() => {
@@ -74,27 +150,6 @@ export default function SubscriptionUserPage() {
     }
   }, [subscriptionUsers]);
 
-  // Download Template
-  const handleDownloadTemplate = () => {
-    const template = [
-      { Name: 'John Doe', Email: 'john@example.com' },
-      { Name: 'Jane Smith', Email: 'jane@example.com' }
-    ];
-    const csv = Papa.unparse(template);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'subscription_users_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast({
-      title: 'Template Downloaded',
-      description: 'Use this template to bulk import users',
-    });
-  };
 
   // Export current assigned users
   const handleExport = () => {
@@ -127,127 +182,6 @@ export default function SubscriptionUserPage() {
     });
   };
 
-  // Import users from CSV
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const rows: any[] = results.data as any[];
-        if (!rows.length) {
-          toast({
-            title: 'Empty file',
-            description: 'No rows found in file',
-            variant: 'destructive'
-          });
-          return;
-        }
-        
-        let added = 0;
-        let skipped = 0;
-        const mismatchErrors: string[] = [];
-        const notFoundUsers: string[] = [];
-        const duplicatesInCSV: string[] = [];
-        const seenEmails = new Set<string>();
-        
-        rows.forEach((row, index) => {
-          const email = (row.Email || row.email || '').trim().toLowerCase();
-          const name = (row.Name || row.name || '').trim();
-          
-          if (!email || !name) {
-            skipped++;
-            notFoundUsers.push(name || email || 'Unknown');
-            return;
-          }
-          
-          // Check for duplicates within the CSV
-          if (seenEmails.has(email)) {
-            duplicatesInCSV.push(`${name} (${email}) on row ${index + 2}`);
-            skipped++;
-            return;
-          }
-          seenEmails.add(email);
-          
-          // Find employee by email
-          const employee = employees.find(emp => 
-            emp.email?.toLowerCase() === email
-          );
-          
-          if (employee) {
-            // Check if name also matches (trim both sides for comparison)
-            const employeeName = (employee.name || '').trim().toLowerCase();
-            const csvName = name.toLowerCase();
-            
-            if (employeeName === csvName) {
-              const empId = employee.id || employee._id;
-              // Check if not already added
-              if (!selectedUsers.some(u => (u.id || u._id) === empId)) {
-                setSelectedUsers(prev => [...prev, employee]);
-                added++;
-              } else {
-                skipped++;
-              }
-            } else {
-              // Email matches but name doesn't match
-              mismatchErrors.push(`${name} (email: ${email}) - Found employee "${employee.name?.trim()}" with this email`);
-              skipped++;
-            }
-          } else {
-            // Email not found
-            notFoundUsers.push(`${name} (${email})`);
-            skipped++;
-          }
-        });
-        
-        // Show detailed error message
-        if (duplicatesInCSV.length > 0 || mismatchErrors.length > 0 || notFoundUsers.length > 0) {
-          let errorMsg = '';
-          
-          if (duplicatesInCSV.length > 0) {
-            const dupList = duplicatesInCSV.slice(0, 3).join('; ');
-            const moreCount = duplicatesInCSV.length > 3 ? ` and ${duplicatesInCSV.length - 3} more` : '';
-            errorMsg += `Duplicate entries in CSV: ${dupList}${moreCount}. `;
-          }
-          
-          if (mismatchErrors.length > 0) {
-            const mismatchList = mismatchErrors.slice(0, 3).join('; ');
-            const moreCount = mismatchErrors.length > 3 ? ` and ${mismatchErrors.length - 3} more` : '';
-            errorMsg += `Name/Email mismatch: ${mismatchList}${moreCount}. `;
-          }
-          
-          if (notFoundUsers.length > 0) {
-            const notFoundList = notFoundUsers.slice(0, 3).join(', ');
-            const moreCount = notFoundUsers.length > 3 ? ` and ${notFoundUsers.length - 3} more` : '';
-            errorMsg += `Not found: ${notFoundList}${moreCount}.`;
-          }
-          
-          toast({
-            title: added > 0 ? 'Import Complete with Errors' : 'Import Failed',
-            description: `Added ${added} users. ${skipped} skipped. ${errorMsg}`,
-            variant: added === 0 ? 'destructive' : 'default'
-          });
-        } else {
-          toast({
-            title: 'Import Complete',
-            description: `Added ${added} users successfully`,
-            variant: 'success'
-          });
-        }
-        
-        e.target.value = '';
-      },
-      error: () => {
-        toast({
-          title: 'Import error',
-          description: 'Failed to parse file',
-          variant: 'destructive'
-        });
-      }
-    });
-  };
 
   // Filtered employees (not already added)
   const availableEmployees = useMemo(() => {
@@ -548,66 +482,6 @@ export default function SubscriptionUserPage() {
     }
   };
 
-  // Save handler
-  const handleSave = async () => {
-    if (!subscriptionId) {
-      toast({
-        title: "Error",
-        description: "No subscription ID available. Cannot save users.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const payload = {
-        users: selectedUsers.map(user => ({
-          id: user.id || user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          department: user.department
-        }))
-      };
-const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Error response:", errorText);
-        throw new Error(`Failed to save: ${response.status} ${response.statusText} - ${errorText}`);
-      }
-
-      await response.json();
-      toast({
-        title: "Success",
-        description: "Subscription users updated successfully.",
-        variant: "success",
-      });
-      
-      // Refetch to ensure data is up to date
-      await refetchSubscriptionUsers();
-      
-      // Navigate back to subscriptions page with modal open
-      navigate(`/subscriptions?open=${subscriptionId}`, { replace: true });
-    } catch (error: unknown) {
-      console.error("Error saving users:", error);
-      toast({
-        title: "Error",
-        description: `Failed to save users: ${getErrorMessage(error)}`,
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   // Cancel handler
   const handleCancel = () => {
     const state = (location.state || {}) as {
@@ -616,15 +490,24 @@ if (!response.ok) {
     };
 
     const idToOpen = state.returnOpenSubscriptionId || subscriptionId;
-    const returnPath = state.returnPath || "/subscriptions";
+    const returnPath = typeof state.returnPath === 'string' && state.returnPath.startsWith('/') ? state.returnPath : "/subscriptions";
 
     // Navigate back to subscriptions and re-open the subscription modal.
-    if (idToOpen) {
-      navigate(`${returnPath}?open=${idToOpen}`, { replace: true });
+    if (!idToOpen) {
+      navigate(returnPath, { replace: true, state: location.state });
       return;
     }
 
-    navigate(returnPath, { replace: true });
+    void (async () => {
+      try {
+        const token = await mintDeeplinkToken(String(idToOpen));
+        const qs = new URLSearchParams({ openToken: token }).toString();
+        navigate(`${returnPath}?${qs}`, { replace: true, state: location.state });
+      } catch {
+        const qs = new URLSearchParams({ open: String(idToOpen) }).toString();
+        navigate(`${returnPath}?${qs}`, { replace: true, state: location.state });
+      }
+    })();
   };
 
   const itemVariants = {

@@ -1421,7 +1421,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
 
-    const { id } = req.params;
+    const id = String(req.params.id ?? '').trim();
+    if (!id || id.length > 200) {
+      return res.status(400).json({ message: "Invalid id" });
+    }
     try {
       const { deletedCount } = await deleteNotificationTargets(tenantId, [{ id }]);
       if (deletedCount > 0) return res.status(200).json({ success: true, deletedCount });

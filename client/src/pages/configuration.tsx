@@ -3867,7 +3867,7 @@ export default function Configuration() {
                                 type="submit" 
                                 className="h-9 px-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200 tracking-wide"
                               >
-                                Create Payment Method
+                                Create
                               </Button>
                             </div>
                           </form>

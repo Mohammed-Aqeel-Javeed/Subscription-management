@@ -44,6 +44,41 @@ function formatDateDDMMMYYYY(value: Date | null): string {
   return `${dd}-${mmm}-${yyyy}`;
 }
 
+// Renewal Status badge colors + labels (exactly matching Renewal page)
+function getRenewalStatusClassName(renewalStatus: string) {
+  switch (renewalStatus) {
+    case "Approved":
+      return "bg-green-600 text-white";
+    case "Cancelled":
+      return "bg-red-600 text-white";
+    case "Rejected":
+      return "bg-red-600 text-white";
+    case "Renewal Initiated":
+      return "bg-blue-600 text-white";
+    case "Application Submitted":
+      return "bg-indigo-600 text-white";
+    case "Amendments/ Appeal Submitted":
+      return "bg-orange-600 text-white";
+    case "Resubmitted":
+      return "bg-purple-600 text-white";
+    default:
+      return "bg-blue-600 text-white";
+  }
+}
+
+function getRenewalStatusLabel(renewalStatus: string) {
+  switch (renewalStatus) {
+    case "Renewal Initiated":
+      return "Initiated";
+    case "Application Submitted":
+      return "Submitted";
+    case "Amendments/ Appeal Submitted":
+      return "Amendment/Appeal";
+    default:
+      return renewalStatus;
+  }
+}
+
 function normalizeDepartmentTokens(value: unknown): string[] {
   if (value == null) return [];
 
@@ -222,7 +257,19 @@ export default function ExpiredRenewalsReport() {
                       <TableCell className="px-3 py-3 text-center text-sm text-gray-700">{r.daysExpired ?? ""}</TableCell>
                       <TableCell className="px-3 py-3 text-sm text-gray-700">{r.responsiblePerson}</TableCell>
                       <TableCell className="px-3 py-3 text-sm text-gray-700">{r.department}</TableCell>
-                      <TableCell className="px-3 py-3 text-sm text-gray-700">{r.renewalStatus}</TableCell>
+                      <TableCell className="px-3 py-3 w-[150px] text-left">
+                        {r.renewalStatus ? (
+                          <span
+                            className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none min-w-[140px] ${getRenewalStatusClassName(
+                              r.renewalStatus
+                            )}`}
+                          >
+                            {getRenewalStatusLabel(r.renewalStatus)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}

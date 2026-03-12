@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Bell, Search, LogOut, User, ChevronDown } from "lucide-react";
+import { Bell, Search, MoreVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useUser } from "@/context/UserContext";
 import { useNavigate } from "react-router-dom";
@@ -97,6 +97,16 @@ export default function Header() {
     return user.role || "USER";
   };
 
+  const formatRole = (role: string) => {
+    if (!role) return "";
+    return role
+      .replace(/[-_]+/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+  };
+
   const getUserName = () => {
     return user?.fullName || user?.email || "User";
   };
@@ -170,22 +180,39 @@ export default function Header() {
         >
           <Bell className="h-5 w-5 text-gray-600" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 bg-white rounded-full px-1 py-0.5 text-[11px] leading-none font-semibold text-red-600">
+            <span className="absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-semibold leading-none flex items-center justify-center border-2 border-white">
               {unreadCount}
             </span>
           )}
         </button>
 
-        {/* User Profile Dropdown */}
-        <div className="relative" ref={profileRef}>
-          <button
-            onClick={() => setShowProfileMenu(!showProfileMenu)}
-            className="flex items-center gap-2 p-1 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <div className="h-10 w-10 bg-emerald-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-              {getInitials(getUserName())}
+        {/* User Profile + Kebab Menu */}
+        <div className="relative flex items-center gap-3" ref={profileRef}>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center">
+              {user?.profileImage ? (
+                <img src={user.profileImage} alt="Profile" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-sm font-semibold text-gray-700">{getInitials(getUserName())}</span>
+              )}
             </div>
-            <ChevronDown className="h-4 w-4 text-gray-600" />
+            <div className="hidden sm:flex flex-col leading-tight">
+              <div className="text-sm font-semibold text-gray-900 max-w-[180px] truncate">
+                {getUserName()}
+              </div>
+              <div className="text-xs text-gray-500 max-w-[180px] truncate">
+                {formatRole(getUserRole())}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="Profile menu"
+          >
+            <MoreVertical className="h-5 w-5 text-gray-600" />
           </button>
 
           {/* Profile Dropdown Menu */}

@@ -961,7 +961,7 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 <Save className="w-4 h-4 mr-2" />
 {createEmployeeMutation.isPending || updateEmployeeMutation.isPending
 ? 'Saving...'
-: editingEmployee ? 'Update Employee' : 'Create Employee'
+: editingEmployee ? 'Update' : 'Create'
 }
 </Button>
 </div>
@@ -1998,7 +1998,7 @@ className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 ho
 <Save className="w-4 h-4 mr-2" />
 {createMutation.isPending || updateMutation.isPending
 ? 'Saving...'
-: editingUser ? 'Update User' : 'Create User'
+: editingUser ? 'Update' : 'Create'
 }
 </Button>
 </div>

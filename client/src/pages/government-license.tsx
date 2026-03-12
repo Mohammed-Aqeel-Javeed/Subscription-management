@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -990,6 +990,7 @@ export default function GovernmentLicense() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedRenewalStatuses, setSelectedRenewalStatuses] = useState<string[]>([]);
@@ -1731,6 +1732,40 @@ export default function GovernmentLicense() {
       }
     }
   }, [licenses, isModalOpen]);
+
+  // Auto-open license modal when deep-linked via URL: /government-license?open=<id>
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const openToken = searchParams.get('openToken');
+    const openLicenseId = searchParams.get('open');
+    if (!openToken && !openLicenseId) return;
+    if (isModalOpen) return;
+    if (!Array.isArray(licenses) || licenses.length === 0) return;
+
+    const resolveToken = async (token: string) => {
+      const qs = new URLSearchParams({ token }).toString();
+      const res = await fetch(`/api/deeplink/resolve?${qs}`, { credentials: 'include' });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { id?: string };
+      return data?.id ? String(data.id) : null;
+    };
+
+    void (async () => {
+      const resolvedId = openToken ? await resolveToken(openToken) : openLicenseId;
+
+      // Clear the query param (whether found or not)
+      navigate(location.pathname, { replace: true, state: location.state });
+
+      if (!resolvedId) return;
+
+      const license = licenses.find((lic: License) =>
+        String(lic.id) === resolvedId || String((lic as any)._id) === resolvedId
+      );
+
+      if (!license) return;
+      handleEdit(license);
+    })();
+  }, [location.search, location.pathname, licenses, isModalOpen, navigate]);
 
   // Query for employees (owners)
   const { data: employeesRaw = [], refetch: refetchEmployees } = useQuery({
@@ -3024,6 +3059,13 @@ export default function GovernmentLicense() {
   };
 
   const handleExitConfirm = () => {
+    // If opened from Calendar, return there on exit
+    const returnTo = (location.state as any)?.returnTo;
+    if (typeof returnTo === 'string' && returnTo.length > 0) {
+      navigate(returnTo, { replace: true });
+      return;
+    }
+
     setIsModalOpen(false);
     setExitConfirmOpen(false);
 
@@ -3754,7 +3796,31 @@ export default function GovernmentLicense() {
                     onClick={() => {
                       if (editingLicense?.id) {
                         const currentName = form.getValues("licenseName") || editingLicense?.licenseName || "";
-                        window.location.href = `/renewal-log?id=${editingLicense.id}&name=${encodeURIComponent(currentName)}`;
+                        const id = String(editingLicense.id);
+                        void (async () => {
+                          try {
+                            const res = await fetch('/api/deeplink/token', {
+                              method: 'POST',
+                              credentials: 'include',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ entityType: 'license', id }),
+                            });
+                            if (!res.ok) throw new Error('Failed to create deeplink token');
+                            const data = (await res.json()) as { token?: string };
+                            if (!data?.token) throw new Error('Invalid deeplink token response');
+                            const qs = new URLSearchParams({
+                              openToken: String(data.token),
+                              name: String(currentName),
+                            }).toString();
+                            window.location.href = `/renewal-log?${qs}`;
+                          } catch {
+                            const qs = new URLSearchParams({
+                              id,
+                              name: String(currentName),
+                            }).toString();
+                            window.location.href = `/renewal-log?${qs}`;
+                          }
+                        })();
                       }
                     }}
                     title="History"

@@ -6,6 +6,26 @@ import { Button } from "@/components/ui/button";
 import { Edit, Trash2, FileText, Calendar, CheckCircle, XCircle, Clock, ArrowLeft, History } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+function sanitizeId(raw: string | null) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 200) return null;
+  return trimmed;
+}
+
+function sanitizeName(raw: string | null) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return "";
+  return trimmed.slice(0, 200);
+}
+
+function sanitizeToken(raw: string | null) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return null;
+  if (trimmed.length < 20 || trimmed.length > 10000) return null;
+  return trimmed;
+}
+
 // Helper to format date as dd/mm/yyyy
 const formatDate = (dateStr?: string): string => {
   if (!dateStr) return "";
@@ -111,9 +131,53 @@ export default function ComplianceLedger() {
   const [ledgerItems, setLedgerItems] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
 
-  const complianceId = searchParams.get("id");
-  const complianceNameParam = searchParams.get("name");
+  const idParam = sanitizeId(searchParams.get("id"));
+  const openToken = sanitizeToken(searchParams.get("openToken"));
+  const complianceNameParam = sanitizeName(searchParams.get("name"));
 
+  const [resolvedComplianceId, setResolvedComplianceId] = React.useState<string | null>(idParam);
+  const [tokenError, setTokenError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (idParam) {
+      setTokenError(null);
+      setResolvedComplianceId(idParam);
+      return;
+    }
+
+    if (!openToken) {
+      setTokenError(null);
+      setResolvedComplianceId(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const qs = new URLSearchParams({ token: openToken }).toString();
+        const res = await fetch(`/api/deeplink/resolve?${qs}`, { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to resolve token");
+        const data = (await res.json()) as { id?: string };
+        const resolved = sanitizeId(data?.id ? String(data.id) : null);
+        if (!resolved) throw new Error("Invalid token payload");
+        if (!cancelled) {
+          setTokenError(null);
+          setResolvedComplianceId(resolved);
+        }
+      } catch {
+        if (!cancelled) {
+          setResolvedComplianceId(null);
+          setTokenError("Invalid or expired link");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [idParam, openToken]);
+
+  const complianceId = resolvedComplianceId;
   const isFilteredById = Boolean(complianceId);
   const tableColumnCount = isFilteredById ? 6 : 7;
   
@@ -155,7 +219,7 @@ export default function ComplianceLedger() {
   };
   
   const derivedName = displayedLedgerItems?.[0]?.filingName || displayedLedgerItems?.[0]?.policy;
-  const headerName = complianceNameParam ? decodeURIComponent(complianceNameParam) : derivedName;
+  const headerName = complianceNameParam || derivedName;
   const headerTitle = isFilteredById && headerName ? `${headerName} History Log` : "Compliance History Log";
 
   return (
@@ -170,6 +234,7 @@ export default function ComplianceLedger() {
               </div>
               <div>
                 <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{headerTitle}</h1>
+                {tokenError ? <p className="text-sm text-red-600 mt-1">{tokenError}</p> : null}
               </div>
             </div>
 

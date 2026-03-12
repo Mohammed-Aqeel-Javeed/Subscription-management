@@ -38,6 +38,7 @@ import Compliance from "@/pages/compliance";
 import AuthPage from "@/pages/auth";
 import SignupPage from "@/pages/signup";
 import CompanyDetails from "@/pages/company-details";
+import CalendarPage from "@/pages/calendar";
 import CalendarMonthly from "@/pages/calendar-monthly";
 import CalendarYearly from "@/pages/calendar-yearly";
 import LandingPage from "@/pages/landing";
@@ -170,6 +171,7 @@ function AppWithSidebar() {
               <Route path="/company-details" element={<CompanyDetails />} />
               <Route path="/subscription-user" element={<SubscriptionUserPage />} />
               <Route path="/profile" element={<Profile />} />
+                <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/calendar-monthly" element={<CalendarMonthly />} />
               <Route path="/calendar-yearly" element={<CalendarYearly />} />
               <Route path="*" element={<NotFound />} />
