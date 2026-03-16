@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CalendarDays, TrendingUp, RefreshCw, Bell, Users, Clock, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { TrendingUp, Bell, DollarSign, RotateCcw } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import TrendsChart from "@/components/charts/trends-chart";
 import CategoryChart from "@/components/charts/category-chart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useUser } from "@/context/UserContext";
 import type { DashboardMetrics, SpendingTrend, CategoryBreakdown, Subscription } from "@shared/types";
 
 // Error boundary wrapper
@@ -27,14 +28,29 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
 }
 
 export default function Dashboard() {
-  const location = window.location.pathname;
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useUser();
   const [activeSubscriptionsModalOpen, setActiveSubscriptionsModalOpen] = useState(false);
   const [upcomingRenewalsModalOpen, setUpcomingRenewalsModalOpen] = useState(false);
   
   // Filter states
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [dateRange, setDateRange] = useState("6months");
+
+  // Get greeting based on time of day
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 18) return "Good Afternoon";
+    return "Good Evening";
+  };
+
+  // Get user's first name
+  const getFirstName = () => {
+    if (!user?.fullName) return user?.email?.split('@')[0] || "User";
+    return user.fullName.split(' ')[0];
+  };
   
   // Use dashboard metrics query for auth check and data
   const { isLoading: metricsLoading, error: metricsError } = useQuery<DashboardMetrics>({
@@ -83,6 +99,121 @@ export default function Dashboard() {
 
   // Get unique categories from actual subscriptions (like subscriptions page does)
   const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => sub.category) : [])).filter(Boolean);
+
+  // Category badge sizing: use the longest category label (clamped) so all category badges are the same width.
+  const modalCategoryBadgeWidthCh = useMemo(() => {
+    const list = Array.isArray(subscriptions) ? subscriptions : [];
+    let maxLen = 0;
+    for (const sub of list) {
+      const val = String((sub as any)?.category ?? "").trim();
+      if (val.length > maxLen) maxLen = val.length;
+    }
+    return Math.min(Math.max(maxLen, 6), 28);
+  }, [subscriptions]);
+
+  const trendsStats = useMemo(() => {
+    const points = Array.isArray(trends) ? trends : [];
+    if (points.length === 0) {
+      return {
+        percentChange: null as number | null,
+        avgMonthly: 0,
+        peakMonth: 0,
+        ytdTotal: 0,
+      };
+    }
+
+    const amounts = points.map((p) => Number(p.amount) || 0);
+    const avgMonthly = amounts.reduce((a, b) => a + b, 0) / Math.max(amounts.length, 1);
+    const peakMonth = Math.max(...amounts);
+
+    const currentYear = new Date().getFullYear();
+    const ytdTotal = points
+      .filter((p) => String(p.month).startsWith(String(currentYear)))
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    let percentChange: number | null = null;
+    if (points.length >= 2) {
+      const last = Number(points[points.length - 1]?.amount) || 0;
+      const prev = Number(points[points.length - 2]?.amount) || 0;
+      if (prev !== 0) percentChange = ((last - prev) / prev) * 100;
+    }
+
+    return { percentChange, avgMonthly, peakMonth, ytdTotal };
+  }, [trends]);
+
+  const formatCompactMoney = (value: number) => {
+    const n = Number(value) || 0;
+    const formatted = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      notation: "compact",
+      maximumFractionDigits: 2,
+    }).format(n);
+    // Match screenshot style ($401k instead of $401K)
+    return formatted.replace(/K/g, "k");
+  };
+
+  const renderCategoryBadge = (categoryInput: unknown) => {
+    const raw = String(categoryInput ?? "").trim();
+    if (!raw) {
+      return <span className="text-gray-400 text-xs">-</span>;
+    }
+
+    const normalized = raw.toLowerCase();
+
+    const categoryClassMap: Record<string, string> = {
+      "productivity & collaboration": "bg-blue-100 text-blue-800 border-blue-300",
+      "accounting & finance": "bg-emerald-100 text-emerald-800 border-emerald-300",
+      "crm & sales": "bg-indigo-100 text-indigo-800 border-indigo-300",
+      "development & hosting": "bg-purple-100 text-purple-800 border-purple-300",
+      "design & creative tools": "bg-orange-100 text-orange-800 border-orange-300",
+      "marketing & seo": "bg-amber-100 text-amber-800 border-amber-300",
+      "communication tools": "bg-sky-100 text-sky-800 border-sky-300",
+      "security & compliance": "bg-rose-100 text-rose-800 border-rose-300",
+      "hr & admin": "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300",
+      "subscription infrastructure": "bg-cyan-100 text-cyan-800 border-cyan-300",
+      "office infrastructure": "bg-teal-100 text-teal-800 border-teal-300",
+      "games": "bg-violet-100 text-violet-800 border-violet-300",
+    };
+
+    const fallbackPalette: string[] = [
+      "bg-blue-100 text-blue-800 border-blue-300",
+      "bg-emerald-100 text-emerald-800 border-emerald-300",
+      "bg-indigo-100 text-indigo-800 border-indigo-300",
+      "bg-purple-100 text-purple-800 border-purple-300",
+      "bg-orange-100 text-orange-800 border-orange-300",
+      "bg-amber-100 text-amber-800 border-amber-300",
+      "bg-sky-100 text-sky-800 border-sky-300",
+      "bg-rose-100 text-rose-800 border-rose-300",
+      "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300",
+      "bg-cyan-100 text-cyan-800 border-cyan-300",
+      "bg-teal-100 text-teal-800 border-teal-300",
+      "bg-violet-100 text-violet-800 border-violet-300",
+      "bg-slate-100 text-slate-800 border-slate-300",
+      "bg-pink-100 text-pink-800 border-pink-300",
+    ];
+
+    const hashString = (value: string) => {
+      let hash = 0;
+      for (let i = 0; i < value.length; i++) {
+        hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+      }
+      return hash;
+    };
+
+    const badgeClass =
+      categoryClassMap[normalized] ?? fallbackPalette[Math.abs(hashString(normalized)) % fallbackPalette.length];
+
+    return (
+      <span
+        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold leading-none border max-w-full ${badgeClass}`}
+        style={{ width: `${modalCategoryBadgeWidthCh}ch`, maxWidth: "100%" }}
+        title={raw}
+      >
+        <span className="truncate w-full whitespace-nowrap">{raw}</span>
+      </span>
+    );
+  };
   
   // Activity query removed as it's not currently used in the dashboard
 
@@ -108,21 +239,15 @@ export default function Dashboard() {
     );
   }
 
-  // Tab navigation handler
-  const handleTabClick = (tab: 'subscription' | 'calendar' | 'compliance') => {
-    if (tab === 'subscription') {
-      navigate('/dashboard');
-      return;
-    }
-    if (tab === 'calendar') {
-      navigate('/calendar');
-      return;
-    }
-    navigate('/compliance-dashboard');
-  };
+  const norm = (value: unknown) => String(value ?? "").trim().toLowerCase();
 
-  // Filter active subscriptions
-  const activeSubscriptions = Array.isArray(subscriptions) ? subscriptions.filter(sub => sub.status === "Active") : [];
+  // Never include Draft subscriptions in dashboard calculations
+  const subscriptionsExcludingDraft = Array.isArray(subscriptions)
+    ? subscriptions.filter((sub) => norm((sub as any)?.status) !== "draft")
+    : [];
+
+  // Filter active subscriptions (robust to case)
+  const activeSubscriptions = subscriptionsExcludingDraft.filter((sub) => norm((sub as any)?.status) === "active");
   
   // Apply filters to subscriptions
   const getDateRangeMonths = () => {
@@ -136,7 +261,7 @@ export default function Dashboard() {
 
   const filteredSubscriptions = activeSubscriptions.filter(sub => {
     // Category filter
-    if (categoryFilter !== "all" && sub.category !== categoryFilter) {
+    if (categoryFilter !== "all" && norm(sub.category) !== norm(categoryFilter)) {
       return false;
     }
     
@@ -156,7 +281,8 @@ export default function Dashboard() {
   const calculateMonthlySpend = () => {
     return filteredSubscriptions.reduce((total, sub) => {
       const amount = parseFloat(String(sub.amount)) || 0;
-      switch(sub.billingCycle) {
+      const cycle = norm(sub.billingCycle);
+      switch(cycle) {
         case "monthly": return total + amount;
         case "yearly": return total + (amount / 12);
         case "quarterly": return total + (amount / 3);
@@ -168,7 +294,8 @@ export default function Dashboard() {
   const calculateYearlySpend = () => {
     return filteredSubscriptions.reduce((total, sub) => {
       const amount = parseFloat(String(sub.amount)) || 0;
-      switch(sub.billingCycle) {
+      const cycle = norm(sub.billingCycle);
+      switch(cycle) {
         case "monthly": return total + (amount * 12);
         case "yearly": return total + amount;
         case "quarterly": return total + (amount * 4);
@@ -210,62 +337,51 @@ export default function Dashboard() {
     );
   }
 
-  const getGrowthIcon = (growth: number) => {
-    if (growth > 0) return <TrendingUp className="w-4 h-4" />;
-    return <TrendingUp className="w-4 h-4 rotate-180" />;
-  };
-
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-white">
-        <div className="max-w-[1400px] mx-auto px-6 py-8">          
-          {/* Modern Professional Header */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-4">
-                <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
-                  <TrendingUp className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Dashboard</h1>
-                  <p className="text-gray-600 text-sm">Overview of your subscription spending and analytics</p>
-                </div>
-              </div>
-              
-              <div className="flex flex-col items-end gap-2">
-                <div className="flex items-center gap-2">
-                  <Button
-                    className={`${location === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
-                    variant="outline"
-                    onClick={() => handleTabClick('subscription')}
-                  >
-                    Subscription
-                  </Button>
-                  <Button
-                    className={`${location === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
-                    variant="outline"
-                    onClick={() => handleTabClick('compliance')}
-                  >
-                    Compliance
-                  </Button>
-                </div>
-
-                <Button
-                  className={`${location === '/calendar' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
-                  variant="outline"
-                  onClick={() => handleTabClick('calendar')}
-                >
-                  Calendar
-                </Button>
-              </div>
+      <div className="min-h-screen bg-gray-50">
+        <div
+          className="max-w-[1400px] mx-auto px-8 py-8"
+          style={{ zoom: 0.88 }}
+        >
+          {/* Modern Header with Greeting and Buttons */}
+          <div className="mb-8 flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                {getGreeting()}, {getFirstName()}!
+              </h1>
+            </div>
+            
+            {/* Action Buttons on Right */}
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                className={`${location.pathname === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-600 hover:text-white' : 'bg-white text-blue-600 border-blue-600 hover:bg-blue-50'} px-6 py-2.5 rounded-lg font-medium`}
+                onClick={() => navigate('/dashboard')}
+              >
+                Subscription
+              </Button>
+              <Button
+                variant="outline"
+                className={`${location.pathname === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-600 hover:text-white' : 'bg-white text-blue-600 border-blue-600 hover:bg-blue-50'} px-6 py-2.5 rounded-lg font-medium`}
+                onClick={() => navigate('/compliance-dashboard')}
+              >
+                Compliance
+              </Button>
+              <Button
+                variant="outline"
+                className={`${location.pathname === '/calendar' ? 'bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-600 hover:text-white' : 'bg-white text-blue-600 border-blue-600 hover:bg-blue-50'} px-6 py-2.5 rounded-lg font-medium`}
+                onClick={() => navigate('/calendar')}
+              >
+                Calendar
+              </Button>
             </div>
           </div>
 
-        {/* Date Filter */}
-        <div className="mb-6 flex justify-between items-center">
-          <div className="flex space-x-4">
+          {/* Filters */}
+          <div className="mb-6 flex items-center gap-4">
             <Select value={dateRange} onValueChange={setDateRange}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-48 bg-white border-gray-300 px-2">
                 <SelectValue placeholder="Last 6 months" />
               </SelectTrigger>
               <SelectContent>
@@ -275,7 +391,7 @@ export default function Dashboard() {
               </SelectContent>
             </Select>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-48 bg-white border-gray-300 px-2">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
@@ -288,89 +404,110 @@ export default function Dashboard() {
               </SelectContent>
             </Select>
           </div>
-        </div>
 
         {/* Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-blue-100">Monthly Spend</p>
-                <p className="text-2xl font-bold text-white mt-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Monthly Spend Card */}
+          <div className="bg-white rounded-xl p-6 shadow-sm border-t-4 border-blue-500">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600 mb-1">Monthly Spend</p>
+                <p className="text-3xl font-bold text-gray-900">
                   ${filteredMonthlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </p>
-                <p className={`text-sm mt-1 flex items-center text-blue-200`}>
-                  {getGrowthIcon(-12)} 12% from last month
-                </p>
               </div>
-              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <CalendarDays className="h-5 w-5 text-white" />
+              <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <DollarSign className="h-6 w-6 text-blue-600" />
               </div>
+            </div>
+            <div className="flex items-center text-sm">
+              <span className="text-green-600 font-medium flex items-center">
+                <TrendingUp className="h-4 w-4 mr-1" />
+                +12%
+              </span>
+              <span className="text-gray-500 ml-2">from last month</span>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-lg p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-green-100">Yearly Spend</p>
-                <p className="text-2xl font-bold text-white mt-1">
+          {/* Yearly Spend Card */}
+          <div className="bg-white rounded-xl p-6 shadow-sm border-t-4 border-green-500">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600 mb-1">Yearly Spend</p>
+                <p className="text-3xl font-bold text-gray-900">
                   ${filteredYearlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </p>
-                <p className={`text-sm mt-1 flex items-center text-green-200`}>
-                  {getGrowthIcon(8)} 8% from last year
-                </p>
               </div>
-              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-white" />
+              <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <TrendingUp className="h-6 w-6 text-green-600" />
               </div>
+            </div>
+            <div className="flex items-center text-sm">
+              <span className="text-green-600 font-medium flex items-center">
+                <TrendingUp className="h-4 w-4 mr-1" />
+                +8%
+              </span>
+              <span className="text-gray-500 ml-2">from last year</span>
             </div>
           </div>
 
+          {/* Active Subscriptions Card */}
           <div 
-            className={`cursor-pointer hover:shadow-lg transition-shadow bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 shadow-sm ${activeSubscriptionsModalOpen ? 'ring-2 ring-purple-300' : ''}`} 
+            className="bg-white rounded-xl p-6 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow" 
             onClick={() => setActiveSubscriptionsModalOpen(true)}
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-purple-100">Active Subscriptions</p>
-                <p className="text-2xl font-bold text-white mt-1">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600 mb-1">Active Subscriptions</p>
+                <p className="text-3xl font-bold text-gray-900">
                   {filteredSubscriptions.length}
                 </p>
-                <p className="text-sm text-purple-200 mt-1 flex items-center">
-                  <Users className="w-4 h-4 mr-1" /> Click to view details
-                </p>
               </div>
-              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <RefreshCw className="h-5 w-5 text-white" />
+              <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <RotateCcw className="h-6 w-6 text-purple-600" />
               </div>
+            </div>
+            <div className="flex items-center text-sm">
+              <span className="text-purple-600 font-medium">Click to view details</span>
             </div>
           </div>
 
+          {/* Upcoming Renewals Card */}
           <div 
-            className={`cursor-pointer hover:shadow-lg transition-shadow bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-4 shadow-sm ${upcomingRenewalsModalOpen ? 'ring-2 ring-orange-300' : ''}`} 
+            className="bg-white rounded-xl p-6 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow" 
             onClick={() => setUpcomingRenewalsModalOpen(true)}
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-orange-100">Upcoming Renewals</p>
-                <p className="text-2xl font-bold text-white mt-1">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-600 mb-1">Upcoming Renewals</p>
+                <p className="text-3xl font-bold text-gray-900">
                   {upcomingRenewals.length}
                 </p>
-                <p className="text-sm text-orange-200 mt-1 flex items-center">
-                  <Clock className="w-4 h-4 mr-1" /> Next 30 days - Click to view
-                </p>
               </div>
-              <div className="h-10 w-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <Bell className="h-5 w-5 text-white" />
+              <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Bell className="h-6 w-6 text-orange-600" />
               </div>
+            </div>
+            <div className="flex items-center text-sm">
+              <span className="text-orange-600 font-medium">Next 30 days - Click to view</span>
             </div>
           </div>
         </div>
 
         {/* Charts Section */}
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">Spending Analytics</h2>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Spending Trends</h3>
+          {/* Spending Trends */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Spending Trend</h3>
+              <span className="text-sm text-gray-500">
+                {dateRange === "3months" ? "Last 3 months" : dateRange === "12months" ? "Last 12 months" : "Last 6 months"}
+              </span>
+            </div>
             <div>
               {trendsLoading ? (
                 <Skeleton className="h-80 w-full" />
@@ -382,10 +519,30 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+
+            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="text-sm text-gray-500">Avg Monthly</div>
+                <div className="text-base font-semibold text-gray-900">{formatCompactMoney(trendsStats.avgMonthly)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-gray-500">Peak Month</div>
+                <div className="text-base font-semibold text-gray-900">{formatCompactMoney(trendsStats.peakMonth)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-gray-500">YTD Total</div>
+                <div className="text-base font-semibold text-gray-900">{formatCompactMoney(trendsStats.ytdTotal)}</div>
+              </div>
+            </div>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Category Breakdown</h3>
+          {/* Category Breakdown */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Category Breakdown</h3>
+              </div>
+            </div>
             <div>
               {categoriesLoading ? (
                 <Skeleton className="h-80 w-full" />
@@ -402,107 +559,156 @@ export default function Dashboard() {
 
         {/* Active Subscriptions Modal */}
         <Dialog open={activeSubscriptionsModalOpen} onOpenChange={setActiveSubscriptionsModalOpen}>
-    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
+          <DialogContent className="max-w-6xl w-[95vw] max-h-[85vh] bg-white border-2 border-blue-500 rounded-xl shadow-lg p-0 overflow-hidden">
             <DialogHeader>
-              <div className="flex items-center justify-between">
-                <DialogTitle>Active Subscriptions ({filteredSubscriptions.length})</DialogTitle>
-                <button
-                  onClick={() => setActiveSubscriptionsModalOpen(false)}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="h-5 w-5 text-gray-500" />
-                </button>
+              <div className="flex items-center justify-between px-6 pt-6">
+                <DialogTitle className="text-xl font-bold text-gray-900">
+                  Active Subscriptions ({filteredSubscriptions.length})
+                </DialogTitle>
               </div>
             </DialogHeader>
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="px-6 pb-6 pt-4">
+              <div className="h-[70vh] overflow-auto overscroll-contain custom-scrollbar rounded-lg border border-gray-200">
+                <Table className="table-fixed w-full">
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Service</TableHead>
-                    <TableHead>Vendor</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Billing Cycle</TableHead>
-                    <TableHead>Next Renewal</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Reminder Policy</TableHead>
+                  <TableRow className="border-b-2 border-gray-300 bg-gray-200">
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[210px]">
+                      SERVICE
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[210px]">
+                      VENDOR
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                      AMOUNT
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">
+                      BILLING
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                      NEXT RENEWAL
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[240px]">
+                      CATEGORY
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredSubscriptions.map((subscription) => (
-                    <TableRow key={subscription.id}>
-                      <TableCell className="font-medium">{subscription.serviceName}</TableCell>
-                      <TableCell>{subscription.vendor}</TableCell>
-                      <TableCell>${parseFloat(String(subscription.amount)).toFixed(2)}</TableCell>
-                      <TableCell className="capitalize">{subscription.billingCycle}</TableCell>
-                      <TableCell>{new Date(subscription.nextRenewal).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{subscription.category}</Badge>
+                    <TableRow
+                      key={subscription.id}
+                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                    >
+                      <TableCell className="px-4 py-3 font-medium text-gray-800 w-[210px] max-w-[210px] overflow-hidden">
+                        <div className="truncate whitespace-nowrap" title={subscription.serviceName}>
+                          {subscription.serviceName}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-sm">
-                        {subscription.reminderPolicy} ({subscription.reminderDays}d)
+                      <TableCell className="px-4 py-3 text-gray-700 w-[210px] max-w-[210px] overflow-hidden">
+                        <div className="truncate whitespace-nowrap" title={subscription.vendor}>
+                          {subscription.vendor}
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-3 py-3 text-right w-[120px]">
+                        <span className="text-sm font-semibold text-gray-900">
+                          ${parseFloat(String(subscription.amount)).toFixed(2)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 w-[110px] capitalize text-gray-700">
+                        {subscription.billingCycle}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 w-[140px] text-gray-700">
+                        {new Date(subscription.nextRenewal).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 w-[240px] max-w-[240px] overflow-hidden">
+                        {renderCategoryBadge(subscription.category)}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
 
         {/* Upcoming Renewals Modal */}
         <Dialog open={upcomingRenewalsModalOpen} onOpenChange={setUpcomingRenewalsModalOpen}>
-    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-white border-2 border-blue-500 rounded-xl shadow-lg">
+          <DialogContent className="max-w-6xl w-[95vw] max-h-[85vh] bg-white border-2 border-blue-500 rounded-xl shadow-lg p-0 overflow-hidden">
             <DialogHeader>
-              <div className="flex items-center justify-between">
-                <DialogTitle>Upcoming Renewals - Next 30 Days ({upcomingRenewals.length})</DialogTitle>
-                <button
-                  onClick={() => setUpcomingRenewalsModalOpen(false)}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="h-5 w-5 text-gray-500" />
-                </button>
+              <div className="flex items-center justify-between px-6 pt-6">
+                <DialogTitle className="text-xl font-bold text-gray-900">
+                  Upcoming Renewals - Next 30 Days ({upcomingRenewals.length})
+                </DialogTitle>
               </div>
             </DialogHeader>
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="px-6 pb-6 pt-4">
+              <div className="h-[70vh] overflow-auto overscroll-contain custom-scrollbar rounded-lg border border-gray-200">
+                <Table className="table-fixed w-full">
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Service</TableHead>
-                    <TableHead>Vendor</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Renewal Date</TableHead>
-                    <TableHead>Days Until</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Reminder Policy</TableHead>
+                  <TableRow className="border-b-2 border-gray-300 bg-gray-200">
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[210px]">
+                      SERVICE
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[210px]">
+                      VENDOR
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                      AMOUNT
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                      RENEWAL DATE
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[90px]">
+                      DAYS
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[240px]">
+                      CATEGORY
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {upcomingRenewals.map((subscription) => {
                     const daysUntil = Math.ceil((new Date(subscription.nextRenewal).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                     return (
-                      <TableRow key={subscription.id}>
-                        <TableCell className="font-medium">{subscription.serviceName}</TableCell>
-                        <TableCell>{subscription.vendor}</TableCell>
-                        <TableCell>${parseFloat(String(subscription.amount)).toFixed(2)}</TableCell>
-                        <TableCell>{new Date(subscription.nextRenewal).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <Badge variant={daysUntil <= 7 ? "destructive" : daysUntil <= 14 ? "default" : "secondary"}>
-                            {daysUntil} days
+                      <TableRow
+                        key={subscription.id}
+                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                      >
+                        <TableCell className="px-4 py-3 font-medium text-gray-800 w-[210px] max-w-[210px] overflow-hidden">
+                          <div className="truncate whitespace-nowrap" title={subscription.serviceName}>
+                            {subscription.serviceName}
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-gray-700 w-[210px] max-w-[210px] overflow-hidden">
+                          <div className="truncate whitespace-nowrap" title={subscription.vendor}>
+                            {subscription.vendor}
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-3 py-3 text-right w-[120px]">
+                          <span className="text-sm font-semibold text-gray-900">
+                            ${parseFloat(String(subscription.amount)).toFixed(2)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 w-[140px] text-gray-700">
+                          {new Date(subscription.nextRenewal).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 w-[90px]">
+                          <Badge
+                            className="rounded-full"
+                            variant={daysUntil <= 7 ? "destructive" : daysUntil <= 14 ? "default" : "secondary"}
+                          >
+                            {daysUntil}d
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{subscription.category}</Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {subscription.reminderPolicy} ({subscription.reminderDays}d)
+                        <TableCell className="px-4 py-3 w-[240px] max-w-[240px] overflow-hidden">
+                          {renderCategoryBadge(subscription.category)}
                         </TableCell>
                       </TableRow>
                     );
                   })}
                 </TableBody>
               </Table>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

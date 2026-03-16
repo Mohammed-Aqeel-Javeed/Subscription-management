@@ -178,7 +178,10 @@ export default function Header() {
           onClick={() => navigate("/notifications")}
           className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors"
         >
-          <Bell className="h-5 w-5 text-gray-600" />
+          <Bell
+            className={unreadCount > 0 ? "h-5 w-5 text-yellow-400" : "h-5 w-5 text-gray-600"}
+            fill={unreadCount > 0 ? "currentColor" : "none"}
+          />
           {unreadCount > 0 && (
             <span className="absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-semibold leading-none flex items-center justify-center border-2 border-white">
               {unreadCount}

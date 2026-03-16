@@ -104,7 +104,7 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
             />
           </div>
           <div className="mb-2 text-xs font-semibold text-gray-600 px-2">Your Companies</div>
-                <div className="max-h-64 overflow-y-auto thin-scrollbar">
+                <div className="max-h-64 overflow-y-auto custom-scrollbar">
             {isLoading ? (
               <div className="text-center py-4 text-gray-500 text-sm">Loading...</div>
             ) : filteredCompanies.length === 0 ? (
@@ -259,7 +259,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         </div>
 
         {/* Collapsed Navigation Icons */}
-        <nav className="flex-1 p-2 overflow-y-auto thin-scrollbar">
+        <nav className="flex-1 p-2 overflow-y-auto custom-scrollbar">
           <ul className="space-y-2">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -425,7 +425,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           onClose={() => setShowCompanySwitcherDialog(false)} 
         />
       )}
-      <nav className="flex-1 p-4 overflow-y-auto thin-scrollbar">
+      <nav className="flex-1 p-4 overflow-y-auto custom-scrollbar">
         {/* Default navigation (hidden when a page wants to fully use the sidebar) */}
         {pageSlotActive && pageSlotReplaceNav ? null : (
           <>
@@ -443,7 +443,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                       relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
                       transition-all duration-200 group
                       ${isActive 
-                        ? 'bg-gradient-to-r ' + item.gradient + ' text-white shadow-xl' 
+                        ? 'bg-blue-600 text-white shadow-xl' 
                         : 'text-gray-700 hover:bg-white/60 hover:text-gray-900 hover:shadow-md backdrop-blur-sm'
                       }
                     `}>
@@ -466,7 +466,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                           className="text-white relative z-10" 
                         />
                       </div>
-                      <span className="font-medium">
+                      <span className="font-sidebar font-semibold">
                         {item.label}
                       </span>
                     </Link>
@@ -481,7 +481,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                   relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
                   transition-all duration-200 group
                   ${isActive 
-                    ? 'bg-gradient-to-r ' + item.gradient + ' text-white shadow-xl' 
+                    ? 'bg-blue-600 text-white shadow-xl' 
                     : 'text-gray-700 hover:bg-white/60 hover:text-gray-900 hover:shadow-md backdrop-blur-sm'
                   }
                 `}>
@@ -504,7 +504,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                       className="text-white relative z-10" 
                     />
                   </div>
-                  <span className="font-medium">
+                  <span className="font-sidebar font-semibold">
                     {item.label}
                   </span>
                 </Link>
