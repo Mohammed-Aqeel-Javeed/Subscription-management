@@ -61,7 +61,7 @@ import bcrypt from "bcrypt";
 import type { User } from "./types";
 import { sendSubscriptionNotifications, detectSubscriptionChanges } from "./subscription-notification.service.js";
 import { sendComplianceNotifications, detectComplianceChanges } from "./compliance-notification.service.js";
-import { encrypt, decrypt } from "./encryption.service.js";
+import { encryptUrlSafe, decrypt } from "./encryption.service.js";
 import { z } from "zod";
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 
@@ -72,15 +72,16 @@ const router = Router();
 // - Encrypted server-side (AES-256-GCM)
 // - Bound to tenantId
 // - Short-lived
-type DeeplinkEntityType = 'subscription' | 'compliance' | 'license';
+type DeeplinkEntityType = 'subscription' | 'compliance' | 'license' | 'paymentMethod' | 'currency';
 
 const isDeeplinkEntityType = (v: any): v is DeeplinkEntityType =>
-  v === 'subscription' || v === 'compliance' || v === 'license';
+  v === 'subscription' || v === 'compliance' || v === 'license' || v === 'paymentMethod' || v === 'currency';
 
 const isLikelyToken = (token: string) => {
   if (!token) return false;
   if (token.length < 20 || token.length > 10000) return false;
-  return /^[A-Za-z0-9+/=]+$/.test(token);
+  // Accept legacy base64 (+,/ and =) and base64url (-,_ and no padding)
+  return /^[A-Za-z0-9+/_=-]+$/.test(token);
 };
 
 router.post('/api/deeplink/token', (req, res) => {
@@ -103,7 +104,7 @@ router.post('/api/deeplink/token', (req, res) => {
     exp: now + ttlMs,
   };
 
-  const token = encrypt(JSON.stringify(payload));
+  const token = encryptUrlSafe(JSON.stringify(payload));
   return res.json({ token, exp: payload.exp });
 });
 
@@ -141,6 +142,117 @@ router.get('/api/deeplink/resolve', (req, res) => {
     if (!id) return res.status(400).json({ message: 'Invalid token' });
 
     return res.json({ entityType: parsed.entityType, id });
+  } catch {
+    return res.status(400).json({ message: 'Invalid token' });
+  }
+});
+
+// --- Secure link API (encrypted navigation URLs) ---
+// Produces links like: /s/<token>
+// Token is encrypted server-side, tenant-bound, and short-lived.
+type SecureLinkQuery = Record<string, string>;
+
+const isAllowedSecurePath = (path: string): boolean => {
+  // Keep this allowlist tight. Add more paths only when you need them.
+  if (!path || typeof path !== 'string') return false;
+  if (!path.startsWith('/')) return false;
+  // Prevent protocol-relative or absolute URLs
+  if (path.startsWith('//') || path.includes('://')) return false;
+
+  const allowedExact = new Set([
+    '/dashboard',
+    '/configuration',
+    '/company-details',
+    '/subscriptions',
+    '/compliance',
+    '/government-license',
+    '/notifications',
+    '/calendar',
+  ]);
+
+  if (allowedExact.has(path)) return true;
+  // Reports: allow report subroutes
+  if (path === '/reports' || path.startsWith('/reports/')) return true;
+
+  return false;
+};
+
+const sanitizeSecureQuery = (q: any): SecureLinkQuery => {
+  const out: SecureLinkQuery = {};
+  if (!q || typeof q !== 'object' || Array.isArray(q)) return out;
+
+  const entries = Object.entries(q);
+  if (entries.length > 20) return out;
+
+  for (const [k, v] of entries) {
+    const key = String(k ?? '').trim();
+    if (!key || key.length > 50) continue;
+    if (key === 'token') continue; // avoid confusion with resolver token
+    if (typeof v !== 'string' && typeof v !== 'number' && typeof v !== 'boolean') continue;
+    const value = String(v).trim();
+    if (value.length > 500) continue;
+    out[key] = value;
+  }
+  return out;
+};
+
+router.post('/api/secure-link/token', (req, res) => {
+  const tenantId = (req as any).user?.tenantId;
+  if (!tenantId) return res.status(401).json({ message: 'Unauthorized' });
+
+  const path = String(req.body?.path ?? '').trim();
+  if (!isAllowedSecurePath(path)) {
+    return res.status(400).json({ message: 'Invalid path' });
+  }
+
+  const query = sanitizeSecureQuery(req.body?.query);
+
+  const ttlMsRaw = Number(req.body?.ttlMs);
+  const ttlMs = Number.isFinite(ttlMsRaw) ? Math.min(Math.max(ttlMsRaw, 30_000), 24 * 60 * 60 * 1000) : 10 * 60 * 1000;
+
+  const now = Date.now();
+  const payload = {
+    v: 1,
+    tenantId,
+    path,
+    query,
+    exp: now + ttlMs,
+  };
+
+  const token = encryptUrlSafe(JSON.stringify(payload));
+  return res.json({ token, exp: payload.exp });
+});
+
+router.get('/api/secure-link/resolve', (req, res) => {
+  const tenantId = (req as any).user?.tenantId;
+  if (!tenantId) return res.status(401).json({ message: 'Unauthorized' });
+
+  const token = String(req.query?.token ?? '').trim();
+  if (!token || token.length < 20 || token.length > 10000) {
+    return res.status(400).json({ message: 'Invalid token' });
+  }
+
+  try {
+    const raw = decrypt(token);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return res.status(400).json({ message: 'Invalid token' });
+
+    if (String(parsed.tenantId) !== String(tenantId)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const exp = Number(parsed.exp);
+    if (!Number.isFinite(exp) || exp <= Date.now()) {
+      return res.status(400).json({ message: 'Token expired' });
+    }
+
+    const path = String(parsed.path ?? '').trim();
+    if (!isAllowedSecurePath(path)) {
+      return res.status(400).json({ message: 'Invalid token' });
+    }
+
+    const query = sanitizeSecureQuery(parsed.query);
+    return res.json({ path, query });
   } catch {
     return res.status(400).json({ message: 'Invalid token' });
   }

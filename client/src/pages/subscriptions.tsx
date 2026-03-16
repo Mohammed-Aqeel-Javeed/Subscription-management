@@ -89,6 +89,53 @@ export default function Subscriptions() {
   const [startDateTo, setStartDateTo] = useState<string>("");
   const [nextRenewalFrom, setNextRenewalFrom] = useState<string>("");
   const [nextRenewalTo, setNextRenewalTo] = useState<string>("");
+
+  // When a modal is opened for editing, we temporarily replace the URL with a secure token URL (/s/<token>)
+  // so the user can copy/share it. We restore the original URL when the modal closes.
+  const modalUrlRestoreRef = React.useRef<string | null>(null);
+
+  const setSecureUrlForSubscriptionEdit = React.useCallback(async (subscriptionId: string) => {
+    const id = String(subscriptionId ?? '').trim();
+    if (!id) return;
+
+    try {
+      // 1) Mint entity deeplink token (encrypted record id)
+      const res1 = await fetch('/api/deeplink/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entityType: 'subscription', id }),
+      });
+      if (!res1.ok) return;
+      const data1 = (await res1.json().catch(() => ({}))) as { token?: string };
+      const openToken = String(data1?.token ?? '').trim();
+      if (!openToken) return;
+
+      // 2) Wrap it into a secure-link token to get an OpenAI-style URL (/s/<token>)
+      const res2 = await fetch('/api/secure-link/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: '/subscriptions',
+          query: { openToken },
+          ttlMs: 10 * 60 * 1000,
+        }),
+      });
+      if (!res2.ok) return;
+      const data2 = (await res2.json().catch(() => ({}))) as { token?: string };
+      const secureToken = String(data2?.token ?? '').trim();
+      if (!secureToken) return;
+
+      if (!modalUrlRestoreRef.current) {
+        modalUrlRestoreRef.current = window.location.pathname + window.location.search;
+      }
+      // Replace without triggering router navigation (address bar changes, UI stays)
+      window.history.replaceState(null, '', `/s/${encodeURIComponent(secureToken)}`);
+    } catch {
+      // ignore
+    }
+  }, []);
   
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -266,6 +313,10 @@ export default function Subscriptions() {
       // department: removed, only use departments array
     });
     setModalOpen(true);
+
+    // Set a secure URL in the address bar while the edit modal is open.
+    // This makes the URL shareable without exposing internal IDs.
+    void setSecureUrlForSubscriptionEdit(subscriptionId);
   };
   
   const handleCloseModal = () => {
@@ -273,6 +324,11 @@ export default function Subscriptions() {
     if (typeof returnTo === 'string' && returnTo.length > 0) {
       navigate(returnTo, { replace: true });
       return;
+    }
+
+    if (modalUrlRestoreRef.current) {
+      window.history.replaceState(null, '', modalUrlRestoreRef.current);
+      modalUrlRestoreRef.current = null;
     }
 
     setModalOpen(false);

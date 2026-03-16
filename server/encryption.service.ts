@@ -12,6 +12,27 @@ const ENCRYPTED_POSITION = TAG_POSITION + TAG_LENGTH;
 let cachedEncryptionKey: Buffer | null = null;
 let cachedDefaultEncryptionKey: Buffer | null = null;
 
+function toBase64Url(base64: string): string {
+  // Convert standard base64 -> base64url (RFC 4648 §5)
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function fromBase64Url(base64Url: string): string {
+  // Convert base64url -> standard base64, adding padding
+  const b64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const padLen = (4 - (b64.length % 4)) % 4;
+  return b64 + '='.repeat(padLen);
+}
+
+function normalizeBase64OrUrl(str: string): string {
+  // If it already looks like standard base64, keep as-is.
+  // If it contains base64url characters, convert.
+  if (str.includes('-') || str.includes('_')) return fromBase64Url(str);
+  // Some base64url generators keep '+'/'/' but strip '=', so ensure padding.
+  const padLen = (4 - (str.length % 4)) % 4;
+  return str + '='.repeat(padLen);
+}
+
 // Get encryption key from environment or generate a strong one
 function getEncryptionKey(): Buffer {
   // Return cached key if already derived
@@ -78,14 +99,14 @@ export function decrypt(encryptedData: string | number): string {
   
   const dataStr = String(encryptedData);
   
-  // Check if data is likely encrypted (base64 has specific pattern)
+  // Check if data is likely encrypted (base64/base64url with minimum length)
   if (!isLikelyEncrypted(dataStr)) {
     // Return as-is if it's plain text (legacy data)
     return dataStr;
   }
   
   try {
-    const combined = Buffer.from(dataStr, 'base64');
+    const combined = Buffer.from(normalizeBase64OrUrl(dataStr), 'base64');
     
     // Check if buffer is valid size
     if (combined.length < ENCRYPTED_POSITION) {
@@ -111,7 +132,7 @@ export function decrypt(encryptedData: string | number): string {
     // when it was missing (default key), try the default key once.
     if (process.env.ENCRYPTION_KEY) {
       try {
-        const combined = Buffer.from(dataStr, 'base64');
+        const combined = Buffer.from(normalizeBase64OrUrl(dataStr), 'base64');
         if (combined.length >= ENCRYPTED_POSITION) {
           const iv = combined.subarray(SALT_LENGTH, TAG_POSITION);
           const tag = combined.subarray(TAG_POSITION, ENCRYPTED_POSITION);
@@ -153,9 +174,28 @@ export function decrypt(encryptedData: string | number): string {
  * Check if string is likely encrypted (base64 with minimum length)
  */
 function isLikelyEncrypted(str: string): boolean {
-  // Encrypted data will be base64 and longer than ENCRYPTED_POSITION chars
-  const base64Regex = /^[A-Za-z0-9+/]+=*$/;
-  return base64Regex.test(str) && str.length > 100;
+  // Encrypted data will be base64 or base64url and longer than ENCRYPTED_POSITION chars
+  // - base64: A-Z a-z 0-9 + / and optional padding '='
+  // - base64url: A-Z a-z 0-9 - _ and no padding
+  const base64OrUrlRegex = /^[A-Za-z0-9+/_=-]+$/;
+  return base64OrUrlRegex.test(str) && str.length > 100;
+}
+
+/**
+ * Encrypts to a URL-safe token (base64url) suitable for use in path/query without extra escaping.
+ */
+export function encryptUrlSafe(text: string | number): string {
+  return toBase64Url(encrypt(text));
+}
+
+/**
+ * Decrypts tokens produced by encryptUrlSafe (also supports legacy base64 output from encrypt).
+ */
+export function decryptUrlSafe(token: string | number): string {
+  if (typeof token === 'number') return decrypt(token);
+  const tokenStr = String(token ?? '');
+  // decrypt() now supports base64url too, but keep this wrapper for clarity.
+  return decrypt(tokenStr);
 }
 
 /**

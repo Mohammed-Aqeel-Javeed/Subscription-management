@@ -3294,6 +3294,44 @@ else if (tabParam === "subscription-category" || tabParam === "subscription") in
 // fallback to company if not valid
 const [activeTab, setActiveTab] = useState(initialTab);
 
+// Secure URL for all Company Details tabs
+const lastSecuredTabRef = useRef<string | null>(null);
+
+const setSecureUrlForCompanyDetailsTab = async (tab: string) => {
+  const t = String(tab ?? '').trim();
+  if (!t) return;
+
+  // Map internal tab values to stable query params
+  const tabQuery = t === 'subscription' ? 'subscription' : t;
+
+  try {
+    const secureRes = await fetch('/api/secure-link/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        path: '/company-details',
+        query: { tab: tabQuery },
+      }),
+    });
+    if (!secureRes.ok) return;
+    const secureData = (await secureRes.json()) as { token?: string };
+    const secureToken = String(secureData?.token ?? '').trim();
+    if (!secureToken) return;
+
+    window.history.replaceState(window.history.state, '', `/s/${secureToken}`);
+  } catch {
+    // best-effort only
+  }
+};
+
+useEffect(() => {
+  if (!activeTab) return;
+  if (lastSecuredTabRef.current === activeTab) return;
+  lastSecuredTabRef.current = activeTab;
+  void setSecureUrlForCompanyDetailsTab(activeTab);
+}, [activeTab]);
+
 return (
   <div className="h-screen overflow-hidden bg-white font-inter">
     <div className="max-w-[1400px] mx-auto px-6 py-8 h-full overflow-hidden">

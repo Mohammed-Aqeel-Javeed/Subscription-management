@@ -11,6 +11,15 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
+  const nextParamRaw = new URLSearchParams(window.location.search).get("next");
+  const nextParam = (() => {
+    const v = String(nextParamRaw ?? "").trim();
+    // Prevent open-redirects: only allow internal paths.
+    if (!v || !v.startsWith("/")) return "";
+    if (v.startsWith("//") || v.includes("://")) return "";
+    return v;
+  })();
+
   // Login handler
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +47,7 @@ export default function AuthPage() {
       sessionStorage.setItem("isAuthenticated", "true");
       
       // Force full page reload to ensure clean state for new user
-      window.location.href = "/dashboard";
+      window.location.href = nextParam || "/dashboard";
     } catch (err) {
       setLoginError("Network error");
     }

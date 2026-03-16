@@ -312,6 +312,50 @@ const formatDate = (dateStr?: string): string => {
 export default function Compliance() {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // While editing an existing record in the modal, replace the URL with an OpenAI-style secure token URL (/s/<token>).
+  // This makes the current modal state shareable without exposing raw IDs.
+  const modalUrlRestoreRef = useRef<string | null>(null);
+
+  const setSecureUrlForComplianceEdit = async (complianceId: string) => {
+    const id = String(complianceId ?? '').trim();
+    if (!id) return;
+
+    try {
+      const res1 = await fetch('/api/deeplink/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entityType: 'compliance', id }),
+      });
+      if (!res1.ok) return;
+      const data1 = (await res1.json().catch(() => ({}))) as { token?: string };
+      const openToken = String(data1?.token ?? '').trim();
+      if (!openToken) return;
+
+      const res2 = await fetch('/api/secure-link/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: '/compliance',
+          query: { openToken },
+          ttlMs: 10 * 60 * 1000,
+        }),
+      });
+      if (!res2.ok) return;
+      const data2 = (await res2.json().catch(() => ({}))) as { token?: string };
+      const secureToken = String(data2?.token ?? '').trim();
+      if (!secureToken) return;
+
+      if (!modalUrlRestoreRef.current) {
+        modalUrlRestoreRef.current = window.location.pathname + window.location.search;
+      }
+      window.history.replaceState(null, '', `/s/${encodeURIComponent(secureToken)}`);
+    } catch {
+      // ignore
+    }
+  };
   
   // --- Dynamic Compliance Fields ---
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
@@ -1679,6 +1723,17 @@ export default function Compliance() {
       });
     })();
   }, [location.search, location.pathname, complianceItems, modalOpen, navigate]);
+
+  // When an existing compliance record is opened in the modal (editIndex set), update the URL to a secure token.
+  useEffect(() => {
+    if (!modalOpen) return;
+    if (editIndex === null) return;
+    const currentItem = Array.isArray(complianceItems) ? (complianceItems[editIndex] as any) : null;
+    const id = currentItem?._id ?? currentItem?.id;
+    if (!id) return;
+    void setSecureUrlForComplianceEdit(String(id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, editIndex]);
   
   // Auto-open compliance modal if coming from notifications
   useEffect(() => {
@@ -1931,6 +1986,11 @@ export default function Compliance() {
         localStorage.removeItem('returnToNotifications');
         navigate('/notifications');
       }
+    }
+
+    if (modalUrlRestoreRef.current) {
+      window.history.replaceState(null, '', modalUrlRestoreRef.current);
+      modalUrlRestoreRef.current = null;
     }
 
     setModalOpen(false);

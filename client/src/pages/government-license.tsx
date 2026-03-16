@@ -991,6 +991,47 @@ export default function GovernmentLicense() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
+  const modalUrlRestoreRef = useRef<string | null>(null);
+
+  const setSecureUrlForLicenseEdit = async (licenseId: string) => {
+    const id = String(licenseId ?? '').trim();
+    if (!id) return;
+
+    try {
+      const res1 = await fetch('/api/deeplink/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entityType: 'license', id }),
+      });
+      if (!res1.ok) return;
+      const data1 = (await res1.json().catch(() => ({}))) as { token?: string };
+      const openToken = String(data1?.token ?? '').trim();
+      if (!openToken) return;
+
+      const res2 = await fetch('/api/secure-link/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: '/government-license',
+          query: { openToken },
+          ttlMs: 10 * 60 * 1000,
+        }),
+      });
+      if (!res2.ok) return;
+      const data2 = (await res2.json().catch(() => ({}))) as { token?: string };
+      const secureToken = String(data2?.token ?? '').trim();
+      if (!secureToken) return;
+
+      if (!modalUrlRestoreRef.current) {
+        modalUrlRestoreRef.current = window.location.pathname + window.location.search;
+      }
+      window.history.replaceState(null, '', `/s/${encodeURIComponent(secureToken)}`);
+    } catch {
+      // ignore
+    }
+  };
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedRenewalStatuses, setSelectedRenewalStatuses] = useState<string[]>([]);
@@ -2982,6 +3023,11 @@ export default function GovernmentLicense() {
     // Respect stored expiry date on edit (do not auto-overwrite on open)
     setEndDateManuallySet(true);
     setIsModalOpen(true);
+
+    const licenseId = String((license as any)?._id ?? (license as any)?.id ?? '').trim();
+    if (licenseId) {
+      void setSecureUrlForLicenseEdit(licenseId);
+    }
   };
 
   // Handle add new
@@ -3064,6 +3110,11 @@ export default function GovernmentLicense() {
     if (typeof returnTo === 'string' && returnTo.length > 0) {
       navigate(returnTo, { replace: true });
       return;
+    }
+
+    if (modalUrlRestoreRef.current) {
+      window.history.replaceState(null, '', modalUrlRestoreRef.current);
+      modalUrlRestoreRef.current = null;
     }
 
     setIsModalOpen(false);
