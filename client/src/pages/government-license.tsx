@@ -1032,6 +1032,32 @@ export default function GovernmentLicense() {
       // ignore
     }
   };
+
+  const setSecureUrlForLicenseCreate = async () => {
+    try {
+      const res = await fetch('/api/secure-link/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: '/government-license',
+          query: { create: '1' },
+          ttlMs: 10 * 60 * 1000,
+        }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json().catch(() => ({}))) as { token?: string };
+      const secureToken = String(data?.token ?? '').trim();
+      if (!secureToken) return;
+
+      if (!modalUrlRestoreRef.current) {
+        modalUrlRestoreRef.current = window.location.pathname + window.location.search;
+      }
+      window.history.replaceState(null, '', `/s/${encodeURIComponent(secureToken)}`);
+    } catch {
+      // ignore
+    }
+  };
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedRenewalStatuses, setSelectedRenewalStatuses] = useState<string[]>([]);
@@ -1779,8 +1805,18 @@ export default function GovernmentLicense() {
     const searchParams = new URLSearchParams(location.search);
     const openToken = searchParams.get('openToken');
     const openLicenseId = searchParams.get('open');
-    if (!openToken && !openLicenseId) return;
+    const createMode = searchParams.get('create') === '1';
+    if (!openToken && !openLicenseId && !createMode) return;
     if (isModalOpen) return;
+
+    if (createMode) {
+      navigate(location.pathname, { replace: true, state: location.state });
+      requestAnimationFrame(() => {
+        handleAddNew();
+      });
+      return;
+    }
+
     if (!Array.isArray(licenses) || licenses.length === 0) return;
 
     const resolveToken = async (token: string) => {
@@ -3059,6 +3095,7 @@ export default function GovernmentLicense() {
   initialFormSnapshotRef.current = cloneSnapshot({ ...EMPTY_LICENSE_FORM_VALUES });
   initialSelectedDepartmentsRef.current = [];
   setIsModalOpen(true);
+  void setSecureUrlForLicenseCreate();
   };
 
   const hasMeaningfulFormData = () => {

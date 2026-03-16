@@ -356,6 +356,32 @@ export default function Compliance() {
       // ignore
     }
   };
+
+  const setSecureUrlForComplianceCreate = async () => {
+    try {
+      const res = await fetch('/api/secure-link/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          path: '/compliance',
+          query: { create: '1' },
+          ttlMs: 10 * 60 * 1000,
+        }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json().catch(() => ({}))) as { token?: string };
+      const secureToken = String(data?.token ?? '').trim();
+      if (!secureToken) return;
+
+      if (!modalUrlRestoreRef.current) {
+        modalUrlRestoreRef.current = window.location.pathname + window.location.search;
+      }
+      window.history.replaceState(null, '', `/s/${encodeURIComponent(secureToken)}`);
+    } catch {
+      // best-effort only
+    }
+  };
   
   // --- Dynamic Compliance Fields ---
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
@@ -1664,8 +1690,44 @@ export default function Compliance() {
     const searchParams = new URLSearchParams(location.search);
     const openToken = searchParams.get('openToken');
     const openComplianceId = searchParams.get('open');
-    if (!openToken && !openComplianceId) return;
+    const createMode = searchParams.get('create') === '1';
+    if (!openToken && !openComplianceId && !createMode) return;
     if (modalOpen) return;
+
+    if (createMode) {
+      navigate(location.pathname, { replace: true, state: location.state });
+      setEditIndex(null);
+      setShowSubmissionDetails(false);
+      setSelectedDepartments([]);
+      setForm({
+        filingName: "",
+        filingFrequency: "Monthly",
+        filingComplianceCategory: "",
+        filingGoverningAuthority: "",
+        filingStartDate: "",
+        filingEndDate: "",
+        filingSubmissionDeadline: "",
+        filingSubmissionStatus: "Pending",
+        filingRecurringFrequency: "",
+        filingRemarks: "",
+        submissionNotes: "",
+        filingSubmissionDate: "",
+        reminderDays: "7",
+        reminderPolicy: "One time",
+        submittedBy: "",
+        owner: "",
+        owner2: "",
+        amount: "",
+        paymentDate: "",
+        submissionAmount: "",
+        paymentMethod: "",
+        department: "",
+        departments: [],
+      });
+      setModalOpen(true);
+      return;
+    }
+
     if (!Array.isArray(complianceItems) || complianceItems.length === 0) return;
 
     const resolveToken = async (token: string) => {
@@ -1732,6 +1794,14 @@ export default function Compliance() {
     const id = currentItem?._id ?? currentItem?.id;
     if (!id) return;
     void setSecureUrlForComplianceEdit(String(id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, editIndex]);
+
+  // When the add-compliance modal is opened (editIndex === null), update the URL to a secure token.
+  useEffect(() => {
+    if (!modalOpen) return;
+    if (editIndex !== null) return;
+    void setSecureUrlForComplianceCreate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modalOpen, editIndex]);
   
