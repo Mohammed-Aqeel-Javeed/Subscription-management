@@ -47,7 +47,7 @@ export default function Subscriptions() {
 
   // Check if we should open modal immediately based on URL parameter
   const searchParams = new URLSearchParams(location.search);
-  const shouldOpenModal = !!searchParams.get('open') || !!searchParams.get('openToken');
+  const shouldOpenModal = !!searchParams.get('open') || !!searchParams.get('openToken') || searchParams.get('create') === '1';
   
   const [modalOpen, setModalOpen] = useState(shouldOpenModal);
   const [editingSubscription, setEditingSubscription] = useState<Partial<SubscriptionWithExtras> | undefined>();
@@ -136,6 +136,32 @@ export default function Subscriptions() {
       // ignore
     }
   }, []);
+
+  const setSecureUrlForSubscriptionCreate = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/secure-link/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: '/subscriptions',
+          query: { create: '1' },
+          ttlMs: 10 * 60 * 1000,
+        }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json().catch(() => ({}))) as { token?: string };
+      const secureToken = String(data?.token ?? '').trim();
+      if (!secureToken) return;
+
+      if (!modalUrlRestoreRef.current) {
+        modalUrlRestoreRef.current = window.location.pathname + window.location.search;
+      }
+      window.history.replaceState(null, '', `/s/${encodeURIComponent(secureToken)}`);
+    } catch {
+      // ignore
+    }
+  }, []);
   
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -182,6 +208,7 @@ export default function Subscriptions() {
     const searchParams = new URLSearchParams(location.search);
     const openToken = searchParams.get('openToken');
     const openSubscriptionId = searchParams.get('open');
+    const createMode = searchParams.get('create') === '1';
 
     const resolveToken = async (token: string) => {
       const qs = new URLSearchParams({ token }).toString();
@@ -191,7 +218,18 @@ export default function Subscriptions() {
       return data?.id ? String(data.id) : null;
     };
 
-    if (!openToken && !openSubscriptionId) return;
+    if (!openToken && !openSubscriptionId && !createMode) return;
+
+    if (createMode) {
+      // Clear the query param and open modal in create mode.
+      navigate(location.pathname, { replace: true, state: location.state });
+      setEditingSubscription(undefined);
+      setModalOpen(true);
+      requestAnimationFrame(() => {
+        void setSecureUrlForSubscriptionCreate();
+      });
+      return;
+    }
 
     // Open immediately (avoid showing the table while data loads)
     setModalOpen(true);
@@ -210,6 +248,9 @@ export default function Subscriptions() {
         setPendingOpenSubscriptionId(null);
         setEditingSubscription(fromList);
         navigate(location.pathname, { replace: true, state: location.state });
+        requestAnimationFrame(() => {
+          void setSecureUrlForSubscriptionEdit(resolvedId);
+        });
         return;
       }
 
@@ -218,7 +259,7 @@ export default function Subscriptions() {
       setPendingOpenSubscriptionId(resolvedId);
       navigate(location.pathname, { replace: true, state: location.state });
     })();
-  }, [location.search, subscriptions, navigate, location.pathname]);
+  }, [location.search, subscriptions, navigate, location.pathname, setSecureUrlForSubscriptionEdit, setSecureUrlForSubscriptionCreate]);
 
   useEffect(() => {
     if (!pendingOpenSubscriptionId) return;
@@ -227,7 +268,10 @@ export default function Subscriptions() {
     setEditingSubscription(openedSubscription);
     setPendingOpenSubscriptionId(null);
     navigate(location.pathname, { replace: true, state: location.state });
-  }, [openedSubscription, pendingOpenSubscriptionId, navigate, location.pathname]);
+    requestAnimationFrame(() => {
+      void setSecureUrlForSubscriptionEdit(pendingOpenSubscriptionId);
+    });
+  }, [openedSubscription, pendingOpenSubscriptionId, navigate, location.pathname, setSecureUrlForSubscriptionEdit]);
   // Listen for login/logout/account change events and trigger immediate refetch
   React.useEffect(() => {
     function triggerImmediateRefresh() {
@@ -351,6 +395,7 @@ export default function Subscriptions() {
   const handleAddNew = () => {
     setEditingSubscription(undefined);
     setModalOpen(true);
+    void setSecureUrlForSubscriptionCreate();
   };
 
   // EXPORT current (filtered) subscriptions to CSV

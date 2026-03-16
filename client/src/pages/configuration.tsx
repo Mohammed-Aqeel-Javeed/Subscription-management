@@ -113,6 +113,31 @@ export default function Configuration() {
       // best-effort only
     }
   };
+
+  const setSecureUrlForConfigAddPaymentModal = async () => {
+    try {
+      storeModalRestoreUrlIfNeeded();
+
+      const secureRes = await fetch('/api/secure-link/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          path: '/configuration',
+          query: { tab: 'payment', addPayment: '1' },
+          ttlMs: 10 * 60 * 1000,
+        }),
+      });
+      if (!secureRes.ok) return;
+      const secureData = (await secureRes.json()) as { token?: string };
+      const secureToken = String(secureData?.token ?? '').trim();
+      if (!secureToken) return;
+
+      window.history.replaceState(window.history.state, '', `/s/${secureToken}`);
+    } catch {
+      // best-effort only
+    }
+  };
   
   // Fetch employees for Managed by dropdown
   const { data: employeesRaw = [] } = useQuery({
@@ -1380,6 +1405,16 @@ export default function Configuration() {
     })();
   }, [searchParams, navigate]);
 
+  // Auto-open Add Payment Method modal when deep-linked via URL: /configuration?tab=payment&addPayment=1
+  useEffect(() => {
+    const addPayment = searchParams.get('addPayment');
+    if (addPayment !== '1') return;
+
+    setActiveTab('payment');
+    setAddPaymentModalOpen(true);
+    navigate('/configuration?tab=payment', { replace: true });
+  }, [searchParams, navigate]);
+
   // Open currency edit modal from resolved token
   useEffect(() => {
     if (!pendingCurrencyCodeToOpen) return;
@@ -2025,19 +2060,8 @@ export default function Configuration() {
       .then(res => res.json())
       .then(() => {
         // Close modal and show toast immediately
-        setAddPaymentModalOpen(false);
+        closeAddPaymentModalNow();
         toast({ title: 'Payment method added', description: 'A new payment method has been added.' });
-
-        // Clear form
-        setPaymentForm({
-          title: '',
-          type: '',
-          owner: '',
-          manager: '',
-          expiresAt: '',
-          financialInstitution: '',
-          lastFourDigits: '',
-        });
 
         // Only use queryClient to invalidate and refetch
         queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
@@ -2095,6 +2119,7 @@ export default function Configuration() {
   };
 
   const closeAddPaymentModalNow = () => {
+    restoreModalUrlIfNeeded();
     setAddPaymentModalOpen(false);
     setIsAddPaymentFullscreen(false);
     setPaymentForm({
@@ -2110,6 +2135,13 @@ export default function Configuration() {
     setPmManagerSearch('');
     paymentSnapshotRef.current = '';
   };
+
+  // When the Add Payment Method modal is opened, update the URL to a secure token.
+  useEffect(() => {
+    if (!addPaymentModalOpen) return;
+    void setSecureUrlForConfigAddPaymentModal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addPaymentModalOpen]);
 
   const closeEditPaymentModalNow = () => {
     closeEditPaymentModal();
@@ -4078,7 +4110,7 @@ export default function Configuration() {
                               <Button 
                                 type="button" 
                                 variant="outline" 
-                                onClick={() => setAddPaymentModalOpen(false)} 
+                                onClick={closeAddPaymentModalNow} 
                                 className="h-9 px-6 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-lg transition-all duration-200"
                               >
                                 Cancel
