@@ -171,7 +171,7 @@ export default function ComplianceDashboard() {
     <ErrorBoundary>
       <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">        
         {/* Top tab buttons */}
-        <div className="flex items-center justify-between gap-4 mb-8">
+        <div className="flex items-center gap-4 mb-8">
           <Button
             variant="outline"
             className="bg-white"
@@ -187,7 +187,7 @@ export default function ComplianceDashboard() {
             Back
           </Button>
 
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2">
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
               <Button
                 className={`${window.location.pathname === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
@@ -199,20 +199,20 @@ export default function ComplianceDashboard() {
             </motion.div>
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
               <Button
-                className={`${window.location.pathname === '/calendar' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
-                variant="outline"
-                onClick={() => handleTabClick('calendar')}
-              >
-                Calendar
-              </Button>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
-              <Button
                 className={`${window.location.pathname === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
                 variant="outline"
                 onClick={() => handleTabClick('compliance')}
               >
                 Compliance
+              </Button>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+              <Button
+                className={`${window.location.pathname === '/calendar' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
+                variant="outline"
+                onClick={() => handleTabClick('calendar')}
+              >
+                Calendar
               </Button>
             </motion.div>
           </div>
