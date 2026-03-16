@@ -43,6 +43,7 @@ import CalendarMonthly from "@/pages/calendar-monthly";
 import CalendarYearly from "@/pages/calendar-yearly";
 import LandingPage from "@/pages/landing";
 import Profile from "@/pages/profile";
+import SecureLinkRedirect from "@/pages/secure-link";
 
 function App() {
   return (
@@ -60,14 +61,18 @@ function App() {
 }
 
 function AppWithSidebar() {
-  const hideSidebarPaths = ["/", "/login", "/signup", "/auth", "/landing"];
-  const hideChatbotPaths = ["/", "/login", "/signup", "/auth", "/landing", "/dashboard", "/notifications", "/reports", "/reports/upcoming-renewal", "/reports/spending-analysis", "/reports/card-wise", "/reports/upcoming-filings", "/reports/compliance-spend", "/reports/departmental-scorecard", "/reports/department-wise-renewals", "/reports/renewal-lead-time-analysis", "/reports/renewal-responsibility", "/reports/expired-renewals", "/reports/upcoming-renewals"];
+  const hideSidebarPaths = ["/", "/login", "/signup", "/auth", "/landing", "/s"];
+  const hideChatbotPaths = ["/", "/login", "/signup", "/auth", "/landing", "/s", "/dashboard", "/notifications", "/reports", "/reports/upcoming-renewal", "/reports/spending-analysis", "/reports/card-wise", "/reports/upcoming-filings", "/reports/compliance-spend", "/reports/departmental-scorecard", "/reports/department-wise-renewals", "/reports/renewal-lead-time-analysis", "/reports/renewal-responsibility", "/reports/expired-renewals", "/reports/upcoming-renewals"];
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  const isSecureLinkRoute = location.pathname.startsWith('/s/');
+  const shouldHideSidebar = isSecureLinkRoute || hideSidebarPaths.includes(location.pathname);
+  const shouldHideChatbot = isSecureLinkRoute || hideChatbotPaths.includes(location.pathname);
+
   // Determine if chatbot should be shown
-  const showChatbot = !hideChatbotPaths.includes(location.pathname);
+  const showChatbot = !shouldHideChatbot;
 
   // Clear session when window/tab is closed
   useEffect(() => {
@@ -89,7 +94,7 @@ function AppWithSidebar() {
     const checkAuth = async () => {
       // Skip auth check for public pages
       const publicPaths = ["/login", "/signup", "/auth", "/landing"];
-      if (publicPaths.includes(location.pathname)) {
+      if (publicPaths.includes(location.pathname) || location.pathname.startsWith('/s/')) {
         return;
       }
 
@@ -128,14 +133,14 @@ function AppWithSidebar() {
   return (
     <SidebarSlotProvider>
       <div className="flex h-screen">
-        {hideSidebarPaths.includes(location.pathname) ? null : (
+        {shouldHideSidebar ? null : (
           <Sidebar 
             isOpen={sidebarOpen} 
             onToggle={() => setSidebarOpen(!sidebarOpen)} 
           />
         )}
         <main className="flex-1 overflow-auto flex flex-col">
-          {!hideSidebarPaths.includes(location.pathname) && <Header />}
+          {!shouldHideSidebar && <Header />}
           <div className="flex-1 overflow-auto">
             <Routes>
               <Route path="/" element={<LandingPage />} />
@@ -143,6 +148,7 @@ function AppWithSidebar() {
               <Route path="/login" element={<AuthPage />} />
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/s/:token" element={<SecureLinkRedirect />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/subscriptions/cancelled" element={<CancelledSubscriptionsPage />} />

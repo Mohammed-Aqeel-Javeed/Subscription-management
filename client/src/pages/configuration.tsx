@@ -31,10 +31,87 @@ export default function Configuration() {
   const exitConfirmActionRef = useRef<null | (() => void)>(null);
   const currencySnapshotRef = useRef<string>("");
   const paymentSnapshotRef = useRef<string>("");
+  const modalUrlRestoreRef = useRef<string | null>(null);
+  const lastSecuredTabRef = useRef<string | null>(null);
 
   const requestExitConfirm = (action: () => void) => {
     exitConfirmActionRef.current = action;
     setExitConfirmOpen(true);
+  };
+
+  const storeModalRestoreUrlIfNeeded = () => {
+    if (modalUrlRestoreRef.current) return;
+    modalUrlRestoreRef.current = window.location.pathname + window.location.search + window.location.hash;
+  };
+
+  const restoreModalUrlIfNeeded = () => {
+    if (modalUrlRestoreRef.current && window.location.pathname.startsWith('/s/')) {
+      window.history.replaceState(window.history.state, '', modalUrlRestoreRef.current);
+    }
+    modalUrlRestoreRef.current = null;
+  };
+
+  const setSecureUrlForConfigEditModal = async (tab: string, entityType: 'paymentMethod' | 'currency', id: string) => {
+    const trimmedId = String(id ?? '').trim();
+    if (!trimmedId) return;
+
+    try {
+      storeModalRestoreUrlIfNeeded();
+
+      const deeplinkRes = await fetch('/api/deeplink/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ entityType, id: trimmedId }),
+      });
+      if (!deeplinkRes.ok) return;
+      const deeplinkData = (await deeplinkRes.json()) as { token?: string };
+      const openToken = String(deeplinkData?.token ?? '').trim();
+      if (!openToken) return;
+
+      const secureRes = await fetch('/api/secure-link/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          path: '/configuration',
+          query: { tab, openToken },
+        }),
+      });
+      if (!secureRes.ok) return;
+      const secureData = (await secureRes.json()) as { token?: string };
+      const secureToken = String(secureData?.token ?? '').trim();
+      if (!secureToken) return;
+
+      window.history.replaceState(window.history.state, '', `/s/${secureToken}`);
+    } catch {
+      // best-effort only
+    }
+  };
+
+  const setSecureUrlForConfigTab = async (tab: string) => {
+    const t = String(tab ?? '').trim();
+    if (!t) return;
+
+    try {
+      const secureRes = await fetch('/api/secure-link/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          path: '/configuration',
+          query: { tab: t },
+        }),
+      });
+      if (!secureRes.ok) return;
+      const secureData = (await secureRes.json()) as { token?: string };
+      const secureToken = String(secureData?.token ?? '').trim();
+      if (!secureToken) return;
+
+      window.history.replaceState(window.history.state, '', `/s/${secureToken}`);
+    } catch {
+      // best-effort only
+    }
   };
   
   // Fetch employees for Managed by dropdown
@@ -68,6 +145,7 @@ export default function Configuration() {
   const [isUpdateMode, setIsUpdateMode] = useState(false);
   const [isUpdatingCurrencyRates, setIsUpdatingCurrencyRates] = useState(false);
   const [editingRates, setEditingRates] = useState<{ [key: string]: string }>({});
+  const [pendingCurrencyCodeToOpen, setPendingCurrencyCodeToOpen] = useState<string | null>(null);
   // Delete payment method handler (DELETE from backend)
   const handleDeletePaymentMethod = (method: any) => {
     setPaymentToDelete(method);
@@ -153,6 +231,10 @@ export default function Configuration() {
     paymentSnapshotRef.current = JSON.stringify(nextPaymentForm);
     setEditPaymentModalOpen(true);
     setEditingPaymentId(method._id);
+
+    if (method?._id) {
+      void setSecureUrlForConfigEditModal('payment', 'paymentMethod', String(method._id));
+    }
   };
   
   // Track which payment method is being edited (id only)
@@ -228,6 +310,7 @@ export default function Configuration() {
   
   // Helper function to close edit modal and navigate back if needed
   const closeEditPaymentModal = () => {
+    restoreModalUrlIfNeeded();
     setEditPaymentModalOpen(false);
     
     // Check if we should return to notifications
@@ -1248,6 +1331,81 @@ export default function Configuration() {
         latestRate: exchangeRatesMap[currency.code]?.rate || '-'
       }))
     : [];
+
+  // Handle secure-link openToken for Configuration edit modals
+  useEffect(() => {
+    const openToken = searchParams.get('openToken');
+    if (!openToken) return;
+
+    const clearTokenFromUrl = (tab: string) => {
+      const t = tab || 'currency';
+      navigate(`/configuration?tab=${encodeURIComponent(t)}`, { replace: true });
+    };
+
+    void (async () => {
+      try {
+        const qs = new URLSearchParams({ token: String(openToken) }).toString();
+        const res = await fetch(`/api/deeplink/resolve?${qs}`, { credentials: 'include' });
+        if (!res.ok) {
+          clearTokenFromUrl(searchParams.get('tab') || 'currency');
+          return;
+        }
+        const data = (await res.json()) as { entityType?: string; id?: string };
+        const entityType = String(data?.entityType ?? '').trim();
+        const id = String(data?.id ?? '').trim();
+        if (!entityType || !id) {
+          clearTokenFromUrl(searchParams.get('tab') || 'currency');
+          return;
+        }
+
+        if (entityType === 'paymentMethod') {
+          localStorage.setItem('openPaymentMethods', 'true');
+          localStorage.setItem('openPaymentId', id);
+          setActiveTab('payment');
+          clearTokenFromUrl('payment');
+          return;
+        }
+
+        if (entityType === 'currency') {
+          setPendingCurrencyCodeToOpen(id);
+          setActiveTab('currency');
+          clearTokenFromUrl('currency');
+          return;
+        }
+
+        clearTokenFromUrl(searchParams.get('tab') || 'currency');
+      } catch {
+        clearTokenFromUrl(searchParams.get('tab') || 'currency');
+      }
+    })();
+  }, [searchParams, navigate]);
+
+  // Open currency edit modal from resolved token
+  useEffect(() => {
+    if (!pendingCurrencyCodeToOpen) return;
+    const code = String(pendingCurrencyCodeToOpen).toUpperCase().trim();
+    if (!code) return;
+
+    const match = currencies.find((c: any) => String(c?.code ?? '').toUpperCase().trim() === code);
+    if (!match) return;
+
+    setNewCurrency({
+      name: match.name || '',
+      code: match.code || '',
+      symbol: match.symbol || '',
+      isoNumber: '',
+      exchangeRate: match.exchangeRate || '',
+      visible: match.visible,
+      created: match.created || '',
+    });
+    setIsEditMode(true);
+    setAddCurrencyOpen(true);
+    setPendingCurrencyCodeToOpen(null);
+
+    requestAnimationFrame(() => {
+      void setSecureUrlForConfigEditModal('currency', 'currency', code);
+    });
+  }, [pendingCurrencyCodeToOpen, currencies]);
   
   const [companyInfo, setCompanyInfo] = useState<{ defaultCurrency?: string }>({});
   
@@ -1318,6 +1476,7 @@ export default function Configuration() {
             created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
           });
           setIsEditMode(false);
+          restoreModalUrlIfNeeded();
           setAddCurrencyOpen(false);
           toast({
             title: isEditMode ? "Currency Updated" : "Currency Added",
@@ -1803,23 +1962,38 @@ export default function Configuration() {
   
   // Deprecated demo handlers removed
   
+  // --- Payment Method Modal State ---
+  const [addPaymentModalOpen, setAddPaymentModalOpen] = useState(false);
+  const [isAddPaymentFullscreen, setIsAddPaymentFullscreen] = useState(false);
+  const [isEditPaymentFullscreen, setIsEditPaymentFullscreen] = useState(false);
+  const [paymentSearchTerm, setPaymentSearchTerm] = useState("");
+  const [paymentForm, setPaymentForm] = useState({
+    title: '',
+    type: '',
+    owner: '',
+    manager: '',
+    expiresAt: '',
+    financialInstitution: '',
+    lastFourDigits: '',
+  });
+
   // Handler for adding a new payment method (POST to backend)
   function handleAddPaymentMethod(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!paymentForm.title.trim() || !paymentForm.type.trim()) return;
-    
+
     // Check for duplicate payment method name
     const duplicateName = paymentMethods.find(
       method => method.name?.toLowerCase().trim() === paymentForm.title.toLowerCase().trim() ||
                 method.title?.toLowerCase().trim() === paymentForm.title.toLowerCase().trim()
     );
-    
+
     if (duplicateName) {
       setValidationErrorMessage(`A payment method with the name "${paymentForm.title}" already exists. Please use a different name.`);
       setValidationErrorOpen(true);
       return;
     }
-    
+
     // Validate expiry date is not in the past
     if (paymentForm.expiresAt) {
       const [year, month] = paymentForm.expiresAt.split('-');
@@ -1827,15 +2001,15 @@ export default function Configuration() {
       const today = new Date();
       today.setDate(1); // Set to first day of current month for comparison
       today.setHours(0, 0, 0, 0);
-      
+
       if (expiryDate < today) {
         setValidationErrorMessage("Card expiry date cannot be in the past");
         setValidationErrorOpen(true);
         return;
       }
     }
-    
-  fetch("/api/payment", {
+
+    fetch("/api/payment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1853,7 +2027,7 @@ export default function Configuration() {
         // Close modal and show toast immediately
         setAddPaymentModalOpen(false);
         toast({ title: 'Payment method added', description: 'A new payment method has been added.' });
-        
+
         // Clear form
         setPaymentForm({
           title: '',
@@ -1864,26 +2038,56 @@ export default function Configuration() {
           financialInstitution: '',
           lastFourDigits: '',
         });
-        
+
         // Only use queryClient to invalidate and refetch
         queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
       });
   }
-  
-  // --- Payment Method Modal State ---
-  const [addPaymentModalOpen, setAddPaymentModalOpen] = useState(false);
-  const [isAddPaymentFullscreen, setIsAddPaymentFullscreen] = useState(false);
-  const [isEditPaymentFullscreen, setIsEditPaymentFullscreen] = useState(false);
-  const [paymentSearchTerm, setPaymentSearchTerm] = useState("");
-  const [paymentForm, setPaymentForm] = useState({
-    title: '',
-    type: '',
-    owner: '',
-    manager: '',
-    expiresAt: '',
-    financialInstitution: '',
-    lastFourDigits: '',
-  });
+
+  // Tab-level secure URL for Configuration (Currency tab only)
+  useEffect(() => {
+    const isBlocking =
+      editPaymentModalOpen ||
+      addPaymentModalOpen ||
+      paymentSubsModalOpen ||
+      deleteConfirmOpen ||
+      validationErrorOpen ||
+      addCurrencyOpen ||
+      currencyDeleteOpen ||
+      importConfirmOpen ||
+      currencyImportConfirmOpen ||
+      paymentImportConfirmOpen ||
+      exitConfirmOpen;
+
+    if (isBlocking) return;
+
+    if (activeTab === 'currency') {
+      if (lastSecuredTabRef.current === 'currency' && window.location.pathname.startsWith('/s/')) return;
+      lastSecuredTabRef.current = 'currency';
+      void setSecureUrlForConfigTab('currency');
+      return;
+    }
+
+    // Leaving Currency tab: ensure URL is not stuck on old /s/<token>
+    if (window.location.pathname.startsWith('/s/')) {
+      const next = `/configuration?tab=${encodeURIComponent(activeTab || 'currency')}`;
+      window.history.replaceState(window.history.state, '', next);
+    }
+    lastSecuredTabRef.current = activeTab;
+  }, [
+    activeTab,
+    editPaymentModalOpen,
+    addPaymentModalOpen,
+    paymentSubsModalOpen,
+    deleteConfirmOpen,
+    validationErrorOpen,
+    addCurrencyOpen,
+    currencyDeleteOpen,
+    importConfirmOpen,
+    currencyImportConfirmOpen,
+    paymentImportConfirmOpen,
+    exitConfirmOpen,
+  ]);
 
   const isPaymentDirty = () => {
     if (!paymentSnapshotRef.current) return false;
@@ -2231,6 +2435,7 @@ export default function Configuration() {
                           const isDirty = !!currencySnapshotRef.current && JSON.stringify(newCurrency) !== currencySnapshotRef.current;
                           if (isDirty) {
                             requestExitConfirm(() => {
+                              restoreModalUrlIfNeeded();
                               setNewCurrency({
                                 name: '',
                                 code: '',
@@ -2249,6 +2454,7 @@ export default function Configuration() {
                           }
 
                           // Reset form when modal closes
+                          restoreModalUrlIfNeeded();
                           setNewCurrency({
                             name: '',
                             code: '',
@@ -2358,7 +2564,10 @@ export default function Configuration() {
                                   <Button 
                                     type="button" 
                                     variant="outline" 
-                                    onClick={() => setAddCurrencyOpen(false)} 
+                                    onClick={() => {
+                                      restoreModalUrlIfNeeded();
+                                      setAddCurrencyOpen(false);
+                                    }}
                                     className="h-9 px-6 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-lg transition-all duration-200"
                                   >
                                     Cancel
@@ -2366,6 +2575,7 @@ export default function Configuration() {
                                   <Button 
                                     onClick={() => {
                                       addNewCurrency();
+                                      restoreModalUrlIfNeeded();
                                       setAddCurrencyOpen(false);
                                     }}
                                     className="h-9 px-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200 tracking-wide"
@@ -2504,6 +2714,11 @@ export default function Configuration() {
                                           });
                                           setIsEditMode(true);
                                           setAddCurrencyOpen(true);
+
+                                          const code = String(currency.code || '').toUpperCase().trim();
+                                          if (code) {
+                                            void setSecureUrlForConfigEditModal('currency', 'currency', code);
+                                          }
                                         }}
                                         title={`${currency.symbol || ''} ${currency.name || ''} (${currency.code || ''})`.trim()}
                                         className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap text-left"
@@ -2577,6 +2792,11 @@ export default function Configuration() {
                                                   });
                                                   setIsEditMode(true);
                                                   setAddCurrencyOpen(true);
+
+                                                  const code = String(currency.code || '').toUpperCase().trim();
+                                                  if (code) {
+                                                    void setSecureUrlForConfigEditModal('currency', 'currency', code);
+                                                  }
                                                 }}
                                                 className="cursor-pointer"
                                               >
