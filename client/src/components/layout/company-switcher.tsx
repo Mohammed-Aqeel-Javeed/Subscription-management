@@ -54,6 +54,9 @@ export default function CompanySwitcher() {
         throw new Error("Failed to switch company");
       }
 
+      // Notify the app that tenant context changed.
+      window.dispatchEvent(new Event('account-changed'));
+
       // Clear all caches completely
       queryClient.clear();
       queryClient.removeQueries();

@@ -6,13 +6,24 @@ import { ObjectId } from "mongodb";
 
 const router = Router();
 
+const setTenantSafeCache = (res: any, _maxAgeSeconds: number) => {
+  // Tenant-specific responses must never be cached as public/shared.
+  // Use no-store so switching companies never reuses old metrics.
+  res.setHeader('Cache-Control', 'private, no-store');
+  const existingVary = String(res.getHeader?.('Vary') ?? '').trim();
+  if (!existingVary) {
+    res.setHeader('Vary', 'Cookie');
+  } else if (!existingVary.toLowerCase().split(',').map((v: string) => v.trim()).includes('cookie')) {
+    res.setHeader('Vary', `${existingVary}, Cookie`);
+  }
+};
+
 // Get dashboard metrics
 router.get("/api/analytics/dashboard", async (req, res) => {
   const tenantId = req.user?.tenantId;
   if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
   try {
-    // Cache for 30 seconds
-    res.setHeader('Cache-Control', 'public, max-age=30');
+    setTenantSafeCache(res, 30);
     
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
@@ -81,8 +92,7 @@ router.get("/api/analytics/trends", async (req, res) => {
   const tenantId = req.user?.tenantId;
   if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
   try {
-    // Cache for 1 minute
-    res.setHeader('Cache-Control', 'public, max-age=60');
+    setTenantSafeCache(res, 60);
     
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
@@ -143,8 +153,7 @@ router.get("/api/analytics/categories", async (req, res) => {
   const tenantId = req.user?.tenantId;
   if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
   try {
-    // Cache for 1 minute
-    res.setHeader('Cache-Control', 'public, max-age=60');
+    setTenantSafeCache(res, 60);
     
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");

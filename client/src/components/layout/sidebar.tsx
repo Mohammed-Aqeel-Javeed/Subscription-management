@@ -64,6 +64,9 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
         throw new Error("Failed to switch company");
       }
 
+      // Notify the app that tenant context changed.
+      window.dispatchEvent(new Event('account-changed'));
+
       queryClient.clear();
       window.location.reload();
       
@@ -235,12 +238,12 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   // Collapsed sidebar view (icon-only)
   if (!isOpen) {
     return (
-      <div className="flex flex-col h-full w-16 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-r border-gray-200/50 shadow-lg">
+      <div className="flex flex-col h-full w-16 bg-[linear-gradient(180deg,#4338ca_0%,#5b3ee6_45%,#7c3aed_100%)] border-r border-white/10 shadow-[0_20px_50px_rgba(67,56,202,0.35)]">
         {/* Collapsed Header */}
-        <div className="flex flex-col items-center gap-1 px-2 pt-3 pb-2 bg-white/40 backdrop-blur-sm border-b border-gray-200/50">
+        <div className="flex flex-col items-center gap-1 px-2 pt-3 pb-2 bg-white/6 backdrop-blur-sm border-b border-white/10">
           <button
             onClick={onToggle}
-            className="relative group h-11 w-11 flex items-center justify-center rounded-xl bg-white/70 hover:bg-white/90 border border-gray-200/50 shadow-sm transition-all duration-200 hover:scale-105"
+            className="relative group h-11 w-11 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/16 border border-white/15 shadow-sm transition-all duration-200 hover:scale-105"
             aria-label="Open Sidebar"
           >
             <img
@@ -253,7 +256,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
             {/* On hover: swap small logo to the "open sidebar" icon */}
             <PanelLeft
               size={20}
-              className="absolute text-indigo-700 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              className="absolute text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100"
             />
           </button>
         </div>
@@ -276,8 +279,8 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                           flex items-center justify-center w-12 h-12 rounded-xl
                           transition-all duration-200
                           ${isActive 
-                            ? 'bg-gradient-to-r ' + item.gradient + ' shadow-xl' 
-                            : 'hover:bg-white/60 hover:shadow-md'
+                            ? 'bg-white shadow-xl' 
+                            : 'hover:bg-white/10 hover:shadow-md'
                           }
                         `}
                         title={item.label}
@@ -286,17 +289,16 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                           relative flex items-center justify-center w-9 h-9 rounded-lg
                           transition-all duration-200
                           ${isActive 
-                            ? 'bg-white/25 backdrop-blur-md border border-white/40 shadow-inner' 
-                            : 'bg-gradient-to-br ' + item.gradient + ' shadow-lg border border-white/20'
+                            ? 'bg-transparent' 
+                            : 'bg-white/10 border border-white/10'
                           }
                         `}
                         style={{
                           boxShadow: isActive 
-                            ? 'inset 0 2px 8px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
-                            : `0 6px 20px ${item.shadow}, inset 0 1px 0 rgba(255,255,255,0.3)`
+                            ? 'none' 
+                            : 'inset 0 1px 0 rgba(255,255,255,0.12)'
                         }}>
-                          <div className={`absolute inset-0 rounded-lg ${!isActive ? 'bg-gradient-to-b from-white/30 to-transparent' : ''}`} style={{ height: '50%' }} />
-                          <Icon className="text-white relative z-10" size={16} />
+                          <Icon className={`relative z-10 ${isActive ? 'text-indigo-700' : 'text-white'}`} size={16} />
                         </div>
                       </Link>
                     </li>
@@ -312,8 +314,8 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                       flex items-center justify-center w-12 h-12 rounded-xl
                       transition-all duration-200
                       ${isActive 
-                        ? 'bg-gradient-to-r ' + item.gradient + ' shadow-xl' 
-                        : 'hover:bg-white/60 hover:shadow-md'
+                        ? 'bg-white shadow-xl' 
+                        : 'hover:bg-white/10 hover:shadow-md'
                       }
                     `}
                     title={item.label}
@@ -322,17 +324,16 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                       relative flex items-center justify-center w-9 h-9 rounded-lg
                       transition-all duration-200
                       ${isActive 
-                        ? 'bg-white/25 backdrop-blur-md border border-white/40 shadow-inner' 
-                        : 'bg-gradient-to-br ' + item.gradient + ' shadow-lg border border-white/20'
+                        ? 'bg-transparent' 
+                        : 'bg-white/10 border border-white/10'
                       }
                     `}
                     style={{
                       boxShadow: isActive 
-                        ? 'inset 0 2px 8px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
-                        : `0 6px 20px ${item.shadow}, inset 0 1px 0 rgba(255,255,255,0.3)`
+                        ? 'none' 
+                        : 'inset 0 1px 0 rgba(255,255,255,0.12)'
                     }}>
-                      <div className={`absolute inset-0 rounded-lg ${!isActive ? 'bg-gradient-to-b from-white/30 to-transparent' : ''}`} style={{ height: '50%' }} />
-                      <Icon className="text-white relative z-10" size={16} />
+                      <Icon className={`relative z-10 ${isActive ? 'text-indigo-700' : 'text-white'}`} size={16} />
                     </div>
                   </Link>
                 </li>
@@ -342,16 +343,15 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         </nav>
 
         {/* Collapsed Footer with User Avatar */}
-        <div className="p-2 border-t border-gray-200/50 bg-white/60 backdrop-blur-sm space-y-2">
+        <div className="p-2 border-t border-white/10 bg-white/6 backdrop-blur-sm space-y-2">
           <div className="flex items-center justify-center">
             <div 
-              className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg border border-white/20 cursor-pointer hover:scale-105 transition-transform"
+              className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-white/12 shadow-lg border border-white/15 cursor-pointer hover:scale-105 transition-transform"
               style={{
-                boxShadow: '0 6px 20px rgba(59, 130, 246, 0.5), inset 0 1px 0 rgba(255,255,255,0.3)'
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)'
               }}
               title={currentUser?.fullName || currentUser?.email || "User"}
             >
-              <div className="absolute inset-0 rounded-lg bg-gradient-to-b from-white/30 to-transparent" style={{ height: '50%' }} />
               <User className="text-white relative z-10" size={16} />
             </div>
           </div>
@@ -359,13 +359,12 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           <div className="flex items-center justify-center">
             <button
               onClick={handleLogout}
-              className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 border border-white/20"
+              className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-white/12 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 border border-white/15 hover:bg-white/18"
               style={{
-                boxShadow: '0 6px 20px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.3)'
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)'
               }}
               title="Logout"
             >
-              <div className="absolute inset-0 rounded-lg bg-gradient-to-b from-white/30 to-transparent" style={{ height: '50%' }} />
               <LogOut size={16} className="relative z-10" />
             </button>
           </div>
@@ -375,8 +374,8 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   }
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-r border-gray-200/50 shadow-lg">
-      <div className="flex flex-col items-start gap-1 px-4 pt-3 pb-2 bg-white/40 backdrop-blur-sm border-b border-gray-200/50">
+    <div className="flex flex-col h-full bg-[linear-gradient(180deg,#4338ca_0%,#5b3ee6_45%,#7c3aed_100%)] border-r border-white/10 shadow-[0_20px_50px_rgba(67,56,202,0.35)]">
+      <div className="flex flex-col items-start gap-1 px-4 pt-3 pb-2 bg-white/6 backdrop-blur-sm border-b border-white/10">
         <div className="flex items-center gap-2 justify-between w-full">
           <div className="flex items-center gap-0">
             <img 
@@ -385,14 +384,14 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
               className="w-20 h-20 object-contain drop-shadow-xl"
               style={{ imageRendering: 'crisp-edges' }}
             />
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+            <h1 className="text-2xl font-bold text-white tracking-tight">
               Trackla
             </h1>
           </div>
           {onToggle && (
             <button
               onClick={onToggle}
-              className="h-9 w-9 flex items-center justify-center rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all duration-200 hover:scale-105"
+              className="h-9 w-9 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/16 text-white transition-all duration-200 hover:scale-105 border border-white/10"
               title="Close Sidebar"
             >
               <PanelLeft className="h-5 w-5" />
@@ -402,14 +401,14 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         {currentUser?.companyName && (
           <div className="flex items-center gap-2 pl-2 pr-2">
             <button
-              className="flex items-center justify-center flex-shrink-0 w-8 h-8 hover:bg-blue-50 rounded-md transition-colors"
+              className="flex items-center justify-center flex-shrink-0 w-8 h-8 hover:bg-white/10 rounded-md transition-colors text-white/90"
               onClick={() => setShowCompanySwitcherDialog(true)}
               title="Switch Company"
             >
-              <Shuffle size={18} className="text-blue-700" />
+              <Shuffle size={18} className="text-white/90" />
             </button>
             <button
-              className="text-base text-blue-700 font-bold leading-tight hover:underline focus:outline-none text-left truncate"
+              className="text-base text-white/90 font-bold leading-tight hover:text-white focus:outline-none text-left truncate"
               onClick={() => setShowCompanySwitcherDialog(true)}
               title="Switch Company"
               style={{ background: 'none', border: 'none', padding: 0, margin: 0, cursor: 'pointer' }}
@@ -443,27 +442,26 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                       relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
                       transition-all duration-200 group
                       ${isActive 
-                        ? 'bg-blue-600 text-white shadow-xl' 
-                        : 'text-gray-700 hover:bg-white/60 hover:text-gray-900 hover:shadow-md backdrop-blur-sm'
+                        ? 'bg-white text-indigo-700 shadow-xl' 
+                        : 'text-white hover:bg-white/10 hover:shadow-md backdrop-blur-sm'
                       }
                     `}>
                       <div className={`
                         relative flex items-center justify-center w-9 h-9 rounded-lg
                         transition-all duration-200
                         ${isActive 
-                          ? 'bg-white/25 backdrop-blur-md border border-white/40 shadow-inner' 
-                          : 'bg-gradient-to-br ' + item.gradient + ' shadow-lg border border-white/20'
+                          ? 'bg-indigo-50/80 border border-indigo-100/80' 
+                          : 'bg-white/10 border border-white/10'
                         }
                       `}
                       style={{
                         boxShadow: isActive 
-                          ? 'inset 0 2px 8px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
-                          : `0 6px 20px ${item.shadow}, inset 0 1px 0 rgba(255,255,255,0.3)`
+                          ? '0 6px 14px rgba(79,70,229,0.14)' 
+                          : 'inset 0 1px 0 rgba(255,255,255,0.12)'
                       }}>
-                        <div className={`absolute inset-0 rounded-lg ${!isActive ? 'bg-gradient-to-b from-white/30 to-transparent' : ''}`} style={{ height: '50%' }} />
                         <Icon 
                           size={16} 
-                          className="text-white relative z-10" 
+                          className={`relative z-10 ${isActive ? 'text-indigo-700' : 'text-white'}`} 
                         />
                       </div>
                       <span className="font-sidebar font-semibold">
@@ -481,27 +479,26 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                   relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
                   transition-all duration-200 group
                   ${isActive 
-                    ? 'bg-blue-600 text-white shadow-xl' 
-                    : 'text-gray-700 hover:bg-white/60 hover:text-gray-900 hover:shadow-md backdrop-blur-sm'
+                    ? 'bg-white text-indigo-700 shadow-xl' 
+                    : 'text-white hover:bg-white/10 hover:shadow-md backdrop-blur-sm'
                   }
                 `}>
                   <div className={`
                     relative flex items-center justify-center w-9 h-9 rounded-lg
                     transition-all duration-200
                     ${isActive 
-                      ? 'bg-white/25 backdrop-blur-md border border-white/40 shadow-inner' 
-                      : 'bg-gradient-to-br ' + item.gradient + ' shadow-lg border border-white/20'
+                      ? 'bg-indigo-50/80 border border-indigo-100/80' 
+                      : 'bg-white/10 border border-white/10'
                     }
                   `}
                   style={{
                     boxShadow: isActive 
-                      ? 'inset 0 2px 8px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
-                      : `0 6px 20px ${item.shadow}, inset 0 1px 0 rgba(255,255,255,0.3)`
+                      ? '0 6px 14px rgba(79,70,229,0.14)' 
+                      : 'inset 0 1px 0 rgba(255,255,255,0.12)'
                   }}>
-                    <div className={`absolute inset-0 rounded-lg ${!isActive ? 'bg-gradient-to-b from-white/30 to-transparent' : ''}`} style={{ height: '50%' }} />
                     <Icon 
                       size={16} 
-                      className="text-white relative z-10" 
+                      className={`relative z-10 ${isActive ? 'text-indigo-700' : 'text-white'}`} 
                     />
                   </div>
                   <span className="font-sidebar font-semibold">
@@ -514,7 +511,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
             </ul>
             
             {/* Import/Export Button in Navigation */}
-            <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="mt-4 pt-4 border-t border-white/10">
               <UnifiedImportExport />
             </div>
           </>
@@ -527,23 +524,22 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         />
       </nav>
       
-      <div className="p-3 border-t border-gray-200/50 bg-white/60 backdrop-blur-sm">
+      <div className="p-3 border-t border-white/10 bg-white/6 backdrop-blur-sm">
         
-        <div className="flex items-center gap-2 p-2 rounded-xl bg-white/80 hover:bg-white hover:shadow-md transition-all duration-200 cursor-pointer mb-2">
+        <div className="flex items-center gap-2 p-2 rounded-xl bg-white/10 hover:bg-white/14 transition-all duration-200 cursor-pointer mb-2 border border-white/10">
           <div 
-            className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg border border-white/20"
+            className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-white/12 shadow-lg border border-white/15"
             style={{
-              boxShadow: '0 6px 20px rgba(59, 130, 246, 0.5), inset 0 1px 0 rgba(255,255,255,0.3)'
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)'
             }}
           >
-            <div className="absolute inset-0 rounded-lg bg-gradient-to-b from-white/30 to-transparent" style={{ height: '50%' }} />
             <User className="text-white relative z-10" size={16} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
+            <p className="text-sm font-medium text-white truncate">
               {currentUser?.fullName || currentUser?.email || "User"}
             </p>
-            <p className="text-xs text-gray-500 truncate capitalize">
+            <p className="text-xs text-white/70 truncate capitalize">
               {currentUser?.role?.replace('_', ' ') || "User"}
             </p>
           </div>
@@ -553,14 +549,11 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         <div className="flex justify-center">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 group relative overflow-hidden"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold bg-white/10 text-white hover:bg-white/16 border border-white/10 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 group relative overflow-hidden"
           >
-            {/* Animated background effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-            
             {/* Content */}
             <div className="relative flex items-center gap-2">
-              <div className="p-1 bg-white/20 rounded group-hover:bg-white/30 transition-colors duration-200">
+              <div className="p-1 bg-white/15 rounded group-hover:bg-white/20 transition-colors duration-200">
                 <LogOut size={14} className="text-white transform group-hover:rotate-12 transition-transform duration-200" />
               </div>
               <span className="font-semibold tracking-wide">Logout</span>

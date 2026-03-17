@@ -4,7 +4,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { History, ArrowLeft } from "lucide-react";
-import { Badge } from "../components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Subscription } from "@shared/types";
@@ -37,24 +36,6 @@ function parseMoneyLike(value: any): number | null {
 
   const num = Number(cleaned.replace(/,/g, ""));
   return Number.isFinite(num) ? num : null;
-}
-
-function getActionBadgeColor(action: string) {
-  switch (String(action || "").toLowerCase()) {
-    case "create":
-    case "created":
-      return "bg-blue-100 text-blue-700 border-blue-200";
-    case "update":
-    case "updated":
-      return "bg-amber-100 text-amber-700 border-amber-200";
-    case "delete":
-    case "deleted":
-      return "bg-red-100 text-red-700 border-red-200";
-    case "renewed":
-      return "bg-emerald-100 text-emerald-700 border-emerald-200";
-    default:
-      return "bg-slate-100 text-slate-700 border-slate-200";
-  }
 }
 
 function formatTimestamp(timestamp: string, opts?: { forceLocal?: boolean }) {
@@ -680,7 +661,6 @@ export default function SubscriptionHistory() {
                       )}
                       <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[180px]">Changed By</th>
                       <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[400px]">Changes</th>
-                      <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[100px]">Action</th>
                       <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[140px]">Updated On</th>
                     </tr>
                   </thead>
@@ -702,7 +682,6 @@ export default function SubscriptionHistory() {
                         item?.data?.owner ||
                         "System";
                       const changesText = buildChangesText(item);
-                      const displayAction = inferDisplayAction(item);
 
                       return (
                         <tr key={item._id || index} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
@@ -718,11 +697,6 @@ export default function SubscriptionHistory() {
                             <div className="whitespace-pre-wrap break-words leading-relaxed" title={changesText || "No changes recorded"}>
                               {changesText || "No changes recorded"}
                             </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge className={`${getActionBadgeColor(displayAction)} px-2 py-1 text-xs font-medium border capitalize`}>
-                              {displayAction}
-                            </Badge>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500">
                             <div className="flex flex-col">

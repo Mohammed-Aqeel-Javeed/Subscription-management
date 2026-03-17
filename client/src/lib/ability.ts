@@ -1,4 +1,4 @@
-import { AbilityBuilder, Ability, AbilityClass, Subject } from '@casl/ability';
+import { AbilityBuilder, Ability, AbilityClass } from '@casl/ability';
 
 type Actions = 'manage' | 'create' | 'read' | 'update' | 'delete';
 type Subjects = 'Subscription' | 'User' | 'Compliance' | 'License' | 'Notification' | 'Settings' | 'Department' | 'all';
@@ -16,6 +16,11 @@ export function defineAbilityFor(user: User) {
   const { can, cannot, build } = new AbilityBuilder(AppAbility);
 
   switch (user.role) {
+    case 'global_admin':
+      // Global Admin: Platform-level full access (treated as super-admin in the UI)
+      can('manage', 'all');
+      break;
+
     case 'super_admin':
       // Super Admin: Full system access
       can('manage', 'all');

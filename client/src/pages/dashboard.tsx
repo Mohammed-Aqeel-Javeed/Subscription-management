@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,6 +31,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useUser();
+  const queryClient = useQueryClient();
+  const [tenantSwitchNonce, setTenantSwitchNonce] = useState(0);
   const [activeSubscriptionsModalOpen, setActiveSubscriptionsModalOpen] = useState(false);
   const [upcomingRenewalsModalOpen, setUpcomingRenewalsModalOpen] = useState(false);
   
@@ -51,13 +53,42 @@ export default function Dashboard() {
     if (!user?.fullName) return user?.email?.split('@')[0] || "User";
     return user.fullName.split(' ')[0];
   };
+
+  // Ensure the dashboard always refreshes correctly when switching companies.
+  // We can't rely only on tenantId from context because some switch flows reload/clear caches.
+  const tenantKey = String(user?.tenantId ?? 'unknown');
+  const dashboardScopeKey = `${tenantKey}:${tenantSwitchNonce}`;
+
+  React.useEffect(() => {
+    const onAccountChanged = () => {
+      setTenantSwitchNonce((n) => n + 1);
+
+      // Close modals and reset filters so UI isn't stuck.
+      setActiveSubscriptionsModalOpen(false);
+      setUpcomingRenewalsModalOpen(false);
+      setCategoryFilter('all');
+      setDateRange('6months');
+
+      // Best-effort: ensure fresh data fetch even if keys don't change elsewhere.
+      queryClient.invalidateQueries({ queryKey: ['/api/analytics'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['/api/subscriptions'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['/api/me'], exact: false });
+    };
+
+    window.addEventListener('account-changed', onAccountChanged);
+    return () => window.removeEventListener('account-changed', onAccountChanged);
+  }, [queryClient]);
   
   // Use dashboard metrics query for auth check and data
-  const { isLoading: metricsLoading, error: metricsError } = useQuery<DashboardMetrics>({
-    queryKey: ["/api/analytics/dashboard"],
+  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery<DashboardMetrics>({
+    queryKey: ["/api/analytics/dashboard", dashboardScopeKey],
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/dashboard");
       if (res.status === 401) throw new Error("Unauthorized");
+      if (!res.ok) {
+        const text = (await res.text().catch(() => '')) || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
       return res.json();
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
@@ -65,9 +96,13 @@ export default function Dashboard() {
     refetchOnWindowFocus: false,
   });
   const { data: trends, isLoading: trendsLoading } = useQuery<SpendingTrend[]>({
-    queryKey: ["/api/analytics/trends"],
+    queryKey: ["/api/analytics/trends", dashboardScopeKey],
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/trends");
+      if (!res.ok) {
+        const text = (await res.text().catch(() => '')) || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
       return res.json();
     },
     staleTime: 2 * 60 * 1000,
@@ -75,9 +110,13 @@ export default function Dashboard() {
     refetchOnWindowFocus: false,
   });
   const { data: categories, isLoading: categoriesLoading } = useQuery<CategoryBreakdown[]>({
-    queryKey: ["/api/analytics/categories"],
+    queryKey: ["/api/analytics/categories", dashboardScopeKey],
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/categories");
+      if (!res.ok) {
+        const text = (await res.text().catch(() => '')) || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
       return res.json();
     },
     staleTime: 2 * 60 * 1000,
@@ -86,15 +125,19 @@ export default function Dashboard() {
   });
 
   const { data: subscriptions, isLoading: subscriptionsLoading } = useQuery<Subscription[]>({
-    queryKey: ["/api/subscriptions"],
+    queryKey: ["/api/subscriptions", dashboardScopeKey],
     queryFn: async () => {
       const res = await apiFetch("/api/subscriptions");
+      if (res.status === 401) throw new Error("Unauthorized");
+      if (!res.ok) {
+        const text = (await res.text().catch(() => '')) || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
       return res.json();
     },
     staleTime: 60 * 1000, // 1 minute
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
-    placeholderData: (previousData) => previousData,
   });
 
   // Get unique categories from actual subscriptions (like subscriptions page does)
@@ -270,11 +313,21 @@ export default function Dashboard() {
     const rangeStartDate = new Date();
     rangeStartDate.setMonth(rangeStartDate.getMonth() - months);
     
-    const nextRenewal = new Date(sub.nextRenewal);
-    const subscriptionStartDate = new Date(sub.startDate);
-    
+    const parseDateSafe = (raw: unknown): Date | null => {
+      if (!raw) return null;
+      const d = raw instanceof Date ? raw : new Date(String(raw));
+      return Number.isFinite(d.getTime()) ? d : null;
+    };
+
+    const nextRenewal = parseDateSafe((sub as any)?.nextRenewal);
+    const subscriptionStartDate = parseDateSafe((sub as any)?.startDate);
+
+    // If dates are missing/invalid, don't exclude the record.
+    if (!nextRenewal && !subscriptionStartDate) return true;
+
     // Include subscription if it renewed or will renew within the date range
-    return nextRenewal >= rangeStartDate || subscriptionStartDate >= rangeStartDate;
+    return (nextRenewal ? nextRenewal >= rangeStartDate : false)
+      || (subscriptionStartDate ? subscriptionStartDate >= rangeStartDate : false);
   });
 
   // Calculate filtered metrics
@@ -312,6 +365,7 @@ export default function Dashboard() {
   const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   const upcomingRenewals = filteredSubscriptions.filter(sub => {
     const renewalDate = new Date(sub.nextRenewal);
+    if (!Number.isFinite(renewalDate.getTime())) return false;
     // Reset time portions to compare only dates
     renewalDate.setHours(0, 0, 0, 0);
     const nowDate = new Date(now);
@@ -320,6 +374,12 @@ export default function Dashboard() {
     thirtyDaysDate.setHours(23, 59, 59, 999);
     return renewalDate <= thirtyDaysDate && renewalDate >= nowDate;
   });
+
+  const hasSubscriptionsData = Array.isArray(subscriptions);
+  const cardMonthlySpend = hasSubscriptionsData ? filteredMonthlySpend : (Number(metrics?.monthlySpend) || 0);
+  const cardYearlySpend = hasSubscriptionsData ? filteredYearlySpend : (Number(metrics?.yearlySpend) || 0);
+  const cardActiveSubscriptions = hasSubscriptionsData ? filteredSubscriptions.length : (Number(metrics?.activeSubscriptions) || 0);
+  const cardUpcomingRenewals = hasSubscriptionsData ? upcomingRenewals.length : (Number(metrics?.upcomingRenewals) || 0);
 
   if (metricsLoading) {
     return (
@@ -413,7 +473,7 @@ export default function Dashboard() {
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-600 mb-1">Monthly Spend</p>
                 <p className="text-3xl font-bold text-gray-900">
-                  ${filteredMonthlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  ${cardMonthlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </p>
               </div>
               <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -435,7 +495,7 @@ export default function Dashboard() {
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-600 mb-1">Yearly Spend</p>
                 <p className="text-3xl font-bold text-gray-900">
-                  ${filteredYearlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  ${cardYearlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </p>
               </div>
               <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -460,7 +520,7 @@ export default function Dashboard() {
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-600 mb-1">Active Subscriptions</p>
                 <p className="text-3xl font-bold text-gray-900">
-                  {filteredSubscriptions.length}
+                  {cardActiveSubscriptions}
                 </p>
               </div>
               <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -481,7 +541,7 @@ export default function Dashboard() {
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-600 mb-1">Upcoming Renewals</p>
                 <p className="text-3xl font-bold text-gray-900">
-                  {upcomingRenewals.length}
+                  {cardUpcomingRenewals}
                 </p>
               </div>
               <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
