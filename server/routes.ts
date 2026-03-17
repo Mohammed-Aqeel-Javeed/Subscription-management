@@ -296,8 +296,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!emailSent) {
         console.warn("⚠️ Email service not configured. OTP:", otp);
-        return res.status(200).json({ 
-          message: "Email service not configured. Check server logs for OTP.",
+        const diagnostics = typeof (emailService as any)?.getDiagnostics === 'function'
+          ? (emailService as any).getDiagnostics()
+          : {
+              configured: false,
+              lastError: { message: 'Email service diagnostics unavailable' },
+            };
+        return res.status(200).json({
+          message: "Failed to send OTP email.",
+          emailSent: false,
+          emailDiagnostics: diagnostics,
           devOtp: process.env.NODE_ENV === 'development' ? otp : undefined
         });
       }

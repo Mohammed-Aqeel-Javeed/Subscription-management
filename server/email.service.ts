@@ -19,6 +19,7 @@ interface EmailData {
 class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private isConfigured: boolean = false;
+  private lastError: { code?: string; message: string } | null = null;
 
   constructor() {
     this.setupTransporter();
@@ -51,13 +52,35 @@ class EmailService {
           socketTimeout,
         } as any);
         this.isConfigured = true;
+        this.lastError = null;
       } catch (error) {
         console.error('Error setting up email transporter:', error);
         this.isConfigured = false;
+        this.lastError = {
+          message: error instanceof Error ? error.message : 'Error setting up email transporter'
+        };
       }
     } else {
       console.warn('Email service not configured. SMTP_USER or SMTP_PASS missing.');
+      this.isConfigured = false;
+      this.lastError = { message: 'SMTP_USER or SMTP_PASS missing' };
     }
+  }
+
+  getDiagnostics() {
+    const port = parseInt(process.env.SMTP_PORT || '587');
+    const smtpPort = Number.isFinite(port) ? port : 587;
+    const smtpSecure = process.env.SMTP_SECURE === 'true';
+    return {
+      configured: this.isConfigured,
+      smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
+      smtpPort,
+      smtpSecure,
+      smtpUserConfigured: !!process.env.SMTP_USER,
+      smtpPassConfigured: !!process.env.SMTP_PASS,
+      smtpFromConfigured: !!(process.env.SMTP_FROM || process.env.SMTP_USER),
+      lastError: this.lastError,
+    };
   }
 
   async sendEmail(emailData: EmailData): Promise<boolean> {
@@ -69,6 +92,7 @@ class EmailService {
         user: process.env.SMTP_USER ? '***configured***' : 'MISSING',
         pass: process.env.SMTP_PASS ? '***configured***' : 'MISSING'
       });
+      this.lastError = { message: 'Email service not configured (missing SMTP_USER/SMTP_PASS or transporter not initialized)' };
       return false;
     }
 
@@ -90,12 +114,19 @@ class EmailService {
 
       const info = await Promise.race([sendPromise, timeoutPromise]);
       console.log(`✅ Email sent successfully! Message ID: ${info.messageId}`);
+      this.lastError = null;
       return true;
     } catch (error) {
       console.error('❌ Error sending email:', error);
       if (error instanceof Error) {
         console.error('   Error message:', error.message);
         console.error('   Error stack:', error.stack);
+        this.lastError = {
+          code: (error as any)?.code,
+          message: error.message,
+        };
+      } else {
+        this.lastError = { message: 'Unknown email sending error' };
       }
       return false;
     }
