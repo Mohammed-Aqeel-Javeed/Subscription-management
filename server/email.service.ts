@@ -38,11 +38,18 @@ class EmailService {
 
     if (config.auth.user && config.auth.pass) {
       try {
-          // Nodemailer exposes `createTransport`, not `createTransporter`
-          this.transporter = nodemailer.createTransport({
-            ...config,
-            tls: { rejectUnauthorized: false }
-          });
+        const connectionTimeout = parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS || '8000');
+        const greetingTimeout = parseInt(process.env.SMTP_GREETING_TIMEOUT_MS || '8000');
+        const socketTimeout = parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS || '15000');
+
+        // Nodemailer exposes `createTransport`, not `createTransporter`
+        this.transporter = nodemailer.createTransport({
+          ...config,
+          tls: { rejectUnauthorized: false },
+          connectionTimeout,
+          greetingTimeout,
+          socketTimeout,
+        } as any);
         this.isConfigured = true;
       } catch (error) {
         console.error('Error setting up email transporter:', error);
@@ -74,8 +81,14 @@ class EmailService {
       };
 
       console.log(`📧 Sending email...`);
-      
-      const info = await this.transporter.sendMail(mailOptions);
+
+      const sendTimeoutMs = parseInt(process.env.SMTP_SEND_TIMEOUT_MS || '15000');
+      const sendPromise = this.transporter.sendMail(mailOptions);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`SMTP send timed out after ${sendTimeoutMs}ms`)), sendTimeoutMs)
+      );
+
+      const info = await Promise.race([sendPromise, timeoutPromise]);
       console.log(`✅ Email sent successfully! Message ID: ${info.messageId}`);
       return true;
     } catch (error) {

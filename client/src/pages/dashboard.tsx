@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TrendingUp, Bell, DollarSign, RotateCcw } from "lucide-react";
+import { TrendingUp, Bell, RotateCcw, Calendar, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import TrendsChart from "@/components/charts/trends-chart";
 import CategoryChart from "@/components/charts/category-chart";
@@ -195,6 +195,7 @@ export default function Dashboard() {
     // Match screenshot style ($401k instead of $401K)
     return formatted.replace(/K/g, "k");
   };
+
 
   const renderCategoryBadge = (categoryInput: unknown) => {
     const raw = String(categoryInput ?? "").trim();
@@ -399,160 +400,180 @@ export default function Dashboard() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50">
-        <div
-          className="max-w-[1400px] mx-auto px-8 py-8"
-          style={{ zoom: 0.88 }}
-        >
-          {/* Modern Header with Greeting and Buttons */}
-          <div className="mb-8 flex items-start justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                {getGreeting()}, {getFirstName()}!
-              </h1>
-            </div>
-            
-            {/* Action Buttons on Right */}
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                className={`${location.pathname === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-600 hover:text-white' : 'bg-white text-blue-600 border-blue-600 hover:bg-blue-50'} px-6 py-2.5 rounded-lg font-medium`}
-                onClick={() => navigate('/dashboard')}
-              >
-                Subscription
-              </Button>
-              <Button
-                variant="outline"
-                className={`${location.pathname === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-600 hover:text-white' : 'bg-white text-blue-600 border-blue-600 hover:bg-blue-50'} px-6 py-2.5 rounded-lg font-medium`}
-                onClick={() => navigate('/compliance-dashboard')}
-              >
-                Compliance
-              </Button>
-              <Button
-                variant="outline"
-                className={`${location.pathname === '/calendar' ? 'bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-600 hover:text-white' : 'bg-white text-blue-600 border-blue-600 hover:bg-blue-50'} px-6 py-2.5 rounded-lg font-medium`}
-                onClick={() => navigate('/calendar')}
-              >
-                Calendar
-              </Button>
-            </div>
-          </div>
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <div className="flex-1 w-full">
+          <div className="w-full px-4 sm:px-6 lg:px-8 py-6" style={{ zoom: 0.92 }}>
+            {/* Greeting Card */}
+            <div
+              className="mb-6 flex items-start justify-between rounded-2xl px-8 py-6 shadow-sm border border-purple-100/50 overflow-hidden backdrop-blur-xl"
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",
+              }}
+            >
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <svg className="absolute -right-12 -top-12 w-72 h-72 opacity-[0.18]" viewBox="0 0 200 200" fill="none">
+                  <circle cx="100" cy="100" r="100" fill="#a78bfa" />
+                </svg>
+                <svg className="absolute right-16 -bottom-20 w-56 h-56 opacity-[0.12]" viewBox="0 0 200 200" fill="none">
+                  <circle cx="100" cy="100" r="100" fill="#8b5cf6" />
+                </svg>
+                <svg className="absolute right-1/3 -top-10 w-36 h-36 opacity-[0.08]" viewBox="0 0 200 200" fill="none">
+                  <circle cx="100" cy="100" r="100" fill="#7c3aed" />
+                </svg>
+                <svg className="absolute left-1/4 bottom-0 w-28 h-28 opacity-[0.06]" viewBox="0 0 200 200" fill="none">
+                  <circle cx="100" cy="100" r="100" fill="#c4b5fd" />
+                </svg>
+              </div>
 
-          {/* Filters */}
-          <div className="mb-6 flex items-center gap-4">
-            <Select value={dateRange} onValueChange={setDateRange}>
-              <SelectTrigger className="w-48 bg-white border-gray-300 px-2">
-                <SelectValue placeholder="Last 6 months" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="3months">Last 3 months</SelectItem>
-                <SelectItem value="6months">Last 6 months</SelectItem>
-                <SelectItem value="12months">Last 12 months</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-48 bg-white border-gray-300 px-2">
-                <SelectValue placeholder="All Categories" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {uniqueCategories.map(category => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <div className="relative z-10">
+                <h1 className="text-2xl font-bold text-gray-900 mb-1">
+                  {getGreeting()}, {getFirstName()}!
+                </h1>
+              </div>
 
-        {/* Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Monthly Spend Card */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border-t-4 border-blue-500">
-            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3 relative z-10">
+                <Button
+                  variant="outline"
+                  className={`${location.pathname === "/dashboard"
+                    ? "bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-700 hover:text-white"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                  onClick={() => navigate("/dashboard")}
+                >
+                  Subscription
+                </Button>
+                <Button
+                  variant="outline"
+                  className={`${location.pathname === "/compliance-dashboard"
+                    ? "bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-700 hover:text-white"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                  onClick={() => navigate("/compliance-dashboard")}
+                >
+                  Compliance
+                </Button>
+                <Button
+                  variant="outline"
+                  className={`${location.pathname === "/calendar"
+                    ? "bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-700 hover:text-white"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                  onClick={() => navigate("/calendar")}
+                >
+                  Calendar
+                </Button>
+              </div>
+            </div>
+
+            {/* Filters */}
+            <div className="mb-6 flex items-center gap-4">
+              <Select value={dateRange} onValueChange={setDateRange}>
+                <SelectTrigger className="w-44 bg-white border-gray-300 rounded-lg text-sm shadow-sm">
+                  <SelectValue placeholder="Last 6 months" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3months">Last 3 months</SelectItem>
+                  <SelectItem value="6months">Last 6 months</SelectItem>
+                  <SelectItem value="12months">Last 12 months</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-44 bg-white border-gray-300 rounded-lg text-sm shadow-sm">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {uniqueCategories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Metrics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+              {/* Monthly Spend Card */}
+              <div className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-blue-500 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-600 mb-1">Monthly Spend</p>
-                <p className="text-3xl font-bold text-gray-900">
+                <p className="text-2xl font-bold text-gray-900">
                   ${cardMonthlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </p>
               </div>
-              <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <DollarSign className="h-6 w-6 text-blue-600" />
+                  <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Calendar className="h-5 w-5 text-blue-500" />
+                  </div>
+                </div>
+                <div className="flex items-center text-sm">
+                  <span className="text-green-600 font-medium flex items-center">
+                    <TrendingUp className="h-4 w-4 mr-1" />
+                    +12%
+                  </span>
+                  <span className="text-gray-500 ml-2">from last month</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center text-sm">
-              <span className="text-green-600 font-medium flex items-center">
-                <TrendingUp className="h-4 w-4 mr-1" />
-                +12%
-              </span>
-              <span className="text-gray-500 ml-2">from last month</span>
-            </div>
-          </div>
 
-          {/* Yearly Spend Card */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border-t-4 border-green-500">
-            <div className="flex items-start justify-between mb-4">
+              {/* Yearly Spend Card */}
+              <div className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-green-500 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-600 mb-1">Yearly Spend</p>
-                <p className="text-3xl font-bold text-gray-900">
+                <p className="text-2xl font-bold text-gray-900">
                   ${cardYearlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </p>
               </div>
-              <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <TrendingUp className="h-6 w-6 text-green-600" />
+                  <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="h-5 w-5 text-green-500" />
+                  </div>
+                </div>
+                <div className="flex items-center text-sm">
+                  <span className="text-green-600 font-medium flex items-center">
+                    <TrendingUp className="h-4 w-4 mr-1" />
+                    +8%
+                  </span>
+                  <span className="text-gray-500 ml-2">from last year</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center text-sm">
-              <span className="text-green-600 font-medium flex items-center">
-                <TrendingUp className="h-4 w-4 mr-1" />
-                +8%
-              </span>
-              <span className="text-gray-500 ml-2">from last year</span>
-            </div>
-          </div>
 
-          {/* Active Subscriptions Card */}
-          <div 
-            className="bg-white rounded-xl p-6 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow" 
-            onClick={() => setActiveSubscriptionsModalOpen(true)}
-          >
-            <div className="flex items-start justify-between mb-4">
+              {/* Active Subscriptions Card */}
+              <div 
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow" 
+                onClick={() => setActiveSubscriptionsModalOpen(true)}
+              >
+                <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-600 mb-1">Active Subscriptions</p>
-                <p className="text-3xl font-bold text-gray-900">
+                <p className="text-2xl font-bold text-gray-900">
                   {cardActiveSubscriptions}
                 </p>
               </div>
-              <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <RotateCcw className="h-6 w-6 text-purple-600" />
+                  <div className="h-10 w-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <RotateCcw className="h-5 w-5 text-purple-500" />
+                  </div>
+                </div>
+                <div className="text-sm text-gray-400">Click to view details</div>
               </div>
-            </div>
-            <div className="flex items-center text-sm">
-              <span className="text-purple-600 font-medium">Click to view details</span>
-            </div>
-          </div>
 
-          {/* Upcoming Renewals Card */}
-          <div 
-            className="bg-white rounded-xl p-6 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow" 
-            onClick={() => setUpcomingRenewalsModalOpen(true)}
-          >
-            <div className="flex items-start justify-between mb-4">
+              {/* Upcoming Renewals Card */}
+              <div 
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow" 
+                onClick={() => setUpcomingRenewalsModalOpen(true)}
+              >
+                <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-600 mb-1">Upcoming Renewals</p>
-                <p className="text-3xl font-bold text-gray-900">
+                <p className="text-2xl font-bold text-gray-900">
                   {cardUpcomingRenewals}
                 </p>
               </div>
-              <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Bell className="h-6 w-6 text-orange-600" />
+                  <div className="h-10 w-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Bell className="h-5 w-5 text-orange-500" />
+                  </div>
+                </div>
+                <div className="text-sm text-gray-400">Next 30 days · Click to view</div>
               </div>
             </div>
-            <div className="flex items-center text-sm">
-              <span className="text-orange-600 font-medium">Next 30 days - Click to view</span>
-            </div>
-          </div>
-        </div>
 
         {/* Charts Section */}
         <div className="mb-4">
@@ -562,12 +583,6 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Spending Trends */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Spending Trend</h3>
-              <span className="text-sm text-gray-500">
-                {dateRange === "3months" ? "Last 3 months" : dateRange === "12months" ? "Last 12 months" : "Last 6 months"}
-              </span>
-            </div>
             <div>
               {trendsLoading ? (
                 <Skeleton className="h-80 w-full" />
@@ -625,6 +640,14 @@ export default function Dashboard() {
                 <DialogTitle className="text-xl font-bold text-gray-900">
                   Active Subscriptions ({filteredSubscriptions.length})
                 </DialogTitle>
+                <button
+                  type="button"
+                  onClick={() => setActiveSubscriptionsModalOpen(false)}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
               </div>
             </DialogHeader>
             <div className="px-6 pb-6 pt-4">
@@ -699,6 +722,14 @@ export default function Dashboard() {
                 <DialogTitle className="text-xl font-bold text-gray-900">
                   Upcoming Renewals - Next 30 Days ({upcomingRenewals.length})
                 </DialogTitle>
+                <button
+                  type="button"
+                  onClick={() => setUpcomingRenewalsModalOpen(false)}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
               </div>
             </DialogHeader>
             <div className="px-6 pb-6 pt-4">
@@ -772,6 +803,7 @@ export default function Dashboard() {
             </div>
           </DialogContent>
         </Dialog>
+          </div>
         </div>
       </div>
     </ErrorBoundary>
