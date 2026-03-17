@@ -1436,8 +1436,16 @@ await generateRemindersForCompliance(updatedDoc, tenantId, db);
 router.get("/api/subscriptions", async (req, res) => {
   try {
     const startTime = Date.now();
-    
-    res.setHeader('Cache-Control', 'private, max-age=30'); // 30 second cache
+
+    // Tenant-specific response: never allow cached data to be reused after switching companies.
+    res.setHeader('Cache-Control', 'private, no-store');
+    // Ensure caches separate by auth cookie (JWT token contains tenantId).
+    const existingVary = String((res as any).getHeader?.('Vary') ?? '').trim();
+    if (!existingVary) {
+      res.setHeader('Vary', 'Cookie');
+    } else if (!existingVary.toLowerCase().split(',').map((v: string) => v.trim()).includes('cookie')) {
+      res.setHeader('Vary', `${existingVary}, Cookie`);
+    }
     
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
@@ -3169,16 +3177,63 @@ router.delete("/api/employees/:id", async (req, res) => {
 
 // --- Users API ---
 
+function isPlatformOwner(email?: string | null): boolean {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) return false;
+  const allow = String(process.env.PLATFORM_OWNER_EMAILS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return allow.includes(normalized);
+}
+
 // Add a new user
 router.post("/api/users", async (req, res) => {
+  const requestedRole = req.body?.role;
+  const isCreatingGlobalAdmin = requestedRole === 'global_admin';
+
   const tenantId = req.user?.tenantId;
-  if (!tenantId) {
+  if (!tenantId && !isCreatingGlobalAdmin) {
     return res.status(401).json({ message: "Missing tenantId in user context" });
   }
   
   try {
     const { password, name, email, role, status, department } = req.body;
 const db = await connectToDatabase();
+
+    // Reserve global_admin for internal/platform owner use only.
+    if (role === 'global_admin' && !isPlatformOwner(req.user?.email)) {
+      return res.status(403).json({ message: 'Access denied: global_admin role is reserved' });
+    }
+
+    if (role === 'global_admin') {
+      // Platform-level global admin is NOT tenant-bound
+      const existingPlatformAdmin = await db.collection('login').findOne({ email, role: 'global_admin' });
+      if (existingPlatformAdmin) {
+        return res.status(400).json({ message: 'Global admin already exists for this email' });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const result = await db.collection('login').insertOne({
+        fullName: name,
+        email: email,
+        password: hashedPassword,
+        tenantId: null,
+        role: 'global_admin',
+        status: status || 'active',
+        department: null,
+        createdAt: new Date(),
+      });
+
+      return res.status(201).json({
+        _id: result.insertedId,
+        name,
+        email,
+        role: 'global_admin',
+        status: status || 'active',
+        tenantId: null,
+      });
+    }
     
     // Check if email already exists in login collection for this tenant
     const existingUser = await db.collection("login").findOne({ email, tenantId });
@@ -3233,14 +3288,32 @@ router.put("/api/users/:_id", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
 
+    let objectId;
+    try {
+      objectId = new EmployeeObjectId(_id);
+    } catch {
+      return res.status(400).json({ message: "Invalid user _id" });
+    }
+
     const { name, email, role, status, department, password } = req.body || {};
+
+    // If the target user is a global_admin, only platform owner can modify.
+    const existing = await collection.findOne({ _id: objectId, tenantId });
+    if (existing?.role === 'global_admin' && !isPlatformOwner(req.user?.email)) {
+      return res.status(403).json({ message: 'Access denied: global_admin user is protected' });
+    }
+
+    // Reserve global_admin for internal/platform owner use only.
+    if (role === 'global_admin' && !isPlatformOwner(req.user?.email)) {
+      return res.status(403).json({ message: 'Access denied: global_admin role is reserved' });
+    }
     
     // Check if email is being updated and already exists (excluding current user)
     if (email) {
       const existingEmail = await collection.findOne({ 
         email, 
         tenantId,
-        _id: { $ne: new EmployeeObjectId(_id) }
+        _id: { $ne: objectId }
       });
       if (existingEmail) {
         return res.status(400).json({ message: "Email already exists" });
@@ -3252,7 +3325,7 @@ router.put("/api/users/:_id", async (req, res) => {
       const existingName = await collection.findOne({ 
         fullName: name, 
         tenantId,
-        _id: { $ne: new EmployeeObjectId(_id) }
+        _id: { $ne: objectId }
       });
       if (existingName) {
         return res.status(400).json({ message: "User name already exists" });
@@ -3264,16 +3337,15 @@ router.put("/api/users/:_id", async (req, res) => {
     if (name) updateData.fullName = name;
     if (email) updateData.email = email;
     if (role) updateData.role = role;
+    if (role === 'global_admin' && isPlatformOwner(req.user?.email)) {
+      updateData.tenantId = null;
+      updateData.department = null;
+    }
     if (status) updateData.status = status;
     if (department !== undefined) updateData.department = department;
     if (password) updateData.password = await bcrypt.hash(password, 10);
     
-    let filter;
-    try {
-      filter = { _id: new EmployeeObjectId(_id), tenantId };
-    } catch {
-      return res.status(400).json({ message: "Invalid user _id" });
-    }
+    const filter = { _id: objectId, tenantId };
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ message: "No valid fields to update" });
@@ -3508,7 +3580,7 @@ router.get("/api/notifications/compliance", async (req, res) => {
     };
 
     const isDeptRole = userRole === 'department_editor' || userRole === 'department_viewer';
-    const isAdminRole = userRole === 'admin' || userRole === 'super_admin';
+    const isAdminRole = userRole === 'admin' || userRole === 'super_admin' || userRole === 'global_admin';
 
     const deptMatches = (n: any) => {
       if (!normalizedDept) return false;
@@ -3699,7 +3771,7 @@ router.get("/api/notifications/license", async (req, res) => {
     };
 
     const isDeptRole = userRole === 'department_editor' || userRole === 'department_viewer';
-    const isAdminRole = userRole === 'admin' || userRole === 'super_admin';
+    const isAdminRole = userRole === 'admin' || userRole === 'super_admin' || userRole === 'global_admin';
 
     let raw: any[] = [];
     if (isAdminRole) {

@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, FileText, Calendar, CheckCircle, XCircle, Clock, ArrowLeft, History } from "lucide-react";
+import { FileText, Calendar, CheckCircle, XCircle, Clock, ArrowLeft, History } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 function sanitizeId(raw: string | null) {
@@ -179,7 +179,7 @@ export default function ComplianceLedger() {
 
   const complianceId = resolvedComplianceId;
   const isFilteredById = Boolean(complianceId);
-  const tableColumnCount = isFilteredById ? 6 : 7;
+  const tableColumnCount = isFilteredById ? 5 : 6;
   
   const fetchLedger = async () => {
     setLoading(true);
@@ -204,19 +204,6 @@ export default function ComplianceLedger() {
   }, [complianceId]);
   
   const displayedLedgerItems = ledgerItems;
-  
-  // Delete handler
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Do you want to delete this ledger record?')) {
-      try {
-        const res = await fetch(`/api/ledger/${id}`, { method: "DELETE" });
-        if (!res.ok) throw new Error("Failed to delete record");
-        await fetchLedger();
-      } catch {
-        // Optionally show error
-      }
-    }
-  };
   
   const derivedName = displayedLedgerItems?.[0]?.filingName || displayedLedgerItems?.[0]?.policy;
   const headerName = complianceNameParam || derivedName;
@@ -265,7 +252,6 @@ export default function ComplianceLedger() {
                     <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">End Date</TableHead>
                     <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">Submission Date</TableHead>
                     <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">Status</TableHead>
-                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -341,25 +327,6 @@ export default function ComplianceLedger() {
                               {statusInfo.icon}
                               {statusInfo.text}
                             </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50"
-                              >
-                                <Edit size={16} />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                                onClick={() => handleDelete(item._id)}
-                              >
-                                <Trash2 size={16} />
-                              </Button>
-                            </div>
                           </TableCell>
                         </TableRow>
                       );

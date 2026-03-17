@@ -5,7 +5,6 @@ import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { History, ArrowLeft } from "lucide-react";
 import { API_BASE_URL } from "@/lib/config";
-import { Badge } from "../components/ui/badge";
 
 function sanitizeId(raw: string | null) {
   const trimmed = (raw ?? "").trim();
@@ -103,22 +102,6 @@ export default function RenewalLog() {
       })
     : logs;
 
-  const getActionBadgeColor = (action: string) => {
-    switch (action?.toLowerCase()) {
-      case 'create':
-      case 'created':
-        return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'update':
-      case 'updated':
-        return 'bg-amber-100 text-amber-700 border-amber-200';
-      case 'delete':
-      case 'deleted':
-        return 'bg-red-100 text-red-700 border-red-200';
-      default:
-        return 'bg-slate-100 text-slate-700 border-slate-200';
-    }
-  };
-
   const formatTimestamp = (timestamp: string) => {
     if (!timestamp) return { date: 'N/A', time: '' };
     const date = new Date(timestamp);
@@ -187,7 +170,6 @@ export default function RenewalLog() {
                       )}
                       <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[180px]">Changed By</th>
                       <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[400px]">Changes</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[100px]">Action</th>
                       <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[140px]">Updated On</th>
                     </tr>
                   </thead>
@@ -225,11 +207,6 @@ export default function RenewalLog() {
                           <div className="whitespace-pre-line leading-relaxed">
                             {changesText}
                           </div>
-                        </td>
-                        <td className="align-top py-3 px-4">
-                          <Badge className={`${getActionBadgeColor(log.action)} px-2 py-1 text-xs font-medium border capitalize`}>
-                            {log.action}
-                          </Badge>
                         </td>
                         <td className="text-sm text-slate-500 align-top py-3 px-4">
                           <div className="flex flex-col">

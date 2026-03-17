@@ -147,7 +147,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           process.env.JWT_SECRET || "subs_secret_key"
         );
         if (typeof decoded === "object" && "tenantId" in decoded) {
-          req.user = decoded as any;
+          const d: any = decoded;
+          if (d?.role === "global_admin" && d?.actingTenantId) {
+            d.tenantId = d.actingTenantId;
+          }
+          req.user = d as any;
         } else {
           req.user = undefined;
         }
@@ -435,7 +439,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const db = await connectToDatabase();
       
       // First try the 'login' collection (primary auth collection)
-      let user = await db.collection("login").findOne({ email });
+      // Prefer platform-level global_admin record if present
+      let user = await db.collection("login").findOne({ email, role: "global_admin" });
+      if (!user) {
+        user = await db.collection("login").findOne({ email });
+      }
       let isNewUserSystem = false;
       
       // If not found in login collection, try the 'users' collection (RBAC users with passwords)
@@ -492,12 +500,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Include role and department in JWT and response
+      const role = user.role || "viewer";
+
+      // Platform-level global_admin has tenantId=null (identity is not bound to a tenant).
+      // The session carries an actingTenantId for whichever tenant is currently selected.
+      let actingTenantId: string | null = null;
+      if (role === "global_admin") {
+        actingTenantId = user.tenantId || null;
+        if (!actingTenantId) {
+          const anyCompany = await db.collection("login").findOne(
+            { tenantId: { $ne: null }, companyName: { $exists: true } },
+            { sort: { createdAt: -1 } }
+          );
+          actingTenantId = anyCompany?.tenantId || null;
+        }
+      }
+
       const tokenPayload: any = {
         userId: user._id,
         email: user.email,
-        tenantId: user.tenantId || null,
-        role: user.role || "viewer",
-        department: userDepartment
+        tenantId: role === "global_admin" ? null : (user.tenantId || null),
+        actingTenantId: role === "global_admin" ? actingTenantId : undefined,
+        role,
+        department: userDepartment,
       };
       const token = jwt.sign(
         tokenPayload,
@@ -518,7 +543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: user.email,
           name: user.name,
           tenantId: user.tenantId || null,
-          role: user.role || "viewer",
+          role,
           department: userDepartment,
           status: user.status
         }
@@ -672,9 +697,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (nextPassword !== undefined) {
         const effectiveRole = user.role || dbUser.role || "viewer";
 
-        // If currentPassword is not provided, only allow super_admin to reset their own password.
+        // If currentPassword is not provided, only allow super_admin/global_admin to reset their own password.
         if (!providedCurrentPassword) {
-          if (effectiveRole !== "super_admin") {
+          if (effectiveRole !== "super_admin" && effectiveRole !== "global_admin") {
             return res.status(400).json({ message: "Current password is required" });
           }
         } else {
@@ -751,17 +776,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
       const db = await connectToDatabase();
-      
-      // Get all companies/tenants this user has access to
-      const companies = await db.collection("login")
-        .find({ email: (await db.collection("login").findOne({ _id: new ObjectId(user.userId) }))?.email })
-        .toArray();
-      
-      const companyList = companies.map(c => ({
-        tenantId: c.tenantId,
-        companyName: c.companyName || 'Unnamed Company',
-        isActive: c.tenantId === user.tenantId
-      }));
+
+      const isGlobalAdmin = user?.role === 'global_admin';
+
+      // Global admin sees ALL companies (tenants). Normal users see only their own.
+      const companies = isGlobalAdmin
+        ? await db.collection('login').find({ tenantId: { $ne: null }, companyName: { $exists: true } }).toArray()
+        : await db.collection("login")
+            .find({ email: (await db.collection("login").findOne({ _id: new ObjectId(user.userId) }))?.email })
+            .toArray();
+
+      const companyList = companies
+        .filter((c: any) => !!c?.tenantId)
+        .map((c: any) => ({
+          tenantId: c.tenantId,
+          companyName: c.companyName || 'Unnamed Company',
+          isActive: c.tenantId === user.tenantId,
+        }));
       
       res.status(200).json(companyList);
     } catch (err) {
@@ -789,23 +820,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!dbUser) {
         return res.status(404).json({ message: "User not found" });
       }
-      
-      // Verify user has access to this tenant
-      const hasAccess = await db.collection("login").findOne({ 
-        email: dbUser.email, 
-        tenantId 
-      });
-      
-      if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied to this company" });
+
+      const isGlobalAdmin = user?.role === 'global_admin' || dbUser?.role === 'global_admin';
+
+      // Ensure tenant exists when global admin switches
+      if (isGlobalAdmin) {
+        const companyExists = await db.collection('login').findOne({ tenantId, companyName: { $exists: true } });
+        if (!companyExists) {
+          return res.status(404).json({ message: 'Company not found' });
+        }
       }
       
-      // Generate new token with updated tenantId
-      const tokenPayload = {
+      // Verify user has access to this tenant (normal users only)
+      if (!isGlobalAdmin) {
+        const hasAccess = await db.collection("login").findOne({ 
+          email: dbUser.email, 
+          tenantId 
+        });
+        
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Access denied to this company" });
+        }
+      }
+
+      // Generate new token
+      const tokenPayload: any = {
         userId: user.userId,
         email: dbUser.email,
-        tenantId: tenantId
+        role: dbUser.role || user.role || 'viewer',
       };
+      if (isGlobalAdmin) {
+        tokenPayload.tenantId = null;
+        tokenPayload.actingTenantId = tenantId;
+      } else {
+        tokenPayload.tenantId = tenantId;
+      }
       
       const token = jwt.sign(
         tokenPayload,
@@ -907,15 +956,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== Users =====
+  function isPlatformOwner(email?: string | null): boolean {
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!normalized) return false;
+    const allow = String(process.env.PLATFORM_OWNER_EMAILS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    return allow.includes(normalized);
+  }
+
   app.get("/api/users", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
     try {
       const db = await connectToDatabase();
       const users = await db.collection("login").find({ tenantId }).toArray();
+
+      const allowGlobalAdmin = isPlatformOwner(req.user?.email);
+      const visibleUsers = allowGlobalAdmin
+        ? users
+        : users.filter((u: any) => u?.role !== 'global_admin');
       
       // Map to match expected format and remove passwords
-      const formattedUsers = users.map(user => ({
+      const formattedUsers = visibleUsers.map(user => ({
         id: user._id.toString(),
         _id: user._id,
         name: user.fullName || user.name,
@@ -939,6 +1003,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = req.params.id;
       const user = await storage.getUser(id, tenantId);
       if (!user) return res.status(404).json({ message: "User not found" });
+
+      if ((user as any)?.role === 'global_admin' && !isPlatformOwner(req.user?.email)) {
+        return res.status(404).json({ message: "User not found" });
+      }
       res.json(user);
     } catch {
       res.status(500).json({ message: "Failed to fetch user" });
@@ -951,6 +1019,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = req.params.id;
       const db = await connectToDatabase();
+
+      // Prevent deleting internal global_admin except by platform owner
+      const existing = await db.collection("login").findOne({ _id: new ObjectId(id), tenantId });
+      if (existing?.role === 'global_admin' && !isPlatformOwner(req.user?.email)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
       
       // Delete from login collection
       const result = await db.collection("login").deleteOne({

@@ -293,7 +293,7 @@ async function getNotificationRecipients(
     };
 
     // Add admins
-    const admins = allUsers.filter(u => u.role === 'admin' || u.role === 'super_admin');
+    const admins = allUsers.filter(u => u.role === 'admin' || u.role === 'super_admin' || u.role === 'global_admin');
     console.log(`  Found ${admins.length} admins`);
     for (const admin of admins) {
       if (rule.admin.inApp || rule.admin.email) {

@@ -2437,15 +2437,14 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
 
       <button
         onClick={() => setIsOpen(true)}
-        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-700 hover:bg-white/60 hover:text-gray-900 hover:shadow-md backdrop-blur-sm transition-all duration-200"
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white hover:bg-white/10 hover:shadow-md backdrop-blur-sm transition-all duration-200"
       >
         <div 
-          className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 shadow-lg border border-white/20 transition-all duration-200"
+          className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-white/10 border border-white/10 transition-all duration-200"
           style={{
-            boxShadow: '0 6px 20px rgba(79, 70, 229, 0.5), inset 0 1px 0 rgba(255,255,255,0.3)'
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)'
           }}
         >
-          <div className="absolute inset-0 rounded-lg bg-gradient-to-b from-white/30 to-transparent" style={{ height: '50%' }} />
           <FileSpreadsheet className="w-4 h-4 text-white relative z-10" />
         </div>
         <span className="font-medium">Import/Export</span>

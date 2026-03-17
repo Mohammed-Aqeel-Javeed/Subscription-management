@@ -108,8 +108,8 @@ export const requireRole = (...allowedRoles: string[]) => {
       return res.status(403).json({ message: "Access denied: No role assigned" });
     }
     
-    // Super admin has access to everything
-    if (user.role === 'super_admin') {
+    // Super/Global admin has access to everything
+    if (user.role === 'super_admin' || user.role === 'global_admin') {
       return next();
     }
     

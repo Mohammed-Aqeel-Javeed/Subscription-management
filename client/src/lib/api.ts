@@ -5,6 +5,7 @@ export const apiFetch = (endpoint: string, options?: RequestInit) => {
   const url = `${API_BASE_URL}${endpoint}`;
   return fetch(url, {
     credentials: 'include',
+    cache: 'no-store',
     ...options,
   }).then(async response => {
     return response;
