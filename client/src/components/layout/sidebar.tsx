@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Layers, Settings, FileBarChart, User, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft } from "lucide-react";
+import { BarChart3, Layers, Settings, FileBarChart, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api";
 import { UnifiedImportExport } from "../unified-import-export";
@@ -44,9 +44,16 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
 
   const getColorForCompany = (name: string) => {
     const colors = [
-      'bg-yellow-500', 'bg-purple-400', 'bg-amber-600', 'bg-teal-500', 
-      'bg-pink-400', 'bg-indigo-500', 'bg-red-500', 'bg-green-500',
-      'bg-blue-500', 'bg-orange-500'
+      "bg-yellow-500",
+      "bg-purple-400",
+      "bg-amber-600",
+      "bg-teal-500",
+      "bg-pink-400",
+      "bg-indigo-500",
+      "bg-red-500",
+      "bg-green-500",
+      "bg-blue-500",
+      "bg-orange-500",
     ];
     const index = name.charCodeAt(0) % colors.length;
     return colors[index];
@@ -65,17 +72,17 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
       }
 
       // Notify the app that tenant context changed.
-      window.dispatchEvent(new Event('account-changed'));
+      window.dispatchEvent(new Event("account-changed"));
 
       queryClient.clear();
       window.location.reload();
-      
+
       toast({
         title: "Company Switched",
         description: "Successfully switched to the selected company",
         variant: "success",
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to switch company. Please try again.",
@@ -85,17 +92,34 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-fade-in border border-gray-200" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-fade-in border border-gray-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <Shuffle size={18} className="text-blue-700" />
             <span className="text-lg font-semibold text-gray-900">Available Companies</span>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1 rounded-full focus:outline-none">
-            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 p-1 rounded-full focus:outline-none"
+          >
+            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
         </div>
+
         <div className="p-4">
           <div className="mb-3">
             <input
@@ -106,8 +130,9 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
               className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
             />
           </div>
+
           <div className="mb-2 text-xs font-semibold text-gray-600 px-2">Your Companies</div>
-                <div className="max-h-64 overflow-y-auto custom-scrollbar">
+          <div className="max-h-64 overflow-y-auto custom-scrollbar">
             {isLoading ? (
               <div className="text-center py-4 text-gray-500 text-sm">Loading...</div>
             ) : filteredCompanies.length === 0 ? (
@@ -125,7 +150,9 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
                     }}
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-left"
                   >
-                    <div className={`h-8 w-8 ${getColorForCompany(company.companyName)} rounded-full flex items-center justify-center flex-shrink-0`}>
+                    <div
+                      className={`h-8 w-8 ${getColorForCompany(company.companyName)} rounded-full flex items-center justify-center flex-shrink-0`}
+                    >
                       <span className="text-xs font-bold text-white">{getInitials(company.companyName)}</span>
                     </div>
                     <span className="flex-1 truncate text-sm text-gray-900">{company.companyName}</span>
@@ -137,7 +164,7 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
               </div>
             )}
           </div>
-          
+
           {/* Add Company Button */}
           <div className="mt-4 pt-4 border-t border-gray-200">
             <button
@@ -145,23 +172,23 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
                 try {
                   // Logout first
                   await fetch("/api/logout", { method: "POST", credentials: "include" });
-                  
+
                   // Clear session storage
                   sessionStorage.removeItem("isAuthenticated");
                   sessionStorage.clear();
-                  
+
                   // Clear all React Query cache
                   queryClient.clear();
-                  
+
                   // Dispatch logout event
-                  window.dispatchEvent(new Event('logout'));
-                  
+                  window.dispatchEvent(new Event("logout"));
+
                   // Close dialog
                   onClose();
-                  
+
                   // Navigate to signup with a flag to open the add company modal
-                  navigate('/signup?addCompany=true', { replace: true });
-                } catch (error) {
+                  navigate("/signup?addCompany=true", { replace: true });
+                } catch {
                   toast({
                     title: "Error",
                     description: "Failed to logout. Please try again.",
@@ -182,15 +209,14 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
 }
 
 const navItems = [
-  { path: "/dashboard", label: "Dashboard", icon: BarChart3, gradient: "from-blue-500 to-indigo-600", shadow: "rgba(59, 130, 246, 0.5)" },
-  { path: "/subscriptions", label: "Subscriptions", icon: Layers, gradient: "from-purple-500 to-pink-600", shadow: "rgba(168, 85, 247, 0.5)" },
-  { path: "/compliance", label: "Compliance", icon: Award, gradient: "from-amber-500 to-orange-600", shadow: "rgba(245, 158, 11, 0.5)" },
-  { path: "/government-license", label: "Renewals", icon: ShieldCheck, gradient: "from-emerald-500 to-teal-600", shadow: "rgba(16, 185, 129, 0.5)" },
-  { path: "/notifications", label: "Notifications", icon: BellRing, gradient: "from-rose-500 to-red-600", shadow: "rgba(244, 63, 94, 0.5)" },
-  { path: "/reminders", label: "Setup & Configuration", icon: Settings, gradient: "from-cyan-500 to-blue-600", shadow: "rgba(6, 182, 212, 0.5)" },
-  { path: "/company-details", label: "Company Details", icon: Building2, gradient: "from-violet-500 to-purple-600", shadow: "rgba(139, 92, 246, 0.5)" },
-  { path: "/reports", label: "Reports", icon: FileBarChart, gradient: "from-lime-500 to-green-600", shadow: "rgba(132, 204, 22, 0.5)" },
-  // ...removed User Management link...
+  { path: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { path: "/subscriptions", label: "Subscriptions", icon: Layers },
+  { path: "/compliance", label: "Compliance", icon: Award },
+  { path: "/government-license", label: "Renewals", icon: ShieldCheck },
+  { path: "/notifications", label: "Notifications", icon: BellRing },
+  { path: "/reminders", label: "Setup & Configuration", icon: Settings },
+  { path: "/company-details", label: "Company Details", icon: Building2 },
+  { path: "/reports", label: "Reports", icon: FileBarChart },
 ];
 
 export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean; onToggle?: () => void }) {
@@ -238,12 +264,12 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   // Collapsed sidebar view (icon-only)
   if (!isOpen) {
     return (
-      <div className="flex flex-col h-full w-16 bg-[linear-gradient(180deg,#4338ca_0%,#5b3ee6_45%,#7c3aed_100%)] border-r border-white/10 shadow-[0_20px_50px_rgba(67,56,202,0.35)]">
+      <div className="flex flex-col h-full w-16 border-r border-indigo-200/50" style={{ background: 'linear-gradient(180deg, #ede9fe 0%, #e0d8fd 50%, #ddd5fc 100%)' }}>
         {/* Collapsed Header */}
-        <div className="flex flex-col items-center gap-1 px-2 pt-3 pb-2 bg-white/6 backdrop-blur-sm border-b border-white/10">
+        <div className="flex flex-col items-center gap-1 px-2 pt-3 pb-2 border-b border-indigo-200/50">
           <button
             onClick={onToggle}
-            className="relative group h-11 w-11 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/16 border border-white/15 shadow-sm transition-all duration-200 hover:scale-105"
+            className="relative group h-11 w-11 flex items-center justify-center rounded-xl bg-white/60 hover:bg-white/80 shadow-sm transition-all duration-200 hover:scale-105"
             aria-label="Open Sidebar"
           >
             <img
@@ -256,14 +282,14 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
             {/* On hover: swap small logo to the "open sidebar" icon */}
             <PanelLeft
               size={20}
-              className="absolute text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              className="absolute text-indigo-600 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
             />
           </button>
         </div>
 
         {/* Collapsed Navigation Icons */}
-        <nav className="flex-1 p-2 overflow-y-auto custom-scrollbar">
-          <ul className="space-y-2">
+        <nav className="flex-1 px-2 py-3 overflow-y-auto custom-scrollbar">
+          <ul className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
@@ -343,29 +369,23 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         </nav>
 
         {/* Collapsed Footer with User Avatar */}
-        <div className="p-2 border-t border-white/10 bg-white/6 backdrop-blur-sm space-y-2">
+        <div className="p-2 border-t border-indigo-200/50 space-y-2">
           <div className="flex items-center justify-center">
             <div 
-              className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-white/12 shadow-lg border border-white/15 cursor-pointer hover:scale-105 transition-transform"
-              style={{
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)'
-              }}
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-green-500 cursor-pointer hover:scale-105 transition-transform"
               title={currentUser?.fullName || currentUser?.email || "User"}
             >
-              <User className="text-white relative z-10" size={16} />
+              <span className="text-white font-bold text-sm">{(currentUser?.fullName || currentUser?.email || 'U').charAt(0).toUpperCase()}</span>
             </div>
           </div>
           
           <div className="flex items-center justify-center">
             <button
               onClick={handleLogout}
-              className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-white/12 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 border border-white/15 hover:bg-white/18"
-              style={{
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)'
-              }}
+              className="flex items-center justify-center w-9 h-9 rounded-lg text-indigo-400 hover:text-red-500 hover:bg-white/50 transition-all duration-200"
               title="Logout"
             >
-              <LogOut size={16} className="relative z-10" />
+              <LogOut size={16} />
             </button>
           </div>
         </div>
@@ -374,8 +394,8 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   }
 
   return (
-    <div className="flex flex-col h-full bg-[linear-gradient(180deg,#4338ca_0%,#5b3ee6_45%,#7c3aed_100%)] border-r border-white/10 shadow-[0_20px_50px_rgba(67,56,202,0.35)]">
-      <div className="flex flex-col items-start gap-1 px-4 pt-3 pb-2 bg-white/6 backdrop-blur-sm border-b border-white/10">
+    <div className="flex flex-col h-full border-r border-indigo-200/50" style={{ background: 'linear-gradient(180deg, #ede9fe 0%, #e0d8fd 50%, #ddd5fc 100%)' }}>
+      <div className="flex flex-col items-start gap-1 px-4 pt-3 pb-2 border-b border-indigo-200/50">
         <div className="flex items-center gap-2 justify-between w-full">
           <div className="flex items-center gap-0">
             <img 
@@ -384,14 +404,14 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
               className="w-20 h-20 object-contain drop-shadow-xl"
               style={{ imageRendering: 'crisp-edges' }}
             />
-            <h1 className="text-2xl font-bold text-white tracking-tight">
+            <h1 className="text-2xl font-bold text-indigo-900 tracking-tight">
               Trackla
             </h1>
           </div>
           {onToggle && (
             <button
               onClick={onToggle}
-              className="h-9 w-9 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/16 text-white transition-all duration-200 hover:scale-105 border border-white/10"
+              className="h-8 w-8 flex items-center justify-center rounded-lg bg-white/50 hover:bg-white/70 text-indigo-600 transition-all duration-200"
               title="Close Sidebar"
             >
               <PanelLeft className="h-5 w-5" />
@@ -399,23 +419,16 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           )}
         </div>
         {currentUser?.companyName && (
-          <div className="flex items-center gap-2 pl-2 pr-2">
-            <button
-              className="flex items-center justify-center flex-shrink-0 w-8 h-8 hover:bg-white/10 rounded-md transition-colors text-white/90"
-              onClick={() => setShowCompanySwitcherDialog(true)}
-              title="Switch Company"
-            >
-              <Shuffle size={18} className="text-white/90" />
-            </button>
-            <button
-              className="text-base text-white/90 font-bold leading-tight hover:text-white focus:outline-none text-left truncate"
-              onClick={() => setShowCompanySwitcherDialog(true)}
-              title="Switch Company"
-              style={{ background: 'none', border: 'none', padding: 0, margin: 0, cursor: 'pointer' }}
-            >
+          <button
+            className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/15 transition-all duration-200 w-full border border-indigo-200/40"
+            onClick={() => setShowCompanySwitcherDialog(true)}
+            title="Switch Company"
+          >
+            <Shuffle size={14} className="text-indigo-500 flex-shrink-0" />
+            <span className="text-sm text-indigo-700 font-semibold leading-tight truncate flex-1 text-left">
               {currentUser.companyName}
-            </button>
-          </div>
+            </span>
+          </button>
         )}
       </div>
       {/* Company Switcher Dialog */}
@@ -424,11 +437,11 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           onClose={() => setShowCompanySwitcherDialog(false)} 
         />
       )}
-      <nav className="flex-1 p-4 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 px-3 py-2 overflow-y-auto custom-scrollbar">
         {/* Default navigation (hidden when a page wants to fully use the sidebar) */}
         {pageSlotActive && pageSlotReplaceNav ? null : (
           <>
-            <ul className="space-y-1.5">
+            <ul className="space-y-0.5">
               {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -438,32 +451,16 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
               return (
                 <Can I="manage" a="Settings" key={item.path} fallback={null}>
                   <li>
-                    <Link to={item.path} className={`
-                      relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
-                      transition-all duration-200 group
-                      ${isActive 
-                        ? 'bg-white text-indigo-700 shadow-xl' 
-                        : 'text-white hover:bg-white/10 hover:shadow-md backdrop-blur-sm'
+                    <Link
+                      to={item.path}
+                      className={
+                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 " +
+                        (isActive
+                          ? "bg-indigo-600 text-white font-semibold shadow-md"
+                          : "text-indigo-800 hover:bg-white/50 hover:text-indigo-900")
                       }
-                    `}>
-                      <div className={`
-                        relative flex items-center justify-center w-9 h-9 rounded-lg
-                        transition-all duration-200
-                        ${isActive 
-                          ? 'bg-indigo-50/80 border border-indigo-100/80' 
-                          : 'bg-white/10 border border-white/10'
-                        }
-                      `}
-                      style={{
-                        boxShadow: isActive 
-                          ? '0 6px 14px rgba(79,70,229,0.14)' 
-                          : 'inset 0 1px 0 rgba(255,255,255,0.12)'
-                      }}>
-                        <Icon 
-                          size={16} 
-                          className={`relative z-10 ${isActive ? 'text-indigo-700' : 'text-white'}`} 
-                        />
-                      </div>
+                    >
+                      <Icon size={18} className="flex-shrink-0" />
                       <span className="font-sidebar font-semibold">
                         {item.label}
                       </span>
@@ -475,32 +472,16 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
             
             return (
               <li key={item.path}>
-                <Link to={item.path} className={`
-                  relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
-                  transition-all duration-200 group
-                  ${isActive 
-                    ? 'bg-white text-indigo-700 shadow-xl' 
-                    : 'text-white hover:bg-white/10 hover:shadow-md backdrop-blur-sm'
+                <Link
+                  to={item.path}
+                  className={
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 " +
+                    (isActive
+                      ? "bg-indigo-600 text-white font-semibold shadow-md"
+                      : "text-indigo-800 hover:bg-white/50 hover:text-indigo-900")
                   }
-                `}>
-                  <div className={`
-                    relative flex items-center justify-center w-9 h-9 rounded-lg
-                    transition-all duration-200
-                    ${isActive 
-                      ? 'bg-indigo-50/80 border border-indigo-100/80' 
-                      : 'bg-white/10 border border-white/10'
-                    }
-                  `}
-                  style={{
-                    boxShadow: isActive 
-                      ? '0 6px 14px rgba(79,70,229,0.14)' 
-                      : 'inset 0 1px 0 rgba(255,255,255,0.12)'
-                  }}>
-                    <Icon 
-                      size={16} 
-                      className={`relative z-10 ${isActive ? 'text-indigo-700' : 'text-white'}`} 
-                    />
-                  </div>
+                >
+                  <Icon size={18} className="flex-shrink-0" />
                   <span className="font-sidebar font-semibold">
                     {item.label}
                   </span>
@@ -511,7 +492,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
             </ul>
             
             {/* Import/Export Button in Navigation */}
-            <div className="mt-4 pt-4 border-t border-white/10">
+            <div className="mt-4 pt-4 border-t border-indigo-200/50">
               <UnifiedImportExport />
             </div>
           </>
@@ -524,42 +505,14 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         />
       </nav>
       
-      <div className="p-3 border-t border-white/10 bg-white/6 backdrop-blur-sm">
-        
-        <div className="flex items-center gap-2 p-2 rounded-xl bg-white/10 hover:bg-white/14 transition-all duration-200 cursor-pointer mb-2 border border-white/10">
-          <div 
-            className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-white/12 shadow-lg border border-white/15"
-            style={{
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)'
-            }}
-          >
-            <User className="text-white relative z-10" size={16} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">
-              {currentUser?.fullName || currentUser?.email || "User"}
-            </p>
-            <p className="text-xs text-white/70 truncate capitalize">
-              {currentUser?.role?.replace('_', ' ') || "User"}
-            </p>
-          </div>
-        </div>
-        
-        {/* Logout Button - Attractive Red Design with Reduced Width */}
-        <div className="flex justify-center">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold bg-white/10 text-white hover:bg-white/16 border border-white/10 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 group relative overflow-hidden"
-          >
-            {/* Content */}
-            <div className="relative flex items-center gap-2">
-              <div className="p-1 bg-white/15 rounded group-hover:bg-white/20 transition-colors duration-200">
-                <LogOut size={14} className="text-white transform group-hover:rotate-12 transition-transform duration-200" />
-              </div>
-              <span className="font-semibold tracking-wide">Logout</span>
-            </div>
-          </button>
-        </div>
+      <div className="px-3 py-3 border-t border-indigo-200/50">
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-indigo-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200"
+        >
+          <LogOut size={16} />
+          <span>Logout</span>
+        </button>
       </div>
     </div>
   );

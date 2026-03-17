@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Bell, Search, MoreVertical } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Bell, MoreVertical } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -14,25 +13,10 @@ type NotificationItem = {
   [key: string]: any;
 };
 
-// Define all available pages for search - matching sidebar exactly
-const pages = [
-  { name: "Dashboard", path: "/dashboard", keywords: ["dashboard", "home", "overview", "analytics"] },
-  { name: "Subscriptions", path: "/subscriptions", keywords: ["subscriptions", "services", "subs"] },
-  { name: "Compliance", path: "/compliance", keywords: ["compliance", "filing", "regulations"] },
-  { name: "Renewals", path: "/government-license", keywords: ["renewals", "license", "government", "permits"] },
-  { name: "Notifications", path: "/notifications", keywords: ["notifications", "alerts", "reminders"] },
-  { name: "Setup & Configuration", path: "/reminders", keywords: ["configuration", "settings", "setup", "reminders"] },
-  { name: "Company Details", path: "/company-details", keywords: ["company", "details", "employees", "departments"] },
-  { name: "Reports", path: "/reports", keywords: ["reports", "analytics"] },
-];
-
 export default function Header() {
   const { user } = useUser();
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showSearchResults, setShowSearchResults] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   const { data: subscriptionNotifications = [] } = useQuery<NotificationItem[]>({
@@ -60,20 +44,9 @@ export default function Header() {
     return dueFiltered.filter((n) => !(n as any)?.isRead).length;
   })();
 
-  // Filter pages based on search query
-  const filteredPages = searchQuery.trim()
-    ? pages.filter(page =>
-        page.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        page.keywords.some(keyword => keyword.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-    : [];
-
-  // Close search results when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setShowSearchResults(false);
-      }
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
         setShowProfileMenu(false);
       }
@@ -111,12 +84,6 @@ export default function Header() {
     return user?.fullName || user?.email || "User";
   };
 
-  const handleSearchSelect = (path: string) => {
-    navigate(path);
-    setSearchQuery("");
-    setShowSearchResults(false);
-  };
-
   const handleLogout = async () => {
     try {
       await fetch("/api/logout", {
@@ -132,44 +99,7 @@ export default function Header() {
 
   return (
     <div className="h-16 bg-white border-b border-gray-200 px-6 flex items-center justify-between sticky top-0 z-40">
-      {/* Search Bar */}
-      <div className="flex-1 max-w-xl relative" ref={searchRef}>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setShowSearchResults(true);
-            }}
-            onFocus={() => setShowSearchResults(true)}
-            className="pl-10 pr-4 h-10 bg-gray-50 border-gray-200 rounded-lg focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
-          />
-        </div>
-
-        {/* Search Results Dropdown */}
-        {showSearchResults && searchQuery.trim() && (
-          <div className="absolute top-full mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto z-50">
-            {filteredPages.length > 0 ? (
-              filteredPages.map((page) => (
-                <div
-                  key={page.path}
-                  onClick={() => handleSearchSelect(page.path)}
-                  className="px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0"
-                >
-                  <div className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 font-medium text-left">
-                    {page.name}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="px-4 py-3 text-gray-500 text-sm">No pages found</div>
-            )}
-          </div>
-        )}
-      </div>
+      <div className="flex-1" />
 
       {/* Right Side Icons */}
       <div className="flex items-center gap-4">
