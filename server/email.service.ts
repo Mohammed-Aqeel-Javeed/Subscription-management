@@ -20,9 +20,37 @@ class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private isConfigured: boolean = false;
   private lastError: { code?: string; message: string } | null = null;
+  private resend: any | null = null;
+  private isResendConfigured: boolean = false;
 
   constructor() {
+    this.setupResend();
     this.setupTransporter();
+  }
+
+  private setupResend() {
+    const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+    if (!apiKey) {
+      this.isResendConfigured = false;
+      this.resend = null;
+      return;
+    }
+
+    try {
+      // Keep runtime compatible with CommonJS output.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { Resend } = require('resend');
+      this.resend = new Resend(apiKey);
+      this.isResendConfigured = true;
+      this.lastError = null;
+    } catch (error) {
+      console.error('Error setting up Resend client:', error);
+      this.isResendConfigured = false;
+      this.resend = null;
+      this.lastError = {
+        message: error instanceof Error ? error.message : 'Error setting up Resend client'
+      };
+    }
   }
 
   private setupTransporter() {
@@ -73,17 +101,52 @@ class EmailService {
     const smtpSecure = process.env.SMTP_SECURE === 'true';
     return {
       configured: this.isConfigured,
+      resendConfigured: this.isResendConfigured,
       smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
       smtpPort,
       smtpSecure,
       smtpUserConfigured: !!process.env.SMTP_USER,
       smtpPassConfigured: !!process.env.SMTP_PASS,
       smtpFromConfigured: !!(process.env.SMTP_FROM || process.env.SMTP_USER),
+      resendFromConfigured: !!(process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER),
       lastError: this.lastError,
     };
   }
 
   async sendEmail(emailData: EmailData): Promise<boolean> {
+    // Prefer HTTPS email provider (Resend) when configured.
+    if (this.isResendConfigured && this.resend) {
+      try {
+        const from = String(process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+        if (!from) {
+          throw new Error('RESEND_FROM (or SMTP_FROM/SMTP_USER) is required for sending email');
+        }
+
+        const sendTimeoutMs = parseInt(process.env.EMAIL_SEND_TIMEOUT_MS || process.env.SMTP_SEND_TIMEOUT_MS || '15000');
+        const sendPromise = this.resend.emails.send({
+          from,
+          to: emailData.to,
+          subject: emailData.subject,
+          html: emailData.html,
+        });
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Email send timed out after ${sendTimeoutMs}ms`)), sendTimeoutMs)
+        );
+
+        await Promise.race([sendPromise, timeoutPromise]);
+        this.lastError = null;
+        return true;
+      } catch (error) {
+        console.error('❌ Error sending email via Resend:', error);
+        if (error instanceof Error) {
+          this.lastError = { code: (error as any)?.code, message: error.message };
+        } else {
+          this.lastError = { message: 'Unknown Resend sending error' };
+        }
+        // Fall through to SMTP attempt if configured.
+      }
+    }
+
     if (!this.isConfigured || !this.transporter) {
       console.error('❌ Email service is NOT configured. Please check SMTP_USER and SMTP_PASS environment variables.');
       console.error('   Current config:', {
@@ -92,7 +155,7 @@ class EmailService {
         user: process.env.SMTP_USER ? '***configured***' : 'MISSING',
         pass: process.env.SMTP_PASS ? '***configured***' : 'MISSING'
       });
-      this.lastError = { message: 'Email service not configured (missing SMTP_USER/SMTP_PASS or transporter not initialized)' };
+      this.lastError = { message: 'Email service not configured (no Resend configured, and SMTP not initialized)' };
       return false;
     }
 
