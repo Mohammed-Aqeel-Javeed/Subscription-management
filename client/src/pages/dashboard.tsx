@@ -451,6 +451,15 @@ export default function Dashboard() {
                 >
                   Compliance
                 </Button>
+                  <Button
+                    variant="outline"
+                    className={`${location.pathname === "/renewals"
+                      ? "bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-700 hover:text-white"
+                      : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                    onClick={() => navigate("/renewals")}
+                  >
+                    Renewal
+                  </Button>
                 <Button
                   variant="outline"
                   className={`${location.pathname === "/calendar"
