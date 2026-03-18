@@ -18,6 +18,53 @@ const setTenantSafeCache = (res: any, _maxAgeSeconds: number) => {
   }
 };
 
+const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const buildSubscriptionScopeFilter = (user: any, tenantId: string) => {
+  const userRole = user?.role;
+  const userId = user?.userId || user?.id;
+  const userEmail = user?.email;
+  const userDepartment = user?.department;
+
+  // Default: company-wide scope
+  let filter: any = { tenantId };
+
+  if (userRole === 'contributor') {
+    // Contributors can only see items where they are the owner
+    filter = {
+      tenantId,
+      $or: [
+        ...(userEmail ? [{ ownerEmail: userEmail }] : []),
+        ...(userId ? [{ owner: userId }] : []),
+      ],
+    };
+  } else if (userRole === 'department_editor' || userRole === 'department_viewer') {
+    // Department roles can only see items in their department OR Company Level items
+    if (userDepartment) {
+      const deptRegex = new RegExp(`\\"${escapeRegex(userDepartment)}\\"`, 'i');
+      const companyLevelRegex = /Company Level/i;
+
+      filter = {
+        tenantId,
+        $or: [
+          // departments stored as array
+          { departments: { $in: ['Company Level', userDepartment] } },
+
+          // department stored as plain string
+          { department: userDepartment },
+          { department: 'Company Level' },
+
+          // department stored as JSON string
+          { department: { $regex: deptRegex } },
+          { department: { $regex: companyLevelRegex } },
+        ],
+      };
+    }
+  }
+
+  return filter;
+};
+
 // Get dashboard metrics
 router.get("/api/analytics/dashboard", async (req, res) => {
   const tenantId = req.user?.tenantId;
@@ -29,20 +76,22 @@ router.get("/api/analytics/dashboard", async (req, res) => {
     const collection = db.collection("subscriptions");
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const scopeFilter = buildSubscriptionScopeFilter(req.user, tenantId);
     
     // Count active subscriptions for tenant
-    const activeSubscriptions = await collection.countDocuments({ status: "Active", tenantId });
+    const activeSubscriptions = await collection.countDocuments({ ...scopeFilter, status: "Active" });
     
     // Count upcoming renewals (next 30 days) for tenant
     const upcomingRenewals = await collection.countDocuments({
       status: "Active",
-      tenantId,
+      ...scopeFilter,
       nextRenewal: { $gte: now.toISOString(), $lte: thirtyDaysFromNow.toISOString() }
     });
     
     // OPTIMIZED: Only fetch amount and billingCycle, not full documents
     const subscriptions = await collection.find(
-      { status: "Active", tenantId },
+      { ...scopeFilter, status: "Active" },
       { projection: { amount: 1, billingCycle: 1 } }
     ).toArray();
     
@@ -96,6 +145,8 @@ router.get("/api/analytics/trends", async (req, res) => {
     
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
+
+    const scopeFilter = buildSubscriptionScopeFilter(req.user, tenantId);
     
     // Get last 6 months of data
     const now = new Date();
@@ -113,7 +164,7 @@ router.get("/api/analytics/trends", async (req, res) => {
     
     // OPTIMIZED: Only fetch needed fields
     const subscriptions = await collection.find(
-      { status: "Active", tenantId },
+      { ...scopeFilter, status: "Active" },
       { projection: { amount: 1, status: 1, startDate: 1, nextRenewal: 1 } }
     ).toArray();
     
@@ -157,10 +208,12 @@ router.get("/api/analytics/categories", async (req, res) => {
     
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
+
+    const scopeFilter = buildSubscriptionScopeFilter(req.user, tenantId);
     
     // OPTIMIZED: Only fetch category and amount
     const subscriptions = await collection.find(
-      { status: "Active", tenantId },
+      { ...scopeFilter, status: "Active" },
       { projection: { category: 1, amount: 1 } }
     ).toArray();
     

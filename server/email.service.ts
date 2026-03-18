@@ -143,9 +143,27 @@ class EmailService {
         );
 
         const result = await Promise.race([sendPromise, timeoutPromise]);
+
+        // Resend SDK may return { data, error } rather than throwing.
+        const resendError = (result as any)?.error;
+        if (resendError) {
+          const message =
+            typeof resendError === 'string'
+              ? resendError
+              : String(resendError?.message || resendError?.name || 'Resend send failed');
+          const err: any = new Error(message);
+          err.code = resendError?.code;
+          throw err;
+        }
+
+        const resendId =
+          (result as any)?.data?.id ??
+          (result as any)?.id ??
+          (result as any)?.data?.data?.id;
+
         this.lastSend = {
           provider: 'resend',
-          id: (result as any)?.id,
+          id: typeof resendId === 'string' ? resendId : undefined,
           at: new Date(),
           to: emailData.to,
           from,
