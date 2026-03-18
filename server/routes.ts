@@ -236,7 +236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate OTP
       const otp = generateOTP();
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
 
       // Store OTP in database
       await db.collection("otps").updateOne(
@@ -295,11 +295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (!emailSent) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn("⚠️ Email failed. OTP (dev only):", otp);
-        } else {
-          console.warn("⚠️ Email failed to send OTP.");
-        }
+        console.warn("⚠️ Email service not configured. OTP:", otp);
         const diagnostics = typeof (emailService as any)?.getDiagnostics === 'function'
           ? (emailService as any).getDiagnostics()
           : {
@@ -308,9 +304,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
         const provider = diagnostics?.lastSend?.provider;
         const messageId = diagnostics?.lastSend?.id;
-        const providerMessage = diagnostics?.lastError?.message;
         return res.status(502).json({
-          message: providerMessage ? `Failed to send OTP email: ${providerMessage}` : "Failed to send OTP email.",
+          message: "Failed to send OTP email.",
           emailSent: false,
           emailProvider: provider,
           emailMessageId: messageId,

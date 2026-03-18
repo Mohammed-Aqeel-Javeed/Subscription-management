@@ -127,8 +127,7 @@ class EmailService {
       smtpUserConfigured: !!process.env.SMTP_USER,
       smtpPassConfigured: !!process.env.SMTP_PASS,
       smtpFromConfigured: !!(process.env.SMTP_FROM || process.env.SMTP_USER),
-      resendFromConfigured: !!process.env.RESEND_FROM,
-      resendFromEffective: String(process.env.RESEND_FROM || 'Subscription Tracker <onboarding@resend.dev>'),
+      resendFromConfigured: !!(process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER),
       lastSend: this.lastSend,
       lastError: this.lastError,
     };
@@ -142,7 +141,10 @@ class EmailService {
     if (preferResend) {
       if (this.isResendConfigured && this.resend) {
         try {
-          const from = String(process.env.RESEND_FROM || 'Subscription Tracker <onboarding@resend.dev>').trim();
+          const from = String(process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+          if (!from) {
+            throw new Error('RESEND_FROM (or SMTP_FROM/SMTP_USER) is required for sending email');
+          }
 
           const sendTimeoutMs = parseInt(process.env.EMAIL_SEND_TIMEOUT_MS || process.env.SMTP_SEND_TIMEOUT_MS || '15000');
           const sendPromise = this.resend.emails.send({
