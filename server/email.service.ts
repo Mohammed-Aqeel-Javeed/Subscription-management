@@ -107,79 +107,102 @@ class EmailService {
     const port = parseInt(process.env.SMTP_PORT || '587');
     const smtpPort = Number.isFinite(port) ? port : 587;
     const smtpSecure = process.env.SMTP_SECURE === 'true';
+    const requestedProvider = String(process.env.EMAIL_PROVIDER || 'auto').trim().toLowerCase();
+    const resolvedProvider =
+      requestedProvider === 'resend' || requestedProvider === 'smtp'
+        ? requestedProvider
+        : this.isResendConfigured
+          ? 'resend'
+          : this.isConfigured
+            ? 'smtp'
+            : 'none';
     return {
       configured: this.isConfigured,
       resendConfigured: this.isResendConfigured,
+      emailProviderRequested: requestedProvider,
+      emailProviderResolved: resolvedProvider,
       smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
       smtpPort,
       smtpSecure,
       smtpUserConfigured: !!process.env.SMTP_USER,
       smtpPassConfigured: !!process.env.SMTP_PASS,
       smtpFromConfigured: !!(process.env.SMTP_FROM || process.env.SMTP_USER),
-      resendFromConfigured: !!(process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER),
+      resendFromConfigured: !!process.env.RESEND_FROM,
+      resendFromEffective: String(process.env.RESEND_FROM || 'Subscription Tracker <onboarding@resend.dev>'),
       lastSend: this.lastSend,
       lastError: this.lastError,
     };
   }
 
   async sendEmail(emailData: EmailData): Promise<boolean> {
-    // Prefer HTTPS email provider (Resend) when configured.
-    if (this.isResendConfigured && this.resend) {
-      try {
-        const from = String(process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
-        if (!from) {
-          throw new Error('RESEND_FROM (or SMTP_FROM/SMTP_USER) is required for sending email');
+    const requestedProvider = String(process.env.EMAIL_PROVIDER || 'auto').trim().toLowerCase();
+    const preferResend = requestedProvider !== 'smtp';
+    const allowSmtp = requestedProvider !== 'resend';
+
+    if (preferResend) {
+      if (this.isResendConfigured && this.resend) {
+        try {
+          const from = String(process.env.RESEND_FROM || 'Subscription Tracker <onboarding@resend.dev>').trim();
+
+          const sendTimeoutMs = parseInt(process.env.EMAIL_SEND_TIMEOUT_MS || process.env.SMTP_SEND_TIMEOUT_MS || '15000');
+          const sendPromise = this.resend.emails.send({
+            from,
+            to: emailData.to,
+            subject: emailData.subject,
+            html: emailData.html,
+          });
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Email send timed out after ${sendTimeoutMs}ms`)), sendTimeoutMs)
+          );
+
+          const result = await Promise.race([sendPromise, timeoutPromise]);
+
+          const resendError = (result as any)?.error;
+          if (resendError) {
+            const message =
+              typeof resendError === 'string'
+                ? resendError
+                : String(resendError?.message || resendError?.name || 'Resend send failed');
+            const err: any = new Error(message);
+            err.code = resendError?.code;
+            throw err;
+          }
+
+          const resendId =
+            (result as any)?.data?.id ??
+            (result as any)?.id ??
+            (result as any)?.data?.data?.id;
+
+          this.lastSend = {
+            provider: 'resend',
+            id: typeof resendId === 'string' ? resendId : undefined,
+            at: new Date(),
+            to: emailData.to,
+            from,
+            subject: emailData.subject,
+          };
+          this.lastError = null;
+          return true;
+        } catch (error) {
+          console.error('❌ Error sending email via Resend:', error);
+          if (error instanceof Error) {
+            this.lastError = { code: (error as any)?.code, message: error.message };
+          } else {
+            this.lastError = { message: 'Unknown Resend sending error' };
+          }
+          // IMPORTANT: do not fall back to SMTP when Resend is configured.
+          // SMTP is commonly blocked/slow on hosts like Render; fallback causes long delays and hides the real error.
+          return false;
         }
-
-        const sendTimeoutMs = parseInt(process.env.EMAIL_SEND_TIMEOUT_MS || process.env.SMTP_SEND_TIMEOUT_MS || '15000');
-        const sendPromise = this.resend.emails.send({
-          from,
-          to: emailData.to,
-          subject: emailData.subject,
-          html: emailData.html,
-        });
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Email send timed out after ${sendTimeoutMs}ms`)), sendTimeoutMs)
-        );
-
-        const result = await Promise.race([sendPromise, timeoutPromise]);
-
-        // Resend SDK may return { data, error } rather than throwing.
-        const resendError = (result as any)?.error;
-        if (resendError) {
-          const message =
-            typeof resendError === 'string'
-              ? resendError
-              : String(resendError?.message || resendError?.name || 'Resend send failed');
-          const err: any = new Error(message);
-          err.code = resendError?.code;
-          throw err;
-        }
-
-        const resendId =
-          (result as any)?.data?.id ??
-          (result as any)?.id ??
-          (result as any)?.data?.data?.id;
-
-        this.lastSend = {
-          provider: 'resend',
-          id: typeof resendId === 'string' ? resendId : undefined,
-          at: new Date(),
-          to: emailData.to,
-          from,
-          subject: emailData.subject,
-        };
-        this.lastError = null;
-        return true;
-      } catch (error) {
-        console.error('❌ Error sending email via Resend:', error);
-        if (error instanceof Error) {
-          this.lastError = { code: (error as any)?.code, message: error.message };
-        } else {
-          this.lastError = { message: 'Unknown Resend sending error' };
-        }
-        // Fall through to SMTP attempt if configured.
+      } else if (requestedProvider === 'resend') {
+        this.lastError = { message: 'EMAIL_PROVIDER=resend but RESEND_API_KEY is not configured' };
+        return false;
       }
+    }
+
+    if (!allowSmtp) {
+      this.lastError = this.lastError || { message: 'SMTP disabled (EMAIL_PROVIDER=resend)' };
+      return false;
     }
 
     if (!this.isConfigured || !this.transporter) {
@@ -190,7 +213,7 @@ class EmailService {
         user: process.env.SMTP_USER ? '***configured***' : 'MISSING',
         pass: process.env.SMTP_PASS ? '***configured***' : 'MISSING'
       });
-      this.lastError = { message: 'Email service not configured (no Resend configured, and SMTP not initialized)' };
+      this.lastError = { message: 'Email service not configured (SMTP not initialized)' };
       return false;
     }
 
