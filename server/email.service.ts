@@ -22,6 +22,14 @@ class EmailService {
   private lastError: { code?: string; message: string } | null = null;
   private resend: any | null = null;
   private isResendConfigured: boolean = false;
+  private lastSend: {
+    provider: 'resend' | 'smtp';
+    id?: string;
+    at: Date;
+    to: string;
+    from: string;
+    subject: string;
+  } | null = null;
 
   constructor() {
     this.setupResend();
@@ -109,6 +117,7 @@ class EmailService {
       smtpPassConfigured: !!process.env.SMTP_PASS,
       smtpFromConfigured: !!(process.env.SMTP_FROM || process.env.SMTP_USER),
       resendFromConfigured: !!(process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER),
+      lastSend: this.lastSend,
       lastError: this.lastError,
     };
   }
@@ -133,7 +142,15 @@ class EmailService {
           setTimeout(() => reject(new Error(`Email send timed out after ${sendTimeoutMs}ms`)), sendTimeoutMs)
         );
 
-        await Promise.race([sendPromise, timeoutPromise]);
+        const result = await Promise.race([sendPromise, timeoutPromise]);
+        this.lastSend = {
+          provider: 'resend',
+          id: (result as any)?.id,
+          at: new Date(),
+          to: emailData.to,
+          from,
+          subject: emailData.subject,
+        };
         this.lastError = null;
         return true;
       } catch (error) {
@@ -167,6 +184,8 @@ class EmailService {
         html: emailData.html
       };
 
+      const from = String(mailOptions.from || '').trim();
+
       console.log(`📧 Sending email...`);
 
       const sendTimeoutMs = parseInt(process.env.SMTP_SEND_TIMEOUT_MS || '15000');
@@ -177,6 +196,14 @@ class EmailService {
 
       const info = await Promise.race([sendPromise, timeoutPromise]);
       console.log(`✅ Email sent successfully! Message ID: ${info.messageId}`);
+      this.lastSend = {
+        provider: 'smtp',
+        id: (info as any)?.messageId,
+        at: new Date(),
+        to: emailData.to,
+        from,
+        subject: emailData.subject,
+      };
       this.lastError = null;
       return true;
     } catch (error) {
