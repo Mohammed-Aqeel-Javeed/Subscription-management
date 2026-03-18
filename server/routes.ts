@@ -302,9 +302,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               configured: false,
               lastError: { message: 'Email service diagnostics unavailable' },
             };
+        const provider = diagnostics?.lastSend?.provider;
+        const messageId = diagnostics?.lastSend?.id;
         return res.status(200).json({
           message: "Failed to send OTP email.",
           emailSent: false,
+          emailProvider: provider,
+          emailMessageId: messageId,
           emailDiagnostics: diagnostics,
           devOtp: process.env.NODE_ENV === 'development' ? otp : undefined
         });
@@ -313,9 +317,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const successDiagnostics = typeof (emailService as any)?.getDiagnostics === 'function'
         ? (emailService as any).getDiagnostics()
         : undefined;
+      const provider = (successDiagnostics as any)?.lastSend?.provider;
+      const messageId = (successDiagnostics as any)?.lastSend?.id;
       res.status(200).json({
         message: "OTP sent successfully to your email",
         emailSent: true,
+        emailProvider: provider,
+        emailMessageId: messageId,
         emailDiagnostics: successDiagnostics,
       });
     } catch (err) {
