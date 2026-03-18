@@ -310,7 +310,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      res.status(200).json({ message: "OTP sent successfully to your email" });
+      const successDiagnostics = typeof (emailService as any)?.getDiagnostics === 'function'
+        ? (emailService as any).getDiagnostics()
+        : undefined;
+      res.status(200).json({
+        message: "OTP sent successfully to your email",
+        emailSent: true,
+        emailDiagnostics: successDiagnostics,
+      });
     } catch (err) {
       console.error("Send OTP error:", err);
       res.status(500).json({ message: "Failed to send OTP" });
