@@ -437,16 +437,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "User already exists with this email" });
       }
 
+      const platformOwner = isPlatformOwner(email);
+
       // Hash the password before storing
       const hashedPassword = await bcrypt.hash(password, 10);
       const doc = { 
         fullName, 
         email, 
         password: hashedPassword, 
-        tenantId,
-        companyName: companyName || fullName + "'s Company",
+        tenantId: platformOwner ? null : tenantId,
+        companyName: platformOwner ? (companyName || 'Platform') : (companyName || fullName + "'s Company"),
         defaultCurrency: defaultCurrency || null,
-        role: "super_admin", // First user gets super_admin role
+        role: platformOwner ? "global_admin" : "super_admin",
         status: "active",
         createdAt: new Date() 
       };
@@ -591,10 +593,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/me", async (req, res) => {
     try {
       const user = req.user as any;
-      if (!user?.userId || !user?.tenantId) {
+      const db = await connectToDatabase();
+      if (!user?.userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      const db = await connectToDatabase();
       
       // Fetch the user record that matches BOTH the userId (email) AND the current tenantId
       // First get the email from the userId
@@ -602,11 +604,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!userRecord) {
         return res.status(404).json({ message: "User not found" });
       }
+
+      // global_admin is platform-level (tenantId=null). It may not exist as a tenant-bound login record.
+      // For global_admin, return the identity record and (optionally) a current tenant context from actingTenantId.
+      if (user?.role === "global_admin") {
+        const effectiveTenantId = user?.actingTenantId ?? user?.tenantId ?? null;
+        const role = user.role || userRecord.role || "viewer";
+        const department = user.department || userRecord.department || undefined;
+
+        let companyName: string | null = null;
+        let defaultCurrency: string | null = (userRecord as any)?.defaultCurrency || null;
+
+        if (effectiveTenantId) {
+          const companyInfo = await db.collection("companyInfo").findOne({ tenantId: effectiveTenantId });
+          if (companyInfo) {
+            companyName = (companyInfo as any)?.companyName || null;
+            defaultCurrency = (companyInfo as any)?.defaultCurrency || defaultCurrency;
+          } else {
+            const anyLogin = await db.collection("login").findOne({
+              tenantId: effectiveTenantId,
+              companyName: { $exists: true },
+            });
+            companyName = (anyLogin as any)?.companyName || null;
+            defaultCurrency = (anyLogin as any)?.defaultCurrency || defaultCurrency;
+          }
+        }
+
+        return res.status(200).json({
+          userId: userRecord._id,
+          email: userRecord.email,
+          fullName: (userRecord as any).fullName || null,
+          profileImage: (userRecord as any).profileImage || null,
+          companyName,
+          tenantId: effectiveTenantId,
+          defaultCurrency,
+          role,
+          department,
+        });
+      }
+
+      const effectiveTenantId = user?.tenantId ?? null;
+      if (!effectiveTenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
       
       // Now fetch the specific company record for this user with the current tenantId
       const dbUser = await db.collection("login").findOne({ 
         email: userRecord.email, 
-        tenantId: user.tenantId 
+        tenantId: effectiveTenantId 
       });
       
       if (!dbUser) {
@@ -637,7 +682,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/me", async (req, res) => {
     try {
       const user = req.user as any;
-      if (!user?.userId || !user?.tenantId) {
+      const effectiveTenantId =
+        user?.role === "global_admin"
+          ? (user?.actingTenantId ?? user?.tenantId ?? null)
+          : (user?.tenantId ?? null);
+
+      if (!user?.userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
@@ -666,16 +716,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Invalid user email" });
       }
 
-      const dbUser = await db.collection("login").findOne({
-        email: userRecord.email,
-        tenantId: user.tenantId,
-      });
+      // Resolve which record we're updating.
+      // - Non-global users: update the tenant-bound record (email + tenantId)
+      // - global_admin: update the identity record (tenantId=null) regardless of acting tenant context
+      const isGlobalAdmin = user?.role === "global_admin";
+      if (!isGlobalAdmin && !effectiveTenantId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const dbUser = isGlobalAdmin
+        ? userRecord
+        : await db.collection("login").findOne({ email: userRecord.email, tenantId: effectiveTenantId });
 
       if (!dbUser) {
         return res.status(404).json({ message: "Company not found for this tenant" });
       }
 
-      const tenantId = user.tenantId;
+      const tenantId = isGlobalAdmin ? (dbUser.tenantId ?? null) : effectiveTenantId;
       const updateData: any = {};
 
       if (nextFullName) {
@@ -751,7 +808,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updated = await db.collection("login").findOneAndUpdate(
-        { _id: dbUser._id, tenantId },
+        isGlobalAdmin ? { _id: dbUser._id } : { _id: dbUser._id, tenantId },
         { $set: updateData },
         { returnDocument: "after" }
       );
@@ -768,7 +825,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const tokenPayload = {
           userId: user.userId,
           email: nextEmail,
-          tenantId: user.tenantId,
+          tenantId: isGlobalAdmin ? null : user.tenantId,
+          actingTenantId: isGlobalAdmin ? (user.actingTenantId ?? null) : undefined,
           role,
           department,
         };

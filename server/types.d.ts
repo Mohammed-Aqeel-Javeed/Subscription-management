@@ -4,7 +4,8 @@ import { Request } from "express";
 export interface AuthenticatedUser {
   userId: string;
   email: string;
-  tenantId: string;
+  tenantId: string | null;
+  actingTenantId?: string | null;
   role?: string;
   department?: string;
   // ...other user properties
@@ -20,7 +21,8 @@ declare global {
 
 export interface User {
   userId: string;
-  tenantId: string;
+  tenantId: string | null;
+  actingTenantId?: string | null;
   email?: string;
   name?: string;
   role?: string;
