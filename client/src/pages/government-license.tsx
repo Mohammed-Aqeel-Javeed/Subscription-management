@@ -1772,6 +1772,8 @@ export default function GovernmentLicense() {
       if (!res.ok) throw new Error("Failed to fetch licenses");
       return res.json();
     },
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 
   // Auto-open license modal if coming from notifications
