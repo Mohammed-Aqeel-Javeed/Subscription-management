@@ -7,14 +7,13 @@ const JWT_SECRET = process.env.JWT_SECRET || "subs_secret_key";
 export interface AuthUser {
   userId: string;
   email: string;
-  tenantId: string;
+  tenantId: string | null;
+  actingTenantId?: string | null;
   role?: string;
   department?: string;
 }
 
-export interface AuthenticatedRequest extends Request {
-  user?: AuthUser;
-}
+export type AuthenticatedRequest = Request;
 
 export const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   let token;
@@ -33,6 +32,12 @@ export const authenticateToken = async (req: AuthenticatedRequest, res: Response
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     req.user = decoded;
+
+    // Normalize tenant context for global admins.
+    // Their identity is platform-level (token tenantId can be null), but most routes expect a tenantId.
+    if ((req.user as any)?.role === 'global_admin' && !(req.user as any)?.tenantId && (req.user as any)?.actingTenantId) {
+      (req.user as any).tenantId = (req.user as any).actingTenantId;
+    }
     
     // For department_editor and department_viewer, find their department by matching email with department head
     if (decoded.role === 'department_editor' || decoded.role === 'department_viewer') {
@@ -72,6 +77,10 @@ export const optionalAuth = async (req: AuthenticatedRequest, res: Response, nex
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
       req.user = decoded;
+
+      if ((req.user as any)?.role === 'global_admin' && !(req.user as any)?.tenantId && (req.user as any)?.actingTenantId) {
+        (req.user as any).tenantId = (req.user as any).actingTenantId;
+      }
       
       // For department_editor and department_viewer, find their department by matching email with department head
       if (decoded.role === 'department_editor' || decoded.role === 'department_viewer') {

@@ -6,12 +6,13 @@ const JWT_SECRET = process.env.JWT_SECRET || "subs_secret_key";
 export interface AuthUser {
   userId: string;
   email: string;
-  tenantId: string;
+  tenantId: string | null;
+  actingTenantId?: string | null;
+  role?: string;
+  department?: string;
 }
 
-export interface AuthRequest extends Request {
-  user?: AuthUser;
-}
+export type AuthRequest = Request;
 
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
   let token;
@@ -30,6 +31,10 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     req.user = decoded;
+
+    if ((req.user as any)?.role === 'global_admin' && !(req.user as any)?.tenantId && (req.user as any)?.actingTenantId) {
+      (req.user as any).tenantId = (req.user as any).actingTenantId;
+    }
     next();
   } catch (err) {
     return res.status(403).json({ message: "Invalid or expired token" });
@@ -50,6 +55,10 @@ export const optionalAuth = (req: AuthRequest, res: Response, next: NextFunction
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
       req.user = decoded;
+
+      if ((req.user as any)?.role === 'global_admin' && !(req.user as any)?.tenantId && (req.user as any)?.actingTenantId) {
+        (req.user as any).tenantId = (req.user as any).actingTenantId;
+      }
     } catch (err) {
       req.user = undefined;
     }
