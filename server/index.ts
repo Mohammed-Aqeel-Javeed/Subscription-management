@@ -91,13 +91,24 @@ app.use(securityHeaders);
 app.use(sanitizeHeaders);
 
 // CORS must be after security headers
-app.use(cors({
-  origin: [
-    "https://subscription-management-6uje.onrender.com",
-    "http://localhost:5173"
-  ],
-  credentials: true,
-}));
+const defaultCorsOrigins = [
+  "https://subscription-management-6uje.onrender.com",
+  "http://localhost:5173",
+];
+
+const envCorsOrigins = String(process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const corsOrigins = Array.from(new Set([...defaultCorsOrigins, ...envCorsOrigins]));
+
+app.use(
+  cors({
+    origin: corsOrigins,
+    credentials: true,
+  })
+);
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));

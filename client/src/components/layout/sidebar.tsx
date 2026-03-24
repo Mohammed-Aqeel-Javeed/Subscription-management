@@ -288,7 +288,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         </div>
 
         {/* Collapsed Navigation Icons */}
-        <nav className="flex-1 px-2 py-3 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 px-2 py-3">
           <ul className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -324,7 +324,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                             ? 'none' 
                             : 'inset 0 1px 0 rgba(255,255,255,0.12)'
                         }}>
-                          <Icon className={`relative z-10 ${isActive ? 'text-indigo-700' : 'text-white'}`} size={16} />
+                          <Icon className="relative z-10 text-indigo-800" size={16} />
                         </div>
                       </Link>
                     </li>
@@ -359,7 +359,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                         ? 'none' 
                         : 'inset 0 1px 0 rgba(255,255,255,0.12)'
                     }}>
-                      <Icon className={`relative z-10 ${isActive ? 'text-indigo-700' : 'text-white'}`} size={16} />
+                      <Icon className="relative z-10 text-indigo-800" size={16} />
                     </div>
                   </Link>
                 </li>
@@ -368,17 +368,8 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           </ul>
         </nav>
 
-        {/* Collapsed Footer with User Avatar */}
-        <div className="p-2 border-t border-indigo-200/50 space-y-2">
-          <div className="flex items-center justify-center">
-            <div 
-              className="flex items-center justify-center w-9 h-9 rounded-full bg-green-500 cursor-pointer hover:scale-105 transition-transform"
-              title={currentUser?.fullName || currentUser?.email || "User"}
-            >
-              <span className="text-white font-bold text-sm">{(currentUser?.fullName || currentUser?.email || 'U').charAt(0).toUpperCase()}</span>
-            </div>
-          </div>
-          
+        {/* Collapsed Footer: Only Logout button, no user avatar/initial */}
+        <div className="p-2 border-t border-indigo-200/50">
           <div className="flex items-center justify-center">
             <button
               onClick={handleLogout}
@@ -437,7 +428,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           onClose={() => setShowCompanySwitcherDialog(false)} 
         />
       )}
-      <nav className="flex-1 px-3 py-2 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 px-3 py-2">
         {/* Default navigation (hidden when a page wants to fully use the sidebar) */}
         {pageSlotActive && pageSlotReplaceNav ? null : (
           <>
