@@ -362,7 +362,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Mark OTP as verified
       await db.collection("otps").updateOne(
         { email },
-        { $set: { verified: true, verifiedAt: new Date() } }
+        {
+          $set: {
+            verified: true,
+            verifiedAt: new Date(),
+            // Give the user time to submit /api/signup after verifying.
+            // This also prevents the TTL index on expiresAt from deleting the record immediately.
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+          },
+        }
       );
 
       res.status(200).json({ message: "Email verified successfully" });
@@ -411,7 +419,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check if OTP was verified
       const otpRecord = await db.collection("otps").findOne({ email });
-      if (!otpRecord || !otpRecord.verified) {
+      if (!otpRecord) {
+        return res.status(400).json({ message: "OTP record not found or expired. Please request a new OTP." });
+      }
+      if (!otpRecord.verified) {
         return res.status(400).json({ message: "Email not verified. Please verify your email with OTP first." });
       }
 
