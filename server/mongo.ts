@@ -121,7 +121,6 @@ export async function ensureSubscriptionIndexes() {
       },
     }
   );
-
   // Prevent duplicate draft creation on repeated clicks / race conditions.
   // Only applies to draft documents that include a string draftSessionId.
   await safeCreateIndex(
@@ -135,4 +134,28 @@ export async function ensureSubscriptionIndexes() {
 
   // Exchange rates batch query optimization
   await safeCreateIndex("exchange_rates", { tenantId: 1, code: 1, date: -1, createdAt: -1 });
+}
+
+export async function ensureLicenseIndexes() {
+  const db = await connectToDatabase();
+
+  const safeCreateIndex = async (
+    collectionName: string,
+    keys: Record<string, any>,
+    options?: Record<string, any>
+  ) => {
+    try {
+      await db.collection(collectionName).createIndex(keys, options);
+    } catch {
+      // Ignore index creation errors (e.g., permissions, duplicates, missing collection)
+    }
+  };
+
+  // Fast tenant-scoped listing for Renewals page (/api/licenses)
+  await safeCreateIndex("licenses", { tenantId: 1, createdAt: -1 });
+  await safeCreateIndex("licenses", { tenantId: 1, updatedAt: -1 });
+
+  // Role-based filtering support
+  await safeCreateIndex("licenses", { tenantId: 1, owner: 1 });
+  await safeCreateIndex("licenses", { tenantId: 1, department: 1 });
 }
