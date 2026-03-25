@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UserProvider } from "@/context/UserContext";
 import { SidebarSlotProvider } from "@/context/SidebarSlotContext";
+import { apiFetch } from "@/lib/api";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import Chatbot from "@/pages/chatbot";
@@ -44,6 +45,7 @@ import CalendarYearly from "@/pages/calendar-yearly";
 import LandingPage from "@/pages/landing";
 import Profile from "@/pages/profile";
 import SecureLinkRedirect from "@/pages/secure-link";
+import PlatformAdminPage from "@/pages/platform-admin";
 
 function App() {
   return (
@@ -101,10 +103,11 @@ function AppWithSidebar() {
       // For root path, check if user is authenticated
       if (location.pathname === "/") {
         try {
-          const res = await fetch("/api/me", { credentials: "include" });
+          const res = await apiFetch("/api/me");
           if (res.ok) {
-            // User is authenticated, redirect to dashboard
-            navigate("/dashboard", { replace: true });
+            const me = await res.json().catch(() => null);
+            const next = me?.role === "global_admin" ? "/platform-admin" : "/dashboard";
+            navigate(next, { replace: true });
           }
           // If not authenticated, stay on landing page
         } catch (error) {
@@ -114,14 +117,30 @@ function AppWithSidebar() {
       }
 
       try {
-        const res = await fetch("/api/me", { credentials: "include" });
+        const res = await apiFetch("/api/me");
+        console.log("[App Auth Guard] /api/me response:", {
+          ok: res.ok,
+          status: res.status,
+          pathname: location.pathname
+        });
         if (!res.ok) {
           // Not authenticated, redirect to landing page
+          console.log("[App Auth Guard] Not authenticated, redirecting to landing");
           sessionStorage.clear();
           navigate("/", { replace: true });
+          return;
+        }
+
+        const me = await res.json().catch(() => null);
+        if (me?.role === "global_admin") {
+          const allowed = new Set(["/platform-admin", "/profile"]);
+          if (!allowed.has(location.pathname)) {
+            navigate("/platform-admin", { replace: true });
+          }
         }
       } catch (error) {
         // Network error or server error, redirect to landing page
+        console.error("[App Auth Guard] Error checking auth:", error);
         sessionStorage.clear();
         navigate("/", { replace: true });
       }
@@ -149,6 +168,7 @@ function AppWithSidebar() {
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/s/:token" element={<SecureLinkRedirect />} />
+              <Route path="/platform-admin" element={<PlatformAdminPage />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/subscriptions/cancelled" element={<CancelledSubscriptionsPage />} />

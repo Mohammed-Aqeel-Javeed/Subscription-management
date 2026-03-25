@@ -242,6 +242,8 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
     refetchOnWindowFocus: true,
   });
 
+  const isGlobalAdmin = currentUser?.role === "global_admin";
+
   const handleLogout = async () => {
     try {
       await fetch("/api/logout", { method: "POST", credentials: "include" });
@@ -289,8 +291,9 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
 
         {/* Collapsed Navigation Icons */}
         <nav className="flex-1 px-2 py-3">
-          <ul className="space-y-1">
-            {navItems.map((item) => {
+          {isGlobalAdmin ? null : (
+            <ul className="space-y-1">
+              {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
               
@@ -364,8 +367,9 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                   </Link>
                 </li>
               );
-            })}
-          </ul>
+              })}
+            </ul>
+          )}
         </nav>
 
         {/* Collapsed Footer: Only Logout button, no user avatar/initial */}
@@ -409,7 +413,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
             </button>
           )}
         </div>
-        {currentUser?.companyName && (
+        {currentUser && !isGlobalAdmin && (
           <button
             className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/15 transition-all duration-200 w-full border border-indigo-200/40"
             onClick={() => setShowCompanySwitcherDialog(true)}
@@ -417,13 +421,20 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           >
             <Shuffle size={14} className="text-indigo-500 flex-shrink-0" />
             <span className="text-sm text-indigo-700 font-semibold leading-tight truncate flex-1 text-left">
-              {currentUser.companyName}
+              {currentUser.companyName || "Select company..."}
             </span>
           </button>
         )}
+
+        {currentUser && isGlobalAdmin && (
+          <div className="w-full rounded-lg bg-indigo-500/10 border border-indigo-200/40 px-3 py-2">
+            <div className="text-sm font-semibold text-indigo-900">Platform Admin</div>
+            <div className="text-xs text-indigo-700/80">Company data is hidden</div>
+          </div>
+        )}
       </div>
       {/* Company Switcher Dialog */}
-      {showCompanySwitcherDialog && (
+      {!isGlobalAdmin && showCompanySwitcherDialog && (
         <CompanySwitcherDialog 
           onClose={() => setShowCompanySwitcherDialog(false)} 
         />
@@ -432,8 +443,11 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         {/* Default navigation (hidden when a page wants to fully use the sidebar) */}
         {pageSlotActive && pageSlotReplaceNav ? null : (
           <>
-            <ul className="space-y-0.5">
-              {navItems.map((item) => {
+            {isGlobalAdmin ? (
+              <div className="px-3 py-3 text-sm text-indigo-700/80">No tenant navigation for platform admin.</div>
+            ) : (
+              <ul className="space-y-0.5">
+                {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             
@@ -480,12 +494,15 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
               </li>
             );
           })}
-            </ul>
+              </ul>
+            )}
             
             {/* Import/Export Button in Navigation */}
-            <div className="mt-4 pt-4 border-t border-indigo-200/50">
-              <UnifiedImportExport />
-            </div>
+            {isGlobalAdmin ? null : (
+              <div className="mt-4 pt-4 border-t border-indigo-200/50">
+                <UnifiedImportExport />
+              </div>
+            )}
           </>
         )}
 

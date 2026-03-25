@@ -148,14 +148,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         if (typeof decoded === "object" && "tenantId" in decoded) {
           const d: any = decoded;
+          // Normalize tenant context for global admins
           if (d?.role === "global_admin" && d?.actingTenantId) {
             d.tenantId = d.actingTenantId;
           }
           req.user = d as any;
+          
+          // Log decoded token for debugging
+          if (req.path === "/api/me") {
+            console.log("[JWT Middleware] Decoded token for /api/me:", {
+              userId: d?.userId,
+              email: d?.email,
+              role: d?.role,
+              tenantId: d?.tenantId,
+              actingTenantId: d?.actingTenantId
+            });
+          }
         } else {
           req.user = undefined;
         }
-      } catch {
+      } catch (err) {
+        console.log("[JWT Middleware] Token verification failed:", err instanceof Error ? err.message : err);
         req.user = undefined;
       }
     }
@@ -404,10 +417,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/signup", async (req, res) => {
     try {
       const { fullName, email, password, tenantId, defaultCurrency, companyName } = req.body;
-      if (!fullName || !email || !password || !tenantId) {
-        return res
-          .status(400)
-          .json({ message: "Missing required fields (fullName, email, password, tenantId)" });
+      if (!fullName || !email || !password) {
+        return res.status(400).json({ message: "Missing required fields (fullName, email, password)" });
       }
 
       // Validate email format
@@ -416,6 +427,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const db = await connectToDatabase();
+
+      // Bootstrap rule (no env needed): if this is the very first account in a fresh DB,
+      // make it the platform global admin.
+      const existingLoginCount = await db.collection("login").estimatedDocumentCount();
+      const bootstrapPlatformOwner = existingLoginCount === 0;
       
       // Check if OTP was verified
       const otpRecord = await db.collection("otps").findOne({ email });
@@ -437,7 +453,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "User already exists with this email" });
       }
 
-      const platformOwner = isPlatformOwner(email);
+      const platformOwner = bootstrapPlatformOwner || isPlatformOwner(email);
+
+      if (!platformOwner && !tenantId) {
+        return res.status(400).json({ message: "Missing required fields (tenantId)" });
+      }
 
       // Hash the password before storing
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -473,6 +493,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Missing required fields" });
       }
       const db = await connectToDatabase();
+
+      // Env-based platform owner login (no signup required).
+      // If PLATFORM_OWNER_EMAILS includes this email and PLATFORM_OWNER_PASSWORD matches,
+      // issue a global_admin token even if the user doesn't exist in MongoDB.
+      const platformOwnerPassword = String(process.env.PLATFORM_OWNER_PASSWORD || "");
+      const isEnvPlatformOwner = isPlatformOwner(email);
+      if (isEnvPlatformOwner && platformOwnerPassword) {
+        const isBcryptHash = platformOwnerPassword.startsWith("$2");
+        const passwordOk = isBcryptHash
+          ? await bcrypt.compare(password, platformOwnerPassword)
+          : password === platformOwnerPassword;
+
+        if (passwordOk) {
+          const tokenPayload: any = {
+            userId: "env-platform-owner",
+            email,
+            tenantId: null,
+            actingTenantId: null,
+            role: "global_admin",
+            department: null,
+          };
+
+          const token = jwt.sign(
+            tokenPayload,
+            process.env.JWT_SECRET || "subs_secret_key",
+            { expiresIn: "24h" }
+          );
+          const isProd = process.env.NODE_ENV === "production";
+
+          res.cookie("token", token, {
+            httpOnly: true,
+            secure: isProd,
+            sameSite: (isProd ? "none" : "lax") as any,
+            path: "/",
+          });
+
+          return res.status(200).json({
+            message: "Login successful",
+            user: {
+              userId: tokenPayload.userId,
+              email,
+              name: "Platform Owner",
+              tenantId: null,
+              role: "global_admin",
+              department: null,
+              status: "active",
+            },
+          });
+        }
+      }
       
       // First try the 'login' collection (primary auth collection)
       // Prefer platform-level global_admin record if present
@@ -539,43 +609,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const role = user.role || "viewer";
 
       // Platform-level global_admin has tenantId=null (identity is not bound to a tenant).
-      // The session carries an actingTenantId for whichever tenant is currently selected.
-      let actingTenantId: string | null = null;
-      if (role === "global_admin") {
-        actingTenantId = user.tenantId || null;
-        if (!actingTenantId) {
-          const anyCompany = await db.collection("login").findOne(
-            { tenantId: { $ne: null }, companyName: { $exists: true } },
-            { sort: { createdAt: -1 } }
-          );
-          actingTenantId = anyCompany?.tenantId || null;
-        }
-      }
+      // actingTenantId is only set when the global admin explicitly switches/impersonates a company.
+      const actingTenantId: string | null = null;
 
       const tokenPayload: any = {
-        userId: user._id,
+        userId: user._id?.toString?.() || String(user._id),
         email: user.email,
         tenantId: role === "global_admin" ? null : (user.tenantId || null),
         actingTenantId: role === "global_admin" ? actingTenantId : undefined,
         role,
         department: userDepartment,
       };
+      
+      console.log("[Login] Creating JWT for:", {
+        email: user.email,
+        role,
+        userId: tokenPayload.userId,
+        tenantId: tokenPayload.tenantId,
+        actingTenantId: tokenPayload.actingTenantId
+      });
+      
       const token = jwt.sign(
         tokenPayload,
         process.env.JWT_SECRET || "subs_secret_key",
         { expiresIn: "24h" } // Token expires in 24 hours
       );
+      const isProd = process.env.NODE_ENV === "production";
+      
+      console.log("[Login] Setting cookie with secure:", isProd, "sameSite:", isProd ? "none" : "lax");
+      
       res.cookie("token", token, {
         httpOnly: true,
-        secure: true,
-        sameSite: "none",
-        path: "/"
+        secure: isProd,
+        sameSite: (isProd ? "none" : "lax") as any,
+        path: "/",
         // No maxAge - cookie expires when browser/tab closes (session cookie)
       });
       res.status(200).json({
         message: "Login successful",
         user: {
-          userId: user._id,
+          userId: user._id?.toString?.() || String(user._id),
           email: user.email,
           name: user.name,
           tenantId: user.tenantId || null,
@@ -594,14 +667,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = req.user as any;
       const db = await connectToDatabase();
+      
+      console.log("[/api/me] Request from user:", { 
+        userId: user?.userId, 
+        email: user?.email, 
+        role: user?.role,
+        tenantId: user?.tenantId,
+        actingTenantId: user?.actingTenantId 
+      });
+      
       if (!user?.userId) {
+        console.log("[/api/me] Unauthorized: No userId in token");
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Env-based global_admin may have a non-ObjectId userId. Allow a synthetic identity.
+      if (user?.role === "global_admin" && isPlatformOwner(user?.email)) {
+        try {
+          // If convertible, we still try DB for richer profile.
+          // Otherwise, return a synthetic platform identity.
+          // eslint-disable-next-line no-new
+          new ObjectId(String(user.userId));
+        } catch {
+          return res.status(200).json({
+            userId: String(user.userId),
+            email: String(user.email || ""),
+            fullName: "Platform Owner",
+            profileImage: null,
+            companyName: null,
+            tenantId: null,
+            actingTenantId: null,
+            defaultCurrency: null,
+            role: "global_admin",
+            department: user.department || undefined,
+          });
+        }
+      }
+
+      let userObjectId: ObjectId;
+      try {
+        userObjectId = new ObjectId(String(user.userId));
+      } catch (err) {
+        console.log("[/api/me] Invalid ObjectId:", user.userId, err);
         return res.status(401).json({ message: "Unauthorized" });
       }
       
       // Fetch the user record that matches BOTH the userId (email) AND the current tenantId
       // First get the email from the userId
-      const userRecord = await db.collection("login").findOne({ _id: new ObjectId(user.userId) });
+      const userRecord =
+        (await db.collection("login").findOne({ _id: userObjectId })) ||
+        (await db.collection("users").findOne({ _id: userObjectId }));
+      
+      console.log("[/api/me] User record found:", userRecord ? {
+        _id: userRecord._id,
+        email: (userRecord as any).email,
+        role: (userRecord as any).role,
+        tenantId: (userRecord as any).tenantId
+      } : null);
+      
       if (!userRecord) {
+        // If token represents env-based platform owner, return a synthetic identity.
+        if (user?.role === "global_admin" && isPlatformOwner(user?.email)) {
+          return res.status(200).json({
+            userId: String(user.userId),
+            email: String(user.email || ""),
+            fullName: "Platform Owner",
+            profileImage: null,
+            companyName: null,
+            tenantId: null,
+            actingTenantId: null,
+            defaultCurrency: null,
+            role: "global_admin",
+            department: user.department || undefined,
+          });
+        }
+
+        console.log("[/api/me] User not found in login or users collection");
         return res.status(404).json({ message: "User not found" });
       }
 
@@ -632,11 +773,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         return res.status(200).json({
           userId: userRecord._id,
-          email: userRecord.email,
-          fullName: (userRecord as any).fullName || null,
+          email: (userRecord as any).email,
+          fullName: (userRecord as any).fullName || (userRecord as any).name || null,
           profileImage: (userRecord as any).profileImage || null,
           companyName,
           tenantId: effectiveTenantId,
+          actingTenantId: user?.actingTenantId ?? null,
           defaultCurrency,
           role,
           department,
@@ -650,7 +792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Now fetch the specific company record for this user with the current tenantId
       const dbUser = await db.collection("login").findOne({ 
-        email: userRecord.email, 
+        email: (userRecord as any).email, 
         tenantId: effectiveTenantId 
       });
       
@@ -835,10 +977,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           process.env.JWT_SECRET || "subs_secret_key",
           { expiresIn: "24h" }
         );
+        const isProd = process.env.NODE_ENV === "production";
         res.cookie("token", token, {
           httpOnly: true,
-          secure: true,
-          sameSite: "none",
+          secure: isProd,
+          sameSite: (isProd ? "none" : "lax") as any,
           path: "/",
         });
       }
@@ -954,11 +1097,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { expiresIn: "24h" }
       );
       
+      const isProd = process.env.NODE_ENV === "production";
       res.cookie("token", token, {
         httpOnly: true,
-        secure: true,
-        sameSite: "none",
-        path: "/"
+        secure: isProd,
+        sameSite: (isProd ? "none" : "lax") as any,
+        path: "/",
         // No maxAge - session cookie expires when browser closes
       });
       
@@ -1026,11 +1170,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           { expiresIn: "24h" }
         );
         
+        const isProd = process.env.NODE_ENV === "production";
         res.cookie("token", token, {
           httpOnly: true,
-          secure: true,
-          sameSite: "none",
-          path: "/"
+          secure: isProd,
+          sameSite: (isProd ? "none" : "lax") as any,
+          path: "/",
           // No maxAge - session cookie expires when browser closes
         });
       }
