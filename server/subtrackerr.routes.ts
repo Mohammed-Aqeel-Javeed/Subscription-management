@@ -579,7 +579,13 @@ router.use((req, res, next) => {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
       if (typeof decoded === "object" && "tenantId" in decoded) {
-        req.user = decoded as User;
+        const d: any = decoded;
+        // Normalize tenant context for global admins.
+        // Their identity is platform-level (token tenantId can be null), but most routes expect a tenantId.
+        if (d?.role === 'global_admin' && !d?.tenantId && d?.actingTenantId) {
+          d.tenantId = d.actingTenantId;
+        }
+        req.user = d as User;
       } else {
         req.user = undefined;
       }

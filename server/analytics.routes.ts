@@ -67,7 +67,7 @@ const buildSubscriptionScopeFilter = (user: any, tenantId: string) => {
 
 // Get dashboard metrics
 router.get("/api/analytics/dashboard", async (req, res) => {
-  const tenantId = req.user?.tenantId;
+  const tenantId = (req.user as any)?.tenantId ?? (req.user as any)?.actingTenantId;
   if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
   try {
     setTenantSafeCache(res, 30);
@@ -138,7 +138,7 @@ router.get("/api/analytics/dashboard", async (req, res) => {
 
 // Get spending trends
 router.get("/api/analytics/trends", async (req, res) => {
-  const tenantId = req.user?.tenantId;
+  const tenantId = (req.user as any)?.tenantId ?? (req.user as any)?.actingTenantId;
   if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
   try {
     setTenantSafeCache(res, 60);
@@ -201,7 +201,7 @@ router.get("/api/analytics/trends", async (req, res) => {
 
 // Get category breakdown
 router.get("/api/analytics/categories", async (req, res) => {
-  const tenantId = req.user?.tenantId;
+  const tenantId = (req.user as any)?.tenantId ?? (req.user as any)?.actingTenantId;
   if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
   try {
     setTenantSafeCache(res, 60);
@@ -250,7 +250,7 @@ router.get("/api/analytics/categories", async (req, res) => {
 
 // Get recent activity
 router.get("/api/analytics/activity", async (req, res) => {
-  const tenantId = req.user?.tenantId;
+  const tenantId = (req.user as any)?.tenantId ?? (req.user as any)?.actingTenantId;
   if (!tenantId) return res.status(401).json({ message: "Missing tenantId" });
   try {
     const db = await connectToDatabase();

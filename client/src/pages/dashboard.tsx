@@ -32,6 +32,7 @@ export default function Dashboard() {
   const location = useLocation();
   const { user } = useUser();
   const queryClient = useQueryClient();
+  const isGlobalAdminNoTenant = user?.role === "global_admin" && !user?.tenantId;
   const [tenantSwitchNonce, setTenantSwitchNonce] = useState(0);
   const [activeSubscriptionsModalOpen, setActiveSubscriptionsModalOpen] = useState(false);
   const [upcomingRenewalsModalOpen, setUpcomingRenewalsModalOpen] = useState(false);
@@ -82,6 +83,7 @@ export default function Dashboard() {
   // Use dashboard metrics query for auth check and data
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery<DashboardMetrics>({
     queryKey: ["/api/analytics/dashboard", dashboardScopeKey],
+    enabled: !isGlobalAdminNoTenant,
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/dashboard");
       if (res.status === 401) throw new Error("Unauthorized");
@@ -95,8 +97,17 @@ export default function Dashboard() {
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+
+  const isUnauthorized = metricsError instanceof Error && metricsError.message === "Unauthorized";
+
+  React.useEffect(() => {
+    if (isUnauthorized && !isGlobalAdminNoTenant) {
+      navigate("/login");
+    }
+  }, [isUnauthorized, isGlobalAdminNoTenant, navigate, location.pathname]);
   const { data: trends, isLoading: trendsLoading } = useQuery<SpendingTrend[]>({
     queryKey: ["/api/analytics/trends", dashboardScopeKey],
+    enabled: !isGlobalAdminNoTenant,
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/trends");
       if (!res.ok) {
@@ -111,6 +122,7 @@ export default function Dashboard() {
   });
   const { data: categories, isLoading: categoriesLoading } = useQuery<CategoryBreakdown[]>({
     queryKey: ["/api/analytics/categories", dashboardScopeKey],
+    enabled: !isGlobalAdminNoTenant,
     queryFn: async () => {
       const res = await apiFetch("/api/analytics/categories");
       if (!res.ok) {
@@ -126,6 +138,7 @@ export default function Dashboard() {
 
   const { data: subscriptions, isLoading: subscriptionsLoading } = useQuery<Subscription[]>({
     queryKey: ["/api/subscriptions", dashboardScopeKey],
+    enabled: !isGlobalAdminNoTenant,
     queryFn: async () => {
       const res = await apiFetch("/api/subscriptions");
       if (res.status === 401) throw new Error("Unauthorized");
@@ -262,10 +275,7 @@ export default function Dashboard() {
   // Activity query removed as it's not currently used in the dashboard
 
   // ...existing code...
-  if (metricsError && metricsError.message === "Unauthorized") {
-    navigate("/login");
-    return null;
-  }
+  if (isUnauthorized) return null;
   // Show skeletons while loading any data
   if (metricsLoading || trendsLoading || categoriesLoading || subscriptionsLoading) {
     return (
@@ -381,6 +391,17 @@ export default function Dashboard() {
   const cardYearlySpend = hasSubscriptionsData ? filteredYearlySpend : (Number(metrics?.yearlySpend) || 0);
   const cardActiveSubscriptions = hasSubscriptionsData ? filteredSubscriptions.length : (Number(metrics?.activeSubscriptions) || 0);
   const cardUpcomingRenewals = hasSubscriptionsData ? upcomingRenewals.length : (Number(metrics?.upcomingRenewals) || 0);
+
+  if (isGlobalAdminNoTenant) {
+    return (
+      <div className="p-8">
+        <div className="rounded-2xl border border-indigo-200/60 bg-white/70 p-6 text-indigo-900">
+          <div className="text-lg font-semibold">Platform admin dashboard</div>
+          <div className="text-sm text-indigo-700/80 mt-1">Company data is hidden for global admin accounts.</div>
+        </div>
+      </div>
+    );
+  }
 
   if (metricsLoading) {
     return (

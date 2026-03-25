@@ -19,17 +19,22 @@ export default function Header() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
+  const isGlobalAdmin = user?.role === "global_admin";
+
   const { data: subscriptionNotifications = [] } = useQuery<NotificationItem[]>({
     queryKey: ['/api/notifications'],
     refetchInterval: 60_000,
+    enabled: !isGlobalAdmin,
   });
   const { data: complianceNotifications = [] } = useQuery<NotificationItem[]>({
     queryKey: ['/api/notifications/compliance'],
     refetchInterval: 60_000,
+    enabled: !isGlobalAdmin,
   });
   const { data: licenseNotifications = [] } = useQuery<NotificationItem[]>({
     queryKey: ['/api/notifications/license'],
     refetchInterval: 60_000,
+    enabled: !isGlobalAdmin,
   });
 
   const unreadCount = (() => {

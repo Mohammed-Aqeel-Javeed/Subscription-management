@@ -40,6 +40,9 @@ export default function AuthPage() {
         setLoginError(data.message || "Login failed");
         return;
       }
+
+      const data = await res.json().catch(() => null);
+      const role = data?.user?.role;
       
       // Clear all cached data from previous session/user
       queryClient.clear();
@@ -47,7 +50,8 @@ export default function AuthPage() {
       sessionStorage.setItem("isAuthenticated", "true");
       
       // Force full page reload to ensure clean state for new user
-      window.location.href = nextParam || "/dashboard";
+      const target = role === "global_admin" ? "/platform-admin" : (nextParam || "/dashboard");
+      window.location.href = target;
     } catch (err) {
       setLoginError("Network error");
     }
