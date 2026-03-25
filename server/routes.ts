@@ -17,6 +17,7 @@ import jwt from "jsonwebtoken";
 import cors from "cors";
 import { connectToDatabase } from "./mongo.js";
 import bcrypt from "bcrypt";
+import { decrypt } from "./encryption.service.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const toEpochMsServer = (raw: any): number => {
@@ -817,6 +818,179 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch user data" });
+    }
+  });
+
+  const requireGlobalAdmin = (req: any, res: any): boolean => {
+    const role = (req.user as any)?.role;
+    if (role !== "global_admin") {
+      res.status(403).json({ message: "Forbidden" });
+      return false;
+    }
+    return true;
+  };
+
+  // ===== Platform Admin APIs =====
+  app.get("/api/platform/stats", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+      const db = await connectToDatabase();
+
+      const [tenantIdsFromLogin, tenantIdsFromCompanyInfo] = await Promise.all([
+        db.collection("login").distinct("tenantId", {
+          tenantId: { $ne: null },
+          role: { $ne: "global_admin" },
+        }),
+        db.collection("companyInfo").distinct("tenantId", { tenantId: { $ne: null } }),
+      ]);
+
+      const tenantIds = new Set(
+        [...tenantIdsFromLogin, ...tenantIdsFromCompanyInfo]
+          .map((t: any) => (t == null ? null : String(t)))
+          .filter(Boolean) as string[]
+      );
+
+      const [loginEmails, usersEmails] = await Promise.all([
+        db.collection("login").distinct("email", {
+          tenantId: { $ne: null },
+          role: { $ne: "global_admin" },
+        }),
+        db.collection("users").distinct("email", { tenantId: { $exists: true, $ne: null } }),
+      ]);
+      const emailSet = new Set(
+        [...loginEmails, ...usersEmails]
+          .map((e: any) => (e == null ? null : String(e).trim().toLowerCase()))
+          .filter(Boolean) as string[]
+      );
+
+      const activeSubs = await db
+        .collection("subscriptions")
+        .find(
+          { status: "Active" },
+          { projection: { amount: 1, billingCycle: 1 } }
+        )
+        .toArray();
+
+      let mrr = 0;
+      for (const sub of activeSubs) {
+        const decryptedAmount = decrypt((sub as any).amount);
+        const amount = parseFloat(String(decryptedAmount)) || 0;
+        const billingCycle = String((sub as any).billingCycle || "monthly").toLowerCase();
+        let monthlyAmount = amount;
+        if (billingCycle === "yearly") monthlyAmount = amount / 12;
+        else if (billingCycle === "quarterly") monthlyAmount = amount / 3;
+        else if (billingCycle === "weekly") monthlyAmount = amount * 4;
+        mrr += monthlyAmount;
+      }
+
+      res.status(200).json({
+        totalCompanies: tenantIds.size,
+        totalUsers: emailSet.size,
+        mrr: Number(mrr.toFixed(2)),
+      });
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ message: "Failed to fetch platform stats", error: errMsg });
+    }
+  });
+
+  app.get("/api/platform/companies", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+      const db = await connectToDatabase();
+
+      const companies = await db
+        .collection("login")
+        .aggregate([
+          {
+            $match: {
+              tenantId: { $ne: null },
+              role: { $ne: "global_admin" },
+            },
+          },
+          {
+            $group: {
+              _id: "$tenantId",
+              companyName: { $max: "$companyName" },
+              createdAt: { $min: "$createdAt" },
+              status: { $max: "$status" },
+              emails: { $addToSet: "$email" },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              tenantId: { $toString: "$_id" },
+              companyName: 1,
+              createdAt: 1,
+              status: 1,
+              users: { $size: "$emails" },
+              plan: { $literal: "—" },
+            },
+          },
+          { $sort: { createdAt: -1 } },
+          { $limit: 100 },
+        ])
+        .toArray();
+
+      // Prefer companyInfo name when available
+      const tenantIds = companies.map((c: any) => c.tenantId).filter(Boolean);
+      const companyInfoList = await db
+        .collection("companyInfo")
+        .find({ tenantId: { $in: tenantIds } }, { projection: { tenantId: 1, companyName: 1, createdAt: 1 } })
+        .toArray();
+      const companyInfoMap = new Map(
+        companyInfoList
+          .map((ci: any) => [String(ci.tenantId), { companyName: ci.companyName, createdAt: ci.createdAt }])
+      );
+
+      const enriched = companies.map((c: any) => {
+        const ci = companyInfoMap.get(String(c.tenantId));
+        return {
+          ...c,
+          companyName: (ci?.companyName || c.companyName || "Unnamed Company") as string,
+          createdAt: (ci?.createdAt || c.createdAt || null) as any,
+        };
+      });
+
+      res.status(200).json(enriched);
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ message: "Failed to fetch companies", error: errMsg });
+    }
+  });
+
+  app.get("/api/platform/activity", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+      const db = await connectToDatabase();
+
+      const activity = await db
+        .collection("history")
+        .find({})
+        .sort({ timestamp: -1 })
+        .limit(20)
+        .toArray();
+
+      const tenantIds = Array.from(
+        new Set(activity.map((a: any) => a?.tenantId).filter(Boolean).map((t: any) => String(t)))
+      );
+      const companyInfoList = await db
+        .collection("companyInfo")
+        .find({ tenantId: { $in: tenantIds } }, { projection: { tenantId: 1, companyName: 1 } })
+        .toArray();
+      const companyInfoMap = new Map(companyInfoList.map((ci: any) => [String(ci.tenantId), String(ci.companyName || "")]));
+
+      const enriched = activity.map((a: any) => ({
+        ...a,
+        _id: a?._id?.toString?.() || a?._id,
+        companyName: companyInfoMap.get(String(a?.tenantId)) || null,
+      }));
+
+      res.status(200).json(enriched);
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ message: "Failed to fetch platform activity", error: errMsg });
     }
   });
 
