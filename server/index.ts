@@ -355,6 +355,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       log("Sending department head notification emails...", "departments");
       const { connectToDatabase } = await import("./mongo.js");
       const { emailService } = await import("./email.service.js");
+      const { decrypt } = await import("./encryption.service.js");
       
       const db = await connectToDatabase();
       const collection = db.collection("departments");
@@ -408,12 +409,16 @@ app.use((req: Request, res: Response, next: NextFunction) => {
           }
           
           const subscriptionsData = nextMonthRenewals.map((sub: any) => ({
-            serviceName: sub.serviceName || 'Unknown Service',
+            serviceName: decrypt(sub.serviceName || 'Unknown Service'),
             nextRenewal: sub.nextRenewal || new Date().toISOString(),
-            amount: sub.amount || 0,
-            currency: sub.currency || 'USD',
+            amount: (() => {
+              const raw = decrypt(sub.amount ?? 0);
+              const n = Number(raw);
+              return Number.isFinite(n) ? n : 0;
+            })(),
+            currency: decrypt(sub.currency || 'USD') || 'USD',
             department: sub.department || '-',
-            category: sub.category || '-'
+            category: decrypt(sub.category || '-') || '-'
           }));
           
           // Send email to this department head

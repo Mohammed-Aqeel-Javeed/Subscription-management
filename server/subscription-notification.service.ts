@@ -426,6 +426,15 @@ async function sendEmailNotification(
     const recipientName = recipient.name;
     const recipientRole = recipient.role;
 
+    const truncateText = (value: unknown, max = 72) => {
+      const s = String(value ?? '').trim();
+      if (!s) return '';
+      if (s.length <= max) return s;
+      return s.slice(0, Math.max(0, max - 3)) + '...';
+    };
+
+    const displayServiceName = truncateText(serviceName, 72) || 'Unknown Service';
+
     const getSubscriptionDepartments = (): string[] => {
       if (Array.isArray(subscription.departments)) return subscription.departments.filter(Boolean);
       const raw = subscription.department;
@@ -462,14 +471,14 @@ async function sendEmailNotification(
 
     switch (eventType) {
       case 'created':
-        subject = `${recipientRole === 'admin' ? 'Admin: ' : ''}New Subscription Created: ${serviceName}`;
+        subject = `${recipientRole === 'admin' ? 'Admin: ' : ''}New Subscription Created: ${displayServiceName}`;
         body = `
           <h2>New Subscription Created</h2>
           <p>Hello ${recipientName},</p>
           ${roleIntro}
           <p>A new subscription has been created.</p>
           <ul>
-            <li><strong>Service:</strong> ${serviceName}</li>
+            <li><strong>Service:</strong> ${displayServiceName}</li>
             <li><strong>Department(s):</strong> ${departmentsLabel}</li>
             <li><strong>Amount:</strong> ${formatMoney(subscription.amount)}</li>
             <li><strong>Status:</strong> ${subscription.status || 'Active'}</li>
@@ -479,14 +488,14 @@ async function sendEmailNotification(
         break;
 
       case 'owner_changed':
-        subject = `Subscription Owner Changed: ${serviceName}`;
+        subject = `Subscription Owner Changed: ${displayServiceName}`;
         body = `
           <h2>Subscription Owner Changed</h2>
           <p>Hello ${recipientName},</p>
           ${roleIntro}
-          <p>The owner of the subscription "${serviceName}" has been changed.</p>
+          <p>The owner of the subscription "${displayServiceName}" has been changed.</p>
           <ul>
-            <li><strong>Service:</strong> ${serviceName}</li>
+            <li><strong>Service:</strong> ${displayServiceName}</li>
             <li><strong>Department(s):</strong> ${departmentsLabel}</li>
             ${recipientRole === 'owner' ? `<li><strong>Your Role:</strong> You are now the subscription owner</li>` : ''}
             ${additionalData?.oldOwner ? `<li><strong>Previous Owner:</strong> ${additionalData.oldOwner}</li>` : ''}
@@ -496,14 +505,14 @@ async function sendEmailNotification(
         break;
 
       case 'price_changed':
-        subject = `${recipientRole === 'admin' ? 'Admin: ' : ''}Subscription Price Updated: ${serviceName}`;
+        subject = `${recipientRole === 'admin' ? 'Admin: ' : ''}Subscription Price Updated: ${displayServiceName}`;
         body = `
           <h2>Subscription Price Changed</h2>
           <p>Hello ${recipientName},</p>
           ${roleIntro}
-          <p>The price of the subscription "${serviceName}" has been updated.</p>
+          <p>The price of the subscription "${displayServiceName}" has been updated.</p>
           <ul>
-            <li><strong>Service:</strong> ${serviceName}</li>
+            <li><strong>Service:</strong> ${displayServiceName}</li>
             <li><strong>Department(s):</strong> ${departmentsLabel}</li>
             ${additionalData?.oldAmount !== undefined && additionalData?.oldAmount !== null ? `<li><strong>Previous Amount:</strong> ${formatMoney(additionalData.oldAmount)}</li>` : ''}
             <li><strong>New Amount:</strong> ${formatMoney(subscription.amount)}</li>
@@ -513,14 +522,14 @@ async function sendEmailNotification(
         break;
 
       case 'quantity_changed':
-        subject = `Subscription Quantity Updated: ${serviceName}`;
+        subject = `Subscription Quantity Updated: ${displayServiceName}`;
         body = `
           <h2>Subscription Quantity Changed</h2>
           <p>Hello ${recipientName},</p>
           ${roleIntro}
-          <p>The quantity of the subscription "${serviceName}" has been updated.</p>
+          <p>The quantity of the subscription "${displayServiceName}" has been updated.</p>
           <ul>
-            <li><strong>Service:</strong> ${serviceName}</li>
+            <li><strong>Service:</strong> ${displayServiceName}</li>
             <li><strong>Department(s):</strong> ${departmentsLabel}</li>
             ${additionalData?.oldQty ? `<li><strong>Previous Quantity:</strong> ${additionalData.oldQty}</li>` : ''}
             <li><strong>New Quantity:</strong> ${subscription.qty || 'N/A'}</li>
@@ -530,14 +539,14 @@ async function sendEmailNotification(
         break;
 
       case 'cancelled':
-        subject = `${recipientRole === 'admin' ? 'Admin: ' : ''}Subscription Cancelled: ${serviceName}`;
+        subject = `${recipientRole === 'admin' ? 'Admin: ' : ''}Subscription Cancelled: ${displayServiceName}`;
         body = `
           <h2>Subscription Cancelled</h2>
           <p>Hello ${recipientName},</p>
           ${roleIntro}
-          <p>The subscription "${serviceName}" has been cancelled.</p>
+          <p>The subscription "${displayServiceName}" has been cancelled.</p>
           <ul>
-            <li><strong>Service:</strong> ${serviceName}</li>
+            <li><strong>Service:</strong> ${displayServiceName}</li>
             <li><strong>Department(s):</strong> ${departmentsLabel}</li>
             <li><strong>Previous Status:</strong> ${additionalData?.oldStatus || 'Active'}</li>
             <li><strong>New Status:</strong> Cancelled</li>
@@ -545,12 +554,77 @@ async function sendEmailNotification(
           <p>Please review the subscription details in Trackla if needed.</p>
         `;
         break;
+
+      case 'deleted':
+        subject = `${recipientRole === 'admin' ? 'Admin: ' : ''}Subscription Deleted: ${displayServiceName}`;
+        body = `
+          <h2>Subscription Deleted</h2>
+          <p>Hello ${recipientName},</p>
+          ${roleIntro}
+          <p>The subscription "${displayServiceName}" has been deleted.</p>
+          <ul>
+            <li><strong>Service:</strong> ${displayServiceName}</li>
+            <li><strong>Department(s):</strong> ${departmentsLabel}</li>
+          </ul>
+          <p>If this was unexpected, please contact your administrator.</p>
+        `;
+        break;
     }
+
+    if (!subject || !body) return;
+
+    const fullEmailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${subject}</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7fb;
+            line-height: 1.6;
+          }
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 32px;
+          }
+          h2 { color: #1a1a1a; margin-bottom: 16px; }
+          p { margin: 12px 0; color: #4a4a4a; }
+          ul { margin: 18px 0; padding-left: 20px; }
+          li { margin: 8px 0; color: #4a4a4a; }
+          strong { color: #1a1a1a; }
+          p, li { word-break: break-word; }
+
+          @media only screen and (max-width: 600px) {
+            body { padding: 12px; }
+            .container { padding: 18px; border-radius: 10px; }
+            h2 { font-size: 20px; }
+            p, li { font-size: 14px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          ${body}
+          <hr style="margin: 24px 0; border: none; border-top: 1px solid #e0e0e0;">
+          <p style="font-size: 12px; color: #888;">This is an automated notification from Trackla.</p>
+        </div>
+      </body>
+      </html>
+    `;
 
     const ok = await emailService.sendEmail({
       to: recipient.email,
       subject: subject,
-      html: body
+      html: fullEmailHtml
     });
     if (ok) {
       console.log(`✅ Email sent to ${recipient.email} for ${eventType} event`);

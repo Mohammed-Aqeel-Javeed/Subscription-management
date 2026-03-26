@@ -1,50 +1,62 @@
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import React, { useMemo } from "react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-export interface ComplianceCategoryChartProps {
-  data: { category: string; count: number }[];
-}
+type CategoryDatum = {
+  category: string;
+  count: number;
+};
 
-const COLORS = [
-  '#6366F1', '#F59E42', '#10B981', '#EF4444', '#FBBF24', '#3B82F6', '#8B5CF6', '#EC4899', '#22D3EE', '#F472B6'
-];
+type Props = {
+  data: CategoryDatum[];
+};
 
-export default function ComplianceCategoryChart({ data }: ComplianceCategoryChartProps) {
-  if (!data || data.length === 0) {
-    return <div className="h-full flex items-center justify-center text-gray-500">No category data available</div>;
+export default function ComplianceCategoryChart({ data }: Props) {
+  const normalized = useMemo(() => {
+    const rows = (data || [])
+      .filter((d) => d && typeof d.category === "string" && d.category.trim().length > 0)
+      .map((d) => ({ category: d.category.trim(), count: Number(d.count || 0) }));
+
+    return [...rows].sort((a, b) => b.count - a.count).slice(0, 10);
+  }, [data]);
+
+  if (!normalized.length) {
+    return <div className="h-[220px] flex items-center justify-center text-sm text-gray-500">No category data</div>;
   }
+
   return (
-    <ResponsiveContainer width="100%" height={320}>
-      <PieChart>
-        <Pie
-          data={data}
-          cx="50%"
-          cy="50%"
-          innerRadius={60}
-          outerRadius={120}
-          paddingAngle={5}
-          dataKey="count"
-          nameKey="category"
-        >
-          {data.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-          ))}
-        </Pie>
-        <Tooltip 
-          formatter={(value: number) => [value, 'Issues']}
-          contentStyle={{
-            backgroundColor: 'white',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-          }}
-        />
-        <Legend 
-          verticalAlign="bottom" 
-          height={36}
-          iconType="circle"
-          wrapperStyle={{ paddingTop: '20px' }}
-        />
-      </PieChart>
-    </ResponsiveContainer>
+    <div className="h-[220px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={normalized} layout="vertical" margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 12, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+          <YAxis
+            type="category"
+            dataKey="category"
+            width={100}
+            tick={{ fontSize: 16, fill: "#6b7280", fontWeight: 500 }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            formatter={(value: number) => [`${Number(value).toLocaleString()} filings`, "Filings"]}
+            cursor={{ fill: "transparent" }}
+            contentStyle={{
+              backgroundColor: "var(--card)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              padding: "12px",
+            }}
+            labelStyle={{ color: "var(--foreground)", fontWeight: 600, marginBottom: 6 }}
+          />
+          <Bar
+            dataKey="count"
+            fill="var(--chart-2)"
+            radius={[0, 8, 8, 0]}
+            barSize={22}
+            barGap={14}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

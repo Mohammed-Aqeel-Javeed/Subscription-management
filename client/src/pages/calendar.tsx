@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
-  ArrowLeft,
   BarChart3,
   Clock,
   CheckCircle2,
@@ -15,13 +14,14 @@ import {
   Award,
   ShieldCheck,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useUser } from "@/context/UserContext";
 
 type CategoryKey = "all" | "subscriptions" | "compliance" | "renewals";
 
@@ -104,20 +104,20 @@ function daysBetween(a: Date, b: Date) {
 
 function getCategoryButtonClass(active: boolean) {
   return active
-    ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-600 hover:text-white"
+    ? "bg-purple-600 text-white border-purple-600 hover:bg-purple-600 hover:text-white"
     : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50";
 }
 
 function getViewButtonClass(active: boolean) {
   return active
-    ? "bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-600"
+    ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-600"
     : "bg-transparent text-slate-600 border-transparent hover:bg-white";
 }
 
 function getTaskPillClass(category: TaskItem["category"]) {
   switch (category) {
     case "subscriptions":
-      return "bg-blue-50 text-blue-700 border border-blue-200";
+      return "bg-purple-50 text-purple-700 border border-purple-200";
     case "compliance":
       return "bg-orange-50 text-orange-700 border border-orange-200";
     case "renewals":
@@ -130,7 +130,7 @@ function getTaskPillClass(category: TaskItem["category"]) {
 function getUpcomingAccentClass(category: TaskItem["category"]) {
   switch (category) {
     case "subscriptions":
-      return "bg-blue-500";
+      return "bg-purple-500";
     case "compliance":
       return "bg-orange-500";
     case "renewals":
@@ -197,6 +197,21 @@ function isSameDay(a: Date, b: Date) {
 
 export default function CalendarPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useUser();
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 18) return "Good Afternoon";
+    return "Good Evening";
+  };
+
+  const getFirstName = () => {
+    if (!user?.fullName) return user?.email?.split("@")[0] || "User";
+    return user.fullName.split(" ")[0];
+  };
+
   const [activeCategory, setActiveCategory] = React.useState<CategoryKey>("all");
   const [view, setView] = React.useState<"month" | "year">("month");
   const [cursor, setCursor] = React.useState<Date>(() => startOfMonth(new Date()));
@@ -511,8 +526,9 @@ export default function CalendarPage() {
   }, [cursor, monthTasks]);
 
   return (
-    <div className="p-8 bg-slate-50 min-h-screen">
-      <div className="max-w-[1400px] mx-auto">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="flex-1 w-full">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-6" style={{ zoom: 0.92 }}>
         {/* Day list modal (opened by '+N more') */}
         <Dialog open={dayListOpen} onOpenChange={setDayListOpen}>
           <DialogContent className="max-w-xl max-h-[80vh] overflow-hidden bg-white text-slate-900 border-slate-200 shadow-2xl rounded-2xl">
@@ -576,7 +592,7 @@ export default function CalendarPage() {
                       {(() => {
                         const Icon = getCategoryIcon(selectedTask.category);
                         return (
-                          <span className="inline-flex items-center gap-2 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 text-sm font-medium">
+                          <span className="inline-flex items-center gap-2 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1 text-sm font-medium">
                             <Icon className="h-4 w-4" />
                             {getCategoryLabel(selectedTask.category)}
                           </span>
@@ -655,7 +671,7 @@ export default function CalendarPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-11 justify-center gap-2 text-blue-700 border-blue-200 hover:bg-blue-50"
+                    className="h-11 justify-center gap-2 text-purple-700 border-purple-200 hover:bg-purple-50"
                     onClick={() => {
                       setDetailsOpen(false);
                       openRecordModal(selectedTask);
@@ -670,32 +686,73 @@ export default function CalendarPage() {
           </DialogContent>
         </Dialog>
 
-        <div className="flex items-start justify-between gap-6 mb-6">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              className="h-10 w-10 p-0 bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  navigate(-1);
-                  return;
-                }
-                navigate("/dashboard");
-              }}
-              aria-label="Back"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-
-            <div className="h-10 w-10 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center">
-              <CalendarDays className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Calendar</h1>
-            </div>
+        {/* Greeting Card (match Dashboard header) */}
+        <div
+          className="mb-6 flex items-start justify-between rounded-2xl px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",
+          }}
+        >
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <svg className="absolute -right-12 -top-12 w-72 h-72 opacity-[0.18]" viewBox="0 0 200 200" fill="none">
+              <circle cx="100" cy="100" r="100" fill="#a78bfa" />
+            </svg>
+            <svg className="absolute right-16 -bottom-20 w-56 h-56 opacity-[0.12]" viewBox="0 0 200 200" fill="none">
+              <circle cx="100" cy="100" r="100" fill="#8b5cf6" />
+            </svg>
+            <svg className="absolute right-1/3 -top-10 w-36 h-36 opacity-[0.08]" viewBox="0 0 200 200" fill="none">
+              <circle cx="100" cy="100" r="100" fill="#7c3aed" />
+            </svg>
+            <svg className="absolute left-1/4 bottom-0 w-28 h-28 opacity-[0.06]" viewBox="0 0 200 200" fill="none">
+              <circle cx="100" cy="100" r="100" fill="#c4b5fd" />
+            </svg>
           </div>
 
-          <div className="w-full max-w-[560px]" />
+          <div className="relative z-10">
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">
+              {getGreeting()}, {getFirstName()}!
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-3 relative z-10">
+            <Button
+              variant="outline"
+              className={`${location.pathname === "/dashboard"
+                ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+              onClick={() => navigate("/dashboard")}
+            >
+              Subscription
+            </Button>
+            <Button
+              variant="outline"
+              className={`${location.pathname === "/compliance-dashboard"
+                ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+              onClick={() => navigate("/compliance-dashboard")}
+            >
+              Compliance
+            </Button>
+            <Button
+              variant="outline"
+              className={`${location.pathname === "/renewal-dashboard"
+                ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+              onClick={() => navigate("/renewal-dashboard")}
+            >
+              Renewal
+            </Button>
+            <Button
+              variant="outline"
+              className={`${location.pathname === "/calendar"
+                ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+              onClick={() => navigate("/calendar")}
+            >
+              Calendar
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8">
@@ -758,7 +815,7 @@ export default function CalendarPage() {
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  className="h-10 w-10 p-0 bg-white text-blue-700 border-blue-200 hover:bg-blue-50"
+                  className="h-10 w-10 p-0 bg-white text-purple-700 border-purple-200 hover:bg-purple-50"
                   onClick={goPrev}
                   aria-label={view === "year" ? "Previous year" : "Previous month"}
                 >
@@ -778,7 +835,7 @@ export default function CalendarPage() {
                       if (!Number.isNaN(m)) setCursor((prev) => new Date(prev.getFullYear(), m, 1));
                     }}
                   >
-                    <SelectTrigger className="h-10 bg-white [&>svg]:text-blue-700">
+                    <SelectTrigger className="h-10 bg-white [&>svg]:text-purple-700">
                       <SelectValue
                         placeholder={
                           view === "year"
@@ -805,7 +862,7 @@ export default function CalendarPage() {
 
                 <Button
                   variant="outline"
-                  className="h-10 w-10 p-0 bg-white text-blue-700 border-blue-200 hover:bg-blue-50"
+                  className="h-10 w-10 p-0 bg-white text-purple-700 border-purple-200 hover:bg-purple-50"
                   onClick={goNext}
                   aria-label={view === "year" ? "Next year" : "Next month"}
                 >
@@ -848,7 +905,7 @@ export default function CalendarPage() {
                             <div
                               className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-sm font-semibold ${
                                 isToday && inMonth
-                                  ? "bg-blue-600 text-white"
+                                  ? "bg-purple-600 text-white"
                                   : inMonth
                                     ? "text-slate-900"
                                     : "text-slate-400"
@@ -906,8 +963,8 @@ export default function CalendarPage() {
                               {d.toLocaleString("en-US", { month: "long" })}
                             </div>
                             <div className="text-xs mt-1">
-                              <span className={hasItems ? "font-semibold text-blue-700" : "text-slate-500"}>{count}</span>{" "}
-                              <span className={hasItems ? "text-blue-700" : "text-slate-500"}>tasks</span>
+                              <span className={hasItems ? "font-semibold text-purple-700" : "text-slate-500"}>{count}</span>{" "}
+                              <span className={hasItems ? "text-purple-700" : "text-slate-500"}>tasks</span>
                             </div>
                           </button>
                         );
@@ -935,7 +992,7 @@ export default function CalendarPage() {
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2 text-slate-700">
-                    <span className="h-2 w-2 rounded-full bg-blue-500" /> Total items
+                    <span className="h-2 w-2 rounded-full bg-purple-500" /> Total items
                   </div>
                   <div className="font-semibold text-slate-900">{monthSummary.total}</div>
                 </div>
@@ -1025,6 +1082,7 @@ export default function CalendarPage() {
               </CardContent>
             </Card>
           </div>
+        </div>
         </div>
       </div>
     </div>

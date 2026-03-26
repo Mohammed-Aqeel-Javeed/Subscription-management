@@ -426,7 +426,7 @@ export default function Dashboard() {
           <div className="w-full px-4 sm:px-6 lg:px-8 py-6" style={{ zoom: 0.92 }}>
             {/* Greeting Card */}
             <div
-              className="mb-6 flex items-start justify-between rounded-2xl px-8 py-6 shadow-sm border border-purple-100/50 overflow-hidden backdrop-blur-xl"
+              className="mb-6 flex items-start justify-between rounded-2xl px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
               style={{
                 background:
                   "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",
@@ -457,7 +457,7 @@ export default function Dashboard() {
                 <Button
                   variant="outline"
                   className={`${location.pathname === "/dashboard"
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-700 hover:text-white"
+                    ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
                     : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/dashboard")}
                 >
@@ -466,25 +466,25 @@ export default function Dashboard() {
                 <Button
                   variant="outline"
                   className={`${location.pathname === "/compliance-dashboard"
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-700 hover:text-white"
+                    ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
                     : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/compliance-dashboard")}
                 >
                   Compliance
                 </Button>
-                  <Button
-                    variant="outline"
-                    className={`${location.pathname === "/renewals"
-                      ? "bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-700 hover:text-white"
-                      : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
-                    onClick={() => navigate("/renewals")}
-                  >
-                    Renewal
-                  </Button>
+                <Button
+                  variant="outline"
+                  className={`${location.pathname === "/renewal-dashboard"
+                    ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                  onClick={() => navigate("/renewal-dashboard")}
+                >
+                  Renewal
+                </Button>
                 <Button
                   variant="outline"
                   className={`${location.pathname === "/calendar"
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm hover:bg-blue-700 hover:text-white"
+                    ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
                     : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/calendar")}
                 >
@@ -684,23 +684,23 @@ export default function Dashboard() {
               <div className="h-[70vh] overflow-auto overscroll-contain custom-scrollbar rounded-lg border border-gray-200">
                 <Table className="table-fixed w-full">
                 <TableHeader>
-                  <TableRow className="border-b-2 border-gray-300 bg-gray-200">
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[210px]">
+                  <TableRow className="border-b-2 border-purple-300 bg-purple-100">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[210px]">
                       SERVICE
                     </TableHead>
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[210px]">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[210px]">
                       VENDOR
                     </TableHead>
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-3 text-right text-xs font-bold text-slate-900 uppercase tracking-wide w-[120px]">
                       AMOUNT
                     </TableHead>
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[110px]">
                       BILLING
                     </TableHead>
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[140px]">
                       NEXT RENEWAL
                     </TableHead>
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[240px]">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[240px]">
                       CATEGORY
                     </TableHead>
                   </TableRow>
@@ -709,7 +709,7 @@ export default function Dashboard() {
                   {filteredSubscriptions.map((subscription) => (
                     <TableRow
                       key={subscription.id}
-                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                      className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                     >
                       <TableCell className="px-4 py-3 font-medium text-gray-800 w-[210px] max-w-[210px] overflow-hidden">
                         <div className="truncate whitespace-nowrap" title={subscription.serviceName}>
@@ -766,23 +766,23 @@ export default function Dashboard() {
               <div className="h-[70vh] overflow-auto overscroll-contain custom-scrollbar rounded-lg border border-gray-200">
                 <Table className="table-fixed w-full">
                 <TableHeader>
-                  <TableRow className="border-b-2 border-gray-300 bg-gray-200">
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[210px]">
+                  <TableRow className="border-b-2 border-purple-300 bg-purple-100">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[210px]">
                       SERVICE
                     </TableHead>
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[210px]">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[210px]">
                       VENDOR
                     </TableHead>
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-3 text-right text-xs font-bold text-slate-900 uppercase tracking-wide w-[120px]">
                       AMOUNT
                     </TableHead>
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[140px]">
                       RENEWAL DATE
                     </TableHead>
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[90px]">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[90px]">
                       DAYS
                     </TableHead>
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[240px]">
+                    <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[240px]">
                       CATEGORY
                     </TableHead>
                   </TableRow>
@@ -793,7 +793,7 @@ export default function Dashboard() {
                     return (
                       <TableRow
                         key={subscription.id}
-                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                        className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                       >
                         <TableCell className="px-4 py-3 font-medium text-gray-800 w-[210px] max-w-[210px] overflow-hidden">
                           <div className="truncate whitespace-nowrap" title={subscription.serviceName}>
