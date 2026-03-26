@@ -3514,6 +3514,7 @@ export default function GovernmentLicense() {
           </AlertDialogContent>
         </AlertDialog>
         {filtersOpen && sidebarSlotEl ? createPortal(<FiltersSidebarPanel />, sidebarSlotEl) : null}
+
         {/* Header Section */}
         <div className="flex items-center justify-between mb-6 shrink-0">
           <div className="flex items-center space-x-4">

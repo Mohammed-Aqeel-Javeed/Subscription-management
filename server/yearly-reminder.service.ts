@@ -194,13 +194,24 @@ export class YearlyReminderService {
   ): Promise<boolean> {
     try {
       const daysUntilRenewal = Math.ceil((renewalDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+
+      const truncateText = (value: unknown, max = 72) => {
+        const s = String(value ?? '').trim();
+        if (!s) return '';
+        if (s.length <= max) return s;
+        return s.slice(0, Math.max(0, max - 3)) + '...';
+      };
+
+      const displayServiceName = truncateText(subscription.serviceName || 'Subscription', 72) || 'Subscription';
       
-      const subject = `⏰ Renewal Reminder: ${subscription.serviceName} renews in ${daysUntilRenewal} days`;
+      const subject = `⏰ Renewal Reminder: ${displayServiceName} renews in ${daysUntilRenewal} days`;
       
       const html = `
         <!DOCTYPE html>
         <html>
         <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
           <style>
             body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -212,6 +223,17 @@ export class YearlyReminderService {
             .value { color: #333; }
             .alert { background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; margin: 20px 0; }
             .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
+            h1, h2, p, span { word-break: break-word; }
+
+            @media only screen and (max-width: 600px) {
+              .container { padding: 12px; }
+              .header { padding: 22px 16px; }
+              .content { padding: 18px 16px; }
+              .subscription-box { padding: 16px; }
+              .info-row { display: block; }
+              .label { display: block; margin-bottom: 4px; }
+              .value { display: block; }
+            }
           </style>
         </head>
         <body>
@@ -225,7 +247,7 @@ export class YearlyReminderService {
               </div>
               
               <div class="subscription-box">
-                <h2>${subscription.serviceName}</h2>
+                <h2>${displayServiceName}</h2>
                 
                 <div class="info-row">
                   <span class="label">Vendor:</span>

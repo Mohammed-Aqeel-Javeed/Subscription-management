@@ -529,9 +529,19 @@ async function sendEmailNotification(
     let subject = '';
     let body = '';
 
-    const filingName = compliance.filingName || compliance.policy || compliance.complianceName || compliance.name || 'Compliance Filing';
+    const filingName =
+      compliance.filingName || compliance.policy || compliance.complianceName || compliance.name || 'Compliance Filing';
     const recipientName = recipient.name;
     const recipientRole = recipient.role;
+
+    const truncateText = (value: unknown, max = 64) => {
+      const s = String(value ?? '').trim();
+      if (!s) return '';
+      if (s.length <= max) return s;
+      return s.slice(0, Math.max(0, max - 3)) + '...';
+    };
+
+    const displayFilingName = truncateText(filingName, 72) || 'Compliance Filing';
 
     const departments = getComplianceDepartmentsForNotification(compliance);
     const departmentsLabel = departments.length ? departments.join(', ') : 'N/A';
@@ -555,14 +565,14 @@ async function sendEmailNotification(
 
     switch (eventType) {
       case 'created':
-        subject = `${recipientRole === 'admin' ? 'Admin: ' : ''}New Compliance Filing Created: ${filingName}`;
+        subject = `${recipientRole === 'admin' ? 'Admin: ' : ''}New Compliance Filing Created: ${displayFilingName}`;
         body = `
           <h2>New Compliance Filing Created</h2>
           <p>Hello ${recipientName},</p>
           ${roleIntro}
           <p>A new compliance filing has been created.</p>
           <ul>
-            <li><strong>Filing Name:</strong> ${filingName}</li>
+            <li><strong>Filing Name:</strong> ${displayFilingName}</li>
             <li><strong>Category:</strong> ${compliance.complianceCategory || compliance.category || 'N/A'}</li>
             <li><strong>Authority:</strong> ${compliance.governingAuthority || 'N/A'}</li>
             <li><strong>Submission Deadline:</strong> ${formatDate(compliance.submissionDeadline)}</li>
@@ -573,14 +583,14 @@ async function sendEmailNotification(
         break;
 
       case 'owner_changed':
-        subject = `Compliance Owner Changed: ${filingName}`;
+        subject = `Compliance Owner Changed: ${displayFilingName}`;
         body = `
           <h2>Compliance Owner Changed</h2>
           <p>Hello ${recipientName},</p>
           ${roleIntro}
           <p>You have been assigned as the <strong>new owner</strong> of this compliance filing.</p>
           <ul>
-            <li><strong>Filing Name:</strong> ${filingName}</li>
+            <li><strong>Filing Name:</strong> ${displayFilingName}</li>
             <li><strong>Category:</strong> ${compliance.complianceCategory || compliance.category || 'N/A'}</li>
             <li><strong>Previous Owner:</strong> ${additionalData?.oldOwner || 'N/A'}</li>
             <li><strong>Submission Deadline:</strong> ${formatDate(compliance.submissionDeadline)}</li>
@@ -589,33 +599,34 @@ async function sendEmailNotification(
         break;
 
       case 'submitted':
-        subject = `Compliance Filing Submitted: ${filingName}`;
+        subject = `Compliance Filing Submitted: ${displayFilingName}`;
         body = `
           <h2>Compliance Filing Submitted</h2>
           <p>Hello ${recipientName},</p>
           ${roleIntro}
           <p>The compliance filing has been marked as <strong>submitted</strong>.</p>
           <ul>
-            <li><strong>Filing Name:</strong> ${filingName}</li>
+            <li><strong>Filing Name:</strong> ${displayFilingName}</li>
             <li><strong>Category:</strong> ${compliance.complianceCategory || compliance.category || 'N/A'}</li>
             <li><strong>Submission Date:</strong> ${formatDate(compliance.submissionDate || new Date())}</li>
             <li><strong>Status:</strong> ${compliance.status || 'Submitted'}</li>
           </ul>
         `;
         break;
+
       case 'reminder': {
         const reminderType = additionalData?.reminderType ? String(additionalData.reminderType) : 'Reminder';
         const triggerDate = additionalData?.reminderTriggerDate || additionalData?.reminderDate;
         const deadline = additionalData?.submissionDeadline || compliance.submissionDeadline;
 
-        subject = `Compliance Deadline Reminder: ${filingName}`;
+        subject = `Compliance Deadline Reminder: ${displayFilingName}`;
         body = `
           <h2>Compliance Deadline Reminder</h2>
           <p>Hello ${recipientName},</p>
           ${roleIntro}
           <p>This is a reminder regarding an upcoming compliance submission deadline.</p>
           <ul>
-            <li><strong>Filing:</strong> ${filingName}</li>
+            <li><strong>Filing:</strong> ${displayFilingName}</li>
             <li><strong>Category:</strong> ${compliance.complianceCategory || compliance.category || 'General'}</li>
             <li><strong>Reminder:</strong> ${reminderType}</li>
             <li><strong>Reminder Date:</strong> ${formatDate(triggerDate)}</li>
@@ -630,7 +641,6 @@ async function sendEmailNotification(
         return; // No email for other_fields
     }
 
-    // Wrap body in a proper email template
     const fullEmailHtml = `
       <!DOCTYPE html>
       <html>
@@ -639,17 +649,17 @@ async function sendEmailNotification(
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${subject}</title>
         <style>
-          body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; 
-            margin: 0; 
-            padding: 20px; 
-            background-color: #f4f7fb; 
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7fb;
             line-height: 1.6;
           }
-          .container { 
-            max-width: 600px; 
-            margin: 0 auto; 
-            background-color: white; 
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             padding: 32px;
@@ -659,6 +669,14 @@ async function sendEmailNotification(
           ul { margin: 20px 0; padding-left: 20px; }
           li { margin: 8px 0; color: #4a4a4a; }
           strong { color: #1a1a1a; }
+          p, li { word-break: break-word; }
+
+          @media only screen and (max-width: 600px) {
+            body { padding: 12px; }
+            .container { padding: 18px; border-radius: 10px; }
+            h2 { font-size: 20px; }
+            p, li { font-size: 14px; }
+          }
         </style>
       </head>
       <body>
@@ -674,7 +692,7 @@ async function sendEmailNotification(
     `;
 
     console.log(`📧 Attempting to send compliance email (${eventType}) to ${maskEmailForLog(recipient.email)}...`);
-    
+
     const sent = await emailService.sendEmail({
       to: recipient.email,
       subject,

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Layers, Settings, FileBarChart, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft } from "lucide-react";
+import { BarChart3, Layers, Settings, FileBarChart, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft, UserCircle, LayoutDashboard } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api";
 import { UnifiedImportExport } from "../unified-import-export";
@@ -219,6 +219,11 @@ const navItems = [
   { path: "/reports", label: "Reports", icon: FileBarChart },
 ];
 
+const platformNavItems = [
+  { path: "/platform-admin", label: "Platform Dashboard", icon: LayoutDashboard },
+  { path: "/profile", label: "Profile", icon: UserCircle },
+];
+
 export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean; onToggle?: () => void }) {
   // Get current location for active state
   const location = useLocation();
@@ -291,85 +296,52 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
 
         {/* Collapsed Navigation Icons */}
         <nav className="flex-1 px-2 py-3">
-          {isGlobalAdmin ? null : (
-            <ul className="space-y-1">
-              {navItems.map((item) => {
+          <ul className="space-y-1">
+            {(isGlobalAdmin ? platformNavItems : navItems).map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
-              
+
+              const link = (
+                <Link
+                  to={item.path}
+                  className={
+                    `flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ` +
+                    (isActive
+                      ? "bg-white shadow-xl"
+                      : "hover:bg-white/10 hover:shadow-md")
+                  }
+                  title={item.label}
+                >
+                  <div
+                    className={
+                      `relative flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200 ` +
+                      (isActive
+                        ? "bg-transparent"
+                        : "bg-white/10 border border-white/10")
+                    }
+                    style={{
+                      boxShadow: isActive
+                        ? "none"
+                        : "inset 0 1px 0 rgba(255,255,255,0.12)",
+                    }}
+                  >
+                    <Icon className="relative z-10 text-indigo-800" size={16} />
+                  </div>
+                </Link>
+              );
+
               // Protect Settings and Company Details based on role
-              if (item.path === "/reminders" || item.path === "/company-details") {
+              if (!isGlobalAdmin && (item.path === "/reminders" || item.path === "/company-details")) {
                 return (
                   <Can I="manage" a="Settings" key={item.path} fallback={null}>
-                    <li>
-                      <Link
-                        to={item.path}
-                        className={`
-                          flex items-center justify-center w-12 h-12 rounded-xl
-                          transition-all duration-200
-                          ${isActive 
-                            ? 'bg-white shadow-xl' 
-                            : 'hover:bg-white/10 hover:shadow-md'
-                          }
-                        `}
-                        title={item.label}
-                      >
-                        <div className={`
-                          relative flex items-center justify-center w-9 h-9 rounded-lg
-                          transition-all duration-200
-                          ${isActive 
-                            ? 'bg-transparent' 
-                            : 'bg-white/10 border border-white/10'
-                          }
-                        `}
-                        style={{
-                          boxShadow: isActive 
-                            ? 'none' 
-                            : 'inset 0 1px 0 rgba(255,255,255,0.12)'
-                        }}>
-                          <Icon className="relative z-10 text-indigo-800" size={16} />
-                        </div>
-                      </Link>
-                    </li>
+                    <li>{link}</li>
                   </Can>
                 );
               }
 
-              return (
-                <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    className={`
-                      flex items-center justify-center w-12 h-12 rounded-xl
-                      transition-all duration-200
-                      ${isActive 
-                        ? 'bg-white shadow-xl' 
-                        : 'hover:bg-white/10 hover:shadow-md'
-                      }
-                    `}
-                    title={item.label}
-                  >
-                    <div className={`
-                      relative flex items-center justify-center w-9 h-9 rounded-lg
-                      transition-all duration-200
-                      ${isActive 
-                        ? 'bg-transparent' 
-                        : 'bg-white/10 border border-white/10'
-                      }
-                    `}
-                    style={{
-                      boxShadow: isActive 
-                        ? 'none' 
-                        : 'inset 0 1px 0 rgba(255,255,255,0.12)'
-                    }}>
-                      <Icon className="relative z-10 text-indigo-800" size={16} />
-                    </div>
-                  </Link>
-                </li>
-              );
-              })}
-            </ul>
-          )}
+              return <li key={item.path}>{link}</li>;
+            })}
+          </ul>
         </nav>
 
         {/* Collapsed Footer: Only Logout button, no user avatar/initial */}
@@ -444,7 +416,28 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         {pageSlotActive && pageSlotReplaceNav ? null : (
           <>
             {isGlobalAdmin ? (
-              <div className="px-3 py-3 text-sm text-indigo-700/80">No tenant navigation for platform admin.</div>
+              <ul className="space-y-0.5">
+                {platformNavItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <li key={item.path}>
+                      <Link
+                        to={item.path}
+                        className={
+                          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 " +
+                          (isActive
+                            ? "bg-indigo-600 text-white font-semibold shadow-md"
+                            : "text-indigo-800 hover:bg-white/50 hover:text-indigo-900")
+                        }
+                      >
+                        <Icon size={18} className="flex-shrink-0" />
+                        <span className="font-sidebar font-semibold">{item.label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
             ) : (
               <ul className="space-y-0.5">
                 {navItems.map((item) => {

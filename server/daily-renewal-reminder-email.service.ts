@@ -77,6 +77,15 @@ function buildHtml(params: {
   renewalDate: string;
   reminderDays: number;
 }): string {
+  const truncateText = (value: unknown, max = 72) => {
+    const s = String(value ?? "").trim();
+    if (!s) return "";
+    if (s.length <= max) return s;
+    return s.slice(0, Math.max(0, max - 3)) + "...";
+  };
+
+  const displayServiceName = truncateText(params.serviceName, 72) || "-";
+
   return `
   <!DOCTYPE html>
   <html>
@@ -91,6 +100,12 @@ function buildHtml(params: {
         p { margin:8px 0; color:#374151; line-height:1.5; }
         .meta { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-top:12px; }
         .meta b { color:#111827; }
+        p { word-break: break-word; }
+
+        @media only screen and (max-width: 600px) {
+          body { padding: 12px; }
+          .card { padding: 16px; }
+        }
       </style>
     </head>
     <body>
@@ -99,7 +114,7 @@ function buildHtml(params: {
         <p>Hello ${params.recipientName},</p>
         <p>This is a reminder that the following subscription is due for renewal soon.</p>
         <div class="meta">
-          <p><b>Subscription:</b> ${params.serviceName}</p>
+          <p><b>Subscription:</b> ${displayServiceName}</p>
           <p><b>Next payment date:</b> ${params.renewalDate}</p>
           <p><b>Remind before:</b> ${params.reminderDays} days</p>
         </div>

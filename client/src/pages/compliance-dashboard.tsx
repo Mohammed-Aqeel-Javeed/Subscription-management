@@ -1,21 +1,20 @@
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, CheckCircle, Clock, TrendingUp, ArrowLeft } from "lucide-react";
-import ComplianceTrendsChart from "@/components/charts/compliance-trends-chart";
-import ComplianceCategoryChart from "@/components/charts/compliance-category-chart";
-import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
-import { motion } from "framer-motion";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { useUser } from "@/context/UserContext";
+import ComplianceCategoryChart from "@/components/charts/compliance-category-chart";
+import { AlertTriangle, Calendar, CheckCircle2, FileText, TrendingUp, X } from "lucide-react";
+
+type ModalKey = "total" | "dueToday" | "upcoming7Days" | "overdue" | "completedThisMonth";
 
 // Error boundary wrapper
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
-  const [error, setError] = useState<Error | null>(null);
+  const [error] = React.useState<Error | null>(null);
   return error ? (
     <div style={{ color: 'red', padding: 32 }}>
       <h2>Dashboard Error</h2>
@@ -28,140 +27,322 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
 
 export default function ComplianceDashboard() {
   const navigate = useNavigate();
-  const [activeIssuesModalOpen, setActiveIssuesModalOpen] = useState(false);
-  const [upcomingDeadlinesModalOpen, setUpcomingDeadlinesModalOpen] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
+  const location = useLocation();
+  const { user } = useUser();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState<ModalKey>("total");
   
   // Fetch all compliance filings (live data)
-  const { data: complianceList, isLoading: complianceLoading } = useQuery({
+  const { data: complianceList, isLoading: complianceLoading, error: complianceError } = useQuery<any[]>({
     queryKey: ["/api/compliance/list"],
     queryFn: async () => {
       const res = await fetch("/api/compliance/list", { credentials: "include" });
+      if (res.status === 401) throw new Error("Unauthorized");
       if (!res.ok) throw new Error("Failed to fetch compliance data");
       return res.json();
     },
   refetchInterval: false, // Disable auto-refresh
   });
 
-  // Compute metrics, issues, deadlines from complianceList
-  const now = useMemo(() => new Date(), []);
-  
-  // Compute trends data (submissions per month for last 6 months)
-  const trendsData = useMemo(() => {
-    if (!complianceList) return [];
-    const months: { [key: string]: { submitted: number; total: number } } = {};
-    const nowDate = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(nowDate.getFullYear(), nowDate.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}`;
-      months[key] = { submitted: 0, total: 0 };
-    }
-    complianceList.forEach((c: any) => {
-      if (!c.createdAt) return;
-      const created = new Date(c.createdAt);
-      const key = `${created.getFullYear()}-${(created.getMonth() + 1).toString().padStart(2, "0")}`;
-      if (months[key]) {
-        months[key].total++;
-        if (c.status === "Submitted") months[key].submitted++;
-      }
-    });
-    return Object.entries(months).map(([date, v]) => ({ date, ...v }));
-  }, [complianceList]);
+  const isUnauthorized = complianceError instanceof Error && complianceError.message === "Unauthorized";
 
-  // Compute category breakdown (issues by category)
-  const categoryData = useMemo(() => {
-    if (!complianceList) return [];
-    const map: { [cat: string]: number } = {};
-    complianceList.forEach((c: any) => {
-      if (!c.category) return;
-      if (!map[c.category]) map[c.category] = 0;
-      if (["Pending", "Overdue"].includes(c.status)) map[c.category]++;
-    });
-    return Object.entries(map).map(([category, count]) => ({ category, count }));
-  }, [complianceList]);
+  React.useEffect(() => {
+    if (isUnauthorized) navigate("/login");
+  }, [isUnauthorized, navigate]);
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 18) return "Good Afternoon";
+    return "Good Evening";
+  };
+
+  const getFirstName = () => {
+    if (!user?.fullName) return user?.email?.split("@")[0] || "User";
+    return user.fullName.split(" ")[0];
+  };
+
+  const items = Array.isArray(complianceList) ? complianceList : [];
+
+  const startOfToday = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const startOfTomorrow = useMemo(() => {
+    const d = new Date(startOfToday);
+    d.setDate(d.getDate() + 1);
+    return d;
+  }, [startOfToday]);
+
+  const startOfNext7Days = useMemo(() => {
+    const d = new Date(startOfToday);
+    d.setDate(d.getDate() + 7);
+    return d;
+  }, [startOfToday]);
+
+  const startOfMonth = useMemo(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const parseDateSafe = (value: unknown) => {
+    const d = new Date(String(value ?? ""));
+    return Number.isFinite(d.getTime()) ? d : null;
+  };
+
+  const isSubmitted = (c: any) => String(c?.status ?? "").toLowerCase() === "submitted";
+
+  const getFilingName = (c: any) =>
+    String(c?.filingName ?? c?.policy ?? c?.complianceName ?? c?.name ?? "Compliance Filing");
+
+  const getCategory = (c: any) => {
+    const raw = String(c?.category ?? c?.complianceCategory ?? c?.filingComplianceCategory ?? "Other").trim();
+    return raw || "Other";
+  };
+
+  const getCategoryPillClasses = (category?: string) => {
+    const value = String(category || "").trim();
+    if (!value) return "bg-slate-100 text-slate-700 border-slate-200";
+
+    const palette = [
+      "bg-blue-50 text-blue-700 border-blue-200",
+      "bg-emerald-50 text-emerald-700 border-emerald-200",
+      "bg-purple-50 text-purple-700 border-purple-200",
+      "bg-amber-50 text-amber-800 border-amber-200",
+      "bg-rose-50 text-rose-700 border-rose-200",
+      "bg-cyan-50 text-cyan-700 border-cyan-200",
+    ];
+
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) hash = (hash + value.charCodeAt(i)) % 100000;
+    return palette[hash % palette.length];
+  };
+
+  const getDueDate = (c: any) => parseDateSafe(c?.submissionDeadline);
+
+  const formatDate = (value: Date | null) => {
+    if (!value) return "-";
+    const dd = String(value.getDate()).padStart(2, "0");
+    const mm = String(value.getMonth() + 1).padStart(2, "0");
+    const yyyy = String(value.getFullYear());
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  const getStatusPill = (c: any) => {
+    const raw = String(c?.status ?? "").toLowerCase();
+    if (raw === "draft") {
+      return { label: "Draft", classes: "bg-amber-50 text-amber-700 border-amber-200" };
+    }
+    if (raw === "submitted") {
+      return { label: "Submitted", classes: "bg-green-50 text-green-700 border-green-200" };
+    }
+
+    const deadline = getDueDate(c);
+    if (deadline && deadline < startOfToday) {
+      return { label: "Late", classes: "bg-rose-50 text-rose-700 border-rose-200" };
+    }
+    if (deadline) {
+      return { label: "Due", classes: "bg-orange-50 text-orange-700 border-orange-200" };
+    }
+    return { label: "No Due", classes: "bg-slate-50 text-slate-700 border-slate-200" };
+  };
+
+  const openModal = (key: ModalKey) => {
+    setActiveModal(key);
+    setModalOpen(true);
+  };
 
   const metrics = useMemo(() => {
-    if (!complianceList) return {};
-    const total = complianceList.length;
-    const completed = complianceList.filter((c: any) => c.status === "Submitted").length;
-    const complianceScore = total ? Math.round((completed / total) * 100) : 100;
-    const requiredActions = complianceList.filter((c: any) => ["Pending", "Overdue"].includes(c.status)).length;
-    const activeIssues = complianceList.filter((c: any) => c.status === "Overdue").length;
-    const upcomingDeadlines = complianceList.filter((c: any) => {
-      if (!c.submissionDeadline || c.status === "Submitted") return false;
-      const deadline = new Date(c.submissionDeadline);
-      return deadline >= now && deadline <= new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const total = items.length;
+
+    const dueToday = items.filter((c: any) => {
+      if (isSubmitted(c)) return false;
+      const deadline = parseDateSafe(c?.submissionDeadline);
+      if (!deadline) return false;
+      return deadline >= startOfToday && deadline < startOfTomorrow;
     }).length;
-    return { complianceScore, requiredActions, activeIssues, upcomingDeadlines };
-  }, [complianceList, now]);
 
-  const activeIssues = useMemo(() => {
-    if (!complianceList) return [];
-    return complianceList.filter((c: any) => c.status === "Overdue");
-  }, [complianceList]);
+    const upcoming7Days = items.filter((c: any) => {
+      if (isSubmitted(c)) return false;
+      const deadline = parseDateSafe(c?.submissionDeadline);
+      if (!deadline) return false;
+      return deadline >= startOfTomorrow && deadline <= startOfNext7Days;
+    }).length;
 
-  const upcomingDeadlines = useMemo(() => {
-    if (!complianceList) return [];
-    return complianceList.filter((c: any) => {
-      if (!c.submissionDeadline || c.status === "Submitted") return false;
-      const deadline = new Date(c.submissionDeadline);
-      return deadline >= now && deadline <= new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    });
-  }, [complianceList, now]);
+    const overdue = items.filter((c: any) => {
+      if (isSubmitted(c)) return false;
+      const deadline = parseDateSafe(c?.submissionDeadline);
+      if (!deadline) return false;
+      return deadline < startOfToday;
+    }).length;
 
-  // Auth check: use complianceList query error
-  if (complianceLoading) {
+    const completedThisMonth = items.filter((c: any) => {
+      if (!isSubmitted(c)) return false;
+      const dt =
+        parseDateSafe((c as any)?.submissionDate) ||
+        parseDateSafe((c as any)?.filingSubmissionDate) ||
+        parseDateSafe((c as any)?.updatedAt) ||
+        parseDateSafe((c as any)?.createdAt);
+      if (!dt) return false;
+      return dt >= startOfMonth;
+    }).length;
+
+    return { total, dueToday, upcoming7Days, overdue, completedThisMonth };
+  }, [items, startOfMonth, startOfNext7Days, startOfToday, startOfTomorrow]);
+
+  const statusBuckets = useMemo(() => {
+    const colors = {
+      "No Due": "var(--chart-3)",
+      Draft: "var(--chart-4)",
+      Due: "var(--chart-2)",
+      Late: "var(--chart-1)",
+    } as const;
+
+    const counts: Record<keyof typeof colors, number> = {
+      "No Due": 0,
+      Draft: 0,
+      Due: 0,
+      Late: 0,
+    };
+
+    for (const c of items) {
+      const statusRaw = String(c?.status ?? "").toLowerCase();
+      const deadline = getDueDate(c);
+
+      if (statusRaw === "draft") {
+        counts.Draft += 1;
+        continue;
+      }
+
+      if (isSubmitted(c) || !deadline) {
+        counts["No Due"] += 1;
+        continue;
+      }
+
+      if (statusRaw === "overdue" || deadline < startOfToday) {
+        counts.Late += 1;
+        continue;
+      }
+
+      counts.Due += 1;
+    }
+
+    const ordered: Array<keyof typeof colors> = ["No Due", "Draft", "Due", "Late"];
+    return ordered.map((status) => ({ status, count: counts[status], color: colors[status] }));
+  }, [items, startOfToday]);
+
+  const statusTotal = useMemo(() => statusBuckets.reduce((sum, b) => sum + b.count, 0), [statusBuckets]);
+
+  const statusDonutData = useMemo(() => {
+    return statusBuckets
+      .filter((s) => s.count > 0)
+      .map((s) => ({ category: s.status, count: s.count, color: s.color }));
+  }, [statusBuckets]);
+
+  const renderDonutLabel = (props: any) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
+    if (typeof percent !== 'number' || percent < 0.08) return null;
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
     return (
-      <div className="p-8">
-        <div className="mb-8">
-          <Skeleton className="h-8 w-48 mb-2" />
-          <Skeleton className="h-4 w-96" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
-        </div>
-      </div>
+      <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600}>
+        {(percent * 100).toFixed(0)}%
+      </text>
     );
-  }
-  if (complianceList === undefined) {
-    // If query failed (likely 401), redirect to login
-    navigate("/login");
-    return null;
-  }
-
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/logout", { method: "POST", credentials: "include" });
-    } catch {}
-    navigate("/login");
   };
 
-  // Tab navigation handler
-  const handleTabClick = (tab: 'subscription' | 'calendar' | 'compliance') => {
-    if (tab === 'subscription') {
-      navigate('/dashboard');
-      return;
+  const categoryData = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of items) {
+      const category = getCategory(c);
+      counts.set(category, (counts.get(category) || 0) + 1);
     }
-    if (tab === 'calendar') {
-      navigate('/calendar');
-      return;
+    return Array.from(counts.entries())
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [items]);
+
+  const rowsByModalKey = useMemo(() => {
+    const list = items;
+
+    const dueTodayRows = list.filter((c: any) => {
+      if (isSubmitted(c)) return false;
+      const deadline = getDueDate(c);
+      return !!deadline && deadline >= startOfToday && deadline < startOfTomorrow;
+    });
+
+    const upcoming7DaysRows = list.filter((c: any) => {
+      if (isSubmitted(c)) return false;
+      const deadline = getDueDate(c);
+      return !!deadline && deadline >= startOfTomorrow && deadline <= startOfNext7Days;
+    });
+
+    const overdueRows = list.filter((c: any) => {
+      if (isSubmitted(c)) return false;
+      const deadline = getDueDate(c);
+      if (!deadline) return false;
+      const statusRaw = String(c?.status ?? "").toLowerCase();
+      return statusRaw === "overdue" || deadline < startOfToday;
+    });
+
+    const completedThisMonthRows = list.filter((c: any) => {
+      if (!isSubmitted(c)) return false;
+      const dt =
+        parseDateSafe((c as any)?.submissionDate) ||
+        parseDateSafe((c as any)?.filingSubmissionDate) ||
+        parseDateSafe((c as any)?.updatedAt) ||
+        parseDateSafe((c as any)?.createdAt);
+      return !!dt && dt >= startOfMonth;
+    });
+
+    return {
+      total: list,
+      dueToday: dueTodayRows,
+      upcoming7Days: upcoming7DaysRows,
+      overdue: overdueRows,
+      completedThisMonth: completedThisMonthRows,
+    } satisfies Record<ModalKey, any[]>;
+  }, [items, parseDateSafe, startOfMonth, startOfNext7Days, startOfToday, startOfTomorrow]);
+
+  const modalTitle = useMemo(() => {
+    switch (activeModal) {
+      case "total":
+        return "Total Filings";
+      case "dueToday":
+        return "Due Today";
+      case "upcoming7Days":
+        return "Upcoming (7 days)";
+      case "overdue":
+        return "Overdue / Late";
+      case "completedThisMonth":
+        return "Completed This Month";
+      default:
+        return "Filings";
     }
-    navigate('/compliance-dashboard');
-  };
+  }, [activeModal]);
+
+  const activeRows = rowsByModalKey[activeModal] ?? [];
 
   if (complianceLoading) {
     return (
       <div className="p-8">
         <div className="mb-8">
-          <Skeleton className="h-8 w-48 mb-2" />
-          <Skeleton className="h-4 w-96" />
+          <Skeleton className="h-10 w-full max-w-xl" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-32" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-24" />
           ))}
+        </div>
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Skeleton className="h-80" />
+          <Skeleton className="h-80" />
         </div>
       </div>
     );
@@ -169,313 +350,324 @@ export default function ComplianceDashboard() {
 
   return (
     <ErrorBoundary>
-      <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">        
-        {/* Top tab buttons */}
-        <div className="flex items-center gap-4 mb-8">
-          <Button
-            variant="outline"
-            className="bg-white"
-            onClick={() => {
-              if (window.history.length > 1) {
-                navigate(-1);
-                return;
-              }
-              navigate('/dashboard');
-            }}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <div className="flex-1 w-full">
+          <div className="w-full px-4 sm:px-6 lg:px-8 py-6" style={{ zoom: 0.92 }}>
+            {/* Greeting Card (match Dashboard header) */}
+            <div
+              className="mb-6 flex items-start justify-between rounded-2xl px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",
+              }}
+            >
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <svg className="absolute -right-12 -top-12 w-72 h-72 opacity-[0.18]" viewBox="0 0 200 200" fill="none">
+                  <circle cx="100" cy="100" r="100" fill="#a78bfa" />
+                </svg>
+                <svg className="absolute right-16 -bottom-20 w-56 h-56 opacity-[0.12]" viewBox="0 0 200 200" fill="none">
+                  <circle cx="100" cy="100" r="100" fill="#8b5cf6" />
+                </svg>
+                <svg className="absolute right-1/3 -top-10 w-36 h-36 opacity-[0.08]" viewBox="0 0 200 200" fill="none">
+                  <circle cx="100" cy="100" r="100" fill="#7c3aed" />
+                </svg>
+                <svg className="absolute left-1/4 bottom-0 w-28 h-28 opacity-[0.06]" viewBox="0 0 200 200" fill="none">
+                  <circle cx="100" cy="100" r="100" fill="#c4b5fd" />
+                </svg>
+              </div>
 
-          <div className="ml-auto flex items-center gap-2">
-            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
-              <Button
-                className={`${window.location.pathname === '/dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
-                variant="outline"
-                onClick={() => handleTabClick('subscription')}
+              <div className="relative z-10">
+                <h1 className="text-2xl font-bold text-gray-900 mb-1">
+                  {getGreeting()}, {getFirstName()}!
+                </h1>
+              </div>
+
+              <div className="flex items-center gap-3 relative z-10">
+                <Button
+                  variant="outline"
+                  className={`${location.pathname === "/dashboard"
+                    ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                  onClick={() => navigate("/dashboard")}
+                >
+                  Subscription
+                </Button>
+                <Button
+                  variant="outline"
+                  className={`${location.pathname === "/compliance-dashboard"
+                    ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                  onClick={() => navigate("/compliance-dashboard")}
+                >
+                  Compliance
+                </Button>
+                <Button
+                  variant="outline"
+                  className={`${location.pathname === "/renewal-dashboard"
+                    ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                  onClick={() => navigate("/renewal-dashboard")}
+                >
+                  Renewal
+                </Button>
+                <Button
+                  variant="outline"
+                  className={`${location.pathname === "/calendar"
+                    ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                  onClick={() => navigate("/calendar")}
+                >
+                  Calendar
+                </Button>
+              </div>
+            </div>
+
+            {/* Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+              <div
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-blue-500 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => openModal("total")}
               >
-                Subscription
-              </Button>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
-              <Button
-                className={`${window.location.pathname === '/compliance-dashboard' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
-                variant="outline"
-                onClick={() => handleTabClick('compliance')}
-              >
-                Compliance
-              </Button>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
-              <Button
-                className={`${window.location.pathname === '/calendar' ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-blue-600 border-blue-600'} w-36`}
-                variant="outline"
-                onClick={() => handleTabClick('calendar')}
-              >
-                Calendar
-              </Button>
-            </motion.div>
-          </div>
-        </div>
-        
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="mb-8"
-        >
-          <h2 className="text-3xl font-bold text-gray-900">Compliance Dashboard</h2>
-          <p className="text-gray-600 mt-2">Overview of your compliance status and analytics</p>
-        </motion.div>
-        
-        {/* Date Filter */}
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          className="mb-6 flex justify-between items-center"
-        >
-          <div className="flex space-x-4">
-            <Select defaultValue="30days">
-              <SelectTrigger className="w-48 transition-all duration-300 hover:border-blue-400 focus:border-blue-500">
-                <SelectValue placeholder="Last 30 days" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="30days">Last 30 days</SelectItem>
-                <SelectItem value="90days">Last 90 days</SelectItem>
-                <SelectItem value="custom">Custom range</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select defaultValue="all">
-              <SelectTrigger className="w-48 transition-all duration-300 hover:border-blue-400 focus:border-blue-500">
-                <SelectValue placeholder="All Categories" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="security">Security</SelectItem>
-                <SelectItem value="privacy">Privacy</SelectItem>
-                <SelectItem value="regulatory">Regulatory</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </motion.div>
-        
-        {/* Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
-            whileHover={{ y: -5 }}
-          >
-            <Card className="h-full transition-all duration-300 hover:shadow-lg border-l-4 border-l-green-500">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Compliance Score</p>
-                    <p className="text-3xl font-bold text-gray-900">
-                      {metrics?.complianceScore != null ? `${metrics.complianceScore}%` : '0%'}
-                    </p>
-                    <p className="text-sm mt-1 flex items-center text-green-600">
-                      <TrendingUp className="w-4 h-4 mr-1" /> 5% from last period
-                    </p>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 mb-1">Total Filings</p>
+                    <p className="text-2xl font-bold text-gray-900">{metrics.total}</p>
                   </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <CheckCircle className="text-green-600" />
+                  <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <FileText className="h-5 w-5 text-blue-500" />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-          
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.5 }}
-            whileHover={{ y: -5 }}
-          >
-            <Card className="h-full transition-all duration-300 hover:shadow-lg border-l-4 border-l-orange-500">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Required Actions</p>
-                    <p className="text-3xl font-bold text-gray-900">
-                      {metrics?.requiredActions || 0}
-                    </p>
-                    <p className="text-sm mt-1 flex items-center text-orange-600">
-                      <Clock className="w-4 h-4 mr-1" /> Need attention
-                    </p>
+                <div className="text-sm text-gray-400">Click to view details</div>
+              </div>
+
+              <div
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => openModal("dueToday")}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 mb-1">Due Today</p>
+                    <p className="text-2xl font-bold text-gray-900">{metrics.dueToday}</p>
                   </div>
-                  <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <AlertTriangle className="text-orange-600" />
+                  <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Calendar className="h-5 w-5 text-green-500" />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
-        
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.5 }}
-            whileHover={{ y: -5 }}
-          >
-            <Card className="h-full transition-all duration-300 hover:shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <TrendingUp className="mr-2 h-5 w-5 text-blue-500" />
-                  Compliance Trends
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="h-80">
-                <ComplianceTrendsChart data={trendsData} />
-              </CardContent>
-            </Card>
-          </motion.div>
-          
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7, duration: 0.5 }}
-            whileHover={{ y: -5 }}
-          >
-            <Card className="h-full transition-all duration-300 hover:shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <AlertTriangle className="mr-2 h-5 w-5 text-orange-500" />
-                  Issue Categories
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="h-80">
-                <ComplianceCategoryChart data={categoryData} />
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
-        
-        {/* Active Issues Modal */}
-        <Dialog open={activeIssuesModalOpen} onOpenChange={setActiveIssuesModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto backdrop-blur-sm bg-white/95">
-            <DialogHeader>
-              <DialogTitle className="flex items-center">
-                <AlertTriangle className="mr-2 h-5 w-5 text-red-500" />
-                Active Compliance Issues ({activeIssues?.length || 0})
-              </DialogTitle>
-            </DialogHeader>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Issue</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Severity</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead>Assigned To</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {activeIssues?.map((issue: any) => {
-                    const dueDate = issue.submissionDeadline ? new Date(issue.submissionDeadline) : null;
-                    return (
-                      <TableRow key={issue._id} className="hover:bg-gray-50 transition-colors">
-                        <TableCell className="font-medium">{issue.filingName}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{issue.category}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              dueDate && (dueDate.getTime() - now.getTime())/(1000*60*60*24) <= 7 ? 'destructive' :
-                              dueDate && (dueDate.getTime() - now.getTime())/(1000*60*60*24) <= 14 ? 'default' :
-                              'secondary'
-                            }
-                          >
-                            {dueDate && (dueDate.getTime() - now.getTime())/(1000*60*60*24) <= 7 ? 'High' :
-                            dueDate && (dueDate.getTime() - now.getTime())/(1000*60*60*24) <= 14 ? 'Medium' :
-                            'Low'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{issue.status}</TableCell>
-                        <TableCell>{dueDate ? dueDate.toLocaleDateString() : ''}</TableCell>
-                        <TableCell>{issue.assignedTo || '-'}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                <div className="text-sm text-gray-400">Click to view details</div>
+              </div>
+
+              <div
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => openModal("upcoming7Days")}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 mb-1">Upcoming (7 days)</p>
+                    <p className="text-2xl font-bold text-gray-900">{metrics.upcoming7Days}</p>
+                  </div>
+                  <div className="h-10 w-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="h-5 w-5 text-purple-500" />
+                  </div>
+                </div>
+                <div className="text-sm text-gray-400">Click to view details</div>
+              </div>
+
+              <div
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => openModal("overdue")}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 mb-1">Overdue / Late</p>
+                    <p className="text-2xl font-bold text-gray-900">{metrics.overdue}</p>
+                  </div>
+                  <div className="h-10 w-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="h-5 w-5 text-orange-500" />
+                  </div>
+                </div>
+                <div className="text-sm text-gray-400">Click to view details</div>
+              </div>
+
+              <div
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-emerald-500 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => openModal("completedThisMonth")}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 mb-1">Completed This Month</p>
+                    <p className="text-2xl font-bold text-gray-900">{metrics.completedThisMonth}</p>
+                  </div>
+                  <div className="h-10 w-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  </div>
+                </div>
+                <div className="text-sm text-gray-400">Click to view details</div>
+              </div>
             </div>
-          </DialogContent>
-        </Dialog>
-        
-        {/* Upcoming Deadlines Modal */}
-        <Dialog open={upcomingDeadlinesModalOpen} onOpenChange={setUpcomingDeadlinesModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto backdrop-blur-sm bg-white/95">
-            <DialogHeader>
-              <DialogTitle className="flex items-center">
-                <Clock className="mr-2 h-5 w-5 text-orange-500" />
-                Upcoming Deadlines - Next 30 Days
-              </DialogTitle>
-            </DialogHeader>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Task</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead>Days Until Due</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {upcomingDeadlines?.map((deadline: any) => {
-                    const dueDate = deadline.submissionDeadline ? new Date(deadline.submissionDeadline) : null;
-                    const daysUntil = dueDate ? Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : '';
-                    return (
-                      <TableRow key={deadline._id} className="hover:bg-gray-50 transition-colors">
-                        <TableCell className="font-medium">{deadline.filingName}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{deadline.category}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              daysUntil !== '' && daysUntil <= 7 ? 'destructive' :
-                              daysUntil !== '' && daysUntil <= 14 ? 'default' :
-                              'secondary'
-                            }
+
+            {/* Charts */}
+            <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-gray-900">Status Distribution</h3>
+                </div>
+
+                <div className="h-[320px] w-full flex flex-col sm:flex-row items-start gap-6">
+                  <div className="h-[320px] w-full sm:flex-1 min-w-0 flex items-center justify-center">
+                    {statusDonutData.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-sm text-gray-500">No status data</div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={240}>
+                        <PieChart>
+                          <Pie
+                            data={statusDonutData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={70}
+                            outerRadius={110}
+                            paddingAngle={2}
+                            dataKey="count"
+                            nameKey="category"
+                            label={renderDonutLabel}
+                            labelLine={false}
                           >
-                            {daysUntil !== '' && daysUntil <= 7 ? 'High' :
-                            daysUntil !== '' && daysUntil <= 14 ? 'Medium' :
-                            'Low'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{dueDate ? dueDate.toLocaleDateString() : ''}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              daysUntil !== '' && daysUntil <= 7 ? 'destructive' :
-                              daysUntil !== '' && daysUntil <= 14 ? 'default' :
-                              'secondary'
-                            }
-                          >
-                            {daysUntil !== '' ? daysUntil + ' days' : ''}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{deadline.status}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                            {statusDonutData.map((entry) => (
+                              <Cell key={entry.category} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value: number) => [`${Number(value).toLocaleString()} filings`, 'Filings']}
+                            contentStyle={{
+                              backgroundColor: 'var(--card)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                              padding: '12px',
+                            }}
+                            labelStyle={{ color: 'var(--foreground)', fontWeight: 600, marginBottom: 6 }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+
+                  <div className="h-[240px] w-56 flex flex-col items-start justify-center">
+                    <div className="space-y-4">
+                      {statusDonutData.map((s) => {
+                        const percent = statusTotal ? Math.round((s.count / statusTotal) * 100) : 0;
+                        return (
+                          <div key={s.category} className="flex items-center gap-3">
+                            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: s.color }} />
+                            <div className="text-sm text-gray-700 whitespace-nowrap">
+                              {s.category}
+                            </div>
+                            <div className="text-sm text-gray-500 tabular-nums whitespace-nowrap">
+                              {s.count.toLocaleString()} ({percent}%)
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-gray-900">Category Breakdown</h3>
+                </div>
+                <div>
+                  <ComplianceCategoryChart data={categoryData} />
+                </div>
+              </div>
             </div>
-          </DialogContent>
-        </Dialog>
+
+            {/* Metric Drilldown Modal (match Dashboard modal UI) */}
+            <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+              <DialogContent className="max-w-6xl w-[95vw] max-h-[85vh] bg-white border-2 border-blue-500 rounded-xl shadow-lg p-0 overflow-hidden">
+                <DialogHeader>
+                  <div className="flex items-center justify-between px-6 pt-6">
+                    <DialogTitle className="text-xl font-bold text-gray-900">
+                      {modalTitle} ({activeRows.length})
+                    </DialogTitle>
+                    <button
+                      type="button"
+                      onClick={() => setModalOpen(false)}
+                      className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                      aria-label="Close"
+                    >
+                      <X className="h-5 w-5 text-gray-500" />
+                    </button>
+                  </div>
+                </DialogHeader>
+
+                <div className="px-6 pb-6 pt-4">
+                  <div className="h-[70vh] overflow-auto overscroll-contain custom-scrollbar rounded-lg border border-gray-200">
+                    <Table className="table-fixed w-full">
+                      <TableHeader>
+                        <TableRow className="border-b-2 border-purple-300 bg-purple-100">
+                          <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[320px]">
+                            Filing
+                          </TableHead>
+                          <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[240px]">
+                            Category
+                          </TableHead>
+                          <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[140px]">
+                            Status
+                          </TableHead>
+                          <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[160px]">
+                            Due Date
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {activeRows.map((row: any) => {
+                          const filingName = getFilingName(row);
+                          const category = getCategory(row);
+                          const dueDate = getDueDate(row);
+                          const status = getStatusPill(row);
+                          return (
+                            <TableRow
+                              key={String(row?._id ?? row?.id ?? `${filingName}-${category}`)}
+                              className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                            >
+                              <TableCell className="px-4 py-3 font-medium text-gray-800 w-[320px] max-w-[320px] min-w-0 overflow-hidden">
+                                <div className="min-w-0 truncate whitespace-nowrap" title={filingName}>
+                                  {filingName}
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-4 py-3 w-[240px] max-w-[240px] min-w-0 overflow-hidden">
+                                <span
+                                  className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] max-w-[200px] truncate whitespace-nowrap ${getCategoryPillClasses(
+                                    category
+                                  )}`}
+                                  title={category}
+                                >
+                                  {category}
+                                </span>
+                              </TableCell>
+                              <TableCell className="px-4 py-3 w-[140px]">
+                                <span
+                                  className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[120px] whitespace-nowrap ${status.classes}`}
+                                  title={status.label}
+                                >
+                                  {status.label}
+                                </span>
+                              </TableCell>
+                              <TableCell className="px-4 py-3 w-[160px] text-gray-700">
+                                {formatDate(dueDate)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
       </div>
     </ErrorBoundary>
   );

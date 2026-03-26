@@ -443,9 +443,28 @@ class EmailService {
           @media only screen and (max-width: 600px) {
             .content { padding: 24px; }
             .summary-container { flex-direction: column; }
-            table { font-size: 12px; }
-            thead th { padding: 12px 12px; font-size: 10px; }
-            tbody td { padding: 14px 12px; }
+            table { width: 100% !important; }
+            thead { display: none !important; }
+            tbody tr { display: block !important; border-bottom: 0 !important; margin-bottom: 12px !important; }
+            tbody td {
+              display: block !important;
+              width: 100% !important;
+              box-sizing: border-box !important;
+              padding: 10px 12px !important;
+              border-right: none !important;
+              border-bottom: 1px solid #e2e8f0 !important;
+            }
+            tbody td:last-child { border-bottom: none !important; }
+            tbody td::before {
+              content: attr(data-label);
+              display: block;
+              font-size: 11px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.4px;
+              color: #64748b;
+              margin-bottom: 4px;
+            }
             .amount { font-size: 16px; }
           }
         </style>
@@ -471,6 +490,13 @@ class EmailService {
                 </thead>
                 <tbody>
                   ${subscriptions.map(sub => {
+                    const truncateText = (value: unknown, max = 44) => {
+                      const s = String(value ?? '').trim();
+                      if (!s) return '';
+                      if (s.length <= max) return s;
+                      return s.slice(0, Math.max(0, max - 3)) + '...';
+                    };
+
                     const renewalDate = new Date(sub.nextRenewal);
                     
                     // Format amount with commas
@@ -482,23 +508,27 @@ class EmailService {
                     if (sub.departments && Array.isArray(sub.departments) && sub.departments.length > 0) {
                       departmentText = sub.departments.join(', ');
                     }
+
+                    const displayService = truncateText(sub.serviceName, 52) || '-';
+                    const displayDepartment = truncateText(departmentText, 28) || '-';
+                    const displayCategory = truncateText(sub.category || 'General', 24) || 'General';
                     
                     return `
                     <tr>
-                      <td>
-                        <div class="service-cell">${sub.serviceName}</div>
+                      <td data-label="Service">
+                        <div class="service-cell">${displayService}</div>
                       </td>
-                      <td>
+                      <td data-label="Amount">
                         <div class="amount">${sub.currency || 'USD'} ${formattedAmount}</div>
                       </td>
-                      <td>
+                      <td data-label="Renewal Date">
                         <div class="renewal-date">${renewalDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
                       </td>
-                      <td>
-                        <div class="category-badge">${departmentText}</div>
+                      <td data-label="Department">
+                        <div class="category-badge">${displayDepartment}</div>
                       </td>
-                      <td>
-                        <div class="category-badge">${sub.category || 'General'}</div>
+                      <td data-label="Category">
+                        <div class="category-badge">${displayCategory}</div>
                       </td>
                     </tr>
                   `}).join('')}
@@ -513,6 +543,13 @@ class EmailService {
   }
 
   generateAdminSummaryEmailHTML(ownerSummaries: any[], totalCount: number, monthName: string): string {
+    const truncateText = (value: unknown, max = 44) => {
+      const s = String(value ?? '').trim();
+      if (!s) return '';
+      if (s.length <= max) return s;
+      return s.slice(0, Math.max(0, max - 3)) + '...';
+    };
+
     // Flatten all subscriptions into one array with owner info
     const allSubscriptions = ownerSummaries.flatMap(owner => 
       owner.subscriptions.map((sub: any) => ({
@@ -666,6 +703,34 @@ class EmailService {
             color: #64748b; 
             border-top: 1px solid #e2e8f0;
           }
+
+          @media only screen and (max-width: 600px) {
+            .content { padding: 18px 14px; }
+
+            /* Stack table rows into cards */
+            table { width: 100% !important; }
+            thead { display: none !important; }
+            tbody tr { display: block !important; border-bottom: 0 !important; margin-bottom: 12px !important; }
+            tbody td {
+              display: block !important;
+              width: 100% !important;
+              box-sizing: border-box !important;
+              padding: 10px 12px !important;
+              border-right: none !important;
+              border-bottom: 1px solid #e2e8f0 !important;
+            }
+            tbody td:last-child { border-bottom: none !important; }
+            tbody td::before {
+              content: attr(data-label);
+              display: block;
+              font-size: 11px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.4px;
+              color: #64748b;
+              margin-bottom: 4px;
+            }
+          }
         </style>
       </head>
       <body>
@@ -710,15 +775,20 @@ class EmailService {
                     } else if (typeof sub.department === 'string' && sub.department) {
                       departmentText = sub.department;
                     }
+
+                    const displayService = truncateText(sub.serviceName, 52) || '-';
+                    const displayCategory = truncateText(sub.category || 'General', 24) || 'General';
+                    const displayDepartment = truncateText(departmentText, 28) || '-';
+                    const displayOwnerName = truncateText(sub.ownerName, 36) || '-';
                     
                     return `
                       <tr>
-                        <td><div class="service-cell">${sub.serviceName}</div></td>
-                        <td><div class="amount">${sub.currency || 'USD'} ${formattedAmount}</div></td>
-                        <td><div class="renewal-date">${renewalDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div></td>
-                        <td><div class="category-badge">${sub.category || 'General'}</div></td>
-                        <td><div class="category-badge">${departmentText}</div></td>
-                        <td><div class="owner-name">${sub.ownerName}</div></td>
+                        <td data-label="Service Name"><div class="service-cell">${displayService}</div></td>
+                        <td data-label="Amount"><div class="amount">${sub.currency || 'USD'} ${formattedAmount}</div></td>
+                        <td data-label="Renewal Date"><div class="renewal-date">${renewalDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div></td>
+                        <td data-label="Category"><div class="category-badge">${displayCategory}</div></td>
+                        <td data-label="Department"><div class="category-badge">${displayDepartment}</div></td>
+                        <td data-label="Owner Name"><div class="owner-name">${displayOwnerName}</div></td>
                       </tr>
                     `;
                   }).join('')}
@@ -755,6 +825,13 @@ class EmailService {
     let subscriptionRows = '';
     if (subscriptions.length > 0) {
       subscriptions.forEach((sub) => {
+        const truncateText = (value: unknown, max = 44) => {
+          const s = String(value ?? '').trim();
+          if (!s) return '';
+          if (s.length <= max) return s;
+          return s.slice(0, Math.max(0, max - 3)) + '...';
+        };
+
         const renewalDate = new Date(sub.nextRenewal).toLocaleDateString('en-US', { 
           day: '2-digit', 
           month: 'short', 
@@ -764,14 +841,17 @@ class EmailService {
         // Show only the specific department (not all departments)
         // Since we filtered by this department, just show this department name
         const deptDisplay = departmentName;
+
+        const displayService = truncateText(sub.serviceName, 52) || '-';
+        const displayCategory = truncateText(sub.category || '-', 24) || '-';
         
         subscriptionRows += `
           <tr style="border-bottom: 1px solid #e0e7ff;">
-            <td style="padding: 14px 12px; color: #1e293b; font-size: 14px; font-weight: 500;">${sub.serviceName}</td>
-            <td style="padding: 14px 12px; color: #1e293b; font-size: 14px; font-weight: 600;">${sub.currency} ${sub.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-            <td style="padding: 14px 12px; color: #dc2626; font-size: 14px; font-weight: 500;">${renewalDate}</td>
-            <td style="padding: 14px 12px; color: #64748b; font-size: 13px;">${deptDisplay}</td>
-            <td style="padding: 14px 12px; color: #64748b; font-size: 13px;">${sub.category || '-'}</td>
+            <td data-label="Service" style="padding: 14px 12px; color: #1e293b; font-size: 14px; font-weight: 500; word-break: break-word;">${displayService}</td>
+            <td data-label="Amount" style="padding: 14px 12px; color: #1e293b; font-size: 14px; font-weight: 600; white-space: nowrap;">${sub.currency} ${sub.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td data-label="Renewal Date" style="padding: 14px 12px; color: #dc2626; font-size: 14px; font-weight: 500;">${renewalDate}</td>
+            <td data-label="Department" style="padding: 14px 12px; color: #64748b; font-size: 13px; word-break: break-word;">${deptDisplay}</td>
+            <td data-label="Category" style="padding: 14px 12px; color: #64748b; font-size: 13px; word-break: break-word;">${displayCategory}</td>
           </tr>
         `;
       });
@@ -791,18 +871,42 @@ class EmailService {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          @media only screen and (max-width: 600px) {
+            .outer { margin: 0 !important; border-radius: 0 !important; }
+            .pad { padding: 18px 16px !important; }
+            .title { font-size: 22px !important; }
+            .subtitle { font-size: 14px !important; }
+
+            /* Stack table rows into cards */
+            table { width: 100% !important; }
+            thead { display: none !important; }
+            tr { display: block !important; border-bottom: 0 !important; margin-bottom: 12px !important; }
+            td { display: block !important; width: 100% !important; box-sizing: border-box !important; padding: 10px 12px !important; }
+            td::before {
+              content: attr(data-label);
+              display: block;
+              font-size: 11px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.4px;
+              color: #64748b;
+              margin-bottom: 4px;
+            }
+          }
+        </style>
       </head>
       <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f8fafc;">
-        <div style="max-width: 800px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);">
+        <div class="outer" style="max-width: 800px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);">
           <!-- Header with gradient -->
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">
+            <h1 class="title" style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">
               📅 ${departmentName} Department - Renewals for ${monthName}
             </h1>
           </div>
           
           <!-- Content -->
-          <div style="padding: 40px 30px;">
+          <div class="pad" style="padding: 40px 30px;">
             <p style="color: #334155; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">
               Hello <strong>${departmentHeadName}</strong>,
             </p>
@@ -816,8 +920,8 @@ class EmailService {
               <h2 style="color: #667eea; margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">
                 Upcoming Renewals (${subscriptions.length})
               </h2>
-              <div style="overflow-x: auto; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <table style="width: 100%; border-collapse: collapse; background-color: #ffffff;">
+              <div style="border-radius: 8px; border: 1px solid #e2e8f0;">
+                <table style="width: 100%; border-collapse: collapse; background-color: #ffffff; table-layout: fixed;">
                   <thead>
                     <tr style="background: linear-gradient(to right, #3b82f6, #2563eb);">
                       <th style="padding: 16px 12px; text-align: left; color: #ffffff; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">SERVICE</th>

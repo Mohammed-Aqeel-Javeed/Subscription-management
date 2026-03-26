@@ -127,6 +127,15 @@ function buildEmailHtml(params: {
   expiresLabel: string;
   linkedCount: number;
 }): string {
+  const truncateText = (value: unknown, max = 72) => {
+    const s = String(value ?? "").trim();
+    if (!s) return "";
+    if (s.length <= max) return s;
+    return s.slice(0, Math.max(0, max - 3)) + "...";
+  };
+
+  const displayPaymentName = truncateText(params.paymentName || "(Unnamed)", 72) || "(Unnamed)";
+
   const roleLabel =
     params.role === "dept_head"
       ? "Department Head"
@@ -149,6 +158,12 @@ function buildEmailHtml(params: {
         .pill { display:inline-block; background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:700; }
         .meta { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-top:12px; }
         .meta b { color:#111827; }
+        p { word-break: break-word; }
+
+        @media only screen and (max-width: 600px) {
+          body { padding: 12px; }
+          .card { padding: 16px; }
+        }
       </style>
     </head>
     <body>
@@ -158,7 +173,7 @@ function buildEmailHtml(params: {
         <p>Hello ${params.recipientName},</p>
         <p>You are receiving this notification because you are a <b>${roleLabel}</b>.</p>
         <div class="meta">
-          <p><b>Payment method:</b> ${params.paymentName || "(Unnamed)"}</p>
+          <p><b>Payment method:</b> ${displayPaymentName}</p>
           <p><b>Expiry:</b> ${params.expiresLabel || "N/A"}</p>
           <p><b>Linked subscriptions:</b> ${params.linkedCount}</p>
         </div>
@@ -383,7 +398,9 @@ export class PaymentExpiryService {
 
         let emailOk = false;
         if (recipient.sendEmail && recipientEmail) {
-          const subject = `Payment method expiring soon: ${paymentName || "Payment Method"}`;
+          const safePaymentName = String(paymentName || "Payment Method");
+          const subjectName = safePaymentName.length > 72 ? safePaymentName.slice(0, 69) + "..." : safePaymentName;
+          const subject = `Payment method expiring soon: ${subjectName}`;
           const html = buildEmailHtml({
             recipientName: String(recipient.name || recipientEmail || "User"),
             role: recipient.role,
@@ -678,7 +695,9 @@ export class PaymentExpiryService {
 
           let emailOk = false;
           if (recipient.sendEmail && recipientEmail) {
-            const subject = `Payment method expiring soon: ${paymentName || "Payment Method"}`;
+            const safePaymentName = String(paymentName || "Payment Method");
+            const subjectName = safePaymentName.length > 72 ? safePaymentName.slice(0, 69) + "..." : safePaymentName;
+            const subject = `Payment method expiring soon: ${subjectName}`;
             const html = buildEmailHtml({
               recipientName: String(recipient.name || recipientEmail || "User"),
               role: recipient.role,

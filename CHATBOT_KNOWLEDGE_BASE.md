@@ -611,12 +611,19 @@
 ### SECURITY & PERMISSIONS
 
 **Role-Based Access**
+- Global Admin (Platform Owner): Platform-only access (no tenant operational data by default)
 - Super Admin: Everything
 - Admin: All except user management
 - Viewer: Read-only
 - Contributor: Own items only
 - Department Editor: Department items
 - Department Viewer: Department read-only
+
+**Platform vs Tenant Separation (SaaS)**
+- Global Admin is a *platform* role:
+  - Can access the Platform Admin dashboard (platform-level KPIs, tenant directory, platform activity)
+  - Cannot access tenant dashboards, subscriptions, compliance, calendars, analytics, or notifications unless an explicit impersonation feature is added
+- Tenant roles (Super Admin/Admin/Viewer/Contributor/Department roles) apply *inside a single company/tenant only*
 
 **Data Security**
 - Encrypted connections

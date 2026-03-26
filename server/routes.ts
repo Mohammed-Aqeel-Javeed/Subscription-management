@@ -866,20 +866,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeSubs = await db
         .collection("subscriptions")
         .find(
-          { status: "Active" },
+          {
+            tenantId: { $exists: true, $ne: null },
+            status: { $regex: /^active$/i },
+          },
           { projection: { amount: 1, billingCycle: 1 } }
         )
         .toArray();
 
       let mrr = 0;
       for (const sub of activeSubs) {
-        const decryptedAmount = decrypt((sub as any).amount);
-        const amount = parseFloat(String(decryptedAmount)) || 0;
+        const amountRaw = (sub as any).amount;
+        let decryptedAmount: any = amountRaw;
+        try {
+          decryptedAmount = decrypt(amountRaw);
+        } catch {
+          decryptedAmount = amountRaw;
+        }
+
+        const amount =
+          parseFloat(String(decryptedAmount).replace(/[^0-9.-]/g, "")) || 0;
         const billingCycle = String((sub as any).billingCycle || "monthly").toLowerCase();
+
         let monthlyAmount = amount;
-        if (billingCycle === "yearly") monthlyAmount = amount / 12;
+        if (["yearly", "annual", "annually"].includes(billingCycle)) monthlyAmount = amount / 12;
         else if (billingCycle === "quarterly") monthlyAmount = amount / 3;
-        else if (billingCycle === "weekly") monthlyAmount = amount * 4;
+        else if (billingCycle === "weekly") monthlyAmount = (amount * 52) / 12;
+        else if (billingCycle === "daily") monthlyAmount = (amount * 365) / 12;
+
         mrr += monthlyAmount;
       }
 

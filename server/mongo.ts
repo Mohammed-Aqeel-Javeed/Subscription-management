@@ -1,6 +1,6 @@
 // MongoDB connection utility for Subtrackerr database
 
-import { MongoClient, Db } from "mongodb";
+import { MongoClient, Db, type MongoClientOptions } from "mongodb";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -10,14 +10,26 @@ const dbName = process.env.MONGODB_DB || "Subtrackerr";
 let client: MongoClient | null = null;
 let db: Db | null = null;
 
+function buildMongoOptions(connectionString: string): MongoClientOptions {
+  const uri = String(connectionString || "");
+  const envForcesTls = String(process.env.MONGODB_TLS || "").toLowerCase() === "true";
+  const uriWantsTls =
+    uri.startsWith("mongodb+srv://") || /[?&](tls|ssl)=true/i.test(uri);
+
+  const useTls = envForcesTls || uriWantsTls;
+  if (!useTls) return {};
+
+  return {
+    tls: true,
+    tlsAllowInvalidCertificates: false,
+    tlsAllowInvalidHostnames: false,
+  };
+}
+
 export async function connectToDatabase() {
   if (db) return db;
   if (!client) {
-    client = new MongoClient(uri, {
-      tls: true,
-      tlsAllowInvalidCertificates: false,
-      tlsAllowInvalidHostnames: false,
-    });
+    client = new MongoClient(uri, buildMongoOptions(uri));
     await client.connect();
   }
   db = client.db(dbName);

@@ -77,7 +77,17 @@ function buildHtml(params: {
   role: ReminderRole;
   recipientDepartments?: string[];
 }): string {
-  const deptLine = params.departments.length ? params.departments.join(", ") : "-";
+  const truncateText = (value: unknown, max = 72) => {
+    const s = String(value ?? "").trim();
+    if (!s) return "";
+    if (s.length <= max) return s;
+    return s.slice(0, Math.max(0, max - 3)) + "...";
+  };
+
+  const deptLineRaw = params.departments.length ? params.departments.join(", ") : "-";
+  const displayLicenseName = truncateText(params.licenseName, 72) || "-";
+  const displayDeptLine = truncateText(deptLineRaw, 72) || "-";
+
   // Removed department head reason text as requested
   const roleReason = "";
 
@@ -96,6 +106,12 @@ function buildHtml(params: {
         .meta { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-top:12px; }
         .meta b { color:#111827; }
         .reason { margin-top:10px; color:#6b7280; font-size: 12px; }
+        p { word-break: break-word; }
+
+        @media only screen and (max-width: 600px) {
+          body { padding: 12px; }
+          .card { padding: 16px; }
+        }
       </style>
     </head>
     <body>
@@ -104,11 +120,11 @@ function buildHtml(params: {
         <p>Hello ${params.recipientName},</p>
         <p>This is a reminder that the following license is approaching its expiry date.</p>
         <div class="meta">
-          <p><b>License:</b> ${params.licenseName}</p>
+          <p><b>License:</b> ${displayLicenseName}</p>
           <p><b>Expiry date:</b> ${params.expiryDate}</p>
           <p><b>Reminder policy:</b> ${params.policy}</p>
           <p><b>Remind before:</b> ${params.reminderDays} days</p>
-          <p><b>Department(s):</b> ${deptLine}</p>
+          <p><b>Department(s):</b> ${displayDeptLine}</p>
         </div>
         ${roleReason ? `<div class="reason">${roleReason}</div>` : ""}
       </div>

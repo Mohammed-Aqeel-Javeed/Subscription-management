@@ -35,6 +35,7 @@ import RenewalLog from "@/pages/renewal-log";
 import NotFound from "@/pages/not-found";
 import SubscriptionUserPage from "@/pages/subscription-user";
 import ComplianceDashboard from "@/pages/compliance-dashboard";
+import RenewalDashboard from "@/pages/renewal-dashboard";
 import Compliance from "@/pages/compliance";
 import AuthPage from "@/pages/auth";
 import SignupPage from "@/pages/signup";
@@ -190,6 +191,7 @@ function AppWithSidebar() {
               <Route path="/subscription-history" element={<SubscriptionHistory />} />
               {/* <Route path="/users" element={<Users />} /> */}
               <Route path="/compliance-dashboard" element={<ComplianceDashboard />} />
+              <Route path="/renewal-dashboard" element={<RenewalDashboard />} />
               <Route path="/compliance" element={<Compliance />} />
               <Route path="/compliance-ledger" element={<ComplianceLedger />} />
               <Route path="/government-license" element={<GovernmentLicense />} />
