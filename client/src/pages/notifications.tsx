@@ -352,7 +352,7 @@ const handleMarkAsRead = async () => {
 			toast({
 				title: "Marked as read",
 				description: result.message || `${notificationIds.length} notification(s) marked as read`,
-				variant: "default",
+				variant: "success",
 			});
 		} else {
 			throw new Error(result.message || 'Failed to mark as read');
@@ -392,7 +392,7 @@ return (
 			</div>
 			<div>
 				<h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
-				<p className="text-sm text-gray-500">{searchFilteredNotifications.filter(n => !(n as any).isRead).length} unread · {searchFilteredNotifications.length} total</p>
+				<p className="text-sm text-gray-500">{searchFilteredNotifications.filter(n => !Boolean((n as any).isRead ?? (n as any).read ?? false)).length} unread · {searchFilteredNotifications.length} total</p>
 			</div>
 		</div>
 	</div>
@@ -542,7 +542,7 @@ const rawB = b.timestamp || b.createdAt || b.reminderTriggerDate;
 return toEpochMs(rawB) - toEpochMs(rawA);
 })
 .map((notification) => {
-const isUnread = !(notification as any).isRead;
+			const isUnread = !Boolean((notification as any).isRead ?? (notification as any).read ?? false);
 const notificationId = getNotificationSelectionId(notification);
 const isSelected = selectedNotifications.has(notificationId);
 

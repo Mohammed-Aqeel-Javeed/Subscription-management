@@ -12,7 +12,8 @@ import {
   ArrowRight,
   Zap,
   Lock,
-  Globe
+  Globe,
+  Star
 } from "lucide-react";
 
 export default function LandingPage() {
@@ -61,7 +62,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif" }}>
       {/* Navigation Header */}
       <nav className="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4">
@@ -181,14 +182,14 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
-      {/* Features Section */}
-      <section className="max-w-7xl mx-auto px-6 py-20">
+      {/* Everything you need Section - Heading Only */}
+      <section className="max-w-7xl mx-auto px-6 pt-20 pb-8">
         <motion.div
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           transition={{ duration: 0.6 }}
           viewport={{ once: true }}
-          className="text-center mb-16"
+          className="text-center mb-8"
         >
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
             Everything you need to manage subscriptions
@@ -197,7 +198,226 @@ export default function LandingPage() {
             Powerful features designed for modern teams
           </p>
         </motion.div>
+      </section>
 
+      {/* Three Modules Section */}
+      <section className="max-w-7xl mx-auto px-6 pt-8 pb-20">
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          transition={{ duration: 0.6 }}
+          viewport={{ once: true }}
+          className="text-center mb-16"
+        >
+          <div className="inline-flex items-center gap-2 mb-6 px-6 py-2 bg-blue-50/80 rounded-full">
+            <Star className="w-4 h-4 text-blue-600" fill="currentColor" />
+            <span className="text-sm font-semibold text-blue-600 tracking-wider uppercase">CORE MODULES</span>
+          </div>
+          <h2 className="text-4xl font-bold text-gray-900 mb-4">
+            Three powerful modules.
+            <br />
+            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              One unified platform.
+            </span>
+          </h2>
+          <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+            Trackla isn't just around three tightly integrated modules that give your team complete control over every subscription — from the moment it's created, through compliance checks, all the way to renewal.
+          </p>
+        </motion.div>
+
+        {/* Module 1: Subscription Management */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          viewport={{ once: true }}
+          className="mb-16"
+        >
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="inline-block mb-4">
+                <span className="text-sm font-semibold text-blue-600 tracking-wider uppercase">MODULE 1</span>
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 mb-4">Subscription Management</h3>
+              <p className="text-gray-600 mb-6">
+                Take full control of every subscription your organization manages. Trackla's Subscription module provides a centralized hub as well as register, monitor, and optimize all your subscriptions — whether it's SaaS tools, vendor contracts, or recurring services.
+              </p>
+              <ul className="space-y-3">
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Centralized dashboard with real-time subscription status, cost tracking, and usage insights</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Smart categorization by vendor, department, cost center, or custom tags</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Calendar view to visualize upcoming charges, bills & cycles and payment schedules</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Automated cost analytics and spending trend reports to eliminate waste</span>
+                </li>
+              </ul>
+            </div>
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl p-8 shadow-lg border border-blue-200">
+              <div className="bg-white rounded-xl p-6 shadow-md">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-bold text-gray-900">Subscription Overview</h4>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Live</span>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-700">Active Subscriptions</span>
+                    <span className="text-lg font-bold text-blue-600">24</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-700">Monthly Spend</span>
+                    <span className="text-lg font-bold text-green-600">$2,000</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-700">Upcoming Renewals</span>
+                    <span className="text-lg font-bold text-orange-600">3</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Module 2: Compliance Tracking */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          viewport={{ once: true }}
+          className="mb-16"
+        >
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div className="order-2 md:order-1">
+              <div className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl p-8 shadow-lg border border-green-200">
+                <div className="bg-white rounded-xl p-6 shadow-md">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-bold text-gray-900">Compliance Status</h4>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Healthy</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="text-center p-3 bg-green-50 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">18</div>
+                      <div className="text-xs text-gray-600">Compliant</div>
+                    </div>
+                    <div className="text-center p-3 bg-orange-50 rounded-lg">
+                      <div className="text-2xl font-bold text-orange-600">4</div>
+                      <div className="text-xs text-gray-600">Pending</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-700">Overall Score</span>
+                    <span className="text-lg font-bold text-blue-600">92%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="order-1 md:order-2">
+              <div className="inline-block mb-4">
+                <span className="text-sm font-semibold text-green-600 tracking-wider uppercase">MODULE 2</span>
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 mb-4">Compliance Tracking</h3>
+              <p className="text-gray-600 mb-6">
+                Stay audit-ready and eliminate compliance gaps. Trackla's Compliance module helps your team track regulatory requirements, maintain documentation, and ensure every subscription meets your organization's internal policies and industry standards.
+              </p>
+              <ul className="space-y-3">
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Built-in compliance checklists mapped to industry frameworks: SOC 2, GDPR, ISO 22301</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Document upload for contracts, SRAs, SLAs, and vendor certifications</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Compliance scoring per subscription with real-time notification and audit trail</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Module 3: Renewal Automation */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          viewport={{ once: true }}
+          className="mb-16"
+        >
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="inline-block mb-4">
+                <span className="text-sm font-semibold text-orange-600 tracking-wider uppercase">MODULE 3</span>
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 mb-4">Renewal Automation</h3>
+              <p className="text-gray-600 mb-6">
+                Never miss a renewal or unintentionally auto-renew again. Trackla's Renewal module provides proactive reminders, streamlined approval workflows, and detailed renewal histories — so your team can make informed decisions well before deadlines.
+              </p>
+              <ul className="space-y-3">
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Smart renewal reminders sent 90, 60, and 30 days before expiration with auto-escalation</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Multi-step approval workflows to ensure the right stakeholders review before committing</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Renewal history and cost change analysis to negotiate better terms with vendors</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-gray-700">Auto-cancel or auto-renew options for unattended subscriptions to prevent unintentionally spend</span>
+                </li>
+              </ul>
+            </div>
+            <div className="bg-gradient-to-br from-orange-50 to-yellow-100 rounded-2xl p-8 shadow-lg border border-orange-200">
+              <div className="bg-white rounded-xl p-6 shadow-md">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-bold text-gray-900">Upcoming Renewals</h4>
+                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">Pending</span>
+                </div>
+                <div className="space-y-3">
+                  <div className="p-3 bg-red-50 rounded-lg border-l-4 border-red-500">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-semibold text-gray-900">Back Business</span>
+                      <span className="text-xs font-bold text-red-600">3 days</span>
+                    </div>
+                    <span className="text-xs text-gray-600">Expiring</span>
+                  </div>
+                  <div className="p-3 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-semibold text-gray-900">AWS License</span>
+                      <span className="text-xs font-bold text-yellow-600">15 days</span>
+                    </div>
+                    <span className="text-xs text-gray-600">Pending</span>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-lg border-l-4 border-green-500">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-semibold text-gray-900">Figma Enterprise</span>
+                      <span className="text-xs font-bold text-green-600">45 days</span>
+                    </div>
+                    <span className="text-xs text-gray-600">Renewed</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* Features Grid Section */}
+      <section className="max-w-7xl mx-auto px-6 py-20">
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           {features.map((feature, index) => (
             <motion.div

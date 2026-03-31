@@ -264,8 +264,8 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
     // Dispatch logout event for other components
     window.dispatchEvent(new Event('logout'));
     
-    // Navigate to login and replace history to prevent back navigation
-    navigate("/login", { replace: true });
+    // Navigate to landing page and replace history to prevent back navigation
+    navigate("/landing", { replace: true });
   };
   
   // Collapsed sidebar view (icon-only)

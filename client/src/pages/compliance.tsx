@@ -2881,10 +2881,10 @@ export default function Compliance() {
                       {getSortIcon("filingSubmissionDate")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
                     SUBMISSION
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 pr-6 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
                     ACTIONS
                   </TableHead>
                 </TableRow>
@@ -3047,7 +3047,7 @@ export default function Compliance() {
                           </Button>
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 py-3 w-[120px] text-right">
+                      <TableCell className="px-4 pr-6 py-3 w-[120px] text-right">
                         {(() => {
                           const rowId = String(item._id || item.id || "");
                           const isOpen = !!rowId && openActionsMenuForId === rowId;

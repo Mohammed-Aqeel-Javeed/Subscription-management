@@ -20,6 +20,47 @@ const setTenantSafeCache = (res: any, _maxAgeSeconds: number) => {
 
 const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const normToken = (value: unknown) => String(value ?? "").trim().toLowerCase();
+
+const parseMonthsParam = (raw: unknown): number | null => {
+  if (raw == null) return null;
+  const s = String(raw).trim().toLowerCase();
+  if (!s) return null;
+
+  // Accept: 3 | "3" | "3months" | "last3" | "last3months" | "last-3" etc.
+  const direct = Number.parseInt(s, 10);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+
+  switch (s) {
+    case "3months":
+    case "last3":
+    case "last3months":
+    case "last-3":
+    case "last-3months":
+      return 3;
+    case "6months":
+    case "last6":
+    case "last6months":
+    case "last-6":
+    case "last-6months":
+      return 6;
+    case "12months":
+    case "last12":
+    case "last12months":
+    case "last-12":
+    case "last-12months":
+      return 12;
+    default:
+      return null;
+  }
+};
+
+const parseDateSafe = (raw: unknown): Date | null => {
+  if (!raw) return null;
+  const d = raw instanceof Date ? raw : new Date(String(raw));
+  return Number.isFinite(d.getTime()) ? d : null;
+};
+
 const buildSubscriptionScopeFilter = (user: any, tenantId: string) => {
   const userRole = user?.role;
   const userId = user?.userId || user?.id;
@@ -147,10 +188,17 @@ router.get("/api/analytics/trends", async (req, res) => {
     const collection = db.collection("subscriptions");
 
     const scopeFilter = buildSubscriptionScopeFilter(req.user, tenantId);
-    
-    // Get last 6 months of data
-    const now = new Date();
-    const monthsArray = Array.from({ length: 6 }, (_, i) => {
+
+    const months = Math.min(
+      Math.max(parseMonthsParam((req.query as any)?.months ?? (req.query as any)?.range) ?? 6, 1),
+      24
+    );
+    const categoryParamRaw = String(((req.query as any)?.category ?? "")).trim();
+    const categoryParam = categoryParamRaw && normToken(categoryParamRaw) !== "all" ? categoryParamRaw : "";
+    const categoryParamNorm = normToken(categoryParam);
+
+    // Get last N months of data
+    const monthsArray = Array.from({ length: months }, (_, i) => {
       const date = new Date();
       date.setMonth(date.getMonth() - i);
       return {
@@ -165,7 +213,7 @@ router.get("/api/analytics/trends", async (req, res) => {
     // OPTIMIZED: Only fetch needed fields
     const subscriptions = await collection.find(
       { ...scopeFilter, status: "Active" },
-      { projection: { amount: 1, status: 1, startDate: 1, nextRenewal: 1 } }
+      { projection: { amount: 1, status: 1, startDate: 1, nextRenewal: 1, category: 1 } }
     ).toArray();
     
     // Calculate monthly spend for each month
@@ -174,16 +222,23 @@ router.get("/api/analytics/trends", async (req, res) => {
       
       subscriptions.forEach(sub => {
         if (sub.status !== "Active") return;
+
+        if (categoryParamNorm) {
+          const subCategory = normToken(sub.category || "Other");
+          if (subCategory !== categoryParamNorm) return;
+        }
         
         // Decrypt amount
         const decryptedAmount = decrypt(sub.amount);
         const amount = parseFloat(decryptedAmount) || 0;
-        
-        const startDate = new Date(sub.startDate);
-        const renewalDate = new Date(sub.nextRenewal);
-        
-        if (startDate > monthData.monthEnd) return;
-        if (renewalDate < monthData.monthStart) return;
+
+        const startDate = parseDateSafe(sub.startDate);
+        const renewalDate = parseDateSafe(sub.nextRenewal);
+
+        // If dates are missing/invalid, keep behavior aligned with prior logic
+        // (invalid comparisons used to include the subscription).
+        if (startDate && startDate > monthData.monthEnd) return;
+        if (renewalDate && renewalDate < monthData.monthStart) return;
         
         monthlyTotal += amount;
       });
@@ -210,17 +265,49 @@ router.get("/api/analytics/categories", async (req, res) => {
     const collection = db.collection("subscriptions");
 
     const scopeFilter = buildSubscriptionScopeFilter(req.user, tenantId);
+
+    const months = parseMonthsParam((req.query as any)?.months ?? (req.query as any)?.range);
+    const monthsClamped = months != null ? Math.min(Math.max(months, 1), 24) : null;
+    const categoryParamRaw = String(((req.query as any)?.category ?? "")).trim();
+    const categoryParam = categoryParamRaw && normToken(categoryParamRaw) !== "all" ? categoryParamRaw : "";
+    const categoryParamNorm = normToken(categoryParam);
+
+    const rangeStartDate = monthsClamped
+      ? (() => {
+          const d = new Date();
+          d.setMonth(d.getMonth() - monthsClamped);
+          d.setHours(0, 0, 0, 0);
+          return d;
+        })()
+      : null;
     
     // OPTIMIZED: Only fetch category and amount
     const subscriptions = await collection.find(
       { ...scopeFilter, status: "Active" },
-      { projection: { category: 1, amount: 1 } }
+      { projection: { category: 1, amount: 1, startDate: 1, nextRenewal: 1 } }
     ).toArray();
     
     // Group by category and sum amounts (after decryption)
     const categoryMap = new Map<string, number>();
     
     subscriptions.forEach(sub => {
+      if (categoryParamNorm) {
+        const subCategory = normToken(sub.category || "Other");
+        if (subCategory !== categoryParamNorm) return;
+      }
+
+      if (rangeStartDate) {
+        const nextRenewal = parseDateSafe(sub.nextRenewal);
+        const subscriptionStartDate = parseDateSafe(sub.startDate);
+
+        // If dates are missing/invalid, don't exclude the record.
+        if (nextRenewal || subscriptionStartDate) {
+          const isInRange = (nextRenewal ? nextRenewal >= rangeStartDate : false)
+            || (subscriptionStartDate ? subscriptionStartDate >= rangeStartDate : false);
+          if (!isInRange) return;
+        }
+      }
+
       const category = sub.category || "Other";
       // Decrypt amount
       const decryptedAmount = decrypt(sub.amount);

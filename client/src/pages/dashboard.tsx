@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -40,6 +40,26 @@ export default function Dashboard() {
   // Filter states
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [dateRange, setDateRange] = useState("6months");
+
+  const dateRangeMonths = useMemo(() => {
+    switch (dateRange) {
+      case "3months":
+        return 3;
+      case "6months":
+        return 6;
+      case "12months":
+        return 12;
+      default:
+        return 6;
+    }
+  }, [dateRange]);
+
+  const analyticsQueryString = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("months", String(dateRangeMonths));
+    if (categoryFilter !== "all") params.set("category", categoryFilter);
+    return params.toString();
+  }, [dateRangeMonths, categoryFilter]);
 
   // Get greeting based on time of day
   const getGreeting = () => {
@@ -106,10 +126,11 @@ export default function Dashboard() {
     }
   }, [isUnauthorized, isGlobalAdminNoTenant, navigate, location.pathname]);
   const { data: trends, isLoading: trendsLoading } = useQuery<SpendingTrend[]>({
-    queryKey: ["/api/analytics/trends", dashboardScopeKey],
+    queryKey: ["/api/analytics/trends", dashboardScopeKey, dateRangeMonths, categoryFilter],
     enabled: !isGlobalAdminNoTenant,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
-      const res = await apiFetch("/api/analytics/trends");
+      const res = await apiFetch(`/api/analytics/trends?${analyticsQueryString}`);
       if (!res.ok) {
         const text = (await res.text().catch(() => '')) || res.statusText;
         throw new Error(`${res.status}: ${text}`);
@@ -121,10 +142,11 @@ export default function Dashboard() {
     refetchOnWindowFocus: false,
   });
   const { data: categories, isLoading: categoriesLoading } = useQuery<CategoryBreakdown[]>({
-    queryKey: ["/api/analytics/categories", dashboardScopeKey],
+    queryKey: ["/api/analytics/categories", dashboardScopeKey, dateRangeMonths, categoryFilter],
     enabled: !isGlobalAdminNoTenant,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
-      const res = await apiFetch("/api/analytics/categories");
+      const res = await apiFetch(`/api/analytics/categories?${analyticsQueryString}`);
       if (!res.ok) {
         const text = (await res.text().catch(() => '')) || res.statusText;
         throw new Error(`${res.status}: ${text}`);
@@ -276,8 +298,11 @@ export default function Dashboard() {
 
   // ...existing code...
   if (isUnauthorized) return null;
-  // Show skeletons while loading any data
-  if (metricsLoading || trendsLoading || categoriesLoading || subscriptionsLoading) {
+
+  // Only show a full-page skeleton during the initial load of core data.
+  // Trends/categories refetch on filter changes should not blank the whole dashboard.
+  const isInitialCoreLoading = (metricsLoading && !metrics) || (subscriptionsLoading && !subscriptions);
+  if (isInitialCoreLoading) {
     return (
       <div className="p-8">
         <div className="mb-8">
@@ -403,22 +428,6 @@ export default function Dashboard() {
     );
   }
 
-  if (metricsLoading) {
-    return (
-      <div className="p-8">
-        <div className="mb-8">
-          <Skeleton className="h-8 w-48 mb-2" />
-          <Skeleton className="h-4 w-96" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -458,7 +467,7 @@ export default function Dashboard() {
                   variant="outline"
                   className={`${location.pathname === "/dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/dashboard")}
                 >
                   Subscription
@@ -467,7 +476,7 @@ export default function Dashboard() {
                   variant="outline"
                   className={`${location.pathname === "/compliance-dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/compliance-dashboard")}
                 >
                   Compliance
@@ -476,7 +485,7 @@ export default function Dashboard() {
                   variant="outline"
                   className={`${location.pathname === "/renewal-dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/renewal-dashboard")}
                 >
                   Renewal
@@ -485,7 +494,7 @@ export default function Dashboard() {
                   variant="outline"
                   className={`${location.pathname === "/calendar"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/calendar")}
                 >
                   Calendar
@@ -616,11 +625,11 @@ export default function Dashboard() {
             <div>
               {trendsLoading ? (
                 <Skeleton className="h-80 w-full" />
-              ) : trends ? (
+              ) : Array.isArray(trends) && trends.length > 0 ? (
                 <TrendsChart data={trends} />
               ) : (
                 <div className="h-80 flex items-center justify-center text-gray-500">
-                  No trend data available
+                  No trend data for selected filters
                 </div>
               )}
             </div>
@@ -651,11 +660,11 @@ export default function Dashboard() {
             <div>
               {categoriesLoading ? (
                 <Skeleton className="h-80 w-full" />
-              ) : categories ? (
+              ) : Array.isArray(categories) && categories.length > 0 ? (
                 <CategoryChart data={categories} />
               ) : (
                 <div className="h-80 flex items-center justify-center text-gray-500">
-                  No category data available
+                  No category data for selected filters
                 </div>
               )}
             </div>

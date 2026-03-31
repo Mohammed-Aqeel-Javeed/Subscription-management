@@ -888,6 +888,7 @@ export class MongoStorage implements IStorage {
       }
       let reminderObj = subReminders.find((r: any) => r.reminderDate === (reminderTriggeredDate ? reminderTriggeredDate.toISOString().slice(0, 10) : null));
       if (!reminderObj && subReminders.length > 0) reminderObj = subReminders[0];
+      const isRead = Boolean(reminderObj?.isRead ?? reminderObj?.read ?? false);
       notifications.push({
         id: reminderObj?._id?.toString() || reminderObj?.id || subId,
         subscriptionId: subId,
@@ -902,6 +903,8 @@ export class MongoStorage implements IStorage {
         departments: subscription?.departments || [],
         department: subscription?.department || "",
         type: 'subscription',
+        isRead,
+        readAt: reminderObj?.readAt,
       });
     }
     return notifications;

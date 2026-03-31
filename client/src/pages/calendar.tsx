@@ -83,31 +83,6 @@ function isValidDate(d: Date) {
   return !Number.isNaN(d.getTime());
 }
 
-function formatShortMonthDay(date: Date) {
-  return date.toLocaleString("en-US", { month: "short", day: "numeric" });
-}
-
-function formatLongDate(date: Date) {
-  return date.toLocaleString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function daysBetween(a: Date, b: Date) {
-  const aa = startOfDay(a).getTime();
-  const bb = startOfDay(b).getTime();
-  return Math.round((aa - bb) / (1000 * 60 * 60 * 24));
-}
-
-function getCategoryButtonClass(active: boolean) {
-  return active
-    ? "bg-purple-600 text-white border-purple-600 hover:bg-purple-600 hover:text-white"
-    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50";
-}
-
 function getViewButtonClass(active: boolean) {
   return active
     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-600"
@@ -342,7 +317,7 @@ export default function CalendarPage() {
 
     (Array.isArray(subscriptions) ? subscriptions : []).forEach((sub) => {
       const status = String(sub?.status ?? "").toLowerCase();
-      if (status === "cancelled") return;
+      if (status === "cancelled" || status === "draft") return;
 
       const raw = sub?.nextRenewal ?? sub?.renewalDate ?? sub?.endDate;
       if (!raw) return;
@@ -362,6 +337,9 @@ export default function CalendarPage() {
     });
 
     (Array.isArray(complianceList) ? complianceList : []).forEach((c) => {
+      const status = String(c?.status ?? "").toLowerCase();
+      if (status === "draft") return;
+
       const raw = c?.submissionDeadline;
       if (!raw) return;
       const date = new Date(String(raw));
@@ -381,7 +359,7 @@ export default function CalendarPage() {
 
     (Array.isArray(licenses) ? licenses : []).forEach((lic) => {
       const status = String(lic?.status ?? "").toLowerCase();
-      if (status === "cancelled") return;
+      if (status === "cancelled" || status === "draft") return;
 
       const raw = lic?.endDate;
       if (!raw) return;
@@ -720,7 +698,7 @@ export default function CalendarPage() {
               variant="outline"
               className={`${location.pathname === "/dashboard"
                 ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
               onClick={() => navigate("/dashboard")}
             >
               Subscription
@@ -729,7 +707,7 @@ export default function CalendarPage() {
               variant="outline"
               className={`${location.pathname === "/compliance-dashboard"
                 ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
               onClick={() => navigate("/compliance-dashboard")}
             >
               Compliance
@@ -738,7 +716,7 @@ export default function CalendarPage() {
               variant="outline"
               className={`${location.pathname === "/renewal-dashboard"
                 ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
               onClick={() => navigate("/renewal-dashboard")}
             >
               Renewal
@@ -747,7 +725,7 @@ export default function CalendarPage() {
               variant="outline"
               className={`${location.pathname === "/calendar"
                 ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} px-6 py-2.5 rounded-lg font-medium`}
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
               onClick={() => navigate("/calendar")}
             >
               Calendar
@@ -757,37 +735,6 @@ export default function CalendarPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8">
           <div>
-            <div className="flex flex-wrap items-center gap-2 mb-4">
-              <Button
-                variant="outline"
-                className={`h-9 rounded-full px-4 ${getCategoryButtonClass(activeCategory === "all")}`}
-                onClick={() => setActiveCategory("all")}
-              >
-                All Categories
-              </Button>
-              <Button
-                variant="outline"
-                className={`h-9 rounded-full px-4 ${getCategoryButtonClass(activeCategory === "subscriptions")}`}
-                onClick={() => setActiveCategory("subscriptions")}
-              >
-                Subscriptions
-              </Button>
-              <Button
-                variant="outline"
-                className={`h-9 rounded-full px-4 ${getCategoryButtonClass(activeCategory === "compliance")}`}
-                onClick={() => setActiveCategory("compliance")}
-              >
-                Compliance
-              </Button>
-              <Button
-                variant="outline"
-                className={`h-9 rounded-full px-4 ${getCategoryButtonClass(activeCategory === "renewals")}`}
-                onClick={() => setActiveCategory("renewals")}
-              >
-                Renewals
-              </Button>
-            </div>
-
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1">
                 <button
@@ -813,6 +760,19 @@ export default function CalendarPage() {
               </div>
 
               <div className="flex items-center gap-2">
+                {/* Category Filter Dropdown */}
+                <Select value={activeCategory} onValueChange={(value) => setActiveCategory(value as CategoryKey)}>
+                  <SelectTrigger className="h-10 w-48 bg-white border-slate-300">
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="subscriptions">Subscriptions</SelectItem>
+                    <SelectItem value="compliance">Compliance</SelectItem>
+                    <SelectItem value="renewals">Renewals</SelectItem>
+                  </SelectContent>
+                </Select>
+
                 <Button
                   variant="outline"
                   className="h-10 w-10 p-0 bg-white text-purple-700 border-purple-200 hover:bg-purple-50"
@@ -1087,4 +1047,23 @@ export default function CalendarPage() {
       </div>
     </div>
   );
+}
+
+function formatShortMonthDay(date: Date) {
+  return date.toLocaleString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatLongDate(date: Date) {
+  return date.toLocaleString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function daysBetween(a: Date, b: Date) {
+  const aa = startOfDay(a).getTime();
+  const bb = startOfDay(b).getTime();
+  return Math.round((aa - bb) / (1000 * 60 * 60 * 24));
 }

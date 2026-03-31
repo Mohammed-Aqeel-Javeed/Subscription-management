@@ -21,8 +21,40 @@ export default function SignupPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(120); // 2 minutes in seconds
+  const [canResend, setCanResend] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  
+  // Timer for OTP resend
+  useEffect(() => {
+    if (step === "otp" && timeLeft > 0) {
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            setCanResend(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      return () => clearInterval(timer);
+    }
+  }, [step, timeLeft]);
+  
+  // Format time as MM:SS
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+  
+  // Get timer color (red when <= 30 seconds)
+  const getTimerColor = () => {
+    if (timeLeft <= 30) return "#dc2626"; // red
+    return "#6b7280"; // gray
+  };
   
   // Auto-open Add Company modal if addCompany parameter is present
   useEffect(() => {
@@ -250,6 +282,8 @@ export default function SignupPage() {
 
       setSuccess("OTP sent to your email! Please check your inbox.");
       setStep("otp");
+      setTimeLeft(120); // Reset timer to 2 minutes
+      setCanResend(false);
     } catch (err) {
       setError("Network error - please check if the server is running");
     } finally {
@@ -304,6 +338,35 @@ export default function SignupPage() {
       setTimeout(() => {
         navigate("/login");
       }, 1500);
+    } catch (err) {
+      setError("Network error - please try again");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    setError("");
+    setSuccess("");
+    setLoading(true);
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Failed to resend OTP");
+        return;
+      }
+
+      setSuccess("OTP resent to your email!");
+      setTimeLeft(120); // Reset timer to 2 minutes
+      setCanResend(false);
     } catch (err) {
       setError("Network error - please try again");
     } finally {
@@ -713,13 +776,13 @@ export default function SignupPage() {
                     padding: 10,
                     background: loading
                       ? "#9ca3af"
-                      : "linear-gradient(90deg, #4f46e5, #7c3aed)",
+                      : "linear-gradient(90deg, #2563eb, #3b82f6)",
                     color: "#fff",
                     border: 0,
                     borderRadius: 999,
                     fontWeight: 600,
                     fontSize: 15,
-                    boxShadow: "0 14px 30px rgba(79,70,229,0.35)",
+                    boxShadow: "0 14px 30px rgba(37,99,235,0.35)",
                     cursor: loading ? "not-allowed" : "pointer",
                     marginTop: 4,
                   }}
@@ -878,6 +941,36 @@ export default function SignupPage() {
                     }}
                   />
                 </div>
+                
+                {/* Timer and Resend Button */}
+                <div style={{ 
+                  display: "flex", 
+                  justifyContent: "space-between", 
+                  alignItems: "center",
+                  marginBottom: 14,
+                  fontSize: 13,
+                }}>
+                  <span style={{ color: getTimerColor(), fontWeight: 500 }}>
+                    Time remaining: {formatTime(timeLeft)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleResendOTP}
+                    disabled={!canResend || loading}
+                    style={{
+                      background: "transparent",
+                      border: 0,
+                      color: canResend ? "#4f46e5" : "#9ca3af",
+                      cursor: canResend ? "pointer" : "not-allowed",
+                      fontWeight: 600,
+                      fontSize: 13,
+                      textDecoration: canResend ? "underline" : "none",
+                    }}
+                  >
+                    Resend OTP
+                  </button>
+                </div>
+                
                 <button
                   type="submit"
                   disabled={loading}
@@ -886,13 +979,13 @@ export default function SignupPage() {
                     padding: 12,
                     background: loading
                       ? "#9ca3af"
-                      : "linear-gradient(90deg, #4f46e5, #7c3aed)",
+                      : "linear-gradient(90deg, #2563eb, #3b82f6)",
                     color: "#fff",
                     border: 0,
                     borderRadius: 999,
                     fontWeight: 600,
                     fontSize: 15,
-                    boxShadow: "0 14px 30px rgba(79,70,229,0.35)",
+                    boxShadow: "0 14px 30px rgba(37,99,235,0.35)",
                     cursor: loading ? "not-allowed" : "pointer",
                     marginTop: 4,
                   }}
@@ -910,10 +1003,10 @@ export default function SignupPage() {
                     width: "100%",
                     padding: 10,
                     background: "transparent",
-                    color: "#6b7280",
-                    border: "1px solid #e5e7eb",
+                    color: "#4f46e5",
+                    border: "2px solid #4f46e5",
                     borderRadius: 999,
-                    fontWeight: 500,
+                    fontWeight: 600,
                     fontSize: 14,
                     cursor: "pointer",
                     marginTop: 8,

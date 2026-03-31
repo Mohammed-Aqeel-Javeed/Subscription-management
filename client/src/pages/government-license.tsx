@@ -3686,7 +3686,7 @@ export default function GovernmentLicense() {
                       </TableHead>
                       <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">Status</TableHead>
                       <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Renewal Status</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">ACTIONS</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 pr-6 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
                     <TableBody>
@@ -3759,7 +3759,7 @@ export default function GovernmentLicense() {
                                 <span className="text-gray-400 text-xs">-</span>
                               )}
                             </TableCell>
-                            <TableCell className="px-3 py-3 text-right w-[110px]">
+                            <TableCell className="px-3 pr-6 py-3 text-right w-[110px]">
                               {(() => {
                                 const rowId = String(license.id || "");
                                 const isOpen = !!rowId && openActionsMenuForId === rowId;

@@ -96,7 +96,7 @@ export default function Header() {
         credentials: "include",
       });
       sessionStorage.clear();
-      navigate("/");
+      navigate("/landing");
     } catch (error) {
       console.error("Logout failed:", error);
     }

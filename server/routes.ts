@@ -2005,13 +2005,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         db.collection("compliance_notifications").updateMany(
           query,
           { $set: { isRead: true, readAt: new Date() } }
+        ),
+        // Subscription reminders live in the "reminders" collection (derived notifications)
+        db.collection("reminders").updateMany(
+          query,
+          { $set: { isRead: true, readAt: new Date() } }
         )
       ];
 
       const results = await Promise.all(updatePromises);
       const totalModified = results.reduce((sum, r) => sum + (r.modifiedCount || 0), 0);
 
-      console.log(`✅ Marked ${totalModified} notification(s) as read (notifications: ${results[0].modifiedCount}, events: ${results[1].modifiedCount}, compliance: ${results[2].modifiedCount})`);
+      console.log(
+        `✅ Marked ${totalModified} notification(s) as read (notifications: ${results[0].modifiedCount}, events: ${results[1].modifiedCount}, compliance: ${results[2].modifiedCount}, reminders: ${results[3].modifiedCount})`
+      );
 
       res.status(200).json({ 
         success: true, 
