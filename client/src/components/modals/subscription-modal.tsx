@@ -1357,9 +1357,24 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   };
 
   const normalizeDocumentsInput = (input: unknown): SubscriptionDocument[] => {
-    if (!Array.isArray(input)) return [];
+    if (!input) return [];
 
-    return input
+    const arr: any[] = Array.isArray(input)
+      ? input
+      : (() => {
+          if (typeof input === 'string') {
+            try {
+              const parsed = JSON.parse(input);
+              return Array.isArray(parsed) ? parsed : [];
+            } catch {
+              return [];
+            }
+          }
+          if (typeof input === 'object') return [input as any];
+          return [];
+        })();
+
+    return arr
       .filter(Boolean)
       .map((raw: any): SubscriptionDocument | null => {
         const name = String(raw?.name ?? raw?.fileName ?? '').trim();
@@ -1391,6 +1406,145 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [showDocumentDialog, setShowDocumentDialog] = useState<boolean>(false);
   const [pendingDocument, setPendingDocument] = useState<SubscriptionDocument | null>(null);
   const [pendingDocumentRemark, setPendingDocumentRemark] = useState<string>('');
+  const persistDocumentsInFlightRef = useRef(false);
+  const hydrateDocumentsInFlightRef = useRef(false);
+  const lastDocumentSubscriptionIdRef = useRef<string | null>(null);
+  const [isPersistingDocuments, setIsPersistingDocuments] = useState(false);
+
+  // Hydrate documents when the dialog opens (handles page-refresh timing gaps).
+  // - Priority 1: use documents already on the subscription prop.
+  // - Priority 2: fetch from server if the prop has no documents yet (prop can arrive
+  //   after the dialog is opened when the page was refreshed mid-session).
+  useEffect(() => {
+    if (!showDocumentDialog) return;
+
+    const subscriptionId = (subscription as any)?.id || (subscription as any)?._id;
+    const subDocuments = (subscription as any)?.documents;
+
+    // If prop already has documents, use them immediately.
+    if (subDocuments !== undefined && subDocuments !== null) {
+      const normalized = normalizeDocumentsInput(subDocuments);
+      // Only overwrite local state if it's different (avoid flicker after user uploads).
+      if (normalized.length > 0 || documents.length === 0) {
+        setDocuments(normalized);
+      }
+      return;
+    }
+
+    // Fallback to the subscriptions list cache, which usually contains the full document payload.
+    const cachedSubscriptions = queryClient.getQueryData<any[]>(["/api/subscriptions"]);
+    const cachedMatch = subscriptionId
+      ? cachedSubscriptions?.find(
+          (item: any) => String(item?.id || item?._id || '') === String(subscriptionId)
+        )
+      : undefined;
+    if (cachedMatch?.documents !== undefined && cachedMatch?.documents !== null) {
+      const normalizedCached = normalizeDocumentsInput(cachedMatch.documents);
+      if (normalizedCached.length > 0 || documents.length === 0) {
+        setDocuments(normalizedCached);
+      }
+      return;
+    }
+
+    // Prop has no documents yet. If we already loaded docs locally, keep them.
+    if (documents.length > 0) return;
+
+    // Need to fetch. Requires a known subscription ID.
+    if (!subscriptionId) return;
+    if (hydrateDocumentsInFlightRef.current) return;
+    hydrateDocumentsInFlightRef.current = true;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await apiRequest('GET', `/api/subscriptions/${String(subscriptionId)}`);
+        if (!res.ok) return;
+        const latest = await res.json().catch(() => null);
+        if (cancelled) return;
+        const nextDocs = normalizeDocumentsInput((latest as any)?.documents);
+        setDocuments(nextDocs); // set even if empty so we stop retrying
+      } finally {
+        hydrateDocumentsInFlightRef.current = false;
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDocumentDialog, (subscription as any)?._id, (subscription as any)?.id, (subscription as any)?.documents]);
+  // Handler for Done in document dialog: auto-save and close
+  const handleDocumentDialogDone = async () => {
+    if (persistDocumentsInFlightRef.current) return;
+
+    const remark = pendingDocumentRemark.trim();
+    const finalDocuments = pendingDocument && pendingDocument.url
+      ? [
+          ...documents,
+          {
+            ...pendingDocument,
+            ...(remark ? { remark } : {}),
+          },
+        ]
+      : documents;
+
+    if (pendingDocument && pendingDocument.url) {
+      setDocuments(finalDocuments);
+    }
+
+    const subId = subscription?.id || subscription?._id;
+    if (!subId) {
+      toast({
+        title: 'Not saved yet',
+        description: 'Documents will be saved when you save the subscription.',
+        duration: 2500,
+      });
+      setPendingDocument(null);
+      setPendingDocumentRemark('');
+      setShowDocumentDialog(false);
+      return;
+    }
+
+    persistDocumentsInFlightRef.current = true;
+    setIsPersistingDocuments(true);
+    try {
+      const res = await apiRequest('PUT', `/api/subscriptions/${subId}`, {
+        documents: finalDocuments,
+      } as any);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: 'Failed to save documents' }));
+        throw new Error(err?.message || 'Failed to save documents');
+      }
+
+      toast({
+        title: 'Saved',
+        description: 'Documents saved successfully.',
+        duration: 2000,
+        variant: 'success',
+      });
+
+      try {
+        queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"], exact: false });
+        const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
+        if (tenantId) queryClient.invalidateQueries({ queryKey: ["/api/subscriptions", tenantId], exact: false });
+      } catch {
+        // ignore cache errors
+      }
+
+      setPendingDocument(null);
+      setPendingDocumentRemark('');
+      setShowDocumentDialog(false);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to save documents',
+        variant: 'destructive',
+      });
+      // Keep dialog open so user can retry
+    } finally {
+      persistDocumentsInFlightRef.current = false;
+      setIsPersistingDocuments(false);
+    }
+  };
 
   const getDocumentKind = (name: string, url?: string) => {
     const safeUrl = String(url || '');
@@ -1721,6 +1875,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setTotalAmount('');
       setTaxAmount('0');
       setTotalAmountInclTax('');
+      lastDocumentSubscriptionIdRef.current = null;
       setDocuments([]);
       setIsEditingWebsite(false);
       setNotes([]);
@@ -1757,6 +1912,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   useEffect(() => {
     if (subscription) {
+      const subscriptionId = String((subscription as any)?.id || (subscription as any)?._id || '');
       const start = subscription.startDate ? toISODateOnly(subscription.startDate) : "";
       const end = subscription.nextRenewal ? toISODateOnly(subscription.nextRenewal) : "";
       const depts = parseDepartments(subscription.department);
@@ -1773,15 +1929,18 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Set auto renewal state from subscription data
       setAutoRenewal(subscription.autoRenewal ?? true);
       
-      // Check if subscription has documents
-      if ((subscription as any)?.documents && Array.isArray((subscription as any).documents)) {
+      // Hydrate documents carefully. During refresh/open flows the subscription prop can
+      // arrive in stages, and an intermediate object may omit `documents` temporarily.
+      // Only clear documents when switching to a different subscription that truly has none.
+      if ((subscription as any)?.documents) {
         setDocuments(normalizeDocumentsInput((subscription as any).documents));
       } else if ((subscription as any)?.document) {
         // Legacy support for single document
         setDocuments([{ name: 'Document 1', url: String((subscription as any).document) }]);
-      } else {
+      } else if (subscriptionId && lastDocumentSubscriptionIdRef.current !== subscriptionId) {
         setDocuments([]);
       }
+      lastDocumentSubscriptionIdRef.current = subscriptionId || null;
       
       // Load notes from subscription
       if ((subscription as any)?.notes) {
@@ -3081,6 +3240,70 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       <style>{animationStyles}</style>
       <Dialog open={open} onOpenChange={(v) => { if (!v) setIsFullscreen(false); onOpenChange(v); }}>
         <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'}  border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter flex flex-col overflow-hidden`}> 
+                {/* Document Upload Modal */}
+                <Dialog open={showDocumentDialog} onOpenChange={(open) => {
+                  if (!open) {
+                    setPendingDocument(null);
+                    setPendingDocumentRemark('');
+                  }
+                  setShowDocumentDialog(open);
+                }}>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Upload Document</DialogTitle>
+                    </DialogHeader>
+                    {/* Document upload form fields go here (file input, remark, etc.) */}
+                    {/* Example: */}
+                    <div className="space-y-4">
+                      {/* File input (replace with your actual file upload logic) */}
+                      <Input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              setPendingDocument({
+                                name: file.name,
+                                url: ev.target?.result as string,
+                              });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                      {/* Remark input */}
+                      <Textarea
+                        placeholder="Remark (optional)"
+                        value={pendingDocumentRemark}
+                        onChange={e => setPendingDocumentRemark(e.target.value)}
+                      />
+                    </div>
+                    {/* Button group: Cancel | Done */}
+                    <div className="flex justify-end gap-3 mt-6">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setPendingDocument(null);
+                          setPendingDocumentRemark('');
+                          setShowDocumentDialog(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleDocumentDialogDone}
+                        disabled={!pendingDocument || !pendingDocument.url}
+                        className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold px-6"
+                      >
+                        Done
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
           <DialogHeader className="sticky top-0 z-50 bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white p-6  flex flex-row items-center shadow-sm">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               {companyLogo && (
@@ -3193,28 +3416,46 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   const historyId = (subscription as any)?._id || (subscription as any)?.id;
                   if (isEditing && historyId) {
                     const currentServiceName = form.getValues("serviceName") || subscription?.serviceName || "";
+                    
+                    const mintDeeplinkToken = async (id: string) => {
+                      const res = await fetch('/api/deeplink/token', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ entityType: 'subscription', id: String(id) }),
+                      });
+                      if (!res.ok) throw new Error('Failed to create deeplink token');
+                      const data = (await res.json()) as { token?: string };
+                      if (!data?.token) throw new Error('Invalid deeplink token response');
+                      return String(data.token);
+                    };
+
                     void (async () => {
                       try {
-                        const res = await fetch('/api/deeplink/token', {
-                          method: 'POST',
-                          credentials: 'include',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ entityType: 'subscription', id: String(historyId) }),
-                        });
-                        if (!res.ok) throw new Error('Failed to create deeplink token');
-                        const data = (await res.json()) as { token?: string };
-                        if (!data?.token) throw new Error('Invalid deeplink token response');
+                        const token = await mintDeeplinkToken(String(historyId));
                         const qs = new URLSearchParams({
-                          openToken: String(data.token),
+                          openToken: token,
                           name: String(currentServiceName),
                         }).toString();
-                        window.location.href = `/subscription-history?${qs}`;
+                        navigate(`/subscription-history?${qs}`, {
+                          state: {
+                            ...(location.state as any),
+                            returnOpenSubscriptionId: historyId,
+                            returnPath: location.pathname,
+                          },
+                        });
                       } catch {
                         const qs = new URLSearchParams({
                           id: String(historyId),
                           name: String(currentServiceName),
                         }).toString();
-                        window.location.href = `/subscription-history?${qs}`;
+                        navigate(`/subscription-history?${qs}`, {
+                          state: {
+                            ...(location.state as any),
+                            returnOpenSubscriptionId: historyId,
+                            returnPath: location.pathname,
+                          },
+                        });
                       }
                     })();
                   }
@@ -5589,7 +5830,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           }
         }}
       >
-        <DialogContent className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
+        <DialogContent showClose={false} className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
           <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
             <div className="flex items-start justify-between">
               <div>
@@ -5600,6 +5841,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <Button
                   type="button"
                   size="sm"
+                  disabled={isPersistingDocuments || false}
                   onClick={() => {
                     const input = document.createElement('input');
                     input.type = 'file';
@@ -5742,6 +5984,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
                   Upload
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDocumentDialog(false)}
+                  disabled={isPersistingDocuments}
+                  className="h-9 w-9 p-0 border-gray-300 text-gray-700 hover:bg-gray-50"
+                  aria-label="Close documents"
+                >
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -5898,7 +6151,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               onClick={() => {
                                 openDocumentInNewTab(doc);
                               }}
-                              className="cursor-pointer"
+                              className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
                             >
                               View
                             </DropdownMenuItem>
@@ -5906,7 +6159,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               onClick={() => {
                                 downloadDocument(doc);
                               }}
-                              className="cursor-pointer"
+                              className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
                             >
                               Download
                             </DropdownMenuItem>
@@ -5921,7 +6174,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                   variant: 'destructive',
                                 });
                               }}
-                              className="cursor-pointer text-red-600 focus:text-red-600"
+                              className="cursor-pointer text-red-600 focus:text-red-600 data-[highlighted]:bg-blue-50 data-[highlighted]:text-red-600 focus:bg-blue-50"
                             >
                               Remove
                             </DropdownMenuItem>
@@ -5953,13 +6206,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 type="button"
                 variant="outline"
                 onClick={() => setShowDocumentDialog(false)}
+                disabled={isPersistingDocuments}
                 className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 text-sm px-4 py-1.5"
               >
                 Close
               </Button>
               <Button
                 type="button"
-                onClick={() => setShowDocumentDialog(false)}
+                onClick={handleDocumentDialogDone}
+                disabled={isPersistingDocuments}
                 className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5"
               >
                 Done

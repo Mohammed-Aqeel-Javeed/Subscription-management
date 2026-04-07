@@ -26,6 +26,19 @@ function sanitizeToken(raw: string | null) {
   return trimmed;
 }
 
+function truncateText(value: string | undefined | null, maxChars: number) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars)).trimEnd()}...` : text;
+}
+
+function truncateMultiline(value: string | undefined | null, maxCharsPerLine: number) {
+  const text = String(value ?? '');
+  if (!text) return '';
+  const lines = text.split('\n');
+  return lines.map((l) => truncateText(l, maxCharsPerLine)).join('\n');
+}
+
 export default function RenewalLog() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -35,15 +48,53 @@ export default function RenewalLog() {
 
   const [resolvedLicenseId, setResolvedLicenseId] = useState<string | null>(idParam);
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const [isResolvingToken, setIsResolvingToken] = useState(() => Boolean(openToken && !idParam));
+
+  // Function to mint deeplink token
+  const mintDeeplinkToken = async (id: string) => {
+    const res = await fetch('/api/deeplink/token', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityType: 'license', id: String(id) }),
+    });
+    if (!res.ok) throw new Error('Failed to create deeplink token');
+    const data = (await res.json()) as { token?: string };
+    if (!data?.token) throw new Error('Invalid deeplink token response');
+    return String(data.token);
+  };
+
+  // Handle back navigation to government-license with modal reopened
+  const handleBackToRenewals = () => {
+    const idToOpen = resolvedLicenseId || idParam;
+    
+    if (!idToOpen) {
+      navigate("/government-license", { replace: true });
+      return;
+    }
+
+    void (async () => {
+      try {
+        const token = await mintDeeplinkToken(String(idToOpen));
+        const qs = new URLSearchParams({ openToken: token }).toString();
+        navigate(`/government-license?${qs}`, { replace: true });
+      } catch {
+        const qs = new URLSearchParams({ open: String(idToOpen) }).toString();
+        navigate(`/government-license?${qs}`, { replace: true });
+      }
+    })();
+  };
 
   useEffect(() => {
     if (idParam) {
+      setIsResolvingToken(false);
       setTokenError(null);
       setResolvedLicenseId(idParam);
       return;
     }
 
     if (!openToken) {
+      setIsResolvingToken(false);
       setTokenError(null);
       setResolvedLicenseId(null);
       return;
@@ -51,6 +102,7 @@ export default function RenewalLog() {
 
     let cancelled = false;
     void (async () => {
+      if (!cancelled) setIsResolvingToken(true);
       try {
         const qs = new URLSearchParams({ token: openToken }).toString();
         const res = await fetch(`/api/deeplink/resolve?${qs}`, { credentials: "include" });
@@ -61,11 +113,13 @@ export default function RenewalLog() {
         if (!cancelled) {
           setTokenError(null);
           setResolvedLicenseId(resolved);
+          setIsResolvingToken(false);
         }
       } catch {
         if (!cancelled) {
           setResolvedLicenseId(null);
           setTokenError('Invalid or expired link');
+          setIsResolvingToken(false);
         }
       }
     })();
@@ -75,9 +129,13 @@ export default function RenewalLog() {
     };
   }, [idParam, openToken]);
 
+  const licenseId = resolvedLicenseId;
+  const showAllLogs = !licenseId && !openToken;
+
   // Fetch logs
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ["/api/logs"],
+    enabled: !isResolvingToken && (Boolean(licenseId) || showAllLogs),
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/api/logs`, {
         credentials: "include",
@@ -89,7 +147,6 @@ export default function RenewalLog() {
 
   // Filter logs by license ID if provided
   // Try to match by licenseId first (new logs), fallback to licenseName (old logs)
-  const licenseId = resolvedLicenseId;
   const filteredLogs = licenseId 
     ? logs.filter((log: any) => {
         // First try to match by licenseId (for new logs)
@@ -100,7 +157,9 @@ export default function RenewalLog() {
         // This means old logs won't show when filtering by ID
         return false;
       })
-    : logs;
+    : showAllLogs
+      ? logs
+      : [];
 
   const formatTimestamp = (timestamp: string) => {
     if (!timestamp) return { date: 'N/A', time: '' };
@@ -131,7 +190,11 @@ export default function RenewalLog() {
                   const derivedName = filteredLogs.length > 0 ? (filteredLogs[0]?.licenseName as string | undefined) : undefined;
                   const displayName = licenseNameParam ? decodeURIComponent(licenseNameParam) : derivedName;
                   const title = licenseId && displayName ? `${displayName} History Log` : 'Renewal History Log';
-                  return <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{title}</h1>;
+                  return (
+                    <h1 className="text-2xl font-semibold text-gray-900 tracking-tight truncate max-w-[70vw]" title={title}>
+                      {truncateText(title, 80) || title}
+                    </h1>
+                  );
                 })()}
                 {tokenError ? <p className="text-sm text-red-600 mt-1">{tokenError}</p> : null}
               </div>
@@ -139,7 +202,7 @@ export default function RenewalLog() {
             
             <div className="flex items-center gap-3">
               <Button
-                onClick={() => navigate('/government-license')}
+                onClick={handleBackToRenewals}
                 variant="outline"
                 className="flex items-center gap-2 bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
               >
@@ -197,15 +260,20 @@ export default function RenewalLog() {
                       <tr key={index} className="hover:bg-slate-50 border-b border-slate-100">
                         {!licenseId && (
                           <td className="font-medium text-sm text-slate-900 align-top py-3 px-4">
-                            {log.licenseName || 'N/A'}
+                            <span className="block max-w-[260px] truncate" title={String(log.licenseName || '')}>
+                              {truncateText(String(log.licenseName || 'N/A'), 28) || 'N/A'}
+                            </span>
                           </td>
                         )}
                         <td className="text-sm text-slate-700 align-top py-3 px-4">
                           {log.user || 'System'}
                         </td>
                         <td className="text-sm text-slate-600 align-top py-3 px-4">
-                          <div className="whitespace-pre-line leading-relaxed">
-                            {changesText}
+                          <div
+                            className="whitespace-pre-line leading-relaxed"
+                            title={String(changesText || 'No changes recorded')}
+                          >
+                            {truncateMultiline(String(changesText || 'No changes recorded'), 90)}
                           </div>
                         </td>
                         <td className="text-sm text-slate-500 align-top py-3 px-4">

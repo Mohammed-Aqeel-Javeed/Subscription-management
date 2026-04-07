@@ -12,6 +12,7 @@ import Header from "@/components/layout/header";
 import Chatbot from "@/pages/chatbot";
 import Dashboard from "@/pages/dashboard";
 import ComplianceLedger from "@/pages/compliance-ledger";
+import ComplianceLogPage from "@/pages/compliance-log";
 import Subscriptions from "@/pages/subscriptions";
 import CancelledSubscriptionsPage from "@/pages/cancelled-subscriptions";
 import Notifications from "@/pages/notifications";
@@ -47,6 +48,7 @@ import LandingPage from "@/pages/landing";
 import Profile from "@/pages/profile";
 import SecureLinkRedirect from "@/pages/secure-link";
 import PlatformAdminPage from "@/pages/platform-admin";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 function App() {
   return (
@@ -69,6 +71,7 @@ function AppWithSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const isMobile = useIsMobile();
 
   const isSecureLinkRoute = location.pathname.startsWith('/s/');
   const shouldHideSidebar = isSecureLinkRoute || hideSidebarPaths.includes(location.pathname);
@@ -93,8 +96,7 @@ function AppWithSidebar() {
   }, []);
 
   // Check authentication on every route change
-  useEffect(() => {
-    const checkAuth = async () => {
+  const checkAuth = React.useCallback(async () => {
       // Skip auth check for public pages
       const publicPaths = ["/login", "/signup", "/auth", "/landing"];
       if (publicPaths.includes(location.pathname) || location.pathname.startsWith('/s/')) {
@@ -125,10 +127,12 @@ function AppWithSidebar() {
           pathname: location.pathname
         });
         if (!res.ok) {
-          // Not authenticated, redirect to landing page
-          console.log("[App Auth Guard] Not authenticated, redirecting to landing");
-          sessionStorage.clear();
-          navigate("/", { replace: true });
+          // Only hard-redirect on real auth failures.
+          if (res.status === 401 || res.status === 403) {
+            console.log("[App Auth Guard] Not authenticated, redirecting to landing");
+            sessionStorage.clear();
+            navigate("/", { replace: true });
+          }
           return;
         }
 
@@ -140,28 +144,58 @@ function AppWithSidebar() {
           }
         }
       } catch (error) {
-        // Network error or server error, redirect to landing page
+        // Likely wake-from-sleep/offline/server-restart: do not clear session or redirect.
         console.error("[App Auth Guard] Error checking auth:", error);
-        sessionStorage.clear();
-        navigate("/", { replace: true });
+        return;
+      }
+  }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  // Re-validate auth when waking from sleep / tab becomes visible.
+  useEffect(() => {
+    const onVisibleOrOnline = () => {
+      if (document.visibilityState === "visible") {
+        checkAuth();
       }
     };
 
-    checkAuth();
-  }, [location.pathname, navigate]);
+    window.addEventListener("focus", onVisibleOrOnline);
+    window.addEventListener("online", onVisibleOrOnline);
+    document.addEventListener("visibilitychange", onVisibleOrOnline);
+
+    return () => {
+      window.removeEventListener("focus", onVisibleOrOnline);
+      window.removeEventListener("online", onVisibleOrOnline);
+      document.removeEventListener("visibilitychange", onVisibleOrOnline);
+    };
+  }, [checkAuth]);
+
+  // Responsive default: keep sidebar collapsed on mobile.
+  useEffect(() => {
+    setSidebarOpen(!isMobile);
+  }, [isMobile]);
+
+  // Some views manage their own internal scrolling (tables/panels).
+  // For those routes, lock the outer page scroll so mouse-wheel doesn't move the whole view.
+  const lockOuterScroll =
+    location.pathname.startsWith("/company-details/") ||
+    location.pathname.startsWith("/configuration");
 
   return (
     <SidebarSlotProvider>
-      <div className="flex h-screen">
+      <div className="flex h-screen w-full overflow-hidden">
         {shouldHideSidebar ? null : (
           <Sidebar 
             isOpen={sidebarOpen} 
             onToggle={() => setSidebarOpen(!sidebarOpen)} 
           />
         )}
-        <main className="flex-1 overflow-auto flex flex-col">
+        <main className="flex-1 min-w-0 overflow-hidden flex flex-col">
           {!shouldHideSidebar && <Header />}
-          <div className="flex-1 overflow-auto">
+          <div className={lockOuterScroll ? "flex-1 min-h-0 overflow-hidden" : "flex-1 min-h-0 overflow-auto"}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/landing" element={<LandingPage />} />
@@ -175,6 +209,7 @@ function AppWithSidebar() {
               <Route path="/subscriptions/cancelled" element={<CancelledSubscriptionsPage />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/configuration" element={<Configuration />} />
+              <Route path="/configuration/:section" element={<Configuration />} />
               <Route path="/reminders" element={<Configuration />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/reports/upcoming-renewal" element={<UpcomingRenewalReport />} />
@@ -194,9 +229,11 @@ function AppWithSidebar() {
               <Route path="/renewal-dashboard" element={<RenewalDashboard />} />
               <Route path="/compliance" element={<Compliance />} />
               <Route path="/compliance-ledger" element={<ComplianceLedger />} />
+              <Route path="/compliance-log" element={<ComplianceLogPage />} />
               <Route path="/government-license" element={<GovernmentLicense />} />
               <Route path="/renewal-log" element={<RenewalLog />} />
               <Route path="/company-details" element={<CompanyDetails />} />
+              <Route path="/company-details/:section" element={<CompanyDetails />} />
               <Route path="/subscription-user" element={<SubscriptionUserPage />} />
               <Route path="/profile" element={<Profile />} />
                 <Route path="/calendar" element={<CalendarPage />} />

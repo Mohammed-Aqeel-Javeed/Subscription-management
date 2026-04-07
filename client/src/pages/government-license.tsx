@@ -8,6 +8,7 @@ import { Button } from "../components/ui/button";
 import { Can } from "@/components/Can";
 import { useSidebarSlot } from "@/context/SidebarSlotContext";
 import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown, X, ArrowUpDown, ArrowUp, ArrowDown, History, MoreVertical } from "lucide-react";
@@ -92,12 +93,15 @@ interface License {
   issuingAuthorityPhone: string;
   reminderDays?: number | string;
   reminderPolicy?: string;
+  customFields?: Record<string, string>;
   renewalStatus?: string;
   expectedCompletedDate?: string;
   renewalInitiatedDate?: string;
   submittedBy?: string;
   renewalAmount?: number;
   renewalStatusReason?: string;
+  renewalNotes?: string;
+  renewalStatusLog?: any[];
   renewalAttachments?: RenewalAttachment[] | string[];
   createdAt?: string;
   updatedAt?: string;
@@ -487,6 +491,7 @@ const licenseSchema = z
     return isNaN(Number(num)) ? undefined : Number(num);
   }, z.number().optional()),
   renewalStatusReason: z.string().optional(),
+  renewalNotes: z.string().optional(),
   renewalAttachments: z
     .array(
       z.object({
@@ -502,7 +507,9 @@ const licenseSchema = z
     .optional(),
   reminderDays: z.union([z.string(), z.number()]).optional(),
   reminderPolicy: z.string().optional(),
+  customFields: z.record(z.string()).optional(),
 })
+  .passthrough()
   .superRefine((data, ctx) => {
     const start = String(data.startDate || '').trim();
     const end = String(data.endDate || '').trim();
@@ -1074,7 +1081,14 @@ export default function GovernmentLicense() {
   const [issueDateTo, setIssueDateTo] = useState<string>("");
   const [expiryDateFrom, setExpiryDateFrom] = useState<string>("");
   const [expiryDateTo, setExpiryDateTo] = useState<string>("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(() => {
+    const sp = new URLSearchParams(location.search);
+    return Boolean(sp.get('openToken') || sp.get('open') || sp.get('create') === '1');
+  });
+  const [isDeepLinkOpening, setIsDeepLinkOpening] = useState(() => {
+    const sp = new URLSearchParams(location.search);
+    return Boolean(sp.get('openToken') || sp.get('open') || sp.get('create') === '1');
+  });
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -1096,11 +1110,74 @@ export default function GovernmentLicense() {
     ...v,
     departments: Array.isArray(v.departments) ? [...v.departments] : [],
     renewalAttachments: Array.isArray(v.renewalAttachments) ? [...v.renewalAttachments] : [],
+    customFields:
+      v.customFields && typeof v.customFields === 'object' && !Array.isArray(v.customFields)
+        ? { ...(v.customFields as Record<string, string>) }
+        : {},
   });
 
   const [showRenewalDocumentsModal, setShowRenewalDocumentsModal] = useState(false);
   const [pendingRenewalAttachment, setPendingRenewalAttachment] = useState<RenewalAttachment | null>(null);
   const [pendingRenewalAttachmentRemark, setPendingRenewalAttachmentRemark] = useState("");
+  const persistRenewalAttachmentsInFlightRef = useRef(false);
+  const [isPersistingRenewalAttachments, setIsPersistingRenewalAttachments] = useState(false);
+
+  const handleRenewalDocumentsDone = async () => {
+    if (persistRenewalAttachmentsInFlightRef.current) return;
+
+    const licenseId = editingLicense?.id ? String(editingLicense.id) : '';
+    if (!licenseId) {
+      toast({
+        title: 'Not saved yet',
+        description: 'Documents will be saved when you save the renewal record.',
+        duration: 2500,
+      });
+      setShowRenewalDocumentsModal(false);
+      setPendingRenewalAttachment(null);
+      setPendingRenewalAttachmentRemark('');
+      return;
+    }
+
+    persistRenewalAttachmentsInFlightRef.current = true;
+    setIsPersistingRenewalAttachments(true);
+    try {
+      const attachments = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
+      const res = await fetch(`${API_BASE_URL}/api/licenses/${licenseId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ renewalAttachments: attachments }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: 'Failed to save documents' }));
+        throw new Error(err?.message || 'Failed to save documents');
+      }
+
+      toast({
+        title: 'Saved',
+        description: 'Documents saved successfully.',
+        duration: 2000,
+        variant: 'success',
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['/api/licenses'] });
+
+      setShowRenewalDocumentsModal(false);
+      setPendingRenewalAttachment(null);
+      setPendingRenewalAttachmentRemark('');
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to save documents',
+        variant: 'destructive',
+      });
+      // Keep dialog open so user can retry
+    } finally {
+      persistRenewalAttachmentsInFlightRef.current = false;
+      setIsPersistingRenewalAttachments(false);
+    }
+  };
   const [cancelRenewalConfirmOpen, setCancelRenewalConfirmOpen] = useState(false);
   const [reactivateCancelledConfirmOpen, setReactivateCancelledConfirmOpen] = useState(false);
   const pendingReactivateSubmitRef = useRef<LicenseFormData | null>(null);
@@ -1115,6 +1192,16 @@ export default function GovernmentLicense() {
   const [approvedExpiryDraft, setApprovedExpiryDraft] = useState('');
   const [approvedIssueDraft, setApprovedIssueDraft] = useState('');
   const [previousRenewalStatusForExpiry, setPreviousRenewalStatusForExpiry] = useState<string>('');
+  const approvedClearSnapshotRef = useRef<{
+    renewalInitiatedDate: string;
+    expectedCompletedDate: string;
+    submittedBy: string;
+    renewalAmount: any;
+    renewalStatusReason: any;
+    renewalAttachments: any;
+  } | null>(null);
+  const approvedModalDidSaveRef = useRef(false);
+  const [isSavingApprovedDates, setIsSavingApprovedDates] = useState(false);
 
   const [renewalFeeText, setRenewalFeeText] = useState('');
   const [renewalAmountText, setRenewalAmountText] = useState('');
@@ -1129,6 +1216,41 @@ export default function GovernmentLicense() {
   
   // Get current user name (used for default Submitted By)
   const [currentUserName, setCurrentUserName] = useState<string>('');
+
+  // Renewal Notes (match Subscription modal notes behavior)
+  const [renewalNotes, setRenewalNotes] = useState<Array<{ id: string; text: string; createdAt: string; createdBy: string }>>([]);
+  const [showAddRenewalNoteDialog, setShowAddRenewalNoteDialog] = useState(false);
+  const [showViewRenewalNoteDialog, setShowViewRenewalNoteDialog] = useState(false);
+  const [selectedRenewalNote, setSelectedRenewalNote] = useState<{ id: string; text: string; createdAt: string; createdBy: string } | null>(null);
+  const [newRenewalNoteText, setNewRenewalNoteText] = useState('');
+  const [isPersistingRenewalNotes, setIsPersistingRenewalNotes] = useState(false);
+
+  const persistRenewalNotes = async (
+    nextNotes: Array<{ id: string; text: string; createdAt: string; createdBy: string }>
+  ) => {
+    const licenseId = editingLicense?.id ? String(editingLicense.id) : '';
+    if (!licenseId) return;
+
+    setIsPersistingRenewalNotes(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/licenses/${encodeURIComponent(licenseId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          renewalNotes: nextNotes.length > 0 ? JSON.stringify(nextNotes) : '',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: 'Failed to save notes' }));
+        throw new Error(err?.message || 'Failed to save notes');
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['/api/licenses'] });
+    } finally {
+      setIsPersistingRenewalNotes(false);
+    }
+  };
 
   const getDocumentKind = (name: string, url?: string): 'pdf' | 'excel' | 'word' | 'image' | 'csv' | 'other' => {
     const safeUrl = typeof url === 'string' ? url : '';
@@ -1414,6 +1536,7 @@ export default function GovernmentLicense() {
     renewalAmount: undefined,
     renewalStatusReason: "",
     renewalAttachments: [],
+    customFields: {},
   };
 
   const form = useForm<LicenseFormData>({
@@ -1809,7 +1932,11 @@ export default function GovernmentLicense() {
     const openLicenseId = searchParams.get('open');
     const createMode = searchParams.get('create') === '1';
     if (!openToken && !openLicenseId && !createMode) return;
-    if (isModalOpen) return;
+
+    setIsDeepLinkOpening(true);
+    setIsModalOpen(true);
+    setEditingLicense(null);
+    setShowSubmissionDetails(false);
 
     if (createMode) {
       navigate(location.pathname, { replace: true, state: location.state });
@@ -1819,7 +1946,15 @@ export default function GovernmentLicense() {
       return;
     }
 
-    if (!Array.isArray(licenses) || licenses.length === 0) return;
+    if (!Array.isArray(licenses) || licenses.length === 0) {
+      if (!isLoading) {
+        navigate(location.pathname, { replace: true, state: location.state });
+        setIsDeepLinkOpening(false);
+        setIsModalOpen(false);
+        setEditingLicense(null);
+      }
+      return;
+    }
 
     const resolveToken = async (token: string) => {
       const qs = new URLSearchParams({ token }).toString();
@@ -1832,19 +1967,37 @@ export default function GovernmentLicense() {
     void (async () => {
       const resolvedId = openToken ? await resolveToken(openToken) : openLicenseId;
 
-      // Clear the query param (whether found or not)
-      navigate(location.pathname, { replace: true, state: location.state });
-
-      if (!resolvedId) return;
+      if (!resolvedId) {
+        navigate(location.pathname, { replace: true, state: location.state });
+        setIsDeepLinkOpening(false);
+        setIsModalOpen(false);
+        setEditingLicense(null);
+        return;
+      }
 
       const license = licenses.find((lic: License) =>
         String(lic.id) === resolvedId || String((lic as any)._id) === resolvedId
       );
 
-      if (!license) return;
+      if (!license) {
+        navigate(location.pathname, { replace: true, state: location.state });
+        setIsDeepLinkOpening(false);
+        setIsModalOpen(false);
+        setEditingLicense(null);
+        return;
+      }
+
+      // Keep the modal open; just hydrate it with the resolved license.
       handleEdit(license);
+
+      // Clear the query param after scheduling the modal open.
+      navigate(location.pathname, { replace: true, state: location.state });
     })();
-  }, [location.search, location.pathname, licenses, isModalOpen, navigate]);
+  }, [location.search, location.pathname, licenses, navigate, isLoading]);
+
+  useEffect(() => {
+    if (isDeepLinkOpening && isModalOpen) setIsDeepLinkOpening(false);
+  }, [isDeepLinkOpening, isModalOpen]);
 
   // Query for employees (owners)
   const { data: employeesRaw = [], refetch: refetchEmployees } = useQuery({
@@ -2000,6 +2153,23 @@ export default function GovernmentLicense() {
       return {};
     }
   });
+
+  // Fetch renewal custom field definitions (configured in Configuration → Custom field)
+  const { data: renewalFieldDefs = [] } = useQuery<any[]>({
+    queryKey: ["/api/config/renewal-fields"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE_URL}/api/config/renewal-fields`, { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+
+  const enabledRenewalFieldDefs = Array.isArray(renewalFieldDefs)
+    ? renewalFieldDefs.filter((f: any) => !!f?.enabled && !!f?._id)
+    : [];
 
   // Calculate LCY Amount based on Renewal Cost and Currency (matching subscription modal logic)
   useEffect(() => {
@@ -2893,6 +3063,7 @@ export default function GovernmentLicense() {
       department: JSON.stringify(selectedDepartments),
       currency: currency || undefined,
       lcyAmount: lcyAmountValue,
+      renewalNotes: renewalNotes.length > 0 ? JSON.stringify(renewalNotes) : undefined,
     };
     form.setValue('status', derivedStatus);
     licenseMutation.mutate(payload);
@@ -3044,10 +3215,44 @@ export default function GovernmentLicense() {
         }
         return raw as RenewalAttachment[];
       })(),
+      customFields: (() => {
+        const raw: any = (license as any).customFields;
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+        return raw as Record<string, string>;
+      })(),
     };
 
     // Set currency state
     setCurrency((license as any).currency || "");
+
+    // Load Renewal Notes (stored as JSON array, back-compat with plain string)
+    try {
+      const raw = (license as any)?.renewalNotes;
+      if (!raw) {
+        setRenewalNotes([]);
+      } else {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        setRenewalNotes(Array.isArray(parsed) ? parsed : []);
+      }
+    } catch {
+      const raw = (license as any)?.renewalNotes;
+      if (typeof raw === 'string' && raw.trim() && !raw.trim().startsWith('[')) {
+        setRenewalNotes([
+          {
+            id: 'legacy',
+            text: raw.trim(),
+            createdAt: (license as any)?.updatedAt || (license as any)?.createdAt || new Date().toISOString(),
+            createdBy: currentUserName || 'User',
+          },
+        ]);
+      } else {
+        setRenewalNotes([]);
+      }
+    }
+    setNewRenewalNoteText('');
+    setSelectedRenewalNote(null);
+    setShowAddRenewalNoteDialog(false);
+    setShowViewRenewalNoteDialog(false);
 
     // If the license already has Resubmitted status, prevent the clear effect from running
     if (resetValues.renewalStatus === 'Resubmitted') {
@@ -3079,6 +3284,11 @@ export default function GovernmentLicense() {
   setRenewalAmountText('');
   setCurrency('');
   setLcyAmount('');
+  setRenewalNotes([]);
+  setNewRenewalNoteText('');
+  setSelectedRenewalNote(null);
+  setShowAddRenewalNoteDialog(false);
+  setShowViewRenewalNoteDialog(false);
   setEndDateManuallySet(false);
   setShowRenewalDocumentsModal(false);
   setPendingRenewalAttachment(null);
@@ -3128,6 +3338,14 @@ export default function GovernmentLicense() {
         const an = typeof a === 'number' ? a : undefined;
         const bn = typeof b === 'number' ? b : undefined;
         if (an !== bn) return true;
+        continue;
+      }
+
+      // Objects: deep-compare (custom fields)
+      if (key === 'customFields') {
+        const ao = a && typeof a === 'object' ? a : {};
+        const bo = b && typeof b === 'object' ? b : {};
+        if (JSON.stringify(ao) !== JSON.stringify(bo)) return true;
         continue;
       }
 
@@ -3840,14 +4058,18 @@ export default function GovernmentLicense() {
                       ? 'Renewal Status'
                       : editingLicense
                         ? (form.getValues("licenseName") || editingLicense?.licenseName || 'Renewal')
-                        : 'New Renewal'
+                        : isDeepLinkOpening
+                          ? 'Opening renewal...'
+                          : 'New Renewal'
                   }
                 >
                   {showSubmissionDetails
                     ? 'Renewal Status'
                     : editingLicense
                       ? (form.getValues("licenseName") || editingLicense?.licenseName || 'Renewal')
-                      : 'New Renewal'}
+                      : isDeepLinkOpening
+                        ? 'Opening renewal...'
+                        : 'New Renewal'}
                 </DialogTitle>
                 {(() => {
                   const derived = getDerivedStatus({ endDate: expiryDateValue, status: statusValue });
@@ -3878,46 +4100,117 @@ export default function GovernmentLicense() {
                     Renewal Submit
                   </Button>
                 )}
-                {/* Log Button - Navigate to renewal log page */}
+                {/* History Button (visible even before clicking Renewal Submit) */}
                 {editingLicense?.id && (
                   <Button
                     type="button"
                     variant="outline"
-                    className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
+                    className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[92px] flex items-center gap-2 border-indigo-200 shadow-sm"
                     onClick={() => {
-                      if (editingLicense?.id) {
-                        const currentName = form.getValues("licenseName") || editingLicense?.licenseName || "";
-                        const id = String(editingLicense.id);
-                        void (async () => {
-                          try {
-                            const res = await fetch('/api/deeplink/token', {
-                              method: 'POST',
-                              credentials: 'include',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ entityType: 'license', id }),
-                            });
-                            if (!res.ok) throw new Error('Failed to create deeplink token');
-                            const data = (await res.json()) as { token?: string };
-                            if (!data?.token) throw new Error('Invalid deeplink token response');
-                            const qs = new URLSearchParams({
-                              openToken: String(data.token),
-                              name: String(currentName),
-                            }).toString();
-                            window.location.href = `/renewal-log?${qs}`;
-                          } catch {
-                            const qs = new URLSearchParams({
-                              id,
-                              name: String(currentName),
-                            }).toString();
-                            window.location.href = `/renewal-log?${qs}`;
-                          }
-                        })();
-                      }
+                      const licenseId = editingLicense.id;
+                      const name = String(form.getValues('licenseName') || editingLicense?.licenseName || '').trim();
+                      
+                      const mintDeeplinkToken = async (id: string) => {
+                        const res = await fetch('/api/deeplink/token', {
+                          method: 'POST',
+                          credentials: 'include',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ entityType: 'license', id: String(id) }),
+                        });
+                        if (!res.ok) throw new Error('Failed to create deeplink token');
+                        const data = (await res.json()) as { token?: string };
+                        if (!data?.token) throw new Error('Invalid deeplink token response');
+                        return String(data.token);
+                      };
+
+                      void (async () => {
+                        try {
+                          const token = await mintDeeplinkToken(String(licenseId));
+                          const qs = new URLSearchParams({
+                            openToken: token,
+                            name,
+                          }).toString();
+                          navigate(`/renewal-log?${qs}`, {
+                            state: {
+                              returnOpenLicenseId: licenseId,
+                              returnPath: location.pathname,
+                            },
+                          });
+                        } catch {
+                          const qs = new URLSearchParams({
+                            id: String(licenseId),
+                            name,
+                          }).toString();
+                          navigate(`/renewal-log?${qs}`, {
+                            state: {
+                              returnOpenLicenseId: licenseId,
+                              returnPath: location.pathname,
+                            },
+                          });
+                        }
+                      })();
                     }}
                     title="History"
                   >
                     <History className="h-4 w-4" />
                     History
+                  </Button>
+                )}
+
+                {/* Log Button (only in Renewal Submit view) */}
+                {showSubmissionDetails && editingLicense?.id && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
+                    onClick={() => {
+                      const licenseId = editingLicense.id;
+                      const name = String(form.getValues('licenseName') || editingLicense?.licenseName || '').trim();
+                      
+                      const mintDeeplinkToken = async (id: string) => {
+                        const res = await fetch('/api/deeplink/token', {
+                          method: 'POST',
+                          credentials: 'include',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ entityType: 'license', id: String(id) }),
+                        });
+                        if (!res.ok) throw new Error('Failed to create deeplink token');
+                        const data = (await res.json()) as { token?: string };
+                        if (!data?.token) throw new Error('Invalid deeplink token response');
+                        return String(data.token);
+                      };
+
+                      void (async () => {
+                        try {
+                          const token = await mintDeeplinkToken(String(licenseId));
+                          const qs = new URLSearchParams({
+                            openToken: token,
+                            name,
+                          }).toString();
+                          navigate(`/compliance-log?${qs}`, {
+                            state: {
+                              returnOpenLicenseId: licenseId,
+                              returnPath: location.pathname,
+                            },
+                          });
+                        } catch {
+                          const qs = new URLSearchParams({
+                            id: String(licenseId),
+                            name,
+                          }).toString();
+                          navigate(`/compliance-log?${qs}`, {
+                            state: {
+                              returnOpenLicenseId: licenseId,
+                              returnPath: location.pathname,
+                            },
+                          });
+                        }
+                      })();
+                    }}
+                    title="Log"
+                  >
+                    <History className="h-4 w-4" />
+                    Log
                   </Button>
                 )}
                 {/* License No. display removed */}
@@ -3971,6 +4264,24 @@ export default function GovernmentLicense() {
 
                                     if (val === 'Approved') {
                                       setPreviousRenewalStatusForExpiry(prev);
+                                      approvedModalDidSaveRef.current = false;
+                                      approvedClearSnapshotRef.current = {
+                                        renewalInitiatedDate: String(form.getValues('renewalInitiatedDate') || ''),
+                                        expectedCompletedDate: String(form.getValues('expectedCompletedDate') || ''),
+                                        submittedBy: String(form.getValues('submittedBy') || ''),
+                                        renewalAmount: form.getValues('renewalAmount'),
+                                        renewalStatusReason: form.getValues('renewalStatusReason'),
+                                        renewalAttachments: form.getValues('renewalAttachments'),
+                                      };
+
+                                      // Clear submission fields immediately when selecting Approved.
+                                      form.setValue('renewalInitiatedDate', '', { shouldDirty: true });
+                                      form.setValue('expectedCompletedDate', '', { shouldDirty: true });
+                                      form.setValue('submittedBy', '', { shouldDirty: true });
+                                      form.setValue('renewalAmount', undefined, { shouldDirty: true });
+                                      form.setValue('renewalStatusReason', '', { shouldDirty: true });
+                                      form.setValue('renewalAttachments', [], { shouldDirty: true });
+
                                       setApprovedIssueDraft(String(form.getValues('startDate') || ''));
                                       setApprovedExpiryDraft(String(form.getValues('endDate') || ''));
                                       setShowApprovedExpiryModal(true);
@@ -4162,6 +4473,78 @@ export default function GovernmentLicense() {
                             </FormItem>
                           )}
                         />
+
+                        {/* Notes (match Subscription modal logic/UI) */}
+                        <div className="md:col-span-2">
+                          <div className="flex items-center gap-3 mb-4">
+                            <h3 className="text-base font-semibold text-gray-700">Notes ({renewalNotes.length})</h3>
+                            <button
+                              type="button"
+                              onClick={() => setShowAddRenewalNoteDialog(true)}
+                              className="flex items-center justify-center w-6 h-6 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-full transition-colors"
+                              title="Add note"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" x2="12" y1="8" y2="16"></line>
+                                <line x1="8" x2="16" y1="12" y2="12"></line>
+                              </svg>
+                            </button>
+                          </div>
+
+                          {renewalNotes.length > 0 ? (
+                            <div className="space-y-3 max-h-[240px] overflow-y-auto">
+                              {renewalNotes.map((note) => (
+                                <div key={note.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                                  <div className="flex items-start justify-between gap-3 mb-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedRenewalNote(note);
+                                        setShowViewRenewalNoteDialog(true);
+                                      }}
+                                      className="text-left text-cyan-600 hover:text-cyan-800 hover:underline text-base flex-1 font-medium"
+                                      title={note.text}
+                                    >
+                                      {note.text}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const next = renewalNotes.filter((n) => n.id !== note.id);
+                                        setRenewalNotes(next);
+                                        void persistRenewalNotes(next).catch((error: any) => {
+                                          toast({
+                                            title: 'Error',
+                                            description: error?.message || 'Failed to save notes',
+                                            variant: 'destructive',
+                                          });
+                                        });
+                                      }}
+                                      disabled={isPersistingRenewalNotes}
+                                      className="text-red-500 hover:text-red-700 text-sm font-medium flex-shrink-0 disabled:opacity-60"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                  <div className="text-sm text-gray-500 flex items-center gap-2">
+                                    <span>
+                                      {note.createdAt
+                                        ? new Date(note.createdAt)
+                                            .toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                            .replace(/\//g, '/')
+                                        : ''}
+                                    </span>
+                                    <span>•</span>
+                                    <span>{note.createdBy}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-gray-400 text-sm italic">No notes added yet. Click + to add a note.</p>
+                          )}
+                        </div>
 
                         <FormField
                           control={form.control}
@@ -4567,6 +4950,41 @@ export default function GovernmentLicense() {
                     </div>
                   </div>
 
+                  {/* Custom Fields Section */}
+                  <div className="bg-white border border-gray-200 mb-6 shadow-md">
+                    <h3 className="text-base font-semibold text-slate-800 px-6 py-4 border-b border-gray-200 bg-gray-50">Custom Fields</h3>
+                    <div className="p-6">
+                      {enabledRenewalFieldDefs.length === 0 ? (
+                        <div className="text-sm text-slate-600">
+                          No renewal custom fields configured.
+                        </div>
+                      ) : (
+                        <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-4' : 'grid-cols-2'}`}>
+                          {enabledRenewalFieldDefs.map((field: any) => {
+                            const fieldId = String(field._id);
+                            const name = String(field.name || '').trim() || 'Custom Field';
+                            const path = `customFields.${fieldId}`;
+                            const value = String(form.watch(path as any) || '');
+
+                            return (
+                              <div key={fieldId} className="space-y-2">
+                                <label className="block text-sm font-medium text-slate-700">{name}</label>
+                                <Input
+                                  type="text"
+                                  className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                                  value={value}
+                                  onChange={(e) => {
+                                    form.setValue(path as any, e.target.value, { shouldDirty: true });
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Issuing Authority Section */}
                   <div className="bg-white border border-gray-200 mb-6 shadow-md">
                     <h3 className="text-base font-semibold text-slate-800 px-6 py-4 border-b border-gray-200 bg-gray-50">Issuing Authority</h3>
@@ -4833,7 +5251,7 @@ export default function GovernmentLicense() {
             }
           }}
         >
-              <DialogContent className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
+              <DialogContent showClose={false} className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
                 <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
                   <div className="flex items-start justify-between">
                     <div>
@@ -4853,6 +5271,7 @@ export default function GovernmentLicense() {
                             variant: "success",
                           });
                         }}
+                        disabled={isPersistingRenewalAttachments}
                         className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 border-gray-300"
                       >
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4874,12 +5293,28 @@ export default function GovernmentLicense() {
                           }
                           handleRenewalAttachmentUpload();
                         }}
+                        disabled={isPersistingRenewalAttachments}
                         className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                       >
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                         </svg>
                         Upload
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowRenewalDocumentsModal(false);
+                          setPendingRenewalAttachment(null);
+                          setPendingRenewalAttachmentRemark('');
+                        }}
+                        disabled={isPersistingRenewalAttachments}
+                        className="h-9 w-9 p-0 border-gray-300 text-gray-700 hover:bg-gray-50"
+                        aria-label="Close documents"
+                      >
+                        <X className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -4937,6 +5372,7 @@ export default function GovernmentLicense() {
                                       setPendingRenewalAttachment(null);
                                       setPendingRenewalAttachmentRemark('');
                                     }}
+                                    disabled={isPersistingRenewalAttachments}
                                     className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700"
                                   >
                                   Cancel 
@@ -4967,6 +5403,7 @@ export default function GovernmentLicense() {
                                       setPendingRenewalAttachment(null);
                                       setPendingRenewalAttachmentRemark('');
                                     }}
+                                    disabled={isPersistingRenewalAttachments}
                                     className="bg-blue-600 hover:bg-blue-700 text-white"
                                   >
                                     Save
@@ -5032,13 +5469,13 @@ export default function GovernmentLicense() {
                                   >
                                     <DropdownMenuItem
                                       onClick={() => openDocumentInNewTab({ name: doc.name, url: doc.url })}
-                                      className="cursor-pointer"
+                                      className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
                                     >
                                       View
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onClick={() => downloadDocument({ name: doc.name, url: doc.url })}
-                                      className="cursor-pointer"
+                                      className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
                                     >
                                       Download
                                     </DropdownMenuItem>
@@ -5053,7 +5490,7 @@ export default function GovernmentLicense() {
                                           variant: 'destructive',
                                         });
                                       }}
-                                      className="cursor-pointer text-red-600 focus:text-red-600"
+                                      className="cursor-pointer text-red-600 focus:text-red-600 data-[highlighted]:bg-blue-50 data-[highlighted]:text-red-600 focus:bg-blue-50"
                                     >
                                       Remove
                                     </DropdownMenuItem>
@@ -5090,17 +5527,15 @@ export default function GovernmentLicense() {
                         setPendingRenewalAttachment(null);
                         setPendingRenewalAttachmentRemark('');
                       }}
+                      disabled={isPersistingRenewalAttachments}
                       className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 text-sm px-4 py-1.5"
                     >
                       Close
                     </Button>
                     <Button
                       type="button"
-                      onClick={() => {
-                        setShowRenewalDocumentsModal(false);
-                        setPendingRenewalAttachment(null);
-                        setPendingRenewalAttachmentRemark('');
-                      }}
+                      onClick={handleRenewalDocumentsDone}
+                      disabled={isPersistingRenewalAttachments}
                       className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5"
                     >
                       Done
@@ -5109,6 +5544,8 @@ export default function GovernmentLicense() {
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Renewal Status Log is shown on the separate Compliance Log page */}
 
             {/* Renewal Status Reason Modal */}
             <Dialog
@@ -5264,6 +5701,122 @@ export default function GovernmentLicense() {
               </AlertDialogContent>
             </AlertDialog>
 
+            {/* Add Renewal Note Dialog */}
+            <AlertDialog open={showAddRenewalNoteDialog} onOpenChange={(open) => !open && setShowAddRenewalNoteDialog(false)}>
+              <AlertDialogContent className="sm:max-w-[900px] bg-white border border-gray-200 shadow-2xl">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-2xl font-bold text-gray-900">Add a note</AlertDialogTitle>
+                </AlertDialogHeader>
+                <div className="py-6">
+                  <div className="grid grid-cols-[120px_1fr] gap-4 items-start">
+                    <label className="text-base font-medium text-gray-700 pt-3">
+                      Note <span className="text-red-500">*</span>
+                    </label>
+                    <Textarea
+                      value={newRenewalNoteText}
+                      onChange={(e) => setNewRenewalNoteText(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg p-3 text-base min-h-[120px] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 resize-none"
+                      placeholder="Enter your note here..."
+                    />
+                  </div>
+                </div>
+                <AlertDialogFooter className="flex justify-end gap-3">
+                  <AlertDialogCancel
+                    onClick={() => {
+                      setNewRenewalNoteText('');
+                      setShowAddRenewalNoteDialog(false);
+                    }}
+                    className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 px-8 py-2 rounded-md"
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      if (!newRenewalNoteText.trim()) return;
+                      const newNote = {
+                        id: Date.now().toString(),
+                        text: newRenewalNoteText.trim(),
+                        createdAt: new Date().toISOString(),
+                        createdBy: currentUserName || 'User',
+                      };
+                      setRenewalNotes([...renewalNotes, newNote]);
+                      setNewRenewalNoteText('');
+                      setShowAddRenewalNoteDialog(false);
+                    }}
+                    className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-md"
+                    disabled={!newRenewalNoteText.trim()}
+                  >
+                    OK
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            {/* View Renewal Note Dialog */}
+            <AlertDialog open={showViewRenewalNoteDialog} onOpenChange={(open) => !open && setShowViewRenewalNoteDialog(false)}>
+              <AlertDialogContent className="sm:max-w-[900px] bg-white border border-gray-200 shadow-2xl">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-2xl font-bold text-gray-900">Notes</AlertDialogTitle>
+                </AlertDialogHeader>
+                <div className="py-6 space-y-6">
+                  <div className="grid grid-cols-[120px_1fr] gap-4 items-start">
+                    <label className="text-base font-medium text-gray-700 pt-3">Note</label>
+                    <Textarea
+                      value={selectedRenewalNote?.text || ''}
+                      readOnly
+                      className="w-full border border-gray-300 rounded-lg p-3 text-base min-h-[120px] bg-white text-gray-900 resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-[120px_1fr] gap-4 items-center">
+                    <label className="text-base font-medium text-gray-700">Created</label>
+                    <div className="w-full border border-gray-300 rounded-lg p-3 text-base bg-gray-100 text-gray-900">
+                      {selectedRenewalNote?.createdAt
+                        ? new Date(selectedRenewalNote.createdAt)
+                            .toLocaleString('en-US', {
+                              month: '2-digit',
+                              day: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: false,
+                            })
+                            .replace(',', '')
+                        : ''}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-[120px_1fr] gap-4 items-center">
+                    <label className="text-base font-medium text-gray-700">User ID</label>
+                    <div className="w-full border border-gray-300 rounded-lg p-3 text-base bg-gray-100 text-gray-900">
+                      {selectedRenewalNote?.createdBy}
+                    </div>
+                  </div>
+                </div>
+                <AlertDialogFooter className="flex justify-end gap-3">
+                  <AlertDialogAction
+                    onClick={() => {
+                      setShowViewRenewalNoteDialog(false);
+                      setSelectedRenewalNote(null);
+                    }}
+                    className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2 rounded-md"
+                  >
+                    OK
+                  </AlertDialogAction>
+                  <AlertDialogCancel
+                    onClick={() => {
+                      setShowViewRenewalNoteDialog(false);
+                      setSelectedRenewalNote(null);
+                    }}
+                    className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 px-8 py-2 rounded-md"
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
             {/* Approved - New Issue & Expiry Date Modal */}
             <Dialog
               open={showApprovedExpiryModal}
@@ -5272,6 +5825,20 @@ export default function GovernmentLicense() {
                   setShowApprovedExpiryModal(false);
                   setApprovedExpiryDraft('');
                   setApprovedIssueDraft('');
+
+                  // If user cancelled (didn't save), restore cleared submission fields.
+                  if (!approvedModalDidSaveRef.current && approvedClearSnapshotRef.current) {
+                    const snap = approvedClearSnapshotRef.current;
+                    form.setValue('renewalInitiatedDate', snap.renewalInitiatedDate || '', { shouldDirty: true });
+                    form.setValue('expectedCompletedDate', snap.expectedCompletedDate || '', { shouldDirty: true });
+                    form.setValue('submittedBy', snap.submittedBy || '', { shouldDirty: true });
+                    form.setValue('renewalAmount', snap.renewalAmount, { shouldDirty: true });
+                    form.setValue('renewalStatusReason', snap.renewalStatusReason ?? '', { shouldDirty: true });
+                    form.setValue('renewalAttachments', snap.renewalAttachments || [], { shouldDirty: true });
+                  }
+                  approvedClearSnapshotRef.current = null;
+                  approvedModalDidSaveRef.current = false;
+
                   if (previousRenewalStatusForExpiry) {
                     form.setValue('renewalStatus', previousRenewalStatusForExpiry as any, { shouldDirty: true });
                   } else {
@@ -5313,6 +5880,7 @@ export default function GovernmentLicense() {
                     <Button
                       type="button"
                       variant="outline"
+                      disabled={isSavingApprovedDates}
                       onClick={() => {
                         setShowApprovedExpiryModal(false);
                         setApprovedExpiryDraft('');
@@ -5330,6 +5898,7 @@ export default function GovernmentLicense() {
                     <Button
                       type="button"
                       className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={isSavingApprovedDates}
                       onClick={() => {
                         const nextStart = String(approvedIssueDraft || '').trim();
                         const nextEnd = String(approvedExpiryDraft || '').trim();
@@ -5355,39 +5924,74 @@ export default function GovernmentLicense() {
                           return;
                         }
 
-                        // Prevent auto-calc from overwriting the approved expiry.
-                        prevAutoCalcInputsRef.current = {
-                          renewalFreq: String(form.getValues('renewalCycleTime') || ''),
-                          issueDate: nextStart,
-                        };
+                        void (async () => {
+                          setIsSavingApprovedDates(true);
+                          try {
+                            // Prevent auto-calc from overwriting the approved expiry.
+                            prevAutoCalcInputsRef.current = {
+                              renewalFreq: String(form.getValues('renewalCycleTime') || ''),
+                              issueDate: nextStart,
+                            };
 
-                        setEndDateManuallySet(true);
-                        form.setValue('startDate', nextStart, { shouldDirty: true });
-                        form.setValue('endDate', nextEnd, { shouldDirty: true });
-                        form.clearErrors('startDate');
-                        form.clearErrors('endDate');
+                            setEndDateManuallySet(true);
+                            form.setValue('startDate', nextStart, { shouldDirty: true });
+                            form.setValue('endDate', nextEnd, { shouldDirty: true });
+                            form.clearErrors('startDate');
+                            form.clearErrors('endDate');
 
-                        toast({
-                          title: 'Dates updated',
-                          description: 'New issue/expiry dates have been applied to the license.',
-                          duration: 2000,
-                          variant: 'success',
-                        });
+                            // Persist immediately so the renewal log is created without requiring main Save.
+                            const licenseId = editingLicense?.id ? String(editingLicense.id) : '';
+                            if (licenseId) {
+                              const res = await fetch(`${API_BASE_URL}/api/licenses/${encodeURIComponent(licenseId)}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify({
+                                  renewalStatus: 'Approved',
+                                  startDate: nextStart,
+                                  endDate: nextEnd,
+                                  renewalInitiatedDate: '',
+                                  expectedCompletedDate: '',
+                                  submittedBy: '',
+                                  renewalAmount: undefined,
+                                  renewalStatusReason: '',
+                                  renewalAttachments: [],
+                                }),
+                              });
+                              if (!res.ok) {
+                                const err = await res.json().catch(() => ({ message: 'Failed to save approved dates' }));
+                                throw new Error(err?.message || 'Failed to save approved dates');
+                              }
+                              queryClient.invalidateQueries({ queryKey: ['/api/licenses'] });
+                            }
 
-                        setShowApprovedExpiryModal(false);
-                        setApprovedExpiryDraft('');
-                        setApprovedIssueDraft('');
-                        setPreviousRenewalStatusForExpiry('');
+                            approvedModalDidSaveRef.current = true;
+                            approvedClearSnapshotRef.current = null;
 
-                        // Clear submission fields after approval
-                        form.setValue('renewalInitiatedDate', '', { shouldDirty: true });
-                        form.setValue('submittedBy', '', { shouldDirty: true });
-                        form.setValue('renewalAmount', undefined, { shouldDirty: true });
-                        form.setValue('renewalStatusReason', '', { shouldDirty: true });
-                        form.setValue('renewalAttachments', [], { shouldDirty: true });
+                            toast({
+                              title: 'Saved',
+                              description: 'Approved dates saved.',
+                              duration: 2000,
+                              variant: 'success',
+                            });
 
-                        // Show the updated expiry date immediately in the main form.
-                        setShowSubmissionDetails(false);
+                            setShowApprovedExpiryModal(false);
+                            setApprovedExpiryDraft('');
+                            setApprovedIssueDraft('');
+                            setPreviousRenewalStatusForExpiry('');
+
+                            // Stay in Renewal Submit mode.
+                            setShowSubmissionDetails(true);
+                          } catch (e: any) {
+                            toast({
+                              title: 'Error',
+                              description: e?.message || 'Failed to save approved dates',
+                              variant: 'destructive',
+                            });
+                          } finally {
+                            setIsSavingApprovedDates(false);
+                          }
+                        })();
                       }}
                     >
                       Save

@@ -517,7 +517,14 @@ export default function Compliance() {
 
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(() => {
+    const sp = new URLSearchParams(location.search);
+    return Boolean(sp.get('openToken') || sp.get('open') || sp.get('create') === '1');
+  });
+  const [isDeepLinkOpening, setIsDeepLinkOpening] = useState(() => {
+    const sp = new URLSearchParams(location.search);
+    return Boolean(sp.get('openToken') || sp.get('open') || sp.get('create') === '1');
+  });
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [showSubmissionDetails, setShowSubmissionDetails] = useState(false);
   const [submissionOpenedFromTable, setSubmissionOpenedFromTable] = useState(false);
@@ -531,6 +538,123 @@ export default function Compliance() {
   >(null);
   const [pendingSubmissionDocumentRemark, setPendingSubmissionDocumentRemark] = useState("");
   const [showSubmissionDocumentDialog, setShowSubmissionDocumentDialog] = useState(false);
+  const persistSubmissionDocumentsInFlightRef = useRef(false);
+  const [isPersistingSubmissionDocuments, setIsPersistingSubmissionDocuments] = useState(false);
+
+  const { data: complianceItems = [], isLoading } = useQuery({
+    queryKey: ["compliance"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/compliance/list");
+      return response.json();
+    },
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+
+  const normalizeSubmissionDocumentsInput = (input: any): Array<{ name: string; url: string; remark?: string; updatedBy?: string; updatedAt?: string }> => {
+    if (!input) return [];
+    const arr = Array.isArray(input) ? input : (() => {
+      if (typeof input === 'string') {
+        try {
+          const parsed = JSON.parse(input);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    })();
+
+    return arr
+      .filter(Boolean)
+      .map((raw: any) => {
+        const name = String(raw?.name ?? raw?.fileName ?? 'Document').trim() || 'Document';
+        const url = String(raw?.url ?? raw?.dataUrl ?? raw?.content ?? '').trim();
+        if (!url) return null;
+        const remark = typeof raw?.remark === 'string' ? raw.remark : undefined;
+        const updatedBy = typeof raw?.updatedBy === 'string' ? raw.updatedBy : (typeof raw?.uploadedBy === 'string' ? raw.uploadedBy : undefined);
+        const updatedAt = typeof raw?.updatedAt === 'string' ? raw.updatedAt : (typeof raw?.uploadedAt === 'string' ? raw.uploadedAt : undefined);
+        return {
+          name,
+          url,
+          ...(remark ? { remark } : {}),
+          ...(updatedBy ? { updatedBy } : {}),
+          ...(updatedAt ? { updatedAt } : {}),
+        };
+      })
+      .filter(Boolean) as any;
+  };
+
+  const lastHydratedSubmissionDocsComplianceIdRef = useRef<string>('');
+
+  // Ensure documents hydrate from the saved compliance item when opening/reopening the modal.
+  useEffect(() => {
+    if (!modalOpen) {
+      lastHydratedSubmissionDocsComplianceIdRef.current = '';
+    }
+  }, [modalOpen]);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    if (editIndex === null) return;
+    const item: any = (complianceItems as any)?.[editIndex];
+    const complianceId = String(item?._id || item?.id || '');
+    if (!complianceId) return;
+    if (lastHydratedSubmissionDocsComplianceIdRef.current === complianceId) return;
+
+    lastHydratedSubmissionDocsComplianceIdRef.current = complianceId;
+    const nextDocs = normalizeSubmissionDocumentsInput(item?.documents ?? item?.submissionDocuments);
+    setSubmissionDocuments(nextDocs);
+  }, [modalOpen, editIndex, complianceItems]);
+
+  const handleSubmissionDocumentDialogDone = async () => {
+    if (persistSubmissionDocumentsInFlightRef.current) return;
+
+    const complianceId =
+      editIndex !== null
+        ? String((complianceItems as any)?.[editIndex]?._id || (complianceItems as any)?.[editIndex]?.id || '')
+        : '';
+
+    if (!complianceId) {
+      toast({
+        title: 'Not saved yet',
+        description: 'Documents will be saved when you save the compliance item.',
+        duration: 2500,
+      });
+      setShowSubmissionDocumentDialog(false);
+      return;
+    }
+
+    persistSubmissionDocumentsInFlightRef.current = true;
+    setIsPersistingSubmissionDocuments(true);
+    try {
+      await editMutation.mutateAsync({
+        _id: complianceId,
+        data: {
+          documents: submissionDocuments,
+        },
+      });
+
+      toast({
+        title: 'Saved',
+        description: 'Documents saved successfully.',
+        duration: 2000,
+        variant: 'success',
+      });
+
+      setShowSubmissionDocumentDialog(false);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to save documents',
+        variant: 'destructive',
+      });
+      // Keep dialog open so user can retry
+    } finally {
+      persistSubmissionDocumentsInFlightRef.current = false;
+      setIsPersistingSubmissionDocuments(false);
+    }
+  };
 
   const [submittedByOpen, setSubmittedByOpen] = useState(false);
   const [submittedBySearch, setSubmittedBySearch] = useState('');
@@ -1675,15 +1799,9 @@ export default function Compliance() {
     setDynamicFieldValues(prev => ({ ...prev, [fieldName]: value }));
   };
   
-  const { data: complianceItems = [], isLoading } = useQuery({
-    queryKey: ["compliance"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/compliance/list");
-      return response.json();
-    },
-    staleTime: 0,
-    refetchOnMount: true,
-  });
+  useEffect(() => {
+    if (isDeepLinkOpening && modalOpen) setIsDeepLinkOpening(false);
+  }, [isDeepLinkOpening, modalOpen]);
 
   // Auto-open compliance modal when deep-linked via URL: /compliance?open=<id>
   useEffect(() => {
@@ -1692,7 +1810,10 @@ export default function Compliance() {
     const openComplianceId = searchParams.get('open');
     const createMode = searchParams.get('create') === '1';
     if (!openToken && !openComplianceId && !createMode) return;
-    if (modalOpen) return;
+    setIsDeepLinkOpening(true);
+    setModalOpen(true);
+    setEditIndex(null);
+    setShowSubmissionDetails(false);
 
     if (createMode) {
       navigate(location.pathname, { replace: true, state: location.state });
@@ -1725,10 +1846,19 @@ export default function Compliance() {
         departments: [],
       });
       setModalOpen(true);
+      setIsDeepLinkOpening(false);
       return;
     }
 
-    if (!Array.isArray(complianceItems) || complianceItems.length === 0) return;
+    if (!Array.isArray(complianceItems) || complianceItems.length === 0) {
+      if (!isLoading) {
+        navigate(location.pathname, { replace: true, state: location.state });
+        setIsDeepLinkOpening(false);
+        setModalOpen(false);
+        setEditIndex(null);
+      }
+      return;
+    }
 
     const resolveToken = async (token: string) => {
       const qs = new URLSearchParams({ token }).toString();
@@ -1740,16 +1870,26 @@ export default function Compliance() {
 
     void (async () => {
       const resolvedId = openToken ? await resolveToken(openToken) : openComplianceId;
-      // Clear the query param (whether found or not)
-      navigate(location.pathname, { replace: true, state: location.state });
 
-      if (!resolvedId) return;
+      if (!resolvedId) {
+        navigate(location.pathname, { replace: true, state: location.state });
+        setIsDeepLinkOpening(false);
+        setModalOpen(false);
+        setEditIndex(null);
+        return;
+      }
 
       const index = complianceItems.findIndex((item: ComplianceItem) =>
         String(item.id) === resolvedId || String(item._id) === resolvedId
       );
 
-      if (index === -1) return;
+      if (index === -1) {
+        navigate(location.pathname, { replace: true, state: location.state });
+        setIsDeepLinkOpening(false);
+        setModalOpen(false);
+        setEditIndex(null);
+        return;
+      }
 
       setEditIndex(index);
       setShowSubmissionDetails(false);
@@ -1783,8 +1923,11 @@ export default function Compliance() {
         department: "",
         departments: depts,
       });
+
+      navigate(location.pathname, { replace: true, state: location.state });
+      setIsDeepLinkOpening(false);
     })();
-  }, [location.search, location.pathname, complianceItems, modalOpen, navigate]);
+  }, [location.search, location.pathname, complianceItems, navigate, isLoading]);
 
   // When an existing compliance record is opened in the modal (editIndex set), update the URL to a secure token.
   useEffect(() => {
@@ -2764,7 +2907,7 @@ export default function Compliance() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  window.location.href = "/compliance-ledger";
+                  navigate('/compliance-ledger');
                 }}
                 className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200"
               >
@@ -3286,13 +3429,13 @@ export default function Compliance() {
                             openToken: String(data.token),
                             name: String(currentName),
                           }).toString();
-                          window.location.href = `/compliance-ledger?${qs}`;
+                          navigate(`/compliance-ledger?${qs}`);
                         } catch {
                           const qs = new URLSearchParams({
                             id,
                             name: String(currentName),
                           }).toString();
-                          window.location.href = `/compliance-ledger?${qs}`;
+                          navigate(`/compliance-ledger?${qs}`);
                         }
                       })();
                     }}
@@ -5449,7 +5592,7 @@ export default function Compliance() {
           }
         }}
       >
-        <DialogContent className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
+        <DialogContent showClose={false} className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
           <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
             <div className="flex items-start justify-between">
               <div>
@@ -5460,6 +5603,7 @@ export default function Compliance() {
                   type="button"
                   size="sm"
                   onClick={handleSubmissionDocumentUpload}
+                  disabled={isPersistingSubmissionDocuments}
                   className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5471,6 +5615,17 @@ export default function Compliance() {
                     />
                   </svg>
                   Upload
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSubmissionDocumentDialog(false)}
+                  disabled={isPersistingSubmissionDocuments}
+                  className="h-9 w-9 p-0 border-gray-300 text-gray-700 hover:bg-gray-50"
+                  aria-label="Close documents"
+                >
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -5524,6 +5679,7 @@ export default function Compliance() {
                             setPendingSubmissionDocument(null);
                             setPendingSubmissionDocumentRemark('');
                           }}
+                          disabled={isPersistingSubmissionDocuments}
                           className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700"
                         >
                           Cancel
@@ -5549,6 +5705,7 @@ export default function Compliance() {
                             setPendingSubmissionDocument(null);
                             setPendingSubmissionDocumentRemark('');
                           }}
+                          disabled={isPersistingSubmissionDocuments}
                           className="bg-blue-600 hover:bg-blue-700 text-white"
                         >
                           Save
@@ -5631,7 +5788,7 @@ export default function Compliance() {
                               onClick={() => {
                                 openDocumentInNewTab(doc);
                               }}
-                              className="cursor-pointer"
+                              className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
                             >
                               View
                             </DropdownMenuItem>
@@ -5639,7 +5796,7 @@ export default function Compliance() {
                               onClick={() => {
                                 downloadDocument(doc);
                               }}
-                              className="cursor-pointer"
+                              className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
                             >
                               Download
                             </DropdownMenuItem>
@@ -5654,7 +5811,7 @@ export default function Compliance() {
                                   variant: 'destructive',
                                 });
                               }}
-                              className="cursor-pointer text-red-600 focus:text-red-600"
+                              className="cursor-pointer text-red-600 focus:text-red-600 data-[highlighted]:bg-blue-50 data-[highlighted]:text-red-600 focus:bg-blue-50"
                             >
                               Remove
                             </DropdownMenuItem>
@@ -5686,13 +5843,15 @@ export default function Compliance() {
                 type="button"
                 variant="outline"
                 onClick={() => setShowSubmissionDocumentDialog(false)}
+                disabled={isPersistingSubmissionDocuments}
                 className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 text-sm px-4 py-1.5"
               >
                 Close
               </Button>
               <Button
                 type="button"
-                onClick={() => setShowSubmissionDocumentDialog(false)}
+                onClick={handleSubmissionDocumentDialogDone}
+                disabled={isPersistingSubmissionDocuments}
                 className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5"
               >
                 Done

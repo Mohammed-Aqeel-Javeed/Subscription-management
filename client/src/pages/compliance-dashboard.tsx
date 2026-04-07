@@ -329,33 +329,14 @@ export default function ComplianceDashboard() {
 
   const activeRows = rowsByModalKey[activeModal] ?? [];
 
-  if (complianceLoading) {
-    return (
-      <div className="p-8">
-        <div className="mb-8">
-          <Skeleton className="h-10 w-full max-w-xl" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-24" />
-          ))}
-        </div>
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1 w-full">
-          <div className="w-full px-4 sm:px-6 lg:px-8 py-6" style={{ zoom: 0.92 }}>
+          <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
             {/* Greeting Card (match Dashboard header) */}
             <div
-              className="mb-6 flex items-start justify-between rounded-2xl px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
+              className="mb-6 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
               style={{
                 background:
                   "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",
@@ -382,12 +363,12 @@ export default function ComplianceDashboard() {
                 </h1>
               </div>
 
-              <div className="flex items-center gap-3 relative z-10">
+              <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 relative z-10 w-full sm:w-auto">
                 <Button
                   variant="outline"
                   className={`${location.pathname === "/dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/dashboard")}
                 >
                   Subscription
@@ -396,7 +377,7 @@ export default function ComplianceDashboard() {
                   variant="outline"
                   className={`${location.pathname === "/compliance-dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/compliance-dashboard")}
                 >
                   Compliance
@@ -405,7 +386,7 @@ export default function ComplianceDashboard() {
                   variant="outline"
                   className={`${location.pathname === "/renewal-dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/renewal-dashboard")}
                 >
                   Renewal
@@ -414,150 +395,163 @@ export default function ComplianceDashboard() {
                   variant="outline"
                   className={`${location.pathname === "/calendar"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/calendar")}
                 >
                   Calendar
                 </Button>
               </div>
             </div>
-
-            {/* Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
-              <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-blue-500 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => openModal("total")}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Total Filings</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.total}</p>
-                  </div>
-                  <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <FileText className="h-5 w-5 text-blue-500" />
-                  </div>
+            {complianceLoading ? (
+              <div className="mt-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-24" />
+                  ))}
                 </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
+                <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <Skeleton className="h-80" />
+                  <Skeleton className="h-80" />
+                </div>
               </div>
-
-              <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => openModal("dueToday")}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Due Today</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.dueToday}</p>
+            ) : (
+              <>
+                {/* Metric Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+                  <div
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-blue-500 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => openModal("total")}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-600 mb-1">Total Filings</p>
+                        <p className="text-2xl font-bold text-gray-900">{metrics.total}</p>
+                      </div>
+                      <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <FileText className="h-5 w-5 text-blue-500" />
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-400">Click to view details</div>
                   </div>
-                  <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Calendar className="h-5 w-5 text-green-500" />
+
+                  <div
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => openModal("dueToday")}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-600 mb-1">Due Today</p>
+                        <p className="text-2xl font-bold text-gray-900">{metrics.dueToday}</p>
+                      </div>
+                      <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Calendar className="h-5 w-5 text-green-500" />
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-400">Click to view details</div>
+                  </div>
+
+                  <div
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => openModal("upcoming7Days")}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-600 mb-1">Upcoming (7 days)</p>
+                        <p className="text-2xl font-bold text-gray-900">{metrics.upcoming7Days}</p>
+                      </div>
+                      <div className="h-10 w-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <TrendingUp className="h-5 w-5 text-purple-500" />
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-400">Click to view details</div>
+                  </div>
+
+                  <div
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => openModal("overdue")}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-600 mb-1">Overdue / Late</p>
+                        <p className="text-2xl font-bold text-gray-900">{metrics.overdue}</p>
+                      </div>
+                      <div className="h-10 w-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <AlertTriangle className="h-5 w-5 text-orange-500" />
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-400">Click to view details</div>
+                  </div>
+
+                  <div
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-emerald-500 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => openModal("completedThisMonth")}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-600 mb-1">Completed This Month</p>
+                        <p className="text-2xl font-bold text-gray-900">{metrics.completedThisMonth}</p>
+                      </div>
+                      <div className="h-10 w-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-400">Click to view details</div>
                   </div>
                 </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
-              </div>
 
-              <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => openModal("upcoming7Days")}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Upcoming (7 days)</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.upcoming7Days}</p>
-                  </div>
-                  <div className="h-10 w-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <TrendingUp className="h-5 w-5 text-purple-500" />
-                  </div>
-                </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
-              </div>
+                {/* Charts */}
+                <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="mb-6">
+                      <h3 className="text-lg font-bold text-gray-900">Status Distribution</h3>
+                    </div>
 
-              <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => openModal("overdue")}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Overdue / Late</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.overdue}</p>
-                  </div>
-                  <div className="h-10 w-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <AlertTriangle className="h-5 w-5 text-orange-500" />
-                  </div>
-                </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
-              </div>
+                    <div className="h-[320px] w-full flex flex-col sm:flex-row items-start gap-6">
+                      <div className="h-[320px] w-full sm:flex-1 min-w-0 flex items-center justify-center">
+                        {statusDonutData.length === 0 ? (
+                          <div className="h-full flex items-center justify-center text-sm text-gray-500">No status data</div>
+                        ) : (
+                          <ResponsiveContainer width="100%" height={240}>
+                            <PieChart>
+                              <Pie
+                                data={statusDonutData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={70}
+                                outerRadius={110}
+                                paddingAngle={2}
+                                dataKey="count"
+                                nameKey="category"
+                                label={renderDonutLabel}
+                                labelLine={false}
+                              >
+                                {statusDonutData.map((entry) => (
+                                  <Cell key={entry.category} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                formatter={(value: number) => [`${Number(value).toLocaleString()} filings`, 'Filings']}
+                                contentStyle={{
+                                  backgroundColor: 'var(--card)',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                                  padding: '12px',
+                                }}
+                                labelStyle={{ color: 'var(--foreground)', fontWeight: 600, marginBottom: 6 }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
 
-              <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-emerald-500 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => openModal("completedThisMonth")}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Completed This Month</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.completedThisMonth}</p>
-                  </div>
-                  <div className="h-10 w-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                  </div>
-                </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
-              </div>
-            </div>
-
-            {/* Charts */}
-            <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="mb-6">
-                  <h3 className="text-lg font-bold text-gray-900">Status Distribution</h3>
-                </div>
-
-                <div className="h-[320px] w-full flex flex-col sm:flex-row items-start gap-6">
-                  <div className="h-[320px] w-full sm:flex-1 min-w-0 flex items-center justify-center">
-                    {statusDonutData.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-sm text-gray-500">No status data</div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height={240}>
-                        <PieChart>
-                          <Pie
-                            data={statusDonutData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={70}
-                            outerRadius={110}
-                            paddingAngle={2}
-                            dataKey="count"
-                            nameKey="category"
-                            label={renderDonutLabel}
-                            labelLine={false}
-                          >
-                            {statusDonutData.map((entry) => (
-                              <Cell key={entry.category} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            formatter={(value: number) => [`${Number(value).toLocaleString()} filings`, 'Filings']}
-                            contentStyle={{
-                              backgroundColor: 'var(--card)',
-                              border: '1px solid var(--border)',
-                              borderRadius: '8px',
-                              boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-                              padding: '12px',
-                            }}
-                            labelStyle={{ color: 'var(--foreground)', fontWeight: 600, marginBottom: 6 }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-
-                  <div className="h-[240px] w-56 flex flex-col items-start justify-center">
-                    <div className="space-y-4">
-                      {statusDonutData.map((s) => {
-                        const percent = statusTotal ? Math.round((s.count / statusTotal) * 100) : 0;
-                        return (
-                          <div key={s.category} className="flex items-center gap-3">
-                            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: s.color }} />
+                      <div className="h-[240px] w-56 flex flex-col items-start justify-center">
+                        <div className="space-y-4">
+                          {statusDonutData.map((s) => {
+                            const percent = statusTotal ? Math.round((s.count / statusTotal) * 100) : 0;
+                            return (
+                              <div key={s.category} className="flex items-center gap-3">
+                                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: s.color }} />
                             <div className="text-sm text-gray-700 whitespace-nowrap">
                               {s.category}
                             </div>
@@ -666,6 +660,8 @@ export default function ComplianceDashboard() {
                 </div>
               </DialogContent>
             </Dialog>
+              </>
+            )}
           </div>
         </div>
       </div>

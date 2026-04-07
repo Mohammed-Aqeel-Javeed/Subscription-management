@@ -115,7 +115,6 @@ export default function Dashboard() {
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
   });
 
   const isUnauthorized = metricsError instanceof Error && metricsError.message === "Unauthorized";
@@ -139,7 +138,6 @@ export default function Dashboard() {
     },
     staleTime: 2 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
   });
   const { data: categories, isLoading: categoriesLoading } = useQuery<CategoryBreakdown[]>({
     queryKey: ["/api/analytics/categories", dashboardScopeKey, dateRangeMonths, categoryFilter],
@@ -155,7 +153,6 @@ export default function Dashboard() {
     },
     staleTime: 2 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
   });
 
   const { data: subscriptions, isLoading: subscriptionsLoading } = useQuery<Subscription[]>({
@@ -172,7 +169,6 @@ export default function Dashboard() {
     },
     staleTime: 60 * 1000, // 1 minute
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
   });
 
   // Get unique categories from actual subscriptions (like subscriptions page does)
@@ -297,12 +293,7 @@ export default function Dashboard() {
   // Activity query removed as it's not currently used in the dashboard
 
   // ...existing code...
-  if (isUnauthorized) return null;
-
-  // Only show a full-page skeleton during the initial load of core data.
-  // Trends/categories refetch on filter changes should not blank the whole dashboard.
-  const isInitialCoreLoading = (metricsLoading && !metrics) || (subscriptionsLoading && !subscriptions);
-  if (isInitialCoreLoading) {
+  if (isUnauthorized) {
     return (
       <div className="p-8">
         <div className="mb-8">
@@ -317,6 +308,10 @@ export default function Dashboard() {
       </div>
     );
   }
+
+  // Only show a full-page skeleton during the initial load of core data.
+  // Trends/categories refetch on filter changes should not blank the whole dashboard.
+  const isInitialCoreLoading = (metricsLoading && !metrics) || (subscriptionsLoading && !subscriptions);
 
   const norm = (value: unknown) => String(value ?? "").trim().toLowerCase();
 
@@ -432,10 +427,10 @@ export default function Dashboard() {
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1 w-full">
-          <div className="w-full px-4 sm:px-6 lg:px-8 py-6" style={{ zoom: 0.92 }}>
+          <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
             {/* Greeting Card */}
             <div
-              className="mb-6 flex items-start justify-between rounded-2xl px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
+              className="mb-6 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
               style={{
                 background:
                   "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",
@@ -462,12 +457,12 @@ export default function Dashboard() {
                 </h1>
               </div>
 
-              <div className="flex items-center gap-3 relative z-10">
+              <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 relative z-10 w-full sm:w-auto">
                 <Button
                   variant="outline"
                   className={`${location.pathname === "/dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/dashboard")}
                 >
                   Subscription
@@ -476,7 +471,7 @@ export default function Dashboard() {
                   variant="outline"
                   className={`${location.pathname === "/compliance-dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/compliance-dashboard")}
                 >
                   Compliance
@@ -485,7 +480,7 @@ export default function Dashboard() {
                   variant="outline"
                   className={`${location.pathname === "/renewal-dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/renewal-dashboard")}
                 >
                   Renewal
@@ -494,7 +489,7 @@ export default function Dashboard() {
                   variant="outline"
                   className={`${location.pathname === "/calendar"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/calendar")}
                 >
                   Calendar
@@ -503,9 +498,9 @@ export default function Dashboard() {
             </div>
 
             {/* Filters */}
-            <div className="mb-6 flex items-center gap-4">
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
               <Select value={dateRange} onValueChange={setDateRange}>
-                <SelectTrigger className="w-44 bg-white border-gray-300 rounded-lg text-sm shadow-sm">
+                <SelectTrigger className="w-full sm:w-44 bg-white border-gray-300 rounded-lg text-sm shadow-sm">
                   <SelectValue placeholder="Last 6 months" />
                 </SelectTrigger>
                 <SelectContent>
@@ -515,7 +510,7 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-44 bg-white border-gray-300 rounded-lg text-sm shadow-sm">
+                <SelectTrigger className="w-full sm:w-44 bg-white border-gray-300 rounded-lg text-sm shadow-sm">
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
@@ -528,6 +523,21 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
             </div>
+
+            {isInitialCoreLoading ? (
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-32" />
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                  <Skeleton className="h-80 w-full" />
+                  <Skeleton className="h-80 w-full" />
+                </div>
+              </div>
+            ) : (
+              <>
 
             {/* Metrics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
@@ -842,6 +852,9 @@ export default function Dashboard() {
             </div>
           </DialogContent>
         </Dialog>
+
+              </>
+            )}
           </div>
         </div>
       </div>

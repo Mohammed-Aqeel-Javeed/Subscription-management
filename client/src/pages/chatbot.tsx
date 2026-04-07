@@ -269,7 +269,7 @@ export default function Chatbot() {
 
     // Configuration / Setup
     if (lowerMessage.includes("configuration") || lowerMessage.includes("setup") || lowerMessage.includes("settings")) {
-      return "Setup & Configuration:\n1. Click the Settings icon (gear) in sidebar\n2. Access tabs:\n   • Reminder Policy - Configure notification settings\n   • Payment Methods - Manage payment options\n   • Vendors - Manage vendor list\n3. Set reminder lead times\n4. Customize workflows\n\nTailor Trackla to your needs!";
+      return "Setup & Configuration:\n1. Click the Settings icon (gear) in sidebar\n2. Open sections:\n   • Currency - Manage currencies\n   • Payment Methods - Manage payment options\n   • Custom field - Subscription fields, Compliance fields, and Renewal settings\n\nTailor Trackla to your needs!";
     }
 
     // Payment Method

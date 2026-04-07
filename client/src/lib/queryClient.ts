@@ -1,5 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+const DEFAULT_TIMEOUT_MS = 20_000;
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -36,15 +38,36 @@ export async function apiRequest(
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
+
+function getTokenFromStorageOrCookie(): string {
+  const fromStorage = localStorage.getItem("token") || "";
+  if (fromStorage) return fromStorage;
+
+  if (document.cookie) {
+    const match = document.cookie.match(/(?:^|; )token=([^;]*)/);
+    if (match) return match[1];
+  }
+  return "";
+}
+
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const headers = new Headers();
+    const token = getTokenFromStorageOrCookie();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
     const res = await fetch(queryKey[0] as string, {
       credentials: "include",
       cache: "no-store",
-    });
+      headers,
+      signal: controller.signal,
+    }).finally(() => window.clearTimeout(timeoutId));
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;
@@ -59,10 +82,16 @@ export const queryClient = new QueryClient({
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
       staleTime: 2 * 60 * 1000, // 2 minutes default - queries stay fresh
       gcTime: 10 * 60 * 1000, // 10 minutes garbage collection
-      retry: 1, // Retry once on failure
+      retry: (failureCount, error) => {
+        const msg = (error as any)?.message ? String((error as any).message) : "";
+        if (/^(401|403)\b/.test(msg) || msg === "Unauthorized") return false;
+        return failureCount < 2;
+      },
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10_000),
     },
     mutations: {
       retry: false,

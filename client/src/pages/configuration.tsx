@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import React from "react";
@@ -7,21 +7,110 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ChevronDown, Check } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, Bell, Banknote, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X, MoreVertical } from "lucide-react";
+import { ArrowLeft, Plus, Settings, Eye, EyeOff, CreditCard, Shield, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X, MoreVertical, BadgeDollarSign, WalletCards, Layers, ShieldCheck } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE_URL } from "@/lib/config";
 import * as XLSX from 'xlsx';
-export default function Configuration() {
+
+type ConfigSection = "currency" | "payment" | "custom-field";
+
+const CONFIG_SECTIONS: Array<{ key: ConfigSection; label: string; icon: React.ElementType }> = [
+  { key: "currency", label: "Currency", icon: BadgeDollarSign },
+  { key: "payment", label: "Payment Methods", icon: WalletCards },
+  { key: "custom-field", label: "Custom field", icon: Layers },
+];
+
+function isConfigSection(value: unknown): value is ConfigSection {
+  return (
+    value === "currency" ||
+    value === "payment" ||
+    value === "custom-field"
+  );
+}
+
+function ConfigurationLanding() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (!tabParam) return;
+
+    // Legacy tabs (merged into Custom field)
+    if (tabParam === 'subscription' || tabParam === 'compliance' || tabParam === 'reminder') {
+      navigate('/configuration/custom-field', { replace: true });
+      return;
+    }
+
+    if (isConfigSection(tabParam)) {
+      navigate(`/configuration/${tabParam}`, { replace: true });
+    }
+  }, [navigate, searchParams]);
+
+  return (
+    <div className="h-full bg-gray-50 relative overflow-hidden flex flex-col min-h-0">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="absolute top-40 -right-40 h-[28rem] w-[28rem] rounded-full bg-purple-500/10 blur-3xl" />
+        <div className="absolute -bottom-40 left-1/3 h-[30rem] w-[30rem] rounded-full bg-blue-500/10 blur-3xl" />
+      </div>
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-12">
+        <div className="w-full max-w-6xl mx-auto">
+          <div className="mb-10 flex items-center gap-4">
+            <div className="relative h-14 w-14 rounded-2xl bg-white/70 border border-white/70 backdrop-blur-xl shadow-md flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500/15 via-purple-500/10 to-blue-500/15" />
+              <div className="absolute inset-[1px] rounded-2xl bg-white/70" />
+              <Settings className="relative h-7 w-7 text-indigo-700" strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-2xl sm:text-3xl font-semibold text-indigo-950 truncate">Setup &amp; Configuration</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {CONFIG_SECTIONS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => navigate(`/configuration/${item.key}`)}
+                  className="group relative overflow-hidden text-left rounded-3xl border border-white/60 bg-white/30 backdrop-blur-xl p-8 shadow-lg transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:border-indigo-200/70"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/15 via-purple-500/10 to-blue-500/15 opacity-100" />
+                  <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 bg-gradient-to-br from-white/10 via-white/0 to-white/10" />
+
+                  <div className="relative flex items-center gap-5">
+                    <div className="relative h-14 w-14 rounded-2xl bg-white/70 border border-white/70 backdrop-blur-xl shadow-md flex items-center justify-center">
+                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500/15 via-purple-500/10 to-blue-500/15 opacity-80" />
+                      <div className="absolute inset-[1px] rounded-2xl bg-white/70" />
+                      <Icon className="relative h-7 w-7 text-indigo-700" strokeWidth={2.2} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-lg font-semibold text-indigo-950 truncate">{item.label}</div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfigurationContent({ section }: { section: ConfigSection }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -151,19 +240,12 @@ export default function Configuration() {
     refetchOnMount: true,
   });
   
-  // Handle tab switching from URL parameters
-  const [activeTab, setActiveTab] = useState(() => {
-    const tabParam = searchParams.get('tab');
-    return tabParam || 'currency';
-  });
-  
-  // Update tab when URL changes
-  useEffect(() => {
-    const tabParam = searchParams.get('tab');
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [searchParams]);
+  const activeTab: ConfigSection = section;
+  const setActiveTab = (nextTab: string) => {
+    if (!isConfigSection(nextTab)) return;
+    if (nextTab === section) return;
+    navigate(`/configuration/${nextTab}`);
+  };
   
   const [addCurrencyOpen, setAddCurrencyOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -349,6 +431,7 @@ export default function Configuration() {
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<any>(null);
+  const [openPaymentActionsMenuForKey, setOpenPaymentActionsMenuForKey] = useState<string | null>(null);
   
   // Validation error dialog state
   const [validationErrorOpen, setValidationErrorOpen] = useState(false);
@@ -1174,156 +1257,6 @@ export default function Configuration() {
     if (paymentFileInputRef.current) paymentFileInputRef.current.value = '';
   };
 
-  // Individual Subscription (Field Enablement) Functions
-  const downloadSubscriptionTemplate = () => {
-    const wb = XLSX.utils.book_new();
-    const templateData = [
-      { 'Field Name': 'Custom Field 1', 'Enabled': 'true' },
-      { 'Field Name': 'Custom Field 2', 'Enabled': 'false' }
-    ];
-    const ws = XLSX.utils.json_to_sheet(templateData);
-    ws['!cols'] = [{ wch: 25 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Fields');
-    XLSX.writeFile(wb, 'subscription_fields_template.xlsx');
-    toast({ title: 'Template Downloaded', description: 'Use this template to import subscription fields.' });
-  };
-
-  const exportSubscriptionFields = () => {
-    if (fields.length === 0) {
-      toast({ title: "No data to export", description: "Add fields first before exporting", variant: "destructive" });
-      return;
-    }
-    const wb = XLSX.utils.book_new();
-    const exportData = fields.map(field => ({
-      'Field Name': field.name,
-      'Enabled': field.enabled ? 'true' : 'false'
-    }));
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws['!cols'] = [{ wch: 25 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Fields');
-    XLSX.writeFile(wb, `subscription_fields_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast({ title: "Export Successful", description: `Exported ${fields.length} fields to Excel` });
-  };
-
-  const importSubscriptionFields = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
-        
-        let success = 0, failed = 0;
-        for (const row of jsonData) {
-          try {
-            const fieldData = {
-              name: row['Field Name'],
-              enabled: row['Enabled']?.toString().toLowerCase() === 'true'
-            };
-            await fetch(`${API_BASE_URL}/api/config/fields`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify(fieldData)
-            });
-            success++;
-          } catch { failed++; }
-        }
-        // Refresh fields
-        const res = await fetch('/api/config/fields');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) setFields(data);
-        }
-        toast({ title: "Import Complete", description: `${success} success, ${failed} failed`, variant: success > 0 ? "success" : "destructive" });
-      } catch {
-        toast({ title: "Import Failed", description: "Failed to parse file", variant: "destructive" });
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    if (subscriptionFileInputRef.current) subscriptionFileInputRef.current.value = '';
-  };
-
-  // Individual Compliance Functions
-  const downloadComplianceTemplate = () => {
-    const wb = XLSX.utils.book_new();
-    const templateData = [
-      { 'Field Name': 'Compliance Field 1', 'Enabled': 'true' },
-      { 'Field Name': 'Compliance Field 2', 'Enabled': 'false' }
-    ];
-    const ws = XLSX.utils.json_to_sheet(templateData);
-    ws['!cols'] = [{ wch: 25 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Compliance Fields');
-    XLSX.writeFile(wb, 'compliance_fields_template.xlsx');
-    toast({ title: 'Template Downloaded', description: 'Use this template to import compliance fields.' });
-  };
-
-  const exportComplianceFields = () => {
-    if (complianceFields.length === 0) {
-      toast({ title: "No data to export", description: "Add compliance fields first before exporting", variant: "destructive" });
-      return;
-    }
-    const wb = XLSX.utils.book_new();
-    const exportData = complianceFields.map(field => ({
-      'Field Name': field.name,
-      'Enabled': field.enabled ? 'true' : 'false'
-    }));
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws['!cols'] = [{ wch: 25 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Compliance Fields');
-    XLSX.writeFile(wb, `compliance_fields_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast({ title: "Export Successful", description: `Exported ${complianceFields.length} compliance fields to Excel` });
-  };
-
-  const importComplianceFields = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
-        
-        let success = 0, failed = 0;
-        for (const row of jsonData) {
-          try {
-            const fieldData = {
-              name: row['Field Name'],
-              enabled: row['Enabled']?.toString().toLowerCase() === 'true'
-            };
-            await fetch(`${API_BASE_URL}/api/config/compliance-fields`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify(fieldData)
-            });
-            success++;
-          } catch { failed++; }
-        }
-        // Refresh compliance fields
-        const res = await fetch('/api/config/compliance-fields');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) setComplianceFields(data);
-        }
-        toast({ title: "Import Complete", description: `${success} success, ${failed} failed`, variant: success > 0 ? "success" : "destructive" });
-      } catch {
-        toast({ title: "Import Failed", description: "Failed to parse file", variant: "destructive" });
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    if (complianceFileInputRef.current) complianceFileInputRef.current.value = '';
-  };
-
-  // Note: legacy single-sheet import/export helpers were removed (unused).
-  
   // OPTIMIZED: Use React Query for currencies
   const { data: currenciesData = [], isLoading: currenciesLoading } = useQuery({
     queryKey: ["/api/currencies"],
@@ -1730,21 +1663,39 @@ export default function Configuration() {
   const [complianceFields, setComplianceFields] = useState<any[]>([]);
   const [newComplianceFieldName, setNewComplianceFieldName] = useState('');
   const [isLoadingCompliance, setIsLoadingCompliance] = useState(true);
-  
-  // Subscription (Field Enablement) tab Data Management
-  const subscriptionFileInputRef = useRef<HTMLInputElement>(null);
-  const [subscriptionImportConfirmOpen, setSubscriptionImportConfirmOpen] = useState(false);
-  const [subscriptionDataManagementSelectKey, setSubscriptionDataManagementSelectKey] = useState(0);
-  
-  // Compliance tab Data Management
-  const complianceFileInputRef = useRef<HTMLInputElement>(null);
-  const [complianceImportConfirmOpen, setComplianceImportConfirmOpen] = useState(false);
-  const [complianceDataManagementSelectKey, setComplianceDataManagementSelectKey] = useState(0);
+
+  // Renewal Fields state
+  const [renewalFields, setRenewalFields] = useState<any[]>([]);
+  const [newRenewalFieldName, setNewRenewalFieldName] = useState('');
+  const [isLoadingRenewal, setIsLoadingRenewal] = useState(true);
+
+  const MAX_CUSTOM_FIELDS = 4;
+
+  const [customFieldErrorOpen, setCustomFieldErrorOpen] = useState(false);
+  const [customFieldErrorMessage, setCustomFieldErrorMessage] = useState('');
+
+  type CustomFieldDeleteTarget =
+    | { kind: 'subscription'; name: string }
+    | { kind: 'compliance'; id: string; name: string }
+    | { kind: 'renewal'; id: string; name: string };
+
+  const [customFieldDeleteConfirmOpen, setCustomFieldDeleteConfirmOpen] = useState(false);
+  const [customFieldPendingDelete, setCustomFieldPendingDelete] = useState<CustomFieldDeleteTarget | null>(null);
+
+  const showCustomFieldError = (message: string) => {
+    setCustomFieldErrorMessage(message);
+    setCustomFieldErrorOpen(true);
+  };
+
+  const requestDeleteCustomField = (target: CustomFieldDeleteTarget) => {
+    setCustomFieldPendingDelete(target);
+    setCustomFieldDeleteConfirmOpen(true);
+  };
   
   // Fetch enabled fields from backend on mount
   useEffect(() => {
     setIsLoading(true);
-    fetch('/api/config/fields')
+    fetch(`${API_BASE_URL}/api/config/fields`, { credentials: 'include' })
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch fields');
         return res.json();
@@ -1776,7 +1727,7 @@ export default function Configuration() {
   // Fetch compliance fields from backend on mount (new API)
   useEffect(() => {
     setIsLoadingCompliance(true);
-    fetch('/api/config/compliance-fields')
+    fetch(`${API_BASE_URL}/api/config/compliance-fields`, { credentials: 'include' })
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch compliance fields');
         return res.json();
@@ -1804,64 +1755,106 @@ export default function Configuration() {
       })
       .finally(() => setIsLoadingCompliance(false));
   }, []);
-  
-  // Add new field and persist to backend immediately (MAX 4 FIELDS)
-  const addNewField = async () => {
-    // Check if already at maximum limit
-    if (fields.length >= 4) {
-      toast({
-        title: "Limit Reached",
-        description: "Maximum 4 fields allowed. Delete a field to add a new one.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (newFieldName.trim() && !fields.find(f => f.name.toLowerCase() === newFieldName.toLowerCase())) {
-      const updatedFields = [
-        ...fields,
-        {
-          name: newFieldName.trim(),
-          enabled: true
+
+  // Fetch renewal fields from backend on mount
+  useEffect(() => {
+    setIsLoadingRenewal(true);
+    fetch(`${API_BASE_URL}/api/config/renewal-fields`, { credentials: 'include' })
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch renewal fields');
+        return res.json();
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setRenewalFields(data);
+        } else {
+          setRenewalFields([]);
+          toast({
+            title: "Data Format Error",
+            description: "Received invalid renewal field data from server",
+            variant: "destructive",
+          });
         }
-      ];
-      setFields(updatedFields); // Optimistic update
-      setNewFieldName('');
-      try {
-        const response = await fetch('/api/config/fields', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: updatedFields }),
-        });
-        if (!response.ok) throw new Error('Failed to save fields');
-        // Refetch from backend to ensure UI is in sync
-        const fetchRes = await fetch('/api/config/fields');
-        const data = await fetchRes.json();
-        setFields(Array.isArray(data) ? data : updatedFields);
-        toast({
-          title: "Field Added",
-          description: `${newFieldName} field has been added successfully`,
-          variant: "success",
-        });
-      } catch (error) {
+      })
+      .catch(error => {
+        console.error("Error fetching renewal fields:", error);
+        setRenewalFields([]);
         toast({
           title: "Error",
-          description: "Failed to save new field to backend",
+          description: "Failed to load renewal field configuration",
           variant: "destructive",
         });
+      })
+      .finally(() => setIsLoadingRenewal(false));
+  }, []);
+
+  const addNewField = async () => {
+    const name = newFieldName.trim();
+    if (!name) return;
+
+    if (fields.length >= MAX_CUSTOM_FIELDS) {
+      showCustomFieldError(`Only ${MAX_CUSTOM_FIELDS} fields are allowed. Delete a field to add a new one.`);
+      return;
+    }
+
+    if (fields.find(f => String(f?.name ?? '').toLowerCase() === name.toLowerCase())) {
+      showCustomFieldError(`"${name}" already exists. Please use a different name.`);
+      return;
+    }
+
+    const previousFields = fields;
+    const updatedFields = [...previousFields, { name, enabled: true }];
+    setFields(updatedFields);
+    setNewFieldName('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/config/fields`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ fields: updatedFields }),
+      });
+      if (!response.ok) throw new Error('Failed to save fields');
+
+      const fetchRes = await fetch(`${API_BASE_URL}/api/config/fields`, { credentials: 'include' });
+      const data = await fetchRes.json();
+      setFields(Array.isArray(data) ? data : updatedFields);
+      toast({
+        title: "Field Added",
+        description: `${name} field has been added successfully`,
+        variant: "success",
+      });
+    } catch {
+      showCustomFieldError('Failed to save the new field. Please try again.');
+      try {
+        const fetchRes = await fetch(`${API_BASE_URL}/api/config/fields`, { credentials: 'include' });
+        const data = await fetchRes.json();
+        setFields(Array.isArray(data) ? data : previousFields);
+      } catch {
+        setFields(previousFields);
       }
     }
   };
-  
-  // Add new compliance field using new backend API (POST single field)
+
   const addNewComplianceField = async () => {
     const name = newComplianceFieldName.trim();
-    if (!name || complianceFields.find(f => f.name.toLowerCase() === name.toLowerCase())) return;
+    if (!name) return;
+
+    if (complianceFields.length >= MAX_CUSTOM_FIELDS) {
+      showCustomFieldError(`Only ${MAX_CUSTOM_FIELDS} fields are allowed. Delete a field to add a new one.`);
+      return;
+    }
+
+    if (complianceFields.find(f => String(f?.name ?? '').toLowerCase() === name.toLowerCase())) {
+      showCustomFieldError(`"${name}" already exists. Please use a different name.`);
+      return;
+    }
+
     setIsLoadingCompliance(true);
     try {
-      const response = await fetch('/api/config/compliance-fields', {
+      const response = await fetch(`${API_BASE_URL}/api/config/compliance-fields`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           name,
           enabled: true,
@@ -1870,8 +1863,8 @@ export default function Configuration() {
       });
       if (!response.ok) throw new Error('Failed to save compliance field');
       setNewComplianceFieldName('');
-      // Refetch from backend to ensure UI is in sync
-      const fetchRes = await fetch('/api/config/compliance-fields');
+
+      const fetchRes = await fetch(`${API_BASE_URL}/api/config/compliance-fields`, { credentials: 'include' });
       const data = await fetchRes.json();
       setComplianceFields(Array.isArray(data) ? data : []);
       toast({
@@ -1879,47 +1872,102 @@ export default function Configuration() {
         description: `${name} field has been added successfully`,
         variant: "success",
       });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save new compliance field to backend",
-        variant: "destructive",
-      });
+    } catch {
+      showCustomFieldError('Failed to save the new field. Please try again.');
     } finally {
       setIsLoadingCompliance(false);
     }
   };
-  
-  const updateFieldEnablement = (fieldName: string, enabled: boolean) => {
-    setFields(prev => prev.map(f =>
-      f.name === fieldName ? { ...f, enabled } : f
-    ));
+
+  const addNewRenewalField = async () => {
+    const name = newRenewalFieldName.trim();
+    if (!name) return;
+
+    if (renewalFields.length >= MAX_CUSTOM_FIELDS) {
+      showCustomFieldError(`Only ${MAX_CUSTOM_FIELDS} fields are allowed. Delete a field to add a new one.`);
+      return;
+    }
+
+    if (renewalFields.find(f => String(f?.name ?? '').toLowerCase() === name.toLowerCase())) {
+      showCustomFieldError(`"${name}" already exists. Please use a different name.`);
+      return;
+    }
+
+    setIsLoadingRenewal(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/config/renewal-fields`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name,
+          enabled: true,
+          fieldType: 'renewal',
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to save renewal field');
+      setNewRenewalFieldName('');
+      const fetchRes = await fetch(`${API_BASE_URL}/api/config/renewal-fields`, { credentials: 'include' });
+      const data = await fetchRes.json();
+      setRenewalFields(Array.isArray(data) ? data : []);
+      toast({
+        title: "Renewal Field Added",
+        description: `${name} field has been added successfully`,
+        variant: "success",
+      });
+    } catch {
+      showCustomFieldError('Failed to save the new field. Please try again.');
+    } finally {
+      setIsLoadingRenewal(false);
+    }
   };
-  
-  // Update compliance field enablement using PATCH (new API)
+
+  const updateFieldEnablement = (fieldName: string, enabled: boolean) => {
+    setFields(prev => prev.map(f => (f.name === fieldName ? { ...f, enabled } : f)));
+  };
+
   const updateComplianceFieldEnablement = async (fieldName: string, enabled: boolean) => {
     const field = complianceFields.find(f => f.name === fieldName);
     if (!field || !field._id) return;
     setIsLoadingCompliance(true);
     try {
-      const response = await fetch(`/api/config/compliance-fields/${field._id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/config/compliance-fields/${field._id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ enabled }),
       });
       if (!response.ok) throw new Error('Failed to update compliance field');
-      // Refetch
-      const fetchRes = await fetch('/api/config/compliance-fields');
+
+      const fetchRes = await fetch(`${API_BASE_URL}/api/config/compliance-fields`, { credentials: 'include' });
       const data = await fetchRes.json();
       setComplianceFields(Array.isArray(data) ? data : complianceFields);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update compliance field",
-        variant: "destructive",
-      });
+    } catch {
+      showCustomFieldError('Failed to update the field. Please try again.');
     } finally {
       setIsLoadingCompliance(false);
+    }
+  };
+
+  const updateRenewalFieldEnablement = async (fieldId: string, enabled: boolean) => {
+    if (!fieldId) return;
+    setIsLoadingRenewal(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/config/renewal-fields/${fieldId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ enabled }),
+      });
+      if (!response.ok) throw new Error('Failed to update renewal field');
+
+      const fetchRes = await fetch(`${API_BASE_URL}/api/config/renewal-fields`, { credentials: 'include' });
+      const data = await fetchRes.json();
+      setRenewalFields(Array.isArray(data) ? data : renewalFields);
+    } catch {
+      showCustomFieldError('Failed to update the field. Please try again.');
+    } finally {
+      setIsLoadingRenewal(false);
     }
   };
   
@@ -1928,16 +1976,16 @@ export default function Configuration() {
   // Delete field from backend
   const deleteField = async (fieldName: string) => {
     const updatedFields = fields.filter(f => f.name !== fieldName);
-    setFields(updatedFields);
     try {
-      const response = await fetch('/api/config/fields', {
+      const response = await fetch(`${API_BASE_URL}/api/config/fields`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ fields: updatedFields }),
       });
       if (!response.ok) throw new Error('Failed to delete field');
-      // Refetch from backend to ensure UI is in sync
-      const fetchRes = await fetch('/api/config/fields');
+
+      const fetchRes = await fetch(`${API_BASE_URL}/api/config/fields`, { credentials: 'include' });
       const data = await fetchRes.json();
       setFields(Array.isArray(data) ? data : updatedFields);
       toast({
@@ -1945,12 +1993,8 @@ export default function Configuration() {
         description: `${fieldName} field has been deleted successfully`,
         variant: "destructive",
       });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete field from backend",
-        variant: "destructive",
-      });
+    } catch {
+      showCustomFieldError('Failed to delete the field. Please try again.');
     }
   };
   
@@ -1960,21 +2004,18 @@ export default function Configuration() {
     let field = complianceFields.find(f => f._id === fieldNameOrId);
     if (!field) field = complianceFields.find(f => f.name === fieldNameOrId);
     if (!field || !field._id) {
-      toast({
-        title: "Error",
-        description: "Field not found or missing id",
-        variant: "destructive",
-      });
+      showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
       return;
     }
     setIsLoadingCompliance(true);
     try {
-      const response = await fetch(`/api/config/compliance-fields/${field._id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/config/compliance-fields/${field._id}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to delete compliance field');
       // Refetch
-      const fetchRes = await fetch('/api/config/compliance-fields');
+      const fetchRes = await fetch(`${API_BASE_URL}/api/config/compliance-fields`, { credentials: 'include' });
       const data = await fetchRes.json();
       setComplianceFields(Array.isArray(data) ? data : complianceFields);
       toast({
@@ -1982,14 +2023,36 @@ export default function Configuration() {
         description: `${field.name} field has been deleted successfully`,
         variant: "destructive",
       });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete compliance field from backend",
-        variant: "destructive",
-      });
+    } catch {
+      showCustomFieldError('Failed to delete the field. Please try again.');
     } finally {
       setIsLoadingCompliance(false);
+    }
+  };
+
+  // Delete renewal field using DELETE (by _id)
+  const deleteRenewalField = async (fieldId: string) => {
+    if (!fieldId) return;
+    const field = renewalFields.find(f => f._id === fieldId);
+    setIsLoadingRenewal(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/config/renewal-fields/${fieldId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to delete renewal field');
+      const fetchRes = await fetch(`${API_BASE_URL}/api/config/renewal-fields`, { credentials: 'include' });
+      const data = await fetchRes.json();
+      setRenewalFields(Array.isArray(data) ? data : renewalFields);
+      toast({
+        title: "Renewal Field Deleted",
+        description: `${field?.name || 'Field'} has been deleted successfully`,
+        variant: "destructive",
+      });
+    } catch {
+      showCustomFieldError('Failed to delete the field. Please try again.');
+    } finally {
+      setIsLoadingRenewal(false);
     }
   };
   
@@ -2158,6 +2221,8 @@ export default function Configuration() {
   const [pmManagerSearch, setPmManagerSearch] = useState('');
   const pmManagerDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [paymentMethodsView, setPaymentMethodsView] = useState<'tiles' | 'table'>('tiles');
+
   useEffect(() => {
     if (!pmOwnerOpen) return;
     function handleClickOutside(event: MouseEvent) {
@@ -2190,20 +2255,18 @@ export default function Configuration() {
 
   
   return (
-    <div className="h-screen overflow-hidden bg-white">
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
-        {/* Modern Professional Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-4">
-              <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
-                <Settings className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Setup & Configuration</h1>
-              </div>
-            </div>
-          </div>
+    <div className="h-full bg-gray-50 flex flex-col min-h-0 overflow-hidden">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-6 flex flex-col min-h-0">
+        <div className="mb-4">
+          <Button
+            type="button"
+            variant="default"
+            onClick={() => navigate("/configuration")}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
         </div>
 
         {/* Import Confirm Dialog (Configuration Excel) */}
@@ -2275,79 +2338,18 @@ export default function Configuration() {
           </AlertDialogContent>
         </AlertDialog>
 
-        <div>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-            <TabsList className="sticky top-0 z-10 flex w-full bg-white rounded-lg p-1 shadow-sm mb-6 font-inter gap-2">
-              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-                <TabsTrigger
-                  value="currency"
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-md focus:outline-none transition-all duration-300 font-inter
-                  data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
-                  text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                >
-                  <DollarSign className="w-4 h-4" />
-                  <span>Currency</span>
-                </TabsTrigger>
-              </motion.div>
-              
-              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-                <TabsTrigger
-                  value="payment"
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-md focus:outline-none transition-all duration-300 font-inter
-                  data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
-                  text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                >
-                  <Banknote className="w-4 h-4" />
-                  <span>Payment Methods</span>
-                </TabsTrigger>
-              </motion.div>
-              
-              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-                <TabsTrigger
-                  value="reminder"
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-md focus:outline-none transition-all duration-300 font-inter
-                  data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
-                  text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                >
-                  <Bell className="w-4 h-4" />
-                  <span>Reminder Policy</span>
-                </TabsTrigger>
-              </motion.div>
-              
-              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-                <TabsTrigger
-                  value="subscription"
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-md focus:outline-none transition-all duration-300 font-inter
-                  data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
-                  text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Subscription</span>
-                </TabsTrigger>
-              </motion.div>
-              
-              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-                <TabsTrigger
-                  value="compliance"
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-md focus:outline-none transition-all duration-300 font-inter
-                  data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
-                  text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                >
-                  <Shield className="w-4 h-4" />
-                  <span>Compliance</span>
-                </TabsTrigger>
-              </motion.div>
-            </TabsList>
-            
-                <AnimatePresence mode="wait">
-                  <TabsContent value="currency" className="mt-6">
+        <div className="flex-1 min-h-0">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6 flex flex-col flex-1 min-h-0">
+            <div className="min-w-0">
+              <AnimatePresence mode="wait">
+                  <TabsContent value="currency" className="mt-4">
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <Card className="p-6 bg-white">
+                      <Card className="p-6 bg-transparent border-0 shadow-none">
                         <div className="sticky top-[72px] z-10 bg-white pb-6 -mt-6 pt-6 flex justify-between items-center mb-6 border-b border-gray-200">
                           <div className="flex gap-2 items-center">
                             <DollarSign className="w-5 h-5" />
@@ -2703,17 +2705,18 @@ export default function Configuration() {
                           </div>
                         ) : (
                           <div className="space-y-6">
-                          <div className="max-h-[calc(100vh-350px)] overflow-y-auto rounded-md border shadow-lg hover:shadow-xl transition-shadow duration-300">
-                            <table className="w-full">
-                              <thead className="sticky top-0 z-[5] bg-gray-200">
+                          <div className="shadow-lg border-0 overflow-hidden bg-white rounded-xl h-[calc(100vh-350px)] flex flex-col">
+                            <div className="flex-1 overflow-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead>
                                 <tr className="border-b-2 border-gray-400 bg-gray-200">
-                                  <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">CURRENCY</th>
-                                  <th className={`h-12 px-4 text-right text-xs font-bold uppercase tracking-wide ${isUpdateMode ? 'text-blue-600 bg-blue-50' : 'text-gray-800 bg-gray-200'}`}>
+                                  <th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">CURRENCY</th>
+                                  <th className={`sticky top-0 z-10 h-12 px-4 text-right text-xs font-bold uppercase tracking-wide ${isUpdateMode ? 'text-blue-600 bg-blue-50' : 'text-gray-800 bg-gray-200'}`}>
                                     Exch.Rate against 1 LCY {isUpdateMode && <span className="text-xs">(Editable)</span>}
                                   </th>
-                                  <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">CREATED</th>
-                                  <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">LAST UPDATED</th>
-                                  <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">ACTIONS</th>
+                                  <th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">CREATED</th>
+                                  <th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">LAST UPDATED</th>
+                                  <th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">ACTIONS</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-100 bg-white">
@@ -2860,6 +2863,7 @@ export default function Configuration() {
                                 )}
                               </tbody>
                             </table>
+                            </div>
                           </div>
                         </div>
                         )}
@@ -2931,15 +2935,16 @@ export default function Configuration() {
                 </AlertDialogContent>
               </AlertDialog>
 
-              <TabsContent value="payment" className="mt-6" id="payment-methods-section">
+              <TabsContent value="payment" className="mt-4 h-[calc(100vh-240px)] overflow-hidden" id="payment-methods-section">
                 <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   transition={{ duration: 0.3 }}
+                  className="h-full"
                 >
-                  <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
-                    <div className="sticky top-[72px] z-10 bg-white pb-6 -mt-6 pt-6 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-gray-200">
+                  <Card className="bg-transparent border-0 shadow-none p-6 rounded-xl h-full flex flex-col min-h-0">
+                    <div className="flex-shrink-0 bg-white pb-6 -mt-6 pt-6 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-gray-200">
                       <div className="flex items-center gap-4">
                         <div className="relative flex-1 max-w-md">
                           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -2986,105 +2991,216 @@ export default function Configuration() {
                           </SelectContent>
                         </Select>
                       </div>
-                      
-                      <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+
+                      <div className="flex items-center gap-2">
                         <Button
-                          onClick={() => {
-                            // Reset form when opening add payment modal
-                            const nextPaymentForm = {
-                              title: '',
-                              type: '',
-                              owner: '',
-                              manager: '',
-                              expiresAt: '',
-                              financialInstitution: '',
-                              lastFourDigits: '',
-                            };
-                            setPaymentForm(nextPaymentForm);
-                            paymentSnapshotRef.current = JSON.stringify(nextPaymentForm);
-                            setPmOwnerSearch('');
-                            setPmManagerSearch('');
-                            setAddPaymentModalOpen(true);
-                          }}
-                          className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
+                          type="button"
+                          variant="outline"
+                          onClick={() => setPaymentMethodsView((v) => (v === 'tiles' ? 'table' : 'tiles'))}
+                          className="border-gray-300 text-gray-700 hover:bg-gray-50"
                         >
-                          <Plus className="w-4 h-4 mr-2" />
-                          New Payment Method
+                          {paymentMethodsView === 'tiles' ? 'Table View' : 'Card View'}
                         </Button>
-                      </motion.div>
+
+                        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                          <Button
+                            onClick={() => {
+                              // Reset form when opening add payment modal
+                              const nextPaymentForm = {
+                                title: '',
+                                type: '',
+                                owner: '',
+                                manager: '',
+                                expiresAt: '',
+                                financialInstitution: '',
+                                lastFourDigits: '',
+                              };
+                              setPaymentForm(nextPaymentForm);
+                              paymentSnapshotRef.current = JSON.stringify(nextPaymentForm);
+                              setPmOwnerSearch('');
+                              setPmManagerSearch('');
+                              setAddPaymentModalOpen(true);
+                            }}
+                            className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            New Payment Method
+                          </Button>
+                        </motion.div>
+                      </div>
                     </div>
+                    <div className="flex-1 min-h-0">
                     {/* Payment Methods List */}
-                    <div className="max-h-[calc(100vh-350px)] overflow-y-auto mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {[...paymentMethods]
+                    {(() => {
+                      const filteredPaymentMethods = [...paymentMethods]
                         .reverse()
-                        .filter(method => 
+                        .filter((method) =>
                           method.name.toLowerCase().includes(paymentSearchTerm.toLowerCase()) ||
                           method.type.toLowerCase().includes(paymentSearchTerm.toLowerCase())
-                        )
-                        .map((method, idx) => {
-                        const subsCount = getPaymentMethodSubscriptions(method.name).length;
-                        return (
-                          <motion.div 
-                            key={idx} 
-                            whileHover={{ scale: 1.02 }}
-                            className="bg-white border border-gray-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-200"
-                          >
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="font-semibold text-gray-900 truncate">{method.name}</div>
-                                <div className="text-sm text-gray-500">{method.type}</div>
-                              </div>
-                              {/* Subscription Count Badge */}
-                              <button
-                                onClick={() => openPaymentSubsModal(method.name)}
-                                className="flex-shrink-0 bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-semibold text-sm hover:bg-blue-200 transition-colors cursor-pointer"
-                                title="View subscriptions using this payment method"
-                              >
-                                {subsCount}
-                              </button>
-                            </div>
-                            
-                            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                onClick={() => openEditPayment(method)} 
-                                className="text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 rounded-lg px-3 py-1 h-8 font-medium"
-                              >
-                                <Edit className="w-3 h-3 mr-1" />
-                                Edit
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                onClick={() => handleDeletePaymentMethod(method)} 
-                                className="text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg px-3 py-1 h-8 font-medium"
-                              >
-                                <Trash2 className="w-3 h-3 mr-1" />
-                                Delete
-                              </Button>
-                            </div>
-                          </motion.div>
                         );
-                      })}
-                      
-                      {paymentMethods.filter(method => 
-                        method.name.toLowerCase().includes(paymentSearchTerm.toLowerCase()) ||
-                        method.type.toLowerCase().includes(paymentSearchTerm.toLowerCase())
-                      ).length === 0 && (
-                        <div className="col-span-full flex flex-col items-center justify-center py-12 text-gray-500">
-                          <CreditCard className="w-12 h-12 mb-4 text-gray-300" />
-                          <h3 className="text-lg font-medium text-gray-600 mb-2">
-                            {paymentSearchTerm ? 'No payment methods found' : 'No payment methods yet'}
-                          </h3>
-                          <p className="text-center max-w-md">
-                            {paymentSearchTerm 
-                              ? `No payment methods match "${paymentSearchTerm}". Try adjusting your search.`
-                              : 'Add your first payment method to get started with managing your subscription payments.'
-                            }
-                          </p>
+
+                      if (filteredPaymentMethods.length === 0) {
+                        return (
+                          <div className="mt-6 flex flex-col items-center justify-center py-12 text-gray-500">
+                            <CreditCard className="w-12 h-12 mb-4 text-gray-300" />
+                            <h3 className="text-lg font-medium text-gray-600 mb-2">
+                              {paymentSearchTerm ? 'No payment methods found' : 'No payment methods yet'}
+                            </h3>
+                            <p className="text-center max-w-md">
+                              {paymentSearchTerm
+                                ? `No payment methods match "${paymentSearchTerm}". Try adjusting your search.`
+                                : 'Add your first payment method to get started with managing your subscription payments.'}
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      if (paymentMethodsView === 'table') {
+                        return (
+                          <div className="mt-6 bg-white border border-gray-200 shadow-md overflow-hidden rounded-xl h-full flex flex-col min-h-0">
+                            <div className="flex-1 min-h-0 overflow-auto">
+                            <table className="min-w-full table-fixed">
+                              <thead>
+                                <tr className="border-b-2 border-gray-400 bg-gray-200">
+                                  <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[260px]">NAME</th>
+                                  <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">TYPE</th>
+                                  <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">SUBSCRIPTIONS</th>
+                                  <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">ACTIONS</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white">
+                                {filteredPaymentMethods.map((method, idx) => {
+                                  const subsCount = getPaymentMethodSubscriptions(method.name).length;
+                                  const rowKey = String(method?._id || method?.id || method?.name || idx);
+                                  const isOpen = openPaymentActionsMenuForKey === rowKey;
+                                  const isAnotherRowOpen = !!openPaymentActionsMenuForKey && openPaymentActionsMenuForKey !== rowKey;
+
+                                  return (
+                                    <tr
+                                      key={`${method.name}-${idx}`}
+                                      className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                                        idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
+                                      }`}
+                                    >
+                                      <td className="px-3 py-3 font-medium text-gray-800 text-sm w-[260px] max-w-[260px] overflow-hidden text-left">
+                                        <span className="block truncate whitespace-nowrap" title={method.name}>
+                                          {method.name}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-3 text-gray-600 text-sm w-[220px] max-w-[220px] overflow-hidden text-left">
+                                        <span className="block truncate whitespace-nowrap" title={method.type}>
+                                          {method.type}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-3 text-center w-[150px]">
+                                        <button
+                                          onClick={() => openPaymentSubsModal(method.name)}
+                                          className="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-semibold text-sm hover:bg-blue-200 transition-colors cursor-pointer"
+                                          title="View subscriptions using this payment method"
+                                        >
+                                          {subsCount}
+                                        </button>
+                                      </td>
+                                      <td className="px-3 py-3 text-right">
+                                        <DropdownMenu
+                                          open={isOpen}
+                                          onOpenChange={(open) => setOpenPaymentActionsMenuForKey(open ? rowKey : null)}
+                                        >
+                                          <DropdownMenuTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+                                                isAnotherRowOpen ? 'invisible' : ''
+                                              }`}
+                                            >
+                                              <MoreVertical className="h-4 w-4" />
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent
+                                            align="end"
+                                            className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+                                          >
+                                            <DropdownMenuItem
+                                              onClick={() => openEditPayment(method)}
+                                              className="cursor-pointer"
+                                            >
+                                              <Edit className="h-4 w-4 mr-2" />
+                                              Edit
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                              onClick={() => handleDeletePaymentMethod(method)}
+                                              className="cursor-pointer text-red-600 focus:text-red-600"
+                                            >
+                                              <Trash2 className="h-4 w-4 mr-2" />
+                                              Delete
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="mt-6 h-full min-h-0 overflow-auto overflow-x-hidden">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full min-w-0">
+                          {filteredPaymentMethods.map((method, idx) => {
+                            const subsCount = getPaymentMethodSubscriptions(method.name).length;
+                            return (
+                              <motion.div
+                                key={idx}
+                                whileHover={{ scale: 1.02 }}
+                                className="bg-white border border-gray-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-200"
+                              >
+                                <div className="flex items-center gap-3 mb-3">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-semibold text-gray-900 truncate">{method.name}</div>
+                                    <div className="text-sm text-gray-500">{method.type}</div>
+                                  </div>
+                                  {/* Subscription Count Badge */}
+                                  <button
+                                    onClick={() => openPaymentSubsModal(method.name)}
+                                    className="flex-shrink-0 bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-semibold text-sm hover:bg-blue-200 transition-colors cursor-pointer"
+                                    title="View subscriptions using this payment method"
+                                  >
+                                    {subsCount}
+                                  </button>
+                                </div>
+
+                                <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => openEditPayment(method)}
+                                    className="text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 rounded-lg px-3 py-1 h-8 font-medium"
+                                  >
+                                    <Edit className="w-3 h-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleDeletePaymentMethod(method)}
+                                    className="text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg px-3 py-1 h-8 font-medium"
+                                  >
+                                    <Trash2 className="w-3 h-3 mr-1" />
+                                    Delete
+                                  </Button>
+                                </div>
+                              </motion.div>
+                            );
+                          })}
                         </div>
-                      )}
+                        </div>
+                      );
+                    })()}
                     </div>
                     
                     {/* Payment Method Subscriptions Modal */}
@@ -4162,398 +4278,503 @@ export default function Configuration() {
                 </motion.div>
               </TabsContent>
               
-              <TabsContent value="reminder" className="mt-6">
+              <TabsContent value="custom-field" className="mt-4 h-[calc(100vh-200px)] overflow-hidden">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.3 }}
+                  className="h-full overflow-auto overflow-x-hidden"
                 >
-                  <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
-                    <div className="flex items-center gap-4 mb-6">
-                      <motion.div 
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
-                      >
-                        <Bell className="text-white" size={20} />
-                      </motion.div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">Reminder Policy</h3>
-                        <p className="text-gray-500 text-sm">Configure reminder settings</p>
-                      </div>
-                    </div>
-                    <div className="text-gray-600 py-8 text-center">Reminder policy configuration will appear here.</div>
-                  </Card>
-                </motion.div>
-              </TabsContent>
-              
-              <TabsContent value="subscription" className="mt-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
-                    <div className="flex items-center gap-4 mb-6">
-                      <motion.div 
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
-                      >
-                        <Settings className="text-white" size={20} />
-                      </motion.div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 font-inter">Field Enablement</h3>
-                        {/* Description removed as requested */}
-                      </div>
-                    </div>
-                    <div className="space-y-6">
-                      {/* Add New Field and Data Management */}
-                      <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
-                        <Input
-                          value={newFieldName}
-                          onChange={(e) => setNewFieldName(e.target.value)}
-                          className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
-                          onKeyPress={(e) => e.key === 'Enter' && addNewField()}
-                          disabled={fields.length >= 4}
-                          placeholder={fields.length >= 4 ? "Maximum 4 fields reached" : "Enter field name"}
-                        />
-                        <input
-                          type="file"
-                          ref={subscriptionFileInputRef}
-                          className="hidden"
-                          accept=".xlsx,.xls"
-                          onChange={importSubscriptionFields}
-                        />
-                        <Select
-                          key={subscriptionDataManagementSelectKey}
-                          onValueChange={(value) => {
-                            if (value === 'export') {
-                              exportSubscriptionFields();
-                            } else if (value === 'import') {
-                              setSubscriptionImportConfirmOpen(true);
-                            }
-                            setSubscriptionDataManagementSelectKey((k) => k + 1);
-                          }}
-                        >
-                          <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
-                            <SelectValue placeholder="Data Management" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="export" className="cursor-pointer">
-                              <div className="flex items-center">
-                                <Download className="h-4 w-4 mr-2" />
-                                Export
+                  <div className="space-y-6 pb-6">
+                    {/* Custom Field Error Dialog */}
+                    <Dialog open={customFieldErrorOpen} onOpenChange={setCustomFieldErrorOpen}>
+                      <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+                        <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
+                          <DialogHeader>
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                <AlertCircle className="h-5 w-5 text-white" />
                               </div>
-                            </SelectItem>
-                            <SelectItem value="import" className="cursor-pointer">
-                              <div className="flex items-center">
-                                <Upload className="h-4 w-4 mr-2" />
-                                Import
+                              <div>
+                                <DialogTitle className="text-xl font-bold tracking-tight text-white">Error</DialogTitle>
+                                <p className="text-red-100 mt-0.5 text-sm font-medium">Please review and try again</p>
                               </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                          <Button
-                            onClick={addNewField}
-                            disabled={!newFieldName.trim() || fields.length >= 4}
-                            className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
-                          >
-                            <Plus className="w-4 h-4 mr-2" />
-                            {fields.length >= 4 ? 'Max 4 Fields' : 'New Field'}
-                          </Button>
-                        </motion.div>
-                      </div>
-                      
-                      {/* Field List */}
-                      <div className="space-y-4">
-                        <h3 className="text-base font-semibold text-gray-900">Available Fields</h3>
-                        
-                        {isLoading ? (
-                          <div className="flex justify-center py-8">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-                          </div>
-                        ) : fields.length === 0 ? (
-                          <div className="text-center py-8 text-gray-500">
-                            No fields configured. Add your first field above.
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {fields.map((field) => (
-                              <motion.div
-                                key={field.name}
-                                whileHover={{ y: -5 }}
-                                className={`p-4 border rounded-xl transition-all duration-300 ${
-                                  field.enabled
-                                    ? 'border-indigo-200 bg-indigo-50 shadow-sm'
-                                    : 'border-gray-200 bg-gray-50'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-3">
-                                    <Checkbox
-                                      checked={field.enabled}
-                                      onCheckedChange={(checked: boolean) => updateFieldEnablement(field.name, checked)}
-                                      className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 rounded"
-                                    />
-                                    <Label className="text-sm font-medium cursor-pointer text-gray-900">
-                                      {field.name}
-                                    </Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    {field.enabled ? (
-                                      <Badge className="bg-indigo-100 text-indigo-800 text-xs font-semibold py-1 px-3 rounded-full">
-                                        <Eye className="w-3 h-3 mr-1" />
-                                        Enabled
-                                      </Badge>
-                                    ) : (
-                                      <Badge className="bg-gray-100 text-gray-600 text-xs font-semibold py-1 px-3 rounded-full">
-                                        <EyeOff className="w-3 h-3 mr-1" />
-                                        Disabled
-                                      </Badge>
-                                    )}
-                                    <button
-                                      className="text-red-500 hover:text-red-700 p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-red-300"
-                                      title="Delete field"
-                                      onClick={() => deleteField(field.name)}
-                                    >
-                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                </div>
-                              </motion.div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Removed Summary and Save Configuration */}
-                    </div>
+                            </div>
+                          </DialogHeader>
+                        </div>
 
-                    {/* Subscription Import Confirm Dialog */}
-                    <AlertDialog open={subscriptionImportConfirmOpen} onOpenChange={setSubscriptionImportConfirmOpen}>
-                      <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Select Yes to choose a file. Select No to download the template.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel
-                            className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
-                            onClick={() => {
-                              downloadSubscriptionTemplate();
-                              setSubscriptionImportConfirmOpen(false);
-                            }}
-                          >
-                            No
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-green-600 text-white hover:bg-green-700"
-                            onClick={() => {
-                              setSubscriptionImportConfirmOpen(false);
-                              setTimeout(() => subscriptionFileInputRef.current?.click(), 0);
-                            }}
-                          >
-                            Yes
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </Card>
-                </motion.div>
-              </TabsContent>
-              
-              <TabsContent value="compliance" className="mt-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
-                    <div className="flex items-center gap-4 mb-6">
-                      <motion.div 
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
-                      >
-                        <Shield className="text-white" size={20} />
-                      </motion.div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 font-inter">Compliance Fields</h3>
-                        {/* Description removed as requested */}
-                      </div>
-                    </div>
-                    <div className="space-y-6">
-                      {/* Add New Compliance Field and Data Management */}
-                      <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
-                        <Input
-                          value={newComplianceFieldName}
-                          onChange={(e) => setNewComplianceFieldName(e.target.value)}
-                          className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
-                          onKeyPress={(e) => e.key === 'Enter' && addNewComplianceField()}
-                        />
-                        <input
-                          type="file"
-                          ref={complianceFileInputRef}
-                          className="hidden"
-                          accept=".xlsx,.xls"
-                          onChange={importComplianceFields}
-                        />
-                        <Select
-                          key={complianceDataManagementSelectKey}
-                          onValueChange={(value) => {
-                            if (value === 'export') {
-                              exportComplianceFields();
-                            } else if (value === 'import') {
-                              setComplianceImportConfirmOpen(true);
-                            }
-                            setComplianceDataManagementSelectKey((k) => k + 1);
-                          }}
-                        >
-                          <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
-                            <SelectValue placeholder="Data Management" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="export" className="cursor-pointer">
-                              <div className="flex items-center">
-                                <Download className="h-4 w-4 mr-2" />
-                                Export
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="import" className="cursor-pointer">
-                              <div className="flex items-center">
-                                <Upload className="h-4 w-4 mr-2" />
-                                Import
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                          <Button
-                            onClick={addNewComplianceField}
-                            disabled={!newComplianceFieldName.trim()}
-                            className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
-                          >
-                            <Plus className="w-4 h-4 mr-2" />
-                            New Field
-                          </Button>
-                        </motion.div>
-                      </div>
-                      
-                      {/* Compliance Field List */}
-                      <div className="space-y-4">
-                        <h3 className="text-base font-semibold text-gray-900">Available Compliance Fields</h3>
-                        
-                        {isLoadingCompliance ? (
-                          <div className="flex justify-center py-8">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-                          </div>
-                        ) : complianceFields.length === 0 ? (
-                          <div className="text-center py-8 text-gray-500">
-                            No compliance fields configured. Add your first field above.
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {complianceFields.map((field) => (
-                              <motion.div
-                                key={field._id || field.name}
-                                whileHover={{ y: -5 }}
-                                className={`p-4 border rounded-xl transition-all duration-300 ${
-                                  field.enabled
-                                    ? 'border-indigo-200 bg-indigo-50 shadow-sm'
-                                    : 'border-gray-200 bg-gray-50'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-3">
-                                    <Checkbox
-                                      checked={field.enabled}
-                                      onCheckedChange={(checked: boolean) => updateComplianceFieldEnablement(field.name, checked)}
-                                      className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 rounded"
-                                    />
-                                    <Label className="text-sm font-medium cursor-pointer text-gray-900">
-                                      {field.name}
-                                    </Label>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    {field.enabled ? (
-                                      <Badge className="bg-indigo-100 text-indigo-800 text-xs font-semibold py-1 px-3 rounded-full">
-                                        <Eye className="w-3 h-3 mr-1" />
-                                        Enabled
-                                      </Badge>
-                                    ) : (
-                                      <Badge className="bg-gray-100 text-gray-600 text-xs font-semibold py-1 px-3 rounded-full">
-                                        <EyeOff className="w-3 h-3 mr-1" />
-                                        Disabled
-                                      </Badge>
-                                    )}
-                                    <button
-                                      className={`text-red-500 hover:text-red-700 p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-red-300 ${!field._id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                      title={field._id ? "Delete field" : "Cannot delete: missing id. Please refresh or re-add this field."}
-                                      onClick={() => field._id && deleteComplianceField(field._id)}
-                                      disabled={!field._id}
-                                    >
-                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                </div>
-                              </motion.div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Removed Summary and Save Configuration */}
-                    </div>
+                        <div className="px-6 py-5">
+                          <p className="text-gray-700 text-sm leading-relaxed">{customFieldErrorMessage}</p>
+                        </div>
 
-                    {/* Compliance Import Confirm Dialog */}
-                    <AlertDialog open={complianceImportConfirmOpen} onOpenChange={setComplianceImportConfirmOpen}>
-                      <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Select Yes to choose a file. Select No to download the template.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel
-                            className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
-                            onClick={() => {
-                              downloadComplianceTemplate();
-                              setComplianceImportConfirmOpen(false);
-                            }}
+                        <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setCustomFieldErrorOpen(false)}
+                            className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
                           >
-                            No
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-green-600 text-white hover:bg-green-700"
+                            OK
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* Custom Field Delete Confirmation */}
+                    <Dialog
+                      open={customFieldDeleteConfirmOpen}
+                      onOpenChange={(open) => {
+                        setCustomFieldDeleteConfirmOpen(open);
+                        if (!open) setCustomFieldPendingDelete(null);
+                      }}
+                    >
+                      <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+                        <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
+                          <DialogHeader>
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                <Trash2 className="h-5 w-5 text-white" />
+                              </div>
+                              <div>
+                                <DialogTitle className="text-xl font-bold tracking-tight text-white">Delete Field</DialogTitle>
+                                <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+                              </div>
+                            </div>
+                          </DialogHeader>
+                        </div>
+
+                        <div className="px-6 py-5">
+                          {customFieldPendingDelete ? (
+                            <p className="text-gray-700 text-sm leading-relaxed mb-4">
+                              Are you sure you want to delete the field{' '}
+                              <span className="font-semibold text-gray-900">
+                                "<span
+                                  className="max-w-[200px] inline-block truncate align-bottom"
+                                  title={customFieldPendingDelete.name}
+                                >
+                                  {customFieldPendingDelete.name}
+                                </span>"
+                              </span>
+                              ?
+                            </p>
+                          ) : (
+                            <p className="text-gray-700 text-sm leading-relaxed mb-4">Are you sure you want to delete this field?</p>
+                          )}
+                          <p className="text-gray-600 text-xs leading-relaxed">
+                            This will permanently remove this field and all associated data from your system.
+                          </p>
+                        </div>
+
+                        <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
+                          <Button
+                            type="button"
+                            variant="outline"
                             onClick={() => {
-                              setComplianceImportConfirmOpen(false);
-                              setTimeout(() => complianceFileInputRef.current?.click(), 0);
+                              setCustomFieldDeleteConfirmOpen(false);
+                              setCustomFieldPendingDelete(null);
                             }}
+                            className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
                           >
-                            Yes
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </Card>
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              const target = customFieldPendingDelete;
+                              setCustomFieldDeleteConfirmOpen(false);
+                              setCustomFieldPendingDelete(null);
+                              if (!target) return;
+
+                              if (target.kind === 'subscription') {
+                                void deleteField(target.name);
+                              } else if (target.kind === 'compliance') {
+                                void deleteComplianceField(target.id);
+                              } else {
+                                void deleteRenewalField(target.id);
+                              }
+                            }}
+                            className="h-9 px-6 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
+                      <div className="flex items-center gap-4">
+                        <motion.div
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
+                        >
+                          <Layers className="text-white" size={20} />
+                        </motion.div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">Custom field</h3>
+                        </div>
+                      </div>
+                    </Card>
+
+                    <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
+                      <div className="flex items-center gap-4 mb-6">
+                        <motion.div
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
+                        >
+                          <Settings className="text-white" size={20} />
+                        </motion.div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 font-inter">Subscription Fields</h3>
+                        </div>
+                      </div>
+                      <div className="space-y-6">
+                        <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
+                          <Input
+                            value={newFieldName}
+                            onChange={(e) => setNewFieldName(e.target.value)}
+                            className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
+                            onKeyPress={(e) => e.key === 'Enter' && addNewField()}
+                            placeholder="Enter field name"
+                          />
+                          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                            <Button
+                              onClick={addNewField}
+                              disabled={!newFieldName.trim()}
+                              className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              New Field
+                            </Button>
+                          </motion.div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <h3 className="text-base font-semibold text-gray-900">Available Fields</h3>
+
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 h-64 md:h-72 lg:h-80 overflow-y-auto custom-scrollbar">
+                            {isLoading ? (
+                              <div className="flex items-center justify-center h-full">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                              </div>
+                            ) : fields.length === 0 ? (
+                              <div className="h-full flex items-center justify-center text-gray-500">
+                                No fields configured. Add your first field above.
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {fields.map((field) => (
+                                <motion.div
+                                  key={field.name}
+                                  whileHover={{ y: -5 }}
+                                  className={`p-4 border rounded-xl transition-all duration-300 ${
+                                    field.enabled
+                                      ? 'border-indigo-200 bg-indigo-50 shadow-sm'
+                                      : 'border-gray-200 bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-3">
+                                      <Checkbox
+                                        checked={field.enabled}
+                                        onCheckedChange={(checked: boolean) => updateFieldEnablement(field.name, checked)}
+                                        className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 rounded"
+                                      />
+                                      <Label className="text-sm font-medium cursor-pointer text-gray-900">
+                                        {field.name}
+                                      </Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      {field.enabled ? (
+                                        <Badge className="bg-indigo-100 text-indigo-800 text-xs font-semibold py-1 px-3 rounded-full">
+                                          <Eye className="w-3 h-3 mr-1" />
+                                          Enabled
+                                        </Badge>
+                                      ) : (
+                                        <Badge className="bg-gray-100 text-gray-600 text-xs font-semibold py-1 px-3 rounded-full">
+                                          <EyeOff className="w-3 h-3 mr-1" />
+                                          Disabled
+                                        </Badge>
+                                      )}
+                                      <button
+                                        className="text-red-500 hover:text-red-700 p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-red-300"
+                                        title="Delete field"
+                                        onClick={() => requestDeleteCustomField({ kind: 'subscription', name: field.name })}
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </motion.div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                    </Card>
+
+                    <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
+                      <div className="flex items-center gap-4 mb-6">
+                        <motion.div
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
+                        >
+                          <Shield className="text-white" size={20} />
+                        </motion.div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 font-inter">Compliance Fields</h3>
+                        </div>
+                      </div>
+                      <div className="space-y-6">
+                        <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
+                          <Input
+                            value={newComplianceFieldName}
+                            onChange={(e) => setNewComplianceFieldName(e.target.value)}
+                            className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
+                            onKeyPress={(e) => e.key === 'Enter' && addNewComplianceField()}
+                          />
+                          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                            <Button
+                              onClick={addNewComplianceField}
+                              disabled={!newComplianceFieldName.trim()}
+                              className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              New Field
+                            </Button>
+                          </motion.div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <h3 className="text-base font-semibold text-gray-900">Available Compliance Fields</h3>
+
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 h-64 md:h-72 lg:h-80 overflow-y-auto custom-scrollbar">
+                            {isLoadingCompliance ? (
+                              <div className="flex items-center justify-center h-full">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                              </div>
+                            ) : complianceFields.length === 0 ? (
+                              <div className="h-full flex items-center justify-center text-gray-500">
+                                No compliance fields configured. Add your first field above.
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {complianceFields.map((field) => (
+                                <motion.div
+                                  key={field._id || field.name}
+                                  whileHover={{ y: -5 }}
+                                  className={`p-4 border rounded-xl transition-all duration-300 ${
+                                    field.enabled
+                                      ? 'border-indigo-200 bg-indigo-50 shadow-sm'
+                                      : 'border-gray-200 bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-3">
+                                      <Checkbox
+                                        checked={field.enabled}
+                                        onCheckedChange={(checked: boolean) => updateComplianceFieldEnablement(field.name, checked)}
+                                        className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 rounded"
+                                      />
+                                      <Label className="text-sm font-medium cursor-pointer text-gray-900">
+                                        {field.name}
+                                      </Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      {field.enabled ? (
+                                        <Badge className="bg-indigo-100 text-indigo-800 text-xs font-semibold py-1 px-3 rounded-full">
+                                          <Eye className="w-3 h-3 mr-1" />
+                                          Enabled
+                                        </Badge>
+                                      ) : (
+                                        <Badge className="bg-gray-100 text-gray-600 text-xs font-semibold py-1 px-3 rounded-full">
+                                          <EyeOff className="w-3 h-3 mr-1" />
+                                          Disabled
+                                        </Badge>
+                                      )}
+                                      <button
+                                        className={`text-red-500 hover:text-red-700 p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-red-300 ${!field._id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title={field._id ? "Delete field" : "Cannot delete: missing id. Please refresh or re-add this field."}
+                                        onClick={() => {
+                                          if (!field._id) {
+                                            showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
+                                            return;
+                                          }
+                                          requestDeleteCustomField({ kind: 'compliance', id: field._id, name: field.name });
+                                        }}
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </motion.div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                    </Card>
+
+                    <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
+                      <div className="flex items-center gap-4 mb-6">
+                        <motion.div
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
+                        >
+                          <ShieldCheck className="text-white" size={20} />
+                        </motion.div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 font-inter">Renewal Fields</h3>
+                          <p className="text-gray-500 text-sm">Configure renewal custom fields</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
+                          <Input
+                            value={newRenewalFieldName}
+                            onChange={(e) => setNewRenewalFieldName(e.target.value)}
+                            className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
+                            onKeyPress={(e) => e.key === 'Enter' && addNewRenewalField()}
+                            placeholder="Enter field name"
+                          />
+                          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                            <Button
+                              onClick={addNewRenewalField}
+                              disabled={!newRenewalFieldName.trim()}
+                              className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              New Field
+                            </Button>
+                          </motion.div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <h3 className="text-base font-semibold text-gray-900">Available Renewal Fields</h3>
+
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 h-64 md:h-72 lg:h-80 overflow-y-auto custom-scrollbar">
+                            {isLoadingRenewal ? (
+                              <div className="flex items-center justify-center h-full">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                              </div>
+                            ) : renewalFields.length === 0 ? (
+                              <div className="h-full flex items-center justify-center text-gray-500">
+                                No renewal fields configured. Add your first field above.
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {renewalFields.map((field) => (
+                                <motion.div
+                                  key={field._id || field.name}
+                                  whileHover={{ y: -5 }}
+                                  className={`p-4 border rounded-xl transition-all duration-300 ${
+                                    field.enabled
+                                      ? 'border-indigo-200 bg-indigo-50 shadow-sm'
+                                      : 'border-gray-200 bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-3">
+                                      <Checkbox
+                                        checked={field.enabled}
+                                        onCheckedChange={(checked: boolean) => field._id && updateRenewalFieldEnablement(field._id, checked)}
+                                        className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 rounded"
+                                        disabled={!field._id}
+                                      />
+                                      <Label className="text-sm font-medium cursor-pointer text-gray-900">
+                                        {field.name}
+                                      </Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      {field.enabled ? (
+                                        <Badge className="bg-indigo-100 text-indigo-800 text-xs font-semibold py-1 px-3 rounded-full">
+                                          <Eye className="w-3 h-3 mr-1" />
+                                          Enabled
+                                        </Badge>
+                                      ) : (
+                                        <Badge className="bg-gray-100 text-gray-600 text-xs font-semibold py-1 px-3 rounded-full">
+                                          <EyeOff className="w-3 h-3 mr-1" />
+                                          Disabled
+                                        </Badge>
+                                      )}
+                                      <button
+                                        className={`text-red-500 hover:text-red-700 p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-red-300 ${!field._id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        title={field._id ? "Delete field" : "Cannot delete: missing id. Please refresh or re-add this field."}
+                                        onClick={() => {
+                                          if (!field._id) {
+                                            showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
+                                            return;
+                                          }
+                                          requestDeleteCustomField({ kind: 'renewal', id: field._id, name: field.name });
+                                        }}
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </motion.div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                    </Card>
+                  </div>
                 </motion.div>
               </TabsContent>
             </AnimatePresence>
+            </div>
           </Tabs>
         </div>
       </div>
     </div>
   );
+}
+
+export default function Configuration() {
+  const { section } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Legacy routes (merged into Custom field)
+  useEffect(() => {
+    if (section === 'subscription' || section === 'compliance' || section === 'reminder') {
+      navigate('/configuration/custom-field', { replace: true });
+    }
+  }, [navigate, section]);
+
+  useEffect(() => {
+    if (location.pathname === "/reminders") {
+      navigate("/configuration", { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
+  const resolvedSection: ConfigSection | null =
+    section === 'subscription' || section === 'compliance' || section === 'reminder'
+      ? 'custom-field'
+      : section && isConfigSection(section)
+        ? section
+        : null;
+
+  if (!resolvedSection) {
+    return <ConfigurationLanding />;
+  }
+
+  return <ConfigurationContent section={resolvedSection} />;
 }

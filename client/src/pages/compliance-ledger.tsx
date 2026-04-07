@@ -137,19 +137,40 @@ export default function ComplianceLedger() {
 
   const [resolvedComplianceId, setResolvedComplianceId] = React.useState<string | null>(idParam);
   const [tokenError, setTokenError] = React.useState<string | null>(null);
+  const [isResolvingToken, setIsResolvingToken] = React.useState(() => Boolean(openToken && !idParam));
+
+  // Function to mint deeplink token
+  const mintDeeplinkToken = async (id: string) => {
+    const res = await fetch('/api/deeplink/token', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityType: 'compliance', id: String(id) }),
+    });
+    if (!res.ok) throw new Error('Failed to create deeplink token');
+    const data = (await res.json()) as { token?: string };
+    if (!data?.token) throw new Error('Invalid deeplink token response');
+    return String(data.token);
+  };
+
 
   React.useEffect(() => {
     if (idParam) {
+      setIsResolvingToken(false);
       setTokenError(null);
       setResolvedComplianceId(idParam);
       return;
     }
 
     if (!openToken) {
+      setIsResolvingToken(false);
       setTokenError(null);
       setResolvedComplianceId(null);
       return;
     }
+
+    // Block list fetch immediately (avoid brief "all history" flash)
+    setIsResolvingToken(true);
 
     let cancelled = false;
     void (async () => {
@@ -163,11 +184,13 @@ export default function ComplianceLedger() {
         if (!cancelled) {
           setTokenError(null);
           setResolvedComplianceId(resolved);
+          setIsResolvingToken(false);
         }
       } catch {
         if (!cancelled) {
           setResolvedComplianceId(null);
           setTokenError("Invalid or expired link");
+          setIsResolvingToken(false);
         }
       }
     })();
@@ -200,14 +223,47 @@ export default function ComplianceLedger() {
   };
   
   React.useEffect(() => {
+    if (isResolvingToken) {
+      setLoading(true);
+      setLedgerItems([]);
+      return;
+    }
     fetchLedger();
-  }, [complianceId]);
+  }, [complianceId, isResolvingToken]);
   
-  const displayedLedgerItems = ledgerItems;
+  const displayedLedgerItems = isResolvingToken ? [] : ledgerItems;
+
+  // Handle back navigation to compliance page with modal reopened
+  const handleBackToCompliance = () => {
+    const complianceIdFromRow = displayedLedgerItems?.[0]?.complianceId ? String(displayedLedgerItems[0].complianceId) : null;
+    const idToOpen = complianceIdFromRow || resolvedComplianceId || idParam;
+
+    if (!idToOpen) {
+      navigate('/compliance', { replace: true });
+      return;
+    }
+
+    void (async () => {
+      try {
+        const token = await mintDeeplinkToken(String(idToOpen));
+        const qs = new URLSearchParams({ openToken: token }).toString();
+        navigate(`/compliance?${qs}`, { replace: true });
+      } catch {
+        const qs = new URLSearchParams({ open: String(idToOpen) }).toString();
+        navigate(`/compliance?${qs}`, { replace: true });
+      }
+    })();
+  };
   
   const derivedName = displayedLedgerItems?.[0]?.filingName || displayedLedgerItems?.[0]?.policy;
   const headerName = complianceNameParam || derivedName;
   const headerTitle = isFilteredById && headerName ? `${headerName} History Log` : "Compliance History Log";
+
+  const truncateText = (value: string | undefined | null, maxChars: number) => {
+    const text = String(value ?? '').trim();
+    if (!text) return '';
+    return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars)).trimEnd()}...` : text;
+  };
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 font-['Inter']">
@@ -220,14 +276,19 @@ export default function ComplianceLedger() {
                 <History className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{headerTitle}</h1>
+                <h1
+                  className="text-2xl font-semibold text-gray-900 tracking-tight truncate max-w-[70vw]"
+                  title={headerTitle}
+                >
+                  {truncateText(headerTitle, 80) || headerTitle}
+                </h1>
                 {tokenError ? <p className="text-sm text-red-600 mt-1">{tokenError}</p> : null}
               </div>
             </div>
 
             <div className="flex items-center gap-3">
               <Button
-                onClick={() => navigate("/compliance")}
+                onClick={handleBackToCompliance}
                 variant="outline"
                 className="flex items-center gap-2 bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
               >
@@ -255,12 +316,12 @@ export default function ComplianceLedger() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? (
+                  {loading || isResolvingToken ? (
                     <TableRow>
                       <TableCell colSpan={tableColumnCount} className="text-center py-12">
                         <div className="flex flex-col items-center justify-center">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-3"></div>
-                          <p className="text-gray-600">Loading compliance records...</p>
+                          <p className="text-gray-600">{isResolvingToken ? 'Opening compliance...' : 'Loading compliance records...'}</p>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -291,7 +352,12 @@ export default function ComplianceLedger() {
                       return (
                         <TableRow key={item._id} className="hover:bg-gray-50 transition-colors">
                           {!isFilteredById && (
-                            <TableCell className="font-medium text-gray-900">{item.filingName}</TableCell>
+                            <TableCell
+                              className="font-medium text-gray-900 max-w-[280px] truncate"
+                              title={String(item.filingName || '')}
+                            >
+                              {truncateText(String(item.filingName || ''), 28) || '-'}
+                            </TableCell>
                           )}
                           <TableCell className="text-left">
                             <div className="flex items-center justify-start">

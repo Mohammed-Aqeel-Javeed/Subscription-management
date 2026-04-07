@@ -308,6 +308,19 @@ function formatDateDdMmYyyy(value: any) {
   return `${day}/${month}/${year}`;
 }
 
+function truncateText(value: string | undefined | null, maxChars: number) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars)).trimEnd()}...` : text;
+}
+
+function truncateMultiline(value: string | undefined | null, maxCharsPerLine: number) {
+  const text = String(value ?? '');
+  if (!text) return '';
+  const lines = text.split('\n');
+  return lines.map((l) => truncateText(l, maxCharsPerLine)).join('\n');
+}
+
 function hasActualChanges(record: HistoryRecord): boolean {
   const action = String(record.action || "").toLowerCase();
   
@@ -471,6 +484,41 @@ export default function SubscriptionHistory() {
   const [resolvedSubscriptionId, setResolvedSubscriptionId] = useState<string | null>(idParam);
   const [tokenError, setTokenError] = useState<string | null>(null);
 
+  // Function to mint deeplink token
+  const mintDeeplinkToken = async (id: string) => {
+    const res = await fetch('/api/deeplink/token', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityType: 'subscription', id: String(id) }),
+    });
+    if (!res.ok) throw new Error('Failed to create deeplink token');
+    const data = (await res.json()) as { token?: string };
+    if (!data?.token) throw new Error('Invalid deeplink token response');
+    return String(data.token);
+  };
+
+  // Handle back navigation to subscriptions with modal reopened
+  const handleBackToSubscriptions = () => {
+    const idToOpen = resolvedSubscriptionId || idParam;
+    
+    if (!idToOpen) {
+      navigate("/subscriptions", { replace: true });
+      return;
+    }
+
+    void (async () => {
+      try {
+        const token = await mintDeeplinkToken(String(idToOpen));
+        const qs = new URLSearchParams({ openToken: token }).toString();
+        navigate(`/subscriptions?${qs}`, { replace: true });
+      } catch {
+        const qs = new URLSearchParams({ open: String(idToOpen) }).toString();
+        navigate(`/subscriptions?${qs}`, { replace: true });
+      }
+    })();
+  };
+
   useEffect(() => {
     if (idParam) {
       setTokenError(null);
@@ -630,7 +678,7 @@ export default function SubscriptionHistory() {
 
             <div className="flex items-center gap-3">
               <Button
-                onClick={() => navigate("/subscriptions")}
+                onClick={handleBackToSubscriptions}
                 variant="outline"
                 className="flex items-center gap-2 bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
               >
@@ -682,6 +730,7 @@ export default function SubscriptionHistory() {
                         item?.data?.owner ||
                         "System";
                       const changesText = buildChangesText(item);
+                      const displayChanges = truncateMultiline(changesText, 90);
 
                       return (
                         <tr key={item._id || index} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
@@ -694,8 +743,8 @@ export default function SubscriptionHistory() {
                             <div className="truncate" title={changedBy}>{changedBy}</div>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 w-[400px] max-w-[400px]">
-                            <div className="whitespace-pre-wrap break-words leading-relaxed" title={changesText || "No changes recorded"}>
-                              {changesText || "No changes recorded"}
+                              <div className="whitespace-pre-wrap break-words leading-relaxed" title={changesText || "No changes recorded"}>
+                                {displayChanges || "No changes recorded"}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500">

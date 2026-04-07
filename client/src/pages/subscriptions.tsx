@@ -272,6 +272,32 @@ export default function Subscriptions() {
       void setSecureUrlForSubscriptionEdit(pendingOpenSubscriptionId);
     });
   }, [openedSubscription, pendingOpenSubscriptionId, navigate, location.pathname, setSecureUrlForSubscriptionEdit]);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    if (!editingSubscription) return;
+    if (!subscriptions || subscriptions.length === 0) return;
+
+    const currentId = String(editingSubscription.id ?? editingSubscription._id ?? '');
+    if (!currentId) return;
+    if ((editingSubscription as any)?.documents !== undefined && (editingSubscription as any)?.documents !== null) return;
+
+    const matched = subscriptions.find(
+      (sub) => String(sub.id ?? sub._id ?? '') === currentId && (sub as any)?.documents !== undefined && (sub as any)?.documents !== null
+    );
+    if (!matched) return;
+
+    setEditingSubscription((prev) => {
+      if (!prev) return prev;
+      const prevId = String(prev.id ?? prev._id ?? '');
+      if (prevId !== currentId) return prev;
+      if ((prev as any)?.documents !== undefined && (prev as any)?.documents !== null) return prev;
+      return {
+        ...prev,
+        documents: (matched as any).documents,
+      };
+    });
+  }, [modalOpen, editingSubscription, subscriptions]);
   // Listen for login/logout/account change events and trigger immediate refetch
   React.useEffect(() => {
     function triggerImmediateRefresh() {

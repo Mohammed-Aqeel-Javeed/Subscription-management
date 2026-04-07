@@ -1,9 +1,9 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Layers, Settings, FileBarChart, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft, UserCircle, LayoutDashboard } from "lucide-react";
+import { BarChart3, Layers, Settings, FileBarChart, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft, UserCircle, LayoutDashboard, ChevronDown, ChevronRight } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api";
 import { UnifiedImportExport } from "../unified-import-export";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Can } from "@/components/Can";
 import { useSidebarSlot } from "@/context/SidebarSlotContext";
@@ -214,7 +214,7 @@ const navItems = [
   { path: "/compliance", label: "Compliance", icon: Award },
   { path: "/government-license", label: "Renewals", icon: ShieldCheck },
   { path: "/notifications", label: "Notifications", icon: BellRing },
-  { path: "/reminders", label: "Setup & Configuration", icon: Settings },
+  { path: "/configuration", label: "Setup & Configuration", icon: Settings },
   { path: "/company-details", label: "Company Details", icon: Building2 },
   { path: "/reports", label: "Reports", icon: FileBarChart },
 ];
@@ -224,13 +224,35 @@ const platformNavItems = [
   { path: "/profile", label: "Profile", icon: UserCircle },
 ];
 
+const configSubItems = [
+  { path: "/configuration/currency", label: "Currency" },
+  { path: "/configuration/payment", label: "Payment Methods" },
+  { path: "/configuration/custom-field", label: "Custom field" },
+];
+
+const companySubItems = [
+  { path: "/company-details/company", label: "Company Information" },
+  { path: "/company-details/department", label: "Department" },
+  { path: "/company-details/employee", label: "Employees" },
+  { path: "/company-details/subscription", label: "Subscription Category" },
+  { path: "/company-details/users", label: "User Management", requiresUserRead: true },
+] as const;
+
 export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean; onToggle?: () => void }) {
   // Get current location for active state
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showCompanySwitcherDialog, setShowCompanySwitcherDialog] = useState(false);
+  const [configOpen, setConfigOpen] = useState(() => location.pathname.startsWith("/configuration"));
+  const [companyOpen, setCompanyOpen] = useState(() => location.pathname.startsWith("/company-details"));
   const { active: pageSlotActive, replaceNav: pageSlotReplaceNav } = useSidebarSlot();
+
+  // Auto-expand the dropdown of the active section route.
+  useEffect(() => {
+    if (location.pathname.startsWith("/configuration")) setConfigOpen(true);
+    if (location.pathname.startsWith("/company-details")) setCompanyOpen(true);
+  }, [location.pathname]);
 
   // Fetch current user data
   const { data: currentUser } = useQuery({
@@ -295,11 +317,14 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         </div>
 
         {/* Collapsed Navigation Icons */}
-        <nav className="flex-1 px-2 py-3">
+        <nav className="flex-1 px-2 py-3 overflow-y-auto overscroll-contain custom-scrollbar">
           <ul className="space-y-1">
             {(isGlobalAdmin ? platformNavItems : navItems).map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path;
+              const isActive =
+                location.pathname === item.path ||
+                (item.path === "/configuration" && location.pathname.startsWith("/configuration/")) ||
+                (item.path === "/company-details" && location.pathname.startsWith("/company-details/"));
 
               const link = (
                 <Link
@@ -331,7 +356,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
               );
 
               // Protect Settings and Company Details based on role
-              if (!isGlobalAdmin && (item.path === "/reminders" || item.path === "/company-details")) {
+              if (!isGlobalAdmin && (item.path === "/configuration" || item.path === "/company-details")) {
                 return (
                   <Can I="manage" a="Settings" key={item.path} fallback={null}>
                     <li>{link}</li>
@@ -411,7 +436,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           onClose={() => setShowCompanySwitcherDialog(false)} 
         />
       )}
-      <nav className="flex-1 px-3 py-2">
+      <nav className="flex-1 px-3 py-2 overflow-y-auto overscroll-contain custom-scrollbar">
         {/* Default navigation (hidden when a page wants to fully use the sidebar) */}
         {pageSlotActive && pageSlotReplaceNav ? null : (
           <>
@@ -442,27 +467,120 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
               <ul className="space-y-0.5">
                 {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+            const isConfigRoute = item.path === "/configuration";
+            const isCompanyRoute = item.path === "/company-details";
+            const isActive =
+              location.pathname === item.path ||
+              (isConfigRoute && location.pathname.startsWith("/configuration/")) ||
+              (isCompanyRoute && location.pathname.startsWith("/company-details/"));
             
             // Protect Settings and Company Details based on role
-            if (item.path === "/reminders" || item.path === "/company-details") {
+            if (isConfigRoute || isCompanyRoute) {
               return (
                 <Can I="manage" a="Settings" key={item.path} fallback={null}>
                   <li>
-                    <Link
-                      to={item.path}
+                    <div
                       className={
-                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 " +
+                        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 " +
                         (isActive
                           ? "bg-indigo-600 text-white font-semibold shadow-md"
                           : "text-indigo-800 hover:bg-white/50 hover:text-indigo-900")
                       }
                     >
-                      <Icon size={18} className="flex-shrink-0" />
-                      <span className="font-sidebar font-semibold">
-                        {item.label}
-                      </span>
-                    </Link>
+                      <Link
+                        to={item.path}
+                        className="flex items-center gap-3 flex-1 min-w-0"
+                      >
+                        <Icon size={18} className="flex-shrink-0" />
+                        <span className="font-sidebar font-semibold truncate">
+                          {item.label}
+                        </span>
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (isConfigRoute) setConfigOpen((v) => !v);
+                          if (isCompanyRoute) setCompanyOpen((v) => !v);
+                        }}
+                        className={
+                          "h-7 w-7 rounded-md flex items-center justify-center transition-colors " +
+                          (isActive ? "hover:bg-white/15" : "hover:bg-white/40")
+                        }
+                        aria-label={
+                          isConfigRoute
+                            ? (configOpen ? "Collapse configuration" : "Expand configuration")
+                            : (companyOpen ? "Collapse company details" : "Expand company details")
+                        }
+                      >
+                        {isConfigRoute ? (
+                          configOpen ? (
+                            <ChevronDown className={isActive ? "h-4 w-4 text-white" : "h-4 w-4 text-indigo-800"} />
+                          ) : (
+                            <ChevronRight className={isActive ? "h-4 w-4 text-white" : "h-4 w-4 text-indigo-800"} />
+                          )
+                        ) : companyOpen ? (
+                          <ChevronDown className={isActive ? "h-4 w-4 text-white" : "h-4 w-4 text-indigo-800"} />
+                        ) : (
+                          <ChevronRight className={isActive ? "h-4 w-4 text-white" : "h-4 w-4 text-indigo-800"} />
+                        )}
+                      </button>
+                    </div>
+
+                    {isConfigRoute && configOpen ? (
+                      <div className="mt-1 ml-9 space-y-0.5">
+                        {configSubItems.map((sub) => {
+                          const subActive = location.pathname === sub.path;
+                          return (
+                            <Link
+                              key={sub.path}
+                              to={sub.path}
+                              className={
+                                "block px-3 py-1.5 rounded-lg text-sm transition-all duration-150 " +
+                                (subActive
+                                  ? "bg-white/70 text-indigo-950 font-semibold"
+                                  : "text-indigo-800/90 hover:bg-white/40 hover:text-indigo-950")
+                              }
+                            >
+                              {sub.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {isCompanyRoute && companyOpen ? (
+                      <div className="mt-1 ml-9 space-y-0.5">
+                        {companySubItems.map((sub) => {
+                          const subActive = location.pathname === sub.path;
+                          const link = (
+                            <Link
+                              key={sub.path}
+                              to={sub.path}
+                              className={
+                                "block px-3 py-1.5 rounded-lg text-sm transition-all duration-150 " +
+                                (subActive
+                                  ? "bg-white/70 text-indigo-950 font-semibold"
+                                  : "text-indigo-800/90 hover:bg-white/40 hover:text-indigo-950")
+                              }
+                            >
+                              {sub.label}
+                            </Link>
+                          );
+
+                          if ("requiresUserRead" in sub && sub.requiresUserRead) {
+                            return (
+                              <Can I="read" a="User" key={sub.path} fallback={null}>
+                                {link}
+                              </Can>
+                            );
+                          }
+                          return link;
+                        })}
+                      </div>
+                    ) : null}
                   </li>
                 </Can>
               );

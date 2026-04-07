@@ -210,7 +210,8 @@ export class MongoStorage implements IStorage {
         updatedBy: subscription.updatedBy || null,
         owner: decrypted.owner || null,
         ownerEmail: decrypted.ownerEmail || null,
-        autoRenewal: typeof subscription.autoRenewal === 'boolean' ? subscription.autoRenewal : false
+        autoRenewal: typeof subscription.autoRenewal === 'boolean' ? subscription.autoRenewal : false,
+        documents: subscription.documents || undefined
       } as any;
   }
 

@@ -41,6 +41,7 @@ type NotificationItem = {
 	subscriptionId?: string;
 	licenseId?: string;
 	licenseName?: string;
+	licenseEndDate?: string;
 	submissionDeadline?: string;
 	subscriptionEndDate?: string;
 	isRead?: boolean;
@@ -265,6 +266,14 @@ function toEpochMs(raw: any): number {
 	// Last resort
 	parsedDate = new Date(value);
 	return isValidDateFns(parsedDate) ? parsedDate.getTime() : 0;
+};
+
+const formatDueDate = (raw: any): string => {
+	const ms = toEpochMs(raw);
+	if (!ms) return '';
+	const d = new Date(ms);
+	if (!Number.isFinite(d.getTime())) return '';
+	return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 const handleViewSubscription = async (subscriptionId: string | number) => {
@@ -731,39 +740,22 @@ return (
 										
 										// Handle reminder-based notifications
 										if (notification.type === 'compliance') {
-											let reminderDays = Number((notification as any).reminderDays || 0);
-											
-											if (reminderDays === 0) {
-												const compliance = complianceItems.find(ci => 
-													String(ci.id) === String(notification.complianceId) || 
-													String(ci._id) === String(notification.complianceId)
-												);
-												reminderDays = Number(compliance?.reminderDays || 0);
-											}
-											
-											if (reminderDays > 0) {
-												return `Reminder (${reminderDays}d before)`;
-											} else {
-												return `Reminder`;
-											}
-													} else if (notification.type === 'license') {
-														let reminderDays = Number((notification as any).reminderDays || 0);
-														const policy = String((notification as any).reminderPolicy || '').trim();
-														if (policy === 'Until Renewal') return 'Daily reminder';
-														if (reminderDays > 0) return `Reminder (${reminderDays}d before)`;
-														return 'Reminder';
-													} else {
+											const compliance = complianceItems.find(ci =>
+												String(ci.id) === String(notification.complianceId) ||
+												String(ci._id) === String(notification.complianceId)
+											);
+											const dueText = formatDueDate((notification as any).submissionDeadline || (compliance as any)?.submissionDeadline);
+											return dueText ? `Submission (Due: ${dueText})` : 'Submission';
+														} else if (notification.type === 'license') {
+															const dueText = formatDueDate((notification as any).licenseEndDate || (notification as any).endDate);
+															return dueText ? `Renewal Reminder (Due: ${dueText})` : 'Renewal Reminder';
+														} else {
 											const subscription = subscriptions.find(sub => 
 												String(sub.id) === String(notification.subscriptionId) || 
 												String((sub as any)._id) === String(notification.subscriptionId)
 											);
-											const reminderDays = Number(subscription?.reminderDays || 0);
-											
-											if (reminderDays > 0) {
-												return `Reminder (${reminderDays}d before)`;
-											} else {
-												return `Reminder`;
-											}
+										const dueText = formatDueDate((subscription as any)?.nextRenewal || (notification as any).subscriptionEndDate);
+										return dueText ? `Renewal Reminder (Due: ${dueText})` : 'Renewal Reminder';
 										}
 									})()}
 									</Badge>

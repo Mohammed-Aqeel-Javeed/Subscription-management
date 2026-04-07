@@ -23,6 +23,10 @@ declare global {
       department?: string;
       // add other properties if needed
     }
+
+    interface Request {
+      user?: User;
+    }
   }
 }
 
@@ -3429,6 +3433,10 @@ router.post("/api/config/compliance-fields", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("Fields"); // Changed to Fields collection
     const { name } = req.body;
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
     
     // Validate field name
     if (!name || typeof name !== "string" || !name.trim()) {
@@ -3438,7 +3446,8 @@ router.post("/api/config/compliance-fields", async (req, res) => {
     // Check if field already exists
     const existingField = await collection.findOne({ 
       name: name.trim(),
-      fieldType: "compliance" // Changed type to fieldType
+      fieldType: "compliance", // Changed type to fieldType
+      tenantId,
     });
     
     if (existingField) {
@@ -3450,7 +3459,7 @@ router.post("/api/config/compliance-fields", async (req, res) => {
       name: name.trim(),
       enabled: true,
       fieldType: "compliance", // Changed type to fieldType
-      tenantId: req.user?.tenantId,
+      tenantId,
       createdAt: new Date(),
       updatedAt: new Date(),
       displayOrder: 0, // Added display order for UI sorting
@@ -3501,6 +3510,10 @@ router.patch("/api/config/compliance-fields/:id", async (req, res) => {
     const collection = db.collection("Fields"); // Changed to Fields collection
     const { id } = req.params;
     const updates = req.body;
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
 
     // Remove fields that shouldn't be updated
     delete updates._id;
@@ -3508,7 +3521,7 @@ router.patch("/api/config/compliance-fields/:id", async (req, res) => {
     delete updates.createdAt;
 
     const result = await collection.updateOne(
-      { _id: new ObjectId(id), fieldType: "compliance" },
+      { _id: new ObjectId(id), fieldType: "compliance", tenantId },
       { 
         $set: {
           ...updates,
@@ -3533,10 +3546,15 @@ router.delete("/api/config/compliance-fields/:id", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("Fields"); // Changed to Fields collection
     const { id } = req.params;
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
 
     const result = await collection.deleteOne({
       _id: new ObjectId(id),
-      fieldType: "compliance"
+      fieldType: "compliance",
+      tenantId,
     });
 
     if (result.deletedCount === 0) {
@@ -3546,6 +3564,147 @@ router.delete("/api/config/compliance-fields/:id", async (req, res) => {
     res.status(200).json({ message: "Field deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete compliance field", error });
+  }
+});
+
+// --- Renewal Fields Configuration API ---
+// Save renewal field
+router.post("/api/config/renewal-fields", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("Fields");
+    const { name } = req.body;
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ message: "Field name is required" });
+    }
+
+    const existingField = await collection.findOne({
+      name: name.trim(),
+      fieldType: "renewal",
+      tenantId,
+    });
+
+    if (existingField) {
+      return res.status(409).json({ message: "Field already exists" });
+    }
+
+    const newField = {
+      name: name.trim(),
+      enabled: true,
+      fieldType: "renewal",
+      tenantId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      displayOrder: 0,
+      required: false,
+      description: "",
+      validation: {},
+    };
+
+    const result = await collection.insertOne(newField);
+    res.status(201).json({ insertedId: result.insertedId, ...newField });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to save renewal field", error });
+  }
+});
+
+// Get renewal fields
+router.get("/api/config/renewal-fields", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("Fields");
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const fields = await collection
+      .find({ fieldType: "renewal", tenantId })
+      .sort({ displayOrder: 1 })
+      .toArray();
+
+    res.status(200).json(
+      fields.map((field) => ({
+        _id: field._id,
+        name: field.name,
+        enabled: field.enabled,
+        displayOrder: field.displayOrder,
+        required: field.required,
+        description: field.description,
+        validation: field.validation,
+      }))
+    );
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch renewal fields", error });
+  }
+});
+
+// Update renewal field
+router.patch("/api/config/renewal-fields/:id", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("Fields");
+    const { id } = req.params;
+    const updates = req.body;
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    delete updates._id;
+    delete updates.fieldType;
+    delete updates.createdAt;
+    delete updates.tenantId;
+
+    const result = await collection.updateOne(
+      { _id: new ObjectId(id), fieldType: "renewal", tenantId },
+      {
+        $set: {
+          ...updates,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Field not found" });
+    }
+
+    res.status(200).json({ message: "Field updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update renewal field", error });
+  }
+});
+
+// Delete renewal field
+router.delete("/api/config/renewal-fields/:id", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("Fields");
+    const { id } = req.params;
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const result = await collection.deleteOne({
+      _id: new ObjectId(id),
+      fieldType: "renewal",
+      tenantId,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Field not found" });
+    }
+
+    res.status(200).json({ message: "Field deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete renewal field", error });
   }
 });
 
@@ -3817,6 +3976,53 @@ router.get("/api/notifications/license", async (req, res) => {
 
     let allNotifications = dedupeNotifications(userInAppNotifications);
 
+    // Enrich with license expiry/end date for due-date based UI badges.
+    try {
+      const licenseIds = Array.from(
+        new Set(
+          allNotifications
+            .map((n: any) => String(n?.licenseId || "").trim())
+            .filter(Boolean)
+        )
+      );
+
+      const objectIds: any[] = [];
+      for (const id of licenseIds) {
+        try {
+          objectIds.push(new ObjectId(id));
+        } catch {
+          // ignore invalid IDs
+        }
+      }
+
+      if (objectIds.length > 0) {
+        const licenses = await db
+          .collection("licenses")
+          .find(
+            { tenantId, _id: { $in: objectIds } },
+            { projection: { endDate: 1 } }
+          )
+          .toArray();
+
+        const endDateById = new Map<string, any>();
+        for (const lic of licenses as any[]) {
+          const key = String(lic?._id?.toString?.() || "");
+          if (key) endDateById.set(key, lic?.endDate);
+        }
+
+        allNotifications = allNotifications.map((n: any) => {
+          if (String(n?.type || "").toLowerCase() !== "license") return n;
+          const id = String(n?.licenseId || "").trim();
+          return {
+            ...n,
+            licenseEndDate: n.licenseEndDate || n.endDate || endDateById.get(id) || undefined,
+          };
+        });
+      }
+    } catch {
+      // best-effort enrichment only
+    }
+
     // Hide dismissed notifications for this user
     try {
       const normalizedEmailForQuery = String(userEmail || "").trim().toLowerCase();
@@ -3909,6 +4115,47 @@ router.get("/api/licenses", async (req, res) => {
   }
 });
 
+// Get renewal submission status log for a specific license
+router.get("/api/licenses/:id/renewal-status-log", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection("licenses");
+    const tenantId = req.user?.tenantId;
+    const { id } = req.params;
+
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    let licenseId;
+    try {
+      licenseId = new ObjectId(id);
+    } catch {
+      return res.status(400).json({ message: "Invalid license ID format" });
+    }
+
+    const existing = await collection.findOne({ _id: licenseId, tenantId });
+    if (!existing) {
+      return res.status(404).json({ message: "License not found or access denied" });
+    }
+
+    const log = Array.isArray((existing as any)?.renewalStatusLog) ? (existing as any).renewalStatusLog : [];
+    const sorted = [...log].sort((a: any, b: any) => {
+      const at = String(a?.loggedAt || a?.timestamp || '').trim();
+      const bt = String(b?.loggedAt || b?.timestamp || '').trim();
+      const ad = at ? new Date(at).getTime() : 0;
+      const bd = bt ? new Date(bt).getTime() : 0;
+      return bd - ad;
+    });
+
+    res.status(200).json(sorted);
+  } catch (error: unknown) {
+    console.error("Error fetching renewal status log:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: "Failed to fetch renewal status log", error: errorMessage });
+  }
+});
+
 // Create a new license
 router.post("/api/licenses", async (req, res) => {
   try {
@@ -3922,12 +4169,42 @@ router.post("/api/licenses", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
 
-    const licenseData = {
+    const actorLabel = String((req.user as any)?.name || (req.user as any)?.email || userId || '').trim() || 'User';
+    const hasSubmissionFields = (body: any) => {
+      const norm = (v: any) => String(v ?? '').trim();
+      return Boolean(
+        norm(body?.renewalStatus) ||
+          norm(body?.renewalInitiatedDate) ||
+          norm(body?.expectedCompletedDate) ||
+          norm(body?.submittedBy) ||
+          norm(body?.renewalNotes)
+      );
+    };
+
+    const licenseData: any = {
       ...req.body,
       tenantId,
       createdAt: new Date(),
       updatedAt: new Date()
     };
+
+    // Initialize renewal submission status log if submission fields exist
+    if (hasSubmissionFields(req.body)) {
+      licenseData.renewalStatusLog = [
+        {
+          id: new ObjectId().toString(),
+          renewalStatus: (req.body as any)?.renewalStatus,
+          renewalInitiatedDate: (req.body as any)?.renewalInitiatedDate,
+          expectedCompletedDate: (req.body as any)?.expectedCompletedDate,
+          submittedBy: (req.body as any)?.submittedBy,
+          renewalNotes: (req.body as any)?.renewalNotes,
+          startDate: (req.body as any)?.startDate,
+          endDate: (req.body as any)?.endDate,
+          loggedAt: new Date().toISOString(),
+          loggedBy: actorLabel,
+        },
+      ];
+    }
 
     const result = await collection.insertOne(licenseData);
 
@@ -4020,7 +4297,7 @@ router.put("/api/licenses/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid license ID format" });
     }
 
-    const updateData = {
+    const updateData: any = {
       ...req.body,
       updatedAt: new Date()
     };
@@ -4031,6 +4308,62 @@ router.put("/api/licenses/:id", async (req, res) => {
     const existing = await collection.findOne({ _id: licenseId, tenantId });
     if (!existing) {
       return res.status(404).json({ message: "License not found or access denied" });
+    }
+
+    // Append renewal submission status log entry when any of these fields change
+    const norm = (v: any) => String(v ?? '').trim();
+    const hasOwn = (obj: any, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
+    const submissionKeys = ['renewalStatus', 'renewalInitiatedDate', 'expectedCompletedDate', 'submittedBy', 'renewalNotes'];
+    const anySubmissionFieldProvided = submissionKeys.some((k) => hasOwn(updateData, k));
+
+    const existingSnapshot = {
+      renewalStatus: norm((existing as any)?.renewalStatus),
+      renewalInitiatedDate: norm((existing as any)?.renewalInitiatedDate),
+      expectedCompletedDate: norm((existing as any)?.expectedCompletedDate),
+      submittedBy: norm((existing as any)?.submittedBy),
+      renewalNotes: norm((existing as any)?.renewalNotes),
+    };
+
+    const nextSnapshot = {
+      renewalStatus: hasOwn(updateData, 'renewalStatus') ? norm(updateData.renewalStatus) : existingSnapshot.renewalStatus,
+      renewalInitiatedDate: hasOwn(updateData, 'renewalInitiatedDate') ? norm(updateData.renewalInitiatedDate) : existingSnapshot.renewalInitiatedDate,
+      expectedCompletedDate: hasOwn(updateData, 'expectedCompletedDate') ? norm(updateData.expectedCompletedDate) : existingSnapshot.expectedCompletedDate,
+      submittedBy: hasOwn(updateData, 'submittedBy') ? norm(updateData.submittedBy) : existingSnapshot.submittedBy,
+      renewalNotes: hasOwn(updateData, 'renewalNotes') ? norm(updateData.renewalNotes) : existingSnapshot.renewalNotes,
+    };
+
+    const submissionFieldsChanged = submissionKeys.some((k) => {
+      return anySubmissionFieldProvided && (existingSnapshot as any)[k] !== (nextSnapshot as any)[k];
+    });
+
+    const actorLabel = String((req.user as any)?.name || actorEmailRaw || actorUserId || '').trim() || 'User';
+    const appendSubmissionLog = anySubmissionFieldProvided && submissionFieldsChanged;
+
+    const existingDatesSnapshot = {
+      startDate: norm((existing as any)?.startDate),
+      endDate: norm((existing as any)?.endDate),
+    };
+    const nextDatesSnapshot = {
+      startDate: hasOwn(updateData, 'startDate') ? norm(updateData.startDate) : existingDatesSnapshot.startDate,
+      endDate: hasOwn(updateData, 'endDate') ? norm(updateData.endDate) : existingDatesSnapshot.endDate,
+    };
+
+    const updateOps: any = { $set: updateData };
+    if (appendSubmissionLog) {
+      updateOps.$push = {
+        renewalStatusLog: {
+          id: new ObjectId().toString(),
+          renewalStatus: nextSnapshot.renewalStatus || undefined,
+          renewalInitiatedDate: nextSnapshot.renewalInitiatedDate || undefined,
+          expectedCompletedDate: nextSnapshot.expectedCompletedDate || undefined,
+          submittedBy: nextSnapshot.submittedBy || undefined,
+          renewalNotes: hasOwn(updateData, 'renewalNotes') ? updateData.renewalNotes : (existing as any)?.renewalNotes,
+          startDate: nextDatesSnapshot.startDate || undefined,
+          endDate: nextDatesSnapshot.endDate || undefined,
+          loggedAt: new Date().toISOString(),
+          loggedBy: actorLabel,
+        },
+      };
     }
 
     const parseDepartments = (value: any): string[] => {
@@ -4079,10 +4412,7 @@ router.put("/api/licenses/:id", async (req, res) => {
     if (existingSecondary !== nextSecondary && (existingSecondary || nextSecondary)) changeTypes.push('secondary_person_changed');
     if (!sameDept(existingDepts, nextDepts)) changeTypes.push('department_changed');
 
-    const result = await collection.updateOne(
-      { _id: licenseId, tenantId },
-      { $set: updateData }
-    );
+    const result = await collection.updateOne({ _id: licenseId, tenantId }, updateOps);
 
     if (result.matchedCount === 0) {
       return res.status(404).json({ message: "License not found or access denied" });

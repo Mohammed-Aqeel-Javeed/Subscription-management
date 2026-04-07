@@ -286,13 +286,13 @@ const ChartLegendContent = React.forwardRef<
         className
       )}
     >
-      {payload.map((item: LegendPayload, index: number) => {
+      {payload.map((item: LegendPayload) => {
         const key = `${nameKey || item.dataKey || "value"}`
         const itemConfig = getPayloadConfigFromPayload(config, item, key)
 
         return (
           <div
-            key={item.value}
+            key={`${item.value}-${item.dataKey ?? ""}`}
             className={cn(
               "flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground"
             )}

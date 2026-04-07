@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="SubsTracker">
+  <!-- Simplified favicon version of the logo for clarity at small sizes -->
+  <circle cx="32" cy="32" r="30" fill="#1F27FF" />
+
+  <!-- Stylized 't' (simple, readable at 16px) -->
+  <path
+    d="M30 16c0-1.1.9-2 2-2s2 .9 2 2v10h9c1.1 0 2 .9 2 2s-.9 2-2 2h-9v18c0 2.2 1.8 4 4 4h5c1.1 0 2 .9 2 2s-.9 2-2 2h-5c-4.4 0-8-3.6-8-8V30h-8c-1.1 0-2-.9-2-2s.9-2 2-2h8V16z"
+    fill="#FFFFFF"
+  />
+
+  <!-- Orange dot accent -->
+  <circle cx="47" cy="44" r="4" fill="#FF8A00" />
+</svg>

@@ -382,30 +382,14 @@ export default function RenewalDashboard() {
     return monthLabels.map((m, idx) => ({ month: m, count: counts[idx] }));
   }, [items, startOfNextYear, startOfThisYear]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6" style={{ zoom: 0.92 }}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-24" />
-          ))}
-        </div>
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1 w-full">
-          <div className="w-full px-4 sm:px-6 lg:px-8 py-6" style={{ zoom: 0.92 }}>
+          <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
             {/* Greeting Card (match Dashboard header) */}
             <div
-              className="mb-6 flex items-start justify-between rounded-2xl px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
+              className="mb-6 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
               style={{
                 background:
                   "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",
@@ -432,12 +416,12 @@ export default function RenewalDashboard() {
                 </h1>
               </div>
 
-              <div className="flex items-center gap-3 relative z-10">
+              <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 relative z-10 w-full sm:w-auto">
                 <Button
                   variant="outline"
                   className={`${location.pathname === "/dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/dashboard")}
                 >
                   Subscription
@@ -446,7 +430,7 @@ export default function RenewalDashboard() {
                   variant="outline"
                   className={`${location.pathname === "/compliance-dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/compliance-dashboard")}
                 >
                   Compliance
@@ -455,7 +439,7 @@ export default function RenewalDashboard() {
                   variant="outline"
                   className={`${location.pathname === "/renewal-dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/renewal-dashboard")}
                 >
                   Renewal
@@ -464,7 +448,7 @@ export default function RenewalDashboard() {
                   variant="outline"
                   className={`${location.pathname === "/calendar"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/calendar")}
                 >
                   Calendar
@@ -472,6 +456,20 @@ export default function RenewalDashboard() {
               </div>
             </div>
 
+            {isLoading ? (
+              <div className="mt-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="h-24" />
+                  ))}
+                </div>
+                <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <Skeleton className="h-80" />
+                  <Skeleton className="h-80" />
+                </div>
+              </div>
+            ) : (
+              <>
             {/* Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
               <div
@@ -764,6 +762,8 @@ export default function RenewalDashboard() {
                 </div>
               </DialogContent>
             </Dialog>
+              </>
+            )}
           </div>
         </div>
       </div>

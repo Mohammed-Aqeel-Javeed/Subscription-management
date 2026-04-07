@@ -1,13 +1,13 @@
 // import { insertUserSchema } from "@shared/schema";
 import React, { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, BarChart3, ChevronDown, Check, MoreVertical, AlertCircle } from "lucide-react";
+import { ArrowLeft, Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, BarChart3, ChevronDown, Check, MoreVertical, AlertCircle, Building, Tags, UserCog } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -2264,7 +2264,105 @@ Delete
 </motion.div>
 );
 }
-export default function CompanyDetails() {
+
+type CompanySection = "company" | "department" | "employee" | "subscription" | "users";
+
+const COMPANY_SECTIONS: Array<{ key: CompanySection; label: string; icon: React.ElementType }> = [
+  { key: "company", label: "Company Information", icon: Building2 },
+  { key: "department", label: "Department", icon: Building },
+  { key: "employee", label: "Employees", icon: Users },
+  { key: "subscription", label: "Subscription Category", icon: Tags },
+  { key: "users", label: "User Management", icon: UserCog },
+];
+
+function isCompanySection(value: unknown): value is CompanySection {
+  return (
+    value === "company" ||
+    value === "department" ||
+    value === "employee" ||
+    value === "subscription" ||
+    value === "users"
+  );
+}
+
+function normalizeCompanyTabFromQuery(tabParam: string | null): CompanySection | null {
+  if (!tabParam) return null;
+  if (tabParam === "subscription-category" || tabParam === "subscription") return "subscription";
+  if (isCompanySection(tabParam)) return tabParam;
+  return null;
+}
+
+function CompanyDetailsLanding() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    const section = normalizeCompanyTabFromQuery(tabParam);
+    if (section) {
+      navigate(`/company-details/${section}`, { replace: true });
+    }
+  }, [navigate, searchParams]);
+
+  return (
+    <div className="min-h-screen bg-gray-50 relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="absolute top-40 -right-40 h-[28rem] w-[28rem] rounded-full bg-purple-500/10 blur-3xl" />
+        <div className="absolute -bottom-40 left-1/3 h-[30rem] w-[30rem] rounded-full bg-blue-500/10 blur-3xl" />
+      </div>
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-12">
+        <div className="w-full max-w-6xl mx-auto">
+          <div className="mb-10 flex items-center gap-4">
+            <div className="min-w-0">
+              <div className="text-2xl sm:text-3xl font-semibold text-indigo-950 truncate">Company Details</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {COMPANY_SECTIONS.map((item) => {
+              const Icon = item.icon;
+              const box = (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => navigate(`/company-details/${item.key}`)}
+                  className="group relative overflow-hidden text-left rounded-3xl border border-white/60 bg-white/30 backdrop-blur-xl p-8 shadow-lg transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:border-indigo-200/70"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/15 via-purple-500/10 to-blue-500/15 opacity-100" />
+                  <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 bg-gradient-to-br from-white/10 via-white/0 to-white/10" />
+
+                  <div className="relative flex items-center gap-5">
+                    <div className="relative h-14 w-14 rounded-2xl bg-white/70 border border-white/70 backdrop-blur-xl shadow-md flex items-center justify-center">
+                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500/15 via-purple-500/10 to-blue-500/15 opacity-80" />
+                      <div className="absolute inset-[1px] rounded-2xl bg-white/70" />
+                      <Icon className="relative h-7 w-7 text-indigo-700" strokeWidth={2.2} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-lg font-semibold text-indigo-950 truncate">{item.label}</div>
+                    </div>
+                  </div>
+                </button>
+              );
+
+              return (
+                item.key === "users" ? (
+                  <Can I="read" a="User" key={item.key} fallback={null}>
+                    {box}
+                  </Can>
+                ) : (
+                  box
+                )
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompanyDetailsContent({ section }: { section: CompanySection }) {
 // Company information state
 const [companyInfo, setCompanyInfo] = useState<InsertCompanyInfo>({
   tenantId: "",
@@ -2574,6 +2672,8 @@ const [isDepartmentEmailLocked, setIsDepartmentEmailLocked] = useState(false);
 const [departmentExitConfirmOpen, setDepartmentExitConfirmOpen] = useState(false);
 const departmentExitConfirmActionRef = React.useRef<null | (() => void)>(null);
 const [departmentSearchTerm, setDepartmentSearchTerm] = useState('');
+const [departmentView, setDepartmentView] = useState<'tiles' | 'table'>('tiles');
+const [openDepartmentActionsMenuForKey, setOpenDepartmentActionsMenuForKey] = useState<string | null>(null);
 const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [deptDeleteOpen, setDeptDeleteOpen] = useState(false);
   const [deptToDelete, setDeptToDelete] = useState<any>(null);
@@ -3283,16 +3383,13 @@ const { data: currencies = [], isLoading: currenciesLoading } = useQuery<any[]>(
   refetchOnWindowFocus: false,
 });
 
-// Tab selection logic from query param
-const [searchParams] = useSearchParams();
-const tabParam = searchParams.get("tab");
-let initialTab = "company";
-if (tabParam === "department") initialTab = "department";
-else if (tabParam === "employee") initialTab = "employee";
-else if (tabParam === "users") initialTab = "users";
-else if (tabParam === "subscription-category" || tabParam === "subscription") initialTab = "subscription";
-// fallback to company if not valid
-const [activeTab, setActiveTab] = useState(initialTab);
+const navigate = useNavigate();
+const activeTab: CompanySection = section;
+const setActiveTab = (nextTab: string) => {
+  if (!isCompanySection(nextTab)) return;
+  if (nextTab === section) return;
+  navigate(`/company-details/${nextTab}`);
+};
 
 // Secure URL for all Company Details tabs
 const lastSecuredTabRef = useRef<string | null>(null);
@@ -3333,21 +3430,18 @@ useEffect(() => {
 }, [activeTab]);
 
 return (
-  <div className="h-screen overflow-hidden bg-white font-inter">
-    <div className="max-w-[1400px] mx-auto px-6 py-8 h-full overflow-hidden">
-      {/* Modern Professional Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-4">
-            <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
-              <Building2 className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Company Details</h1>
-              {/* Description removed as requested */}
-            </div>
-          </div>
-        </div>
+  <div className="h-full min-h-0 bg-gray-50 font-inter">
+    <div className="w-full px-4 sm:px-6 lg:px-8 py-6 h-full min-h-0">
+      <div className="mb-4">
+        <Button
+          type="button"
+          variant="default"
+          onClick={() => navigate("/company-details")}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
       </div>
 
       {/* Import Confirm Dialog (Company Details Excel) */}
@@ -3429,72 +3523,9 @@ return (
 
       <div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-<TabsList className="flex w-full bg-white rounded-lg p-1 shadow-sm mb-6">
-<motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-<TabsTrigger
-value="company"
-className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-all duration-300
-data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
-text-gray-600 hover:text-gray-900 hover:bg-gray-100"
->
-<Building2 className="w-4 h-4" />
-<span>Company Information</span>
-</TabsTrigger>
-</motion.div>
-
-<motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-<TabsTrigger
-value="department"
-className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-all duration-300
-data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
-text-gray-600 hover:text-gray-900 hover:bg-gray-100"
->
-<Shield className="w-4 h-4" />
-<span>Department</span>
-</TabsTrigger>
-</motion.div>
-
-<motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-<TabsTrigger
-value="employee"
-className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-all duration-300
-data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
-text-gray-600 hover:text-gray-900 hover:bg-gray-100"
->
-<Users className="w-4 h-4" />
-<span>Employees</span>
-</TabsTrigger>
-</motion.div>
-
-<motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-<TabsTrigger
-value="subscription"
-className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-all duration-300
-data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
-text-gray-600 hover:text-gray-900 hover:bg-gray-100"
->
-<Settings className="w-4 h-4" />
-<span>Subscription Category</span>
-</TabsTrigger>
-</motion.div>
-
-<Can I="read" a="User" fallback={null}>
-<motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-<TabsTrigger
-value="users"
-className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-all duration-300
-data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-inner
-text-gray-600 hover:text-gray-900 hover:bg-gray-100"
->
-<Users className="w-4 h-4" />
-<span>User Management</span>
-</TabsTrigger>
-</motion.div>
-</Can>
-</TabsList>
-
-<AnimatePresence mode="wait">
-<TabsContent value="company" className="mt-6 h-[calc(100vh-240px)] overflow-hidden">
+          <div className="min-w-0">
+            <AnimatePresence mode="wait">
+<TabsContent value="company" className="mt-4">
 <motion.div
 initial={{ opacity: 0 }}
 animate={{ opacity: 1 }}
@@ -3502,7 +3533,7 @@ exit={{ opacity: 0 }}
 transition={{ duration: 0.3 }}
 className="h-full"
 >
-<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden flex flex-col h-full">
+<Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl">
 {/* Professional Header with Gradient */}
 <div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-4 flex-shrink-0">
   <div className="flex items-center gap-4">
@@ -3520,7 +3551,7 @@ className="h-full"
 </div>
 
 {/* Form Content */}
-<div className="flex-1 overflow-y-auto">
+<div>
 <form onSubmit={handleSubmit} className="p-8 bg-gradient-to-br from-gray-50 to-white">
   {/* Professional Section Header */}
   <div className="pb-4 mb-6 -mx-8 px-8 pt-0">
@@ -3728,7 +3759,7 @@ className="w-full bg-white border border-gray-300 rounded-lg h-12 px-3 text-base
 </motion.div>
 </TabsContent>
 
-<TabsContent value="department" className="mt-6 h-[calc(100vh-240px)] overflow-hidden">
+<TabsContent value="department" className="mt-4 h-[calc(100vh-240px)] overflow-hidden">
 <motion.div
 initial={{ opacity: 0 }}
 animate={{ opacity: 1 }}
@@ -3753,10 +3784,10 @@ className="h-full"
   </div>
 </div>
 
-{/* Content - Scrollable */}
-<div className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-50 to-white">
-{/* Search and Add Department - Sticky */}
-<div className="sticky top-0 z-10 bg-white shadow-sm -mx-0 px-8 py-6 flex items-center justify-between space-x-4 mb-6 border-b border-gray-200">
+{/* Content */}
+<div className="flex-1 min-h-0 flex flex-col bg-gradient-to-br from-gray-50 to-white">
+{/* Search and Add Department */}
+<div className="flex-shrink-0 bg-white shadow-sm -mx-0 px-8 py-6 flex items-center justify-between space-x-4 border-b border-gray-200">
 <div className="flex items-center gap-4">
 <div className="relative flex-1 max-w-sm">
   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -3804,7 +3835,17 @@ className="h-full"
   </SelectContent>
 </Select>
 </div>
-<Dialog open={departmentModalOpen} onOpenChange={handleDepartmentModalOpenChange}>
+<div className="flex items-center gap-2">
+  <Button
+    type="button"
+    variant="outline"
+    onClick={() => setDepartmentView((v) => (v === 'tiles' ? 'table' : 'tiles'))}
+    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+  >
+    {departmentView === 'tiles' ? 'Table View' : 'Card View'}
+  </Button>
+
+  <Dialog open={departmentModalOpen} onOpenChange={handleDepartmentModalOpenChange}>
   <DialogTrigger asChild>
     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
       <Button
@@ -4016,103 +4057,236 @@ className="h-full"
   </DialogContent>
 </Dialog>
 </div>
+</div>
 
 {/* Department List */}
-<div className="px-8 pb-8 space-y-4">
-<h3 className="text-base font-semibold text-gray-900 mb-4">Available Departments</h3>
-<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-{departmentsLoading ? (
-<div className="text-gray-500">Loading departments...</div>
+<div className="flex-1 min-h-0 px-8 pb-8">
+{/* <h3 className="text-base font-semibold text-gray-900 mb-4">Available Departments</h3> */}
+{departmentView === 'table' ? (
+  <div className="mt-6 bg-white border border-gray-200 shadow-md overflow-hidden rounded-xl h-full flex flex-col min-h-0">
+    <div className="flex-1 min-h-0 overflow-auto">
+    <table className="min-w-full table-fixed">
+      <thead>
+        <tr className="border-b-2 border-gray-400 bg-gray-200">
+          <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">DEPARTMENT</th>
+          <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">HEAD</th>
+          <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[240px]">EMAIL</th>
+          <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">EMPLOYEES</th>
+          <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">SUBSCRIPTIONS</th>
+          <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody className="bg-white">
+        {departmentsLoading ? (
+          <tr>
+            <td colSpan={6} className="py-6 px-4 text-gray-500">Loading departments...</td>
+          </tr>
+        ) : (
+          [...filteredDepartments].reverse().map((department, idx) => {
+            const displayName = typeof department.name === "string" && department.name.trim() ? department.name : `Unnamed Department ${idx + 1}`;
+            const empCount = getEmployeeCount(department.name);
+            const subCount = getSubscriptionCount(department.name);
+            const rowKey = String(department?.name || displayName || idx);
+            const isOpen = openDepartmentActionsMenuForKey === rowKey;
+            const isAnotherRowOpen = !!openDepartmentActionsMenuForKey && openDepartmentActionsMenuForKey !== rowKey;
+
+            return (
+              <tr
+                key={displayName + idx}
+                className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                  idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
+                }`}
+              >
+                <td className="px-3 py-3 font-medium text-gray-800 text-sm w-[220px] max-w-[220px] overflow-hidden text-left">
+                  <span className="block truncate whitespace-nowrap" title={String(displayName)}>
+                    {String(displayName)}
+                  </span>
+                </td>
+                <td className="px-3 py-3 text-gray-700 text-sm w-[220px] max-w-[220px] overflow-hidden text-left">
+                  <span className="block truncate whitespace-nowrap" title={department.departmentHead || '-'}>
+                    {department.departmentHead || '-'}
+                  </span>
+                </td>
+                <td className="px-3 py-3 text-gray-600 text-sm w-[240px] max-w-[240px] overflow-hidden text-left">
+                  <span className="block truncate whitespace-nowrap" title={department.email || '-'}>
+                    {department.email || '-'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-center w-[110px]">
+                  <button
+                    onClick={() => {
+                      setSelectedDepartmentForDetails(department.name);
+                      setDetailsModalOpen(true);
+                    }}
+                    className="bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-semibold text-sm hover:bg-blue-200 transition-colors cursor-pointer"
+                    title="View employees"
+                  >
+                    {empCount}
+                  </button>
+                </td>
+                <td className="px-4 py-3 text-center w-[140px]">
+                  <span className="text-sm font-medium text-gray-900">{subCount}</span>
+                </td>
+                <td className="px-3 py-3 text-right">
+                  <DropdownMenu
+                    open={isOpen}
+                    onOpenChange={(open) => setOpenDepartmentActionsMenuForKey(open ? rowKey : null)}
+                  >
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+                          isAnotherRowOpen ? 'invisible' : ''
+                        }`}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+                    >
+                      <DropdownMenuItem
+                        onClick={() => {
+                          departmentForm.reset({
+                            name: department.name || "",
+                            departmentHead: department.departmentHead || "",
+                            email: department.email || "",
+                          });
+                          setDeptHeadSearch(department.departmentHead || "");
+                          setDeptHeadOpen(false);
+                          setEditingDepartment(department);
+                          setDepartmentModalOpen(true);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          if (!department.name) return;
+                          setDeptToDelete({
+                            department,
+                            displayName,
+                            subCount,
+                          });
+                          setDeptDeleteOpen(true);
+                        }}
+                        disabled={deleteDepartmentMutation.isPending || !department.name}
+                        className="cursor-pointer text-red-600 focus:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </td>
+              </tr>
+            );
+          })
+        )}
+      </tbody>
+    </table>
+    </div>
+  </div>
 ) : (
-[...filteredDepartments].reverse().map((department, idx) => {
-const displayName = typeof department.name === "string" && department.name.trim() ? department.name : `Unnamed Department ${idx + 1}`;
-const empCount = getEmployeeCount(department.name);
-const subCount = getSubscriptionCount(department.name);
-return (
-  <motion.div
-    key={displayName + idx}
-    whileHover={{ y: -5 }}
-    className="p-4 border border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm rounded-xl transition-all duration-300"
-  >
-    <div className="flex items-start justify-between mb-3">
-      <div className="flex items-center space-x-2">
-        <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center shadow-md">
-          <Building2 className="text-white" size={18} />
-        </div>
-        <div>
-          <span className="text-sm font-semibold text-gray-900 block">{String(displayName)}</span>
-        </div>
-      </div>
-      <div className="flex items-center space-x-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            departmentForm.reset({
-              name: department.name || "",
-              departmentHead: department.departmentHead || "",
-              email: department.email || "",
-            });
-            setDeptHeadSearch(department.departmentHead || "");
-            setDeptHeadOpen(false);
-            setEditingDepartment(department);
-            setDepartmentModalOpen(true);
-          }}
-          className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-full p-1 h-7 w-7"
-          title="Edit Department"
-        >
-          <Edit size={14} />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            if (!department.name) return;
-            setDeptToDelete({
-              department,
-              displayName,
-              subCount,
-            });
-            setDeptDeleteOpen(true);
-          }}
-          disabled={deleteDepartmentMutation.isPending || !department.name}
-          className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-7 w-7"
-          title="Delete Department"
-        >
-          <Trash2 size={14} />
-        </Button>
-      </div>
-    </div>
-    
-    {/* Count badges - clickable to open modal */}
-    <div className="flex items-center space-x-3 mt-3">
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => {
-          setSelectedDepartmentForDetails(department.name);
-          setDetailsModalOpen(true);
-        }}
-        className="flex items-center space-x-1 bg-white px-3 py-1.5 rounded-lg shadow-sm hover:shadow-md transition-all border border-indigo-200 cursor-pointer"
-      >
-        <Users className="w-4 h-4 text-indigo-600" />
-        <span className="text-sm font-semibold text-indigo-600">{empCount}</span>
-      </motion.button>
-      
-      <motion.div
-        whileHover={{ scale: 1.05 }}
-        className="flex items-center space-x-1 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-blue-200"
-      >
-        <BarChart3 className="w-4 h-4 text-blue-600" />
-        <span className="text-sm font-semibold text-blue-600">{subCount}</span>
-      </motion.div>
-    </div>
-  </motion.div>
-);
-})
-)
-}
-</div>
+  <div className="mt-6 h-full min-h-0 overflow-auto overflow-x-hidden">
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    {departmentsLoading ? (
+      <div className="text-gray-500">Loading departments...</div>
+    ) : (
+      [...filteredDepartments].reverse().map((department, idx) => {
+        const displayName = typeof department.name === "string" && department.name.trim() ? department.name : `Unnamed Department ${idx + 1}`;
+        const empCount = getEmployeeCount(department.name);
+        const subCount = getSubscriptionCount(department.name);
+        return (
+          <motion.div
+            key={displayName + idx}
+            whileHover={{ y: -5 }}
+            className="p-4 border border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm rounded-xl transition-all duration-300"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center shadow-md">
+                  <Building2 className="text-white" size={18} />
+                </div>
+                <div>
+                  <span className="text-sm font-semibold text-gray-900 block">{String(displayName)}</span>
+                </div>
+              </div>
+              <div className="flex items-center space-x-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    departmentForm.reset({
+                      name: department.name || "",
+                      departmentHead: department.departmentHead || "",
+                      email: department.email || "",
+                    });
+                    setDeptHeadSearch(department.departmentHead || "");
+                    setDeptHeadOpen(false);
+                    setEditingDepartment(department);
+                    setDepartmentModalOpen(true);
+                  }}
+                  className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-full p-1 h-7 w-7"
+                  title="Edit Department"
+                >
+                  <Edit size={14} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (!department.name) return;
+                    setDeptToDelete({
+                      department,
+                      displayName,
+                      subCount,
+                    });
+                    setDeptDeleteOpen(true);
+                  }}
+                  disabled={deleteDepartmentMutation.isPending || !department.name}
+                  className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-7 w-7"
+                  title="Delete Department"
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </div>
+            </div>
+
+            {/* Count badges - clickable to open modal */}
+            <div className="flex items-center space-x-3 mt-3">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  setSelectedDepartmentForDetails(department.name);
+                  setDetailsModalOpen(true);
+                }}
+                className="flex items-center space-x-1 bg-white px-3 py-1.5 rounded-lg shadow-sm hover:shadow-md transition-all border border-indigo-200 cursor-pointer"
+              >
+                <Users className="w-4 h-4 text-indigo-600" />
+                <span className="text-sm font-semibold text-indigo-600">{empCount}</span>
+              </motion.button>
+
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                className="flex items-center space-x-1 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-blue-200"
+              >
+                <BarChart3 className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-semibold text-blue-600">{subCount}</span>
+              </motion.div>
+            </div>
+          </motion.div>
+        );
+      })
+    )}
+  </div>
+  </div>
+)}
 
 {/* Department Delete Confirmation Dialog */}
 <Dialog open={deptDeleteOpen} onOpenChange={(open) => {
@@ -4376,7 +4550,7 @@ return (
 </motion.div>
 </TabsContent>
 
-<TabsContent value="employee" className="mt-6">
+<TabsContent value="employee" className="mt-4">
 <motion.div
 initial={{ opacity: 0 }}
 animate={{ opacity: 1 }}
@@ -4387,7 +4561,7 @@ transition={{ duration: 0.3 }}
 </motion.div>
 </TabsContent>
 
-<TabsContent value="subscription" className="mt-6">
+<TabsContent value="subscription" className="mt-4">
 <motion.div
 initial={{ opacity: 0 }}
 animate={{ opacity: 1 }}
@@ -4630,7 +4804,8 @@ title="Delete Category"
   </DialogContent>
 </Dialog>
 
-<TabsContent value="users" className="mt-6">
+<Can I="read" a="User" fallback={null}>
+<TabsContent value="users" className="mt-4">
 <motion.div
 initial={{ opacity: 0 }}
 animate={{ opacity: 1 }}
@@ -4640,10 +4815,35 @@ transition={{ duration: 0.3 }}
 <UserManagementTab />
 </motion.div>
 </TabsContent>
+</Can>
 </AnimatePresence>
+          </div>
 </Tabs>
 </div>
 </div>
 </div>
 );
+}
+
+export default function CompanyDetails() {
+  const { section } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Backward-compatible deep links: /company-details?tab=department
+  useEffect(() => {
+    if (location.pathname !== "/company-details") return;
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get("tab");
+    const normalized = normalizeCompanyTabFromQuery(tabParam);
+    if (normalized) {
+      navigate(`/company-details/${normalized}`, { replace: true });
+    }
+  }, [location.pathname, location.search, navigate]);
+
+  if (!section || !isCompanySection(section)) {
+    return <CompanyDetailsLanding />;
+  }
+
+  return <CompanyDetailsContent section={section} />;
 }

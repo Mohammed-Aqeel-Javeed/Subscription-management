@@ -1,15 +1,52 @@
 import { API_BASE_URL } from "./config";
 
-// Helper function to make API calls with proper URL
-export const apiFetch = (endpoint: string, options?: RequestInit) => {
+const DEFAULT_TIMEOUT_MS = 20_000;
+
+function getTokenFromStorageOrCookie(): string {
+  const fromStorage = localStorage.getItem("token") || "";
+  if (fromStorage) return fromStorage;
+
+  if (document.cookie) {
+    const match = document.cookie.match(/(?:^|; )token=([^;]*)/);
+    if (match) return match[1];
+  }
+  return "";
+}
+
+// Helper function to make API calls with proper URL + auth + sane timeouts
+export const apiFetch = async (endpoint: string, options?: RequestInit) => {
   const url = `${API_BASE_URL}${endpoint}`;
-  return fetch(url, {
-    credentials: 'include',
-    cache: 'no-store',
-    ...options,
-  }).then(async response => {
-    return response;
-  });
+
+  const headers = new Headers(options?.headers);
+  const token = getTokenFromStorageOrCookie();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  // Avoid hanging requests after sleep/offline
+  if (options?.signal) {
+    return fetch(url, {
+      credentials: "include",
+      cache: "no-store",
+      ...options,
+      headers,
+    });
+  }
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, {
+      credentials: "include",
+      cache: "no-store",
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 };
 
 // Export commonly used endpoints
