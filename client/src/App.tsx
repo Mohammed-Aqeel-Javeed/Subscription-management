@@ -48,6 +48,10 @@ import LandingPage from "@/pages/landing";
 import Profile from "@/pages/profile";
 import SecureLinkRedirect from "@/pages/secure-link";
 import PlatformAdminPage from "@/pages/platform-admin";
+import UpgradePage from "@/pages/upgrade";
+import PaymentSuccessPage from "@/pages/payment-success";
+import TrialExpiredOverlay from "@/components/TrialExpiredOverlay";
+import { useUser } from "@/context/UserContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 function App() {
@@ -66,8 +70,8 @@ function App() {
 }
 
 function AppWithSidebar() {
-  const hideSidebarPaths = ["/", "/login", "/signup", "/auth", "/landing", "/s"];
-  const hideChatbotPaths = ["/", "/login", "/signup", "/auth", "/landing", "/s", "/dashboard", "/notifications", "/reports", "/reports/upcoming-renewal", "/reports/spending-analysis", "/reports/card-wise", "/reports/upcoming-filings", "/reports/compliance-spend", "/reports/departmental-scorecard", "/reports/department-wise-renewals", "/reports/renewal-lead-time-analysis", "/reports/renewal-responsibility", "/reports/expired-renewals", "/reports/upcoming-renewals"];
+  const hideSidebarPaths = ["/", "/login", "/signup", "/auth", "/landing", "/s", "/upgrade", "/payment-success"];
+  const hideChatbotPaths = ["/", "/login", "/signup", "/auth", "/landing", "/s", "/upgrade", "/payment-success", "/dashboard", "/notifications", "/reports", "/reports/upcoming-renewal", "/reports/spending-analysis", "/reports/card-wise", "/reports/upcoming-filings", "/reports/compliance-spend", "/reports/departmental-scorecard", "/reports/department-wise-renewals", "/reports/renewal-lead-time-analysis", "/reports/renewal-responsibility", "/reports/expired-renewals", "/reports/upcoming-renewals"];
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -76,6 +80,20 @@ function AppWithSidebar() {
   const isSecureLinkRoute = location.pathname.startsWith('/s/');
   const shouldHideSidebar = isSecureLinkRoute || hideSidebarPaths.includes(location.pathname);
   const shouldHideChatbot = isSecureLinkRoute || hideChatbotPaths.includes(location.pathname);
+
+  // Plan expiry gate — covers both trial expiry and cancelled paid subscriptions
+  const { user: currentUser } = useUser();
+  const overlayExcluded = ["/upgrade", "/payment-success", "/", "/login", "/signup", "/auth"];
+  const isTrialExpired =
+    currentUser?.plan === "trial" &&
+    !!currentUser?.trialEndsAt &&
+    new Date(currentUser.trialEndsAt) < new Date();
+  const isPlanExpired = currentUser?.plan === "expired";
+  const isPlanLocked =
+    currentUser !== null &&
+    currentUser?.role !== "global_admin" &&
+    (isTrialExpired || isPlanExpired);
+  const showTrialOverlay = isPlanLocked && !overlayExcluded.includes(location.pathname);
 
   // Determine if chatbot should be shown
   const showChatbot = !shouldHideChatbot;
@@ -98,7 +116,7 @@ function AppWithSidebar() {
   // Check authentication on every route change
   const checkAuth = React.useCallback(async () => {
       // Skip auth check for public pages
-      const publicPaths = ["/login", "/signup", "/auth", "/landing"];
+      const publicPaths = ["/login", "/signup", "/auth", "/landing", "/upgrade", "/payment-success"];
       if (publicPaths.includes(location.pathname) || location.pathname.startsWith('/s/')) {
         return;
       }
@@ -188,9 +206,15 @@ function AppWithSidebar() {
     <SidebarSlotProvider>
       <div className="flex h-screen w-full overflow-hidden">
         {shouldHideSidebar ? null : (
-          <Sidebar 
-            isOpen={sidebarOpen} 
-            onToggle={() => setSidebarOpen(!sidebarOpen)} 
+          <Sidebar
+            isOpen={sidebarOpen}
+            onToggle={() => setSidebarOpen(!sidebarOpen)}
+          />
+        )}
+        {showTrialOverlay && (
+          <TrialExpiredOverlay
+            plan={currentUser?.plan}
+            trialEndsAt={currentUser?.trialEndsAt}
           />
         )}
         <main className="flex-1 min-w-0 overflow-hidden flex flex-col">
@@ -239,6 +263,8 @@ function AppWithSidebar() {
                 <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/calendar-monthly" element={<CalendarMonthly />} />
               <Route path="/calendar-yearly" element={<CalendarYearly />} />
+              <Route path="/upgrade" element={<UpgradePage />} />
+              <Route path="/payment-success" element={<PaymentSuccessPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </div>

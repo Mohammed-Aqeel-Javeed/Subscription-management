@@ -25,7 +25,9 @@ export default function SignupPage() {
   const [canResend, setCanResend] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  
+  const sessionId = searchParams.get("session_id");
+  const planFromUrl = searchParams.get("plan");
+
   // Timer for OTP resend
   useEffect(() => {
     if (step === "otp" && timeLeft > 0) {
@@ -324,7 +326,15 @@ export default function SignupPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ fullName, email, password, tenantId, defaultCurrency: companyCurrency, companyName })
+        body: JSON.stringify({
+          fullName,
+          email,
+          password,
+          tenantId,
+          defaultCurrency: companyCurrency,
+          companyName,
+          ...(sessionId ? { sessionId } : {}),
+        })
       });
 
       const signupData = await signupRes.json();
@@ -503,6 +513,31 @@ export default function SignupPage() {
                 {step === "otp" && "Step 2: Verify OTP to complete your signup."}
               </p>
             </div>
+
+            {/* Plan banner shown when arriving from landing page pricing */}
+            {planFromUrl && (
+              <div
+                style={{
+                  background: "#f0fdf4",
+                  border: "1px solid #86efac",
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  marginBottom: 16,
+                  fontSize: 13,
+                  color: "#166534",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M20 6L9 17l-5-5" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                You're signing up for the{" "}
+                <strong style={{ textTransform: "capitalize" }}>{planFromUrl}</strong>{" "}
+                plan. Complete registration to activate it.
+              </div>
+            )}
 
             {/* Step 1: Enter All Details */}
             {step === "details" && (

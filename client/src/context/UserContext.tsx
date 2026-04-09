@@ -13,6 +13,12 @@ interface User {
   defaultCurrency: string | null;
   role: string;
   department?: string;
+  plan?: string | null;
+  trialStartedAt?: string | null;
+  trialEndsAt?: string | null;
+  planActivatedAt?: string | null;
+  planExpiredAt?: string | null;
+  subscriptionCurrentPeriodEnd?: string | null;
 }
 
 interface UserContextType {

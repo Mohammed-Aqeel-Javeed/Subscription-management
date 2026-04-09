@@ -171,3 +171,25 @@ export async function ensureLicenseIndexes() {
   await safeCreateIndex("licenses", { tenantId: 1, owner: 1 });
   await safeCreateIndex("licenses", { tenantId: 1, department: 1 });
 }
+
+export async function ensurePendingPurchasesIndexes() {
+  const db = await connectToDatabase();
+  try {
+    // Unique index on sessionId to prevent duplicate webhook insertions
+    await db.collection("pending_purchases").createIndex(
+      { sessionId: 1 },
+      { unique: true }
+    );
+    // TTL index: documents expire 7 days after expiresAt
+    await db.collection("pending_purchases").createIndex(
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 }
+    );
+    // Fast lookup by customer email during signup
+    await db.collection("pending_purchases").createIndex(
+      { customerEmail: 1 }
+    );
+  } catch (err) {
+    // Ignore errors (e.g., index already exists)
+  }
+}

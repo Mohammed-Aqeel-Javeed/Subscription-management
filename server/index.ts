@@ -4,6 +4,8 @@ import cors from "cors";
 // @ts-ignore
 import { registerRoutes } from "./routes.js";
 import { enforceHttps, securityHeaders, sanitizeHeaders } from "./middleware/security.middleware.js";
+// @ts-ignore
+import { registerStripeRoutes } from "./stripe.routes.js";
 
 function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -110,7 +112,14 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: '50mb' }));
+// Stripe webhook needs raw body for signature verification — must be registered BEFORE express.json()
+app.use("/api/stripe/webhook", express.raw({ type: "application/json" }));
+
+// Parse JSON for all other routes
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.path === "/api/stripe/webhook") return next();
+  express.json({ limit: "50mb" })(req, res, next);
+});
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -142,11 +151,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 (async () => {
   // Ensure TTL indexes for notifications, reminders, compliance_notifications
-  const { ensureTTLIndexes, ensureHistoryIndexes, ensureSubscriptionIndexes, ensureLicenseIndexes } = await import("./mongo.js");
+  const { ensureTTLIndexes, ensureHistoryIndexes, ensureSubscriptionIndexes, ensureLicenseIndexes, ensurePendingPurchasesIndexes } = await import("./mongo.js");
   await ensureTTLIndexes();
   await ensureHistoryIndexes();
   await ensureSubscriptionIndexes();
   await ensureLicenseIndexes();
+  await ensurePendingPurchasesIndexes();
 
   // One-time cleanup: remove compliance-only fields from subscription reminders
   try {
@@ -173,6 +183,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   // });
 
   const server = await registerRoutes(app);
+
+  // Register Stripe routes
+  const { connectToDatabase } = await import("./mongo.js");
+  registerStripeRoutes(app, connectToDatabase);
 
   // Schedule daily cleanup of old notifications
   const { storage } = await import("./storage.mongo.js");

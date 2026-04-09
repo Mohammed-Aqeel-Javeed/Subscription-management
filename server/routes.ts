@@ -18,6 +18,13 @@ import cors from "cors";
 import { connectToDatabase } from "./mongo.js";
 import bcrypt from "bcrypt";
 import { decrypt } from "./encryption.service.js";
+import StripeLib from "stripe";
+import type { Stripe } from "stripe/cjs/stripe.core.js";
+
+// @ts-ignore — CJS types expose a function constructor, but `new` works at runtime
+const stripe = new StripeLib(process.env.STRIPE_SECRET_KEY || "", {
+  apiVersion: "2024-06-20" as any,
+}) as unknown as Stripe;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const toEpochMsServer = (raw: any): number => {
@@ -417,7 +424,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Signup =====
   app.post("/api/signup", async (req, res) => {
     try {
-      const { fullName, email, password, tenantId, defaultCurrency, companyName } = req.body;
+      const { fullName, email, password, tenantId, defaultCurrency, companyName, sessionId } = req.body;
       if (!fullName || !email || !password) {
         return res.status(400).json({ message: "Missing required fields (fullName, email, password)" });
       }
@@ -462,23 +469,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Hash the password before storing
       const hashedPassword = await bcrypt.hash(password, 10);
-      const doc = { 
-        fullName, 
-        email, 
-        password: hashedPassword, 
+
+      // Determine initial plan: trial by default, or the purchased plan if sessionId was passed
+      const now = new Date();
+      let initialPlan: string = "trial";
+      let trialStartedAt: Date | null = now;
+      let trialEndsAt: Date | null = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000); // +3 days
+      let planActivatedAt: Date | null = null;
+      let stripeCustomerId: string | null = null;
+      let stripeSubscriptionId: string | null = null;
+
+      if (sessionId || email) {
+        try {
+          const queryConditions: any[] = [{ customerEmail: email }];
+          if (sessionId) {
+            queryConditions.push({ sessionId });
+          }
+          const pending = await db.collection("pending_purchases").findOne({
+            $or: queryConditions,
+            linkedAt: null
+          });
+          if (pending) {
+            initialPlan = pending.plan;
+            planActivatedAt = pending.paidAt;
+            stripeCustomerId = pending.stripeCustomerId;
+            stripeSubscriptionId = pending.stripeSubscriptionId;
+            trialStartedAt = null;
+            trialEndsAt = null;
+            
+            // Re-assign sessionId to ensure we delete the correct one later
+            req.body.sessionId = pending.sessionId;
+          }
+          
+          // Proactive Fallback: If pending_purchase webhook hasn't arrived but sessionId is authentic
+          if (!pending && sessionId && sessionId.startsWith('cs_')) {
+            const session = await stripe.checkout.sessions.retrieve(sessionId);
+            if ((session.payment_status === "paid" || session.status === "complete") && session.metadata?.plan) {
+                initialPlan = session.metadata.plan;
+                planActivatedAt = new Date(session.created * 1000);
+                stripeCustomerId = session.customer as string;
+                stripeSubscriptionId = session.subscription as string;
+                trialStartedAt = null;
+                trialEndsAt = null;
+            }
+          }
+        } catch (e) {
+          console.error("[Signup] Failed to check pending_purchases or stripe session:", e);
+          // Non-fatal: proceed with trial plan
+        }
+      }
+
+      const doc: any = {
+        fullName,
+        email,
+        password: hashedPassword,
         tenantId: platformOwner ? null : tenantId,
         companyName: platformOwner ? (companyName || 'Platform') : (companyName || fullName + "'s Company"),
         defaultCurrency: defaultCurrency || null,
         role: platformOwner ? "global_admin" : "super_admin",
         status: "active",
-        createdAt: new Date() 
+        createdAt: now,
+        // Trial / Billing fields
+        plan: initialPlan,
+        trialStartedAt,
+        trialEndsAt,
+        planActivatedAt,
+        stripeCustomerId,
+        stripeSubscriptionId,
       };
       await db.collection("signup").insertOne(doc);
       await db.collection("login").insertOne(doc);
-      
+
+      // If a pending purchase was used, mark it as linked
+      const effectiveSessionId = req.body.sessionId || sessionId;
+      if (effectiveSessionId && stripeCustomerId) {
+        try {
+          await db.collection("pending_purchases").updateOne(
+            { sessionId: effectiveSessionId },
+            { $set: { linkedAt: new Date(), linkedEmail: email } }
+          );
+        } catch (e) {
+          console.error("[Signup] Failed to mark pending_purchase as linked:", e);
+        }
+      }
+
+      // Fetch and store subscription period end so the profile countdown works on first login
+      if (stripeSubscriptionId) {
+        try {
+          const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+          const periodEnd = new Date((sub as any).current_period_end * 1000);
+          const periodUpdate = { $set: { subscriptionCurrentPeriodEnd: periodEnd } };
+          await db.collection("login").updateOne({ email }, periodUpdate);
+          await db.collection("signup").updateOne({ email }, periodUpdate);
+        } catch (e) {
+          console.error("[Signup] Failed to fetch subscription period end:", e);
+        }
+      }
+
       // Clean up OTP after successful signup
       await db.collection("otps").deleteOne({ email });
-      
+
       res.status(201).json({ message: "Signup successful" });
     } catch (err) {
       console.error("Signup error:", err);
@@ -814,7 +904,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: dbUser.tenantId || null,
         defaultCurrency: dbUser.defaultCurrency || null,
         role: role,
-        department: department
+        department: department,
+        plan: (dbUser as any).plan || null,
+        trialStartedAt: (dbUser as any).trialStartedAt || null,
+        trialEndsAt: (dbUser as any).trialEndsAt || null,
+        planActivatedAt: (dbUser as any).planActivatedAt || null,
+        planExpiredAt: (dbUser as any).planExpiredAt || null,
+        subscriptionCurrentPeriodEnd: (dbUser as any).subscriptionCurrentPeriodEnd || null,
       });
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch user data" });

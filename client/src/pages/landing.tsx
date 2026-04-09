@@ -1,12 +1,13 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { 
-  Bell, 
-  Calendar, 
-  TrendingUp, 
-  Shield, 
-  Users, 
+import {
+  Bell,
+  Calendar,
+  TrendingUp,
+  Shield,
+  Users,
   BarChart3,
   CheckCircle2,
   ArrowRight,
@@ -15,9 +16,38 @@ import {
   Globe,
   Star
 } from "lucide-react";
+import { API_BASE_URL } from "../lib/config";
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [pricingLoading, setPricingLoading] = useState<string | null>(null);
+  const [pricingError, setPricingError] = useState<string | null>(null);
+
+  const handlePricingClick = async (plan: "starter" | "professional") => {
+    setPricingLoading(plan);
+    setPricingError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/stripe/checkout-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, mode: "landing" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPricingError(data.message || `Server error (${res.status}). Please try again.`);
+        return;
+      }
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setPricingError("No checkout URL returned. Please try again.");
+      }
+    } catch (err: any) {
+      setPricingError("Network error — could not reach the server. Is it running?");
+    } finally {
+      setPricingLoading(null);
+    }
+  };
 
   const features = [
     {
@@ -458,6 +488,14 @@ export default function LandingPage() {
             <p className="text-xl text-gray-600">
               Choose the plan that's right for your team
             </p>
+            {pricingError && (
+              <div className="mt-4 inline-flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm max-w-md mx-auto">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
+                  <path d="M12 8v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                {pricingError}
+              </div>
+            )}
           </motion.div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
@@ -500,10 +538,11 @@ export default function LandingPage() {
                 </li>
               </ul>
               <Button
-                onClick={() => navigate("/signup")}
-                className="w-full bg-gray-900 hover:bg-gray-800 text-white"
+                onClick={() => handlePricingClick("starter")}
+                disabled={pricingLoading !== null}
+                className="w-full bg-gray-900 hover:bg-gray-800 text-white disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Get Started
+                {pricingLoading === "starter" ? "Loading…" : "Get Started"}
               </Button>
             </motion.div>
 
@@ -555,10 +594,11 @@ export default function LandingPage() {
                 </li>
               </ul>
               <Button
-                onClick={() => navigate("/signup")}
-                className="w-full bg-white text-blue-600 hover:bg-gray-100"
+                onClick={() => handlePricingClick("professional")}
+                disabled={pricingLoading !== null}
+                className="w-full bg-white text-blue-600 hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Get Started
+                {pricingLoading === "professional" ? "Loading…" : "Get Started"}
               </Button>
             </motion.div>
 
@@ -600,11 +640,11 @@ export default function LandingPage() {
                 </li>
               </ul>
               <Button
-                onClick={() => navigate("/signup")}
+                disabled
                 variant="outline"
-                className="w-full border-2 border-gray-900 text-gray-900 hover:bg-gray-900 hover:text-white"
+                className="w-full border-2 border-gray-300 text-gray-400 opacity-60 cursor-not-allowed"
               >
-                Contact Sales
+                Coming Soon
               </Button>
             </motion.div>
           </div>

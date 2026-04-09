@@ -2,16 +2,65 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { User, Shield, Eye, EyeOff, Lock, Camera } from "lucide-react";
+import { User, Shield, Eye, EyeOff, Lock, Camera, CreditCard, Zap, Clock, AlertTriangle } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+
+// ── Subscription helper functions ─────────────────────────────────────────────
+
+function getDaysRemaining(dateStr: string | null | undefined): number | null {
+  if (!dateStr) return null;
+  const diff = new Date(dateStr).getTime() - Date.now();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+function planLabel(plan: string | null | undefined): string {
+  if (!plan) return "No Plan";
+  switch (plan) {
+    case "trial":        return "Free Trial";
+    case "starter":      return "Starter";
+    case "professional": return "Professional";
+    case "expired":      return "Expired";
+    default:             return plan.charAt(0).toUpperCase() + plan.slice(1);
+  }
+}
+
+interface PlanBadgeProps {
+  plan: string | null | undefined;
+}
+function PlanBadge({ plan }: PlanBadgeProps) {
+  let bg = "#f3f4f6", color = "#6b7280";
+  if (plan === "trial")        { bg = "#eff6ff"; color = "#2563eb"; }
+  if (plan === "starter")      { bg = "#f0fdf4"; color = "#16a34a"; }
+  if (plan === "professional") { bg = "#faf5ff"; color = "#7c3aed"; }
+  if (plan === "expired")      { bg = "#fef2f2"; color = "#dc2626"; }
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 4,
+      background: bg,
+      color,
+      fontSize: 12,
+      fontWeight: 600,
+      padding: "3px 10px",
+      borderRadius: 999,
+      letterSpacing: "0.03em",
+      textTransform: "uppercase",
+    }}>
+      {planLabel(plan)}
+    </span>
+  );
+}
 
 export default function Profile() {
   const { user, isLoading } = useUser();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -276,6 +325,7 @@ export default function Profile() {
 
         {/* Profile Tab */}
         {activeTab === "profile" && (
+          <>
           <Card className="p-6 rounded-2xl shadow-md">
             <div className="flex items-center gap-2 mb-6">
               <div className="h-8 w-8 bg-indigo-100 rounded-lg flex items-center justify-center">
@@ -341,6 +391,175 @@ export default function Profile() {
               </Button>
             </div>
           </Card>
+
+          {/* ── Subscription Details ─────────────────────────────────────── */}
+          {(() => {
+            const plan = user?.plan;
+            const trialEndsAt = user?.trialEndsAt;
+            const periodEnd = user?.subscriptionCurrentPeriodEnd;
+            const planExpiredAt = user?.planExpiredAt;
+
+            const isTrialExpired =
+              plan === "trial" && !!trialEndsAt && new Date(trialEndsAt) < new Date();
+            const isPlanExpired = plan === "expired";
+            const isExpired = isTrialExpired || isPlanExpired;
+
+            // Days remaining: trial → trialEndsAt, paid → subscriptionCurrentPeriodEnd
+            const daysRemaining =
+              plan === "trial"
+                ? getDaysRemaining(trialEndsAt)
+                : plan === "starter" || plan === "professional"
+                ? getDaysRemaining(periodEnd)
+                : null;
+
+            const formatDate = (d: string | null | undefined) => {
+              if (!d) return null;
+              return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+            };
+
+            return (
+              <Card className="p-6 rounded-2xl shadow-md">
+                <div className="flex items-center gap-2 mb-5">
+                  <div className="h-8 w-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <CreditCard className="h-4 w-4 text-indigo-600" />
+                  </div>
+                  <h2 className="text-lg font-bold text-gray-900">Subscription</h2>
+                </div>
+
+                {/* Plan row */}
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm font-medium text-gray-600">Current Plan</span>
+                  <PlanBadge plan={isTrialExpired ? "expired" : plan} />
+                </div>
+
+                {/* Status row */}
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm font-medium text-gray-600">Status</span>
+                  {isExpired ? (
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-red-600">
+                      <AlertTriangle className="h-4 w-4" />
+                      Expired
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 inline-block" />
+                      Active
+                    </span>
+                  )}
+                </div>
+
+                {/* Days remaining or renewal date */}
+                {!isExpired && daysRemaining !== null && (
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm font-medium text-gray-600">
+                      {plan === "trial" ? "Trial ends" : "Renews"}
+                    </span>
+                    <span
+                      className="flex items-center gap-1.5 text-sm font-semibold"
+                      style={{ color: daysRemaining <= 3 ? "#dc2626" : daysRemaining <= 7 ? "#d97706" : "#111827" }}
+                    >
+                      <Clock className="h-4 w-4" />
+                      {daysRemaining <= 0
+                        ? "Today"
+                        : daysRemaining === 1
+                        ? "1 day"
+                        : `${daysRemaining} days`}
+                      {(plan === "starter" || plan === "professional") && periodEnd && (
+                        <span className="text-gray-400 font-normal">
+                          &nbsp;({formatDate(periodEnd)})
+                        </span>
+                      )}
+                      {plan === "trial" && trialEndsAt && (
+                        <span className="text-gray-400 font-normal">
+                          &nbsp;({formatDate(trialEndsAt)})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                {/* Expired: show expiry date and upgrade prompt */}
+                {isExpired && (
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm font-medium text-gray-600">Expired on</span>
+                    <span className="text-sm font-semibold text-red-600">
+                      {formatDate(planExpiredAt || trialEndsAt) || "—"}
+                    </span>
+                  </div>
+                )}
+
+                {/* Data safety note */}
+                {isExpired && (
+                  <div className="flex items-center gap-2 mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
+                      <path d="M20 6L9 17l-5-5" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className="text-xs text-green-700 font-medium">
+                      All your data is safely preserved and will be restored upon upgrade.
+                    </span>
+                  </div>
+                )}
+
+                {/* CTA: upgrade or manage */}
+                {isExpired ? (
+                  <Button
+                    onClick={() => navigate("/upgrade")}
+                    className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white py-5 rounded-xl font-medium text-sm shadow-lg"
+                  >
+                    <Zap className="h-4 w-4 mr-2" />
+                    Upgrade Now
+                  </Button>
+                ) : plan === "trial" && daysRemaining !== null && daysRemaining <= 3 ? (
+                  <Button
+                    onClick={() => navigate("/upgrade")}
+                    className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white py-5 rounded-xl font-medium text-sm shadow-lg"
+                  >
+                    <Zap className="h-4 w-4 mr-2" />
+                    Upgrade Before Trial Ends
+                  </Button>
+                ) : plan === "trial" ? (
+                  <Button
+                    onClick={() => navigate("/upgrade")}
+                    variant="outline"
+                    className="w-full border-indigo-200 text-indigo-600 hover:bg-indigo-50 py-5 rounded-xl font-medium text-sm"
+                  >
+                    <Zap className="h-4 w-4 mr-2" />
+                    Upgrade Plan
+                  </Button>
+                ) : plan === "starter" ? (
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      onClick={() => navigate("/upgrade")}
+                      className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white py-5 rounded-xl font-medium text-sm shadow-lg"
+                    >
+                      <Zap className="h-4 w-4 mr-2" />
+                      Upgrade to Professional
+                    </Button>
+                    <Button
+                      disabled
+                      className="w-full bg-gray-100 text-gray-400 py-5 rounded-xl font-medium text-sm cursor-not-allowed border border-gray-200 shadow-none hover:bg-gray-100"
+                    >
+                      <Zap className="h-4 w-4 mr-2" />
+                      Upgrade to Enterprise
+                      <span className="ml-2 text-[10px] bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">Coming Soon</span>
+                    </Button>
+                  </div>
+                ) : plan === "professional" ? (
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      disabled
+                      className="w-full bg-gray-100 text-gray-400 py-5 rounded-xl font-medium text-sm cursor-not-allowed border border-gray-200 shadow-none hover:bg-gray-100"
+                    >
+                      <Zap className="h-4 w-4 mr-2" />
+                      Upgrade to Enterprise
+                      <span className="ml-2 text-[10px] bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">Coming Soon</span>
+                    </Button>
+                  </div>
+                ) : null}
+              </Card>
+            );
+          })()}
+          </>
         )}
 
         {/* Security Tab */}
