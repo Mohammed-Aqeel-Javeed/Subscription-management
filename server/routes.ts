@@ -21,10 +21,11 @@ import { decrypt } from "./encryption.service.js";
 import StripeLib from "stripe";
 import type { Stripe } from "stripe/cjs/stripe.core.js";
 
-// @ts-ignore — CJS types expose a function constructor, but `new` works at runtime
-const stripe = new StripeLib(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2024-06-20" as any,
-}) as unknown as Stripe;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const StripeCtor: any = StripeLib as any;
+const stripe: Stripe | null = STRIPE_SECRET_KEY
+  ? (new StripeCtor(STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" as any }) as Stripe)
+  : null;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const toEpochMsServer = (raw: any): number => {
@@ -503,14 +504,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Proactive Fallback: If pending_purchase webhook hasn't arrived but sessionId is authentic
           if (!pending && sessionId && sessionId.startsWith('cs_')) {
-            const session = await stripe.checkout.sessions.retrieve(sessionId);
-            if ((session.payment_status === "paid" || session.status === "complete") && session.metadata?.plan) {
-                initialPlan = session.metadata.plan;
-                planActivatedAt = new Date(session.created * 1000);
-                stripeCustomerId = session.customer as string;
-                stripeSubscriptionId = session.subscription as string;
-                trialStartedAt = null;
-                trialEndsAt = null;
+            if (stripe) {
+              const session = await stripe.checkout.sessions.retrieve(sessionId);
+              if ((session.payment_status === "paid" || session.status === "complete") && session.metadata?.plan) {
+                  initialPlan = session.metadata.plan;
+                  planActivatedAt = new Date(session.created * 1000);
+                  stripeCustomerId = session.customer as string;
+                  stripeSubscriptionId = session.subscription as string;
+                  trialStartedAt = null;
+                  trialEndsAt = null;
+              }
+            } else {
+              console.warn("[Signup] Stripe not configured; skipping session verification");
             }
           }
         } catch (e) {
@@ -556,11 +561,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Fetch and store subscription period end so the profile countdown works on first login
       if (stripeSubscriptionId) {
         try {
-          const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-          const periodEnd = new Date((sub as any).current_period_end * 1000);
-          const periodUpdate = { $set: { subscriptionCurrentPeriodEnd: periodEnd } };
-          await db.collection("login").updateOne({ email }, periodUpdate);
-          await db.collection("signup").updateOne({ email }, periodUpdate);
+          if (stripe) {
+            const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+            const periodEnd = new Date((sub as any).current_period_end * 1000);
+            const periodUpdate = { $set: { subscriptionCurrentPeriodEnd: periodEnd } };
+            await db.collection("login").updateOne({ email }, periodUpdate);
+            await db.collection("signup").updateOne({ email }, periodUpdate);
+          } else {
+            console.warn("[Signup] Stripe not configured; skipping subscription period end fetch");
+          }
         } catch (e) {
           console.error("[Signup] Failed to fetch subscription period end:", e);
         }

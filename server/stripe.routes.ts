@@ -3,10 +3,11 @@ import type { Stripe } from "stripe/cjs/stripe.core.js";
 import { ObjectId } from "mongodb";
 import type { Express, Request, Response } from "express";
 
-// @ts-ignore — CJS types expose a function constructor, but `new` works at runtime
-const stripe = new StripeLib(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2024-06-20" as any,
-}) as unknown as Stripe;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const StripeCtor: any = StripeLib as any;
+const stripe: Stripe | null = STRIPE_SECRET_KEY
+  ? (new StripeCtor(STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" as any }) as Stripe)
+  : null;
 
 const PRICE_IDS: Record<string, string> = {
   starter:      process.env.STRIPE_STARTER_PRICE_ID      || "",
@@ -20,6 +21,7 @@ async function applySubscriptionPeriodEnd(
   userQuery: Record<string, any>
 ) {
   try {
+    if (!stripe) return;
     const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
     const periodEnd = new Date((sub as any).current_period_end * 1000);
     const update = { $set: { subscriptionCurrentPeriodEnd: periodEnd } };
@@ -35,6 +37,10 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
   // ===== Create Checkout Session =====
   app.post("/api/stripe/checkout-session", async (req: Request, res: Response) => {
     try {
+      if (!stripe) {
+        return res.status(503).json({ message: "Stripe is not configured" });
+      }
+
       const { plan, mode, userId } = req.body;
 
       if (!plan || !PRICE_IDS[plan]) {
@@ -81,6 +87,10 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
   // ===== Stripe Webhook =====
   app.post("/api/stripe/webhook", async (req: Request, res: Response) => {
     const sig = req.headers["stripe-signature"] as string;
+
+    if (!stripe) {
+      return res.status(503).json({ message: "Stripe is not configured" });
+    }
 
     if (!process.env.STRIPE_WEBHOOK_SECRET) {
       console.error("[Stripe Webhook] STRIPE_WEBHOOK_SECRET not set");
@@ -247,6 +257,10 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
   // ===== Verify Checkout Session =====
   app.get("/api/stripe/verify-session", async (req: Request, res: Response) => {
     try {
+      if (!stripe) {
+        return res.status(503).json({ message: "Stripe is not configured" });
+      }
+
       const { sessionId } = req.query as { sessionId: string };
       if (!sessionId) {
         return res.status(400).json({ message: "Missing sessionId" });
