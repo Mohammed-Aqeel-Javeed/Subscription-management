@@ -12,6 +12,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     // Removed explicit 'types' to avoid missing type definition errors
     "paths": {
