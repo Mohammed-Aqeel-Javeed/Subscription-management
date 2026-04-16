@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { CheckCircle2, XCircle, Eye, EyeOff, Building2 } from "lucide-react";
+import { CheckCircle2, XCircle, Eye, EyeOff } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "../lib/config";
-import AddCompanyModal from "../components/modals/add-company-modal";
 
 export default function SignupPage() {
   const [step, setStep] = useState<"details" | "otp" | "success">("details");
@@ -20,7 +19,6 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const [timeLeft, setTimeLeft] = useState(120); // 2 minutes in seconds
   const [canResend, setCanResend] = useState(false);
   const navigate = useNavigate();
@@ -57,13 +55,6 @@ export default function SignupPage() {
     if (timeLeft <= 30) return "#dc2626"; // red
     return "#6b7280"; // gray
   };
-  
-  // Auto-open Add Company modal if addCompany parameter is present
-  useEffect(() => {
-    if (searchParams.get('addCompany') === 'true') {
-      setShowAddCompanyModal(true);
-    }
-  }, [searchParams]);
   
   // Complete currency list
   const currencyList = [
@@ -825,30 +816,6 @@ export default function SignupPage() {
                   {loading ? "Sending OTP..." : "Send OTP"}
                 </button>
                 
-                <button
-                  type="button"
-                  onClick={() => setShowAddCompanyModal(true)}
-                  style={{
-                    width: "100%",
-                    padding: 10,
-                    border: "2px solid #4f46e5",
-                    background: "white",
-                    color: "#4f46e5",
-                    borderRadius: 999,
-                    fontWeight: 600,
-                    fontSize: 14,
-                    cursor: "pointer",
-                    marginTop: 8,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                  }}
-                >
-                  <Building2 size={16} />
-                  Add Company (2nd, 3rd, etc.)
-                </button>
-                
                 {/* Social sign-in UI (visual only) */}
                 <div
                   style={{
@@ -1095,15 +1062,6 @@ export default function SignupPage() {
           </div>
         </div>
       </div>
-
-      {/* Add Company Modal */}
-      <AddCompanyModal 
-        open={showAddCompanyModal} 
-        onOpenChange={setShowAddCompanyModal}
-        onSuccess={() => {
-          // Optional: you can add additional logic here
-        }}
-      />
     </div>
   );
 }

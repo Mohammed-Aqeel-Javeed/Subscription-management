@@ -16,17 +16,20 @@ export type AuthRequest = Request;
 
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
   let token;
+  const tabScoped = Boolean(req.headers["x-tab-auth"]);
   
   // Support both Authorization header and cookie
   if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
     token = req.headers.authorization.replace("Bearer ", "");
-  } else if (req.cookies && req.cookies.token) {
+  } else if (req.cookies && req.cookies.token && (!tabScoped || !req.headers.authorization)) {
     token = req.cookies.token;
   }
 
   if (!token) {
     return res.status(401).json({ message: "Access token required" });
   }
+
+  token = String(token).trim().replace(/^Bearer\s+/i, "");
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
@@ -44,14 +47,16 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 // Optional authentication - sets user if token exists but doesn't fail if missing
 export const optionalAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
   let token;
+  const tabScoped = Boolean(req.headers["x-tab-auth"]);
   
   if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
     token = req.headers.authorization.replace("Bearer ", "");
-  } else if (req.cookies && req.cookies.token) {
+  } else if (req.cookies && req.cookies.token && (!tabScoped || !req.headers.authorization)) {
     token = req.cookies.token;
   }
 
   if (token) {
+    token = String(token).trim().replace(/^Bearer\s+/i, "");
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
       req.user = decoded;

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Layers, Settings, FileBarChart, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft, UserCircle, LayoutDashboard, ChevronDown, ChevronRight } from "lucide-react";
+import { BarChart3, Layers, Settings, FileBarChart, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft, ChevronDown, ChevronRight } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api";
 import { UnifiedImportExport } from "../unified-import-export";
@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Can } from "@/components/Can";
 import { useSidebarSlot } from "@/context/SidebarSlotContext";
+import { findPlatformSection, platformNavSections } from "@/lib/platform-nav";
 
 type Company = {
   tenantId: string;
@@ -69,6 +70,13 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
 
       if (!res.ok) {
         throw new Error("Failed to switch company");
+      }
+
+      const data = await res.json().catch(() => ({} as any));
+      if (typeof (data as any)?.token === "string" && (data as any).token.length > 0) {
+        const normalized = String((data as any).token).trim().replace(/^Bearer\s+/i, "");
+        sessionStorage.setItem("token", normalized);
+        sessionStorage.setItem("isAuthenticated", "true");
       }
 
       // Notify the app that tenant context changed.
@@ -219,11 +227,6 @@ const navItems = [
   { path: "/reports", label: "Reports", icon: FileBarChart },
 ];
 
-const platformNavItems = [
-  { path: "/platform-admin", label: "Platform Dashboard", icon: LayoutDashboard },
-  { path: "/profile", label: "Profile", icon: UserCircle },
-];
-
 const configSubItems = [
   { path: "/configuration/currency", label: "Currency" },
   { path: "/configuration/payment", label: "Payment Methods" },
@@ -239,6 +242,14 @@ const companySubItems = [
 ] as const;
 
 export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean; onToggle?: () => void }) {
+  const buildPlatformOpenState = (pathname: string) =>
+    Object.fromEntries(
+      platformNavSections.map((section) => [
+        section.id,
+        pathname === section.path || pathname.startsWith(`${section.path}/`),
+      ])
+    ) as Record<string, boolean>;
+
   // Get current location for active state
   const location = useLocation();
   const navigate = useNavigate();
@@ -246,12 +257,23 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   const [showCompanySwitcherDialog, setShowCompanySwitcherDialog] = useState(false);
   const [configOpen, setConfigOpen] = useState(() => location.pathname.startsWith("/configuration"));
   const [companyOpen, setCompanyOpen] = useState(() => location.pathname.startsWith("/company-details"));
+  const [platformOpen, setPlatformOpen] = useState<Record<string, boolean>>(() =>
+    buildPlatformOpenState(location.pathname)
+  );
   const { active: pageSlotActive, replaceNav: pageSlotReplaceNav } = useSidebarSlot();
 
   // Auto-expand the dropdown of the active section route.
   useEffect(() => {
     if (location.pathname.startsWith("/configuration")) setConfigOpen(true);
     if (location.pathname.startsWith("/company-details")) setCompanyOpen(true);
+
+    const activePlatformSection = findPlatformSection(location.pathname);
+    if (activePlatformSection) {
+      setPlatformOpen((current) => {
+        if (current[activePlatformSection.id]) return current;
+        return { ...current, [activePlatformSection.id]: true };
+      });
+    }
   }, [location.pathname]);
 
   // Fetch current user data
@@ -270,6 +292,9 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   });
 
   const isGlobalAdmin = currentUser?.role === "global_admin";
+  const sidebarBackground = isGlobalAdmin
+    ? "linear-gradient(180deg, #f5f3ff 0%, #ede9fe 45%, #ffffff 100%)"
+    : "linear-gradient(180deg, #ede9fe 0%, #e0d8fd 50%, #ddd5fc 100%)";
 
   const handleLogout = async () => {
     try {
@@ -277,6 +302,8 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
     } catch {}
     
     // Clear session storage
+    sessionStorage.removeItem("token");
+    localStorage.removeItem("token");
     sessionStorage.removeItem("isAuthenticated");
     sessionStorage.clear();
     
@@ -293,12 +320,28 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   // Collapsed sidebar view (icon-only)
   if (!isOpen) {
     return (
-      <div className="flex flex-col h-full w-16 border-r border-indigo-200/50" style={{ background: 'linear-gradient(180deg, #ede9fe 0%, #e0d8fd 50%, #ddd5fc 100%)' }}>
+      <div
+        className={
+          "flex flex-col h-full w-16 border-r " +
+          (isGlobalAdmin ? "border-indigo-200/60" : "border-indigo-200/50")
+        }
+        style={{ background: sidebarBackground }}
+      >
         {/* Collapsed Header */}
-        <div className="flex flex-col items-center gap-1 px-2 pt-3 pb-2 border-b border-indigo-200/50">
+        <div
+          className={
+            "flex flex-col items-center gap-1 px-2 pt-3 pb-2 border-b " +
+            (isGlobalAdmin ? "border-indigo-200/60" : "border-indigo-200/50")
+          }
+        >
           <button
             onClick={onToggle}
-            className="relative group h-11 w-11 flex items-center justify-center rounded-xl bg-white/60 hover:bg-white/80 shadow-sm transition-all duration-200 hover:scale-105"
+            className={
+              "relative group h-11 w-11 flex items-center justify-center rounded-xl shadow-sm transition-all duration-200 hover:scale-105 " +
+              (isGlobalAdmin
+                ? "bg-white/80 hover:bg-white border border-indigo-200/60"
+                : "bg-white/60 hover:bg-white/80")
+            }
             aria-label="Open Sidebar"
           >
             <img
@@ -311,7 +354,10 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
             {/* On hover: swap small logo to the "open sidebar" icon */}
             <PanelLeft
               size={20}
-              className="absolute text-indigo-600 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              className={
+                "absolute opacity-0 transition-opacity duration-150 group-hover:opacity-100 " +
+                "text-indigo-600"
+              }
             />
           </button>
         </div>
@@ -319,12 +365,15 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         {/* Collapsed Navigation Icons */}
         <nav className="flex-1 px-2 py-3 overflow-y-auto overscroll-contain custom-scrollbar">
           <ul className="space-y-1">
-            {(isGlobalAdmin ? platformNavItems : navItems).map((item) => {
+            {(isGlobalAdmin ? platformNavSections : navItems).map((item) => {
               const Icon = item.icon;
+              const activePlatformSection = isGlobalAdmin ? findPlatformSection(location.pathname) : undefined;
+
               const isActive =
                 location.pathname === item.path ||
                 (item.path === "/configuration" && location.pathname.startsWith("/configuration/")) ||
-                (item.path === "/company-details" && location.pathname.startsWith("/company-details/"));
+                (item.path === "/company-details" && location.pathname.startsWith("/company-details/")) ||
+                (isGlobalAdmin && activePlatformSection?.path === item.path);
 
               const link = (
                 <Link
@@ -333,7 +382,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                     `flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ` +
                     (isActive
                       ? "bg-white shadow-xl"
-                      : "hover:bg-white/10 hover:shadow-md")
+                      : (isGlobalAdmin ? "hover:bg-white/70 hover:shadow-md" : "hover:bg-white/10 hover:shadow-md"))
                   }
                   title={item.label}
                 >
@@ -342,15 +391,15 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                       `relative flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200 ` +
                       (isActive
                         ? "bg-transparent"
-                        : "bg-white/10 border border-white/10")
+                        : (isGlobalAdmin ? "bg-white/80 border border-indigo-200/60" : "bg-white/10 border border-white/10"))
                     }
                     style={{
                       boxShadow: isActive
                         ? "none"
-                        : "inset 0 1px 0 rgba(255,255,255,0.12)",
+                        : (isGlobalAdmin ? "0 1px 2px rgba(99,102,241,0.08)" : "inset 0 1px 0 rgba(255,255,255,0.12)"),
                     }}
                   >
-                    <Icon className="relative z-10 text-indigo-800" size={16} />
+                    <Icon className={"relative z-10 " + (isGlobalAdmin ? "text-indigo-700" : "text-indigo-800")} size={16} />
                   </div>
                 </Link>
               );
@@ -370,11 +419,16 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         </nav>
 
         {/* Collapsed Footer: Only Logout button, no user avatar/initial */}
-        <div className="p-2 border-t border-indigo-200/50">
+        <div className={"p-2 border-t " + (isGlobalAdmin ? "border-indigo-200/60" : "border-indigo-200/50")}>
           <div className="flex items-center justify-center">
             <button
               onClick={handleLogout}
-              className="flex items-center justify-center w-9 h-9 rounded-lg text-indigo-400 hover:text-red-500 hover:bg-white/50 transition-all duration-200"
+              className={
+                "flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200 " +
+                (isGlobalAdmin
+                  ? "text-indigo-500 hover:text-red-600 hover:bg-red-50"
+                  : "text-indigo-400 hover:text-red-500 hover:bg-white/50")
+              }
               title="Logout"
             >
               <LogOut size={16} />
@@ -386,8 +440,19 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   }
 
   return (
-    <div className="flex flex-col h-full border-r border-indigo-200/50" style={{ background: 'linear-gradient(180deg, #ede9fe 0%, #e0d8fd 50%, #ddd5fc 100%)' }}>
-      <div className="flex flex-col items-start gap-1 px-4 pt-3 pb-2 border-b border-indigo-200/50">
+    <div
+      className={
+        "flex flex-col h-full border-r " +
+        (isGlobalAdmin ? "border-indigo-200/60" : "border-indigo-200/50")
+      }
+      style={{ background: sidebarBackground }}
+    >
+      <div
+        className={
+          "flex flex-col items-start gap-1 px-4 pt-3 pb-2 border-b " +
+          (isGlobalAdmin ? "border-indigo-200/60" : "border-indigo-200/50")
+        }
+      >
         <div className="flex items-center gap-2 justify-between w-full">
           <div className="flex items-center gap-0">
             <img 
@@ -396,14 +461,19 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
               className="w-20 h-20 object-contain drop-shadow-xl"
               style={{ imageRendering: 'crisp-edges' }}
             />
-            <h1 className="text-2xl font-bold text-indigo-900 tracking-tight">
+            <h1 className={"text-2xl font-bold tracking-tight text-indigo-900"}>
               Trackla
             </h1>
           </div>
           {onToggle && (
             <button
               onClick={onToggle}
-              className="h-8 w-8 flex items-center justify-center rounded-lg bg-white/50 hover:bg-white/70 text-indigo-600 transition-all duration-200"
+              className={
+                "h-8 w-8 flex items-center justify-center rounded-lg transition-all duration-200 " +
+                (isGlobalAdmin
+                  ? "bg-white/80 hover:bg-white text-indigo-600 border border-indigo-200/60"
+                  : "bg-white/50 hover:bg-white/70 text-indigo-600")
+              }
               title="Close Sidebar"
             >
               <PanelLeft className="h-5 w-5" />
@@ -422,13 +492,6 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
             </span>
           </button>
         )}
-
-        {currentUser && isGlobalAdmin && (
-          <div className="w-full rounded-lg bg-indigo-500/10 border border-indigo-200/40 px-3 py-2">
-            <div className="text-sm font-semibold text-indigo-900">Platform Admin</div>
-            <div className="text-xs text-indigo-700/80">Company data is hidden</div>
-          </div>
-        )}
       </div>
       {/* Company Switcher Dialog */}
       {!isGlobalAdmin && showCompanySwitcherDialog && (
@@ -442,23 +505,73 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           <>
             {isGlobalAdmin ? (
               <ul className="space-y-0.5">
-                {platformNavItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = location.pathname === item.path;
+                {platformNavSections.map((section) => {
+                  const Icon = section.icon;
+                  const isActive =
+                    location.pathname === section.path ||
+                    location.pathname.startsWith(`${section.path}/`);
+                  const isExpanded = platformOpen[section.id] ?? isActive;
                   return (
-                    <li key={item.path}>
-                      <Link
-                        to={item.path}
+                    <li key={section.id}>
+                      <div
                         className={
-                          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 " +
+                          "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 " +
                           (isActive
                             ? "bg-indigo-600 text-white font-semibold shadow-md"
-                            : "text-indigo-800 hover:bg-white/50 hover:text-indigo-900")
+                            : "text-indigo-800 hover:bg-white/60 hover:text-indigo-900")
                         }
                       >
-                        <Icon size={18} className="flex-shrink-0" />
-                        <span className="font-sidebar font-semibold">{item.label}</span>
-                      </Link>
+                        <Link to={section.path} className="flex items-center gap-3 flex-1 min-w-0">
+                          <Icon size={18} className="flex-shrink-0" />
+                          <span className="font-sidebar font-semibold truncate">{section.label}</span>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setPlatformOpen((current) => ({
+                              ...current,
+                              [section.id]: !(current[section.id] ?? false),
+                            }));
+                          }}
+                          className={
+                            "h-7 w-7 rounded-md flex items-center justify-center transition-colors " +
+                            (isActive ? "hover:bg-white/15" : "hover:bg-white/60")
+                          }
+                          aria-label={isExpanded ? `Collapse ${section.label}` : `Expand ${section.label}`}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className={isActive ? "h-4 w-4 text-white" : "h-4 w-4 text-indigo-800"} />
+                          ) : (
+                            <ChevronRight className={isActive ? "h-4 w-4 text-white" : "h-4 w-4 text-indigo-800"} />
+                          )}
+                        </button>
+                      </div>
+                      {isExpanded ? (
+                        <div className="mt-1 ml-9 space-y-0.5">
+                          {section.items.map((subItem) => {
+                            const subActive = location.pathname === subItem.path;
+                            return (
+                              <Link
+                                key={subItem.path}
+                                to={subItem.path}
+                                className={
+                                  "flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg text-sm transition-all duration-150 " +
+                                  (subActive
+                                    ? "bg-white text-indigo-950 font-semibold shadow-sm"
+                                    : "text-indigo-700 hover:bg-white/60 hover:text-indigo-950")
+                                }
+                              >
+                                <span className="truncate">{subItem.label}</span>
+                                {subItem.readOnly ? (
+                                  <span className="text-[10px] uppercase tracking-wide text-indigo-500">View</span>
+                                ) : null}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -624,10 +737,15 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         />
       </nav>
       
-      <div className="px-3 py-3 border-t border-indigo-200/50">
+      <div className={"px-3 py-3 border-t " + (isGlobalAdmin ? "border-indigo-200/60" : "border-indigo-200/50")}>
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-indigo-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200"
+          className={
+            "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-all duration-200 " +
+            (isGlobalAdmin
+              ? "text-indigo-500 hover:text-red-600 hover:bg-red-50"
+              : "text-indigo-400 hover:text-red-600 hover:bg-red-50")
+          }
         >
           <LogOut size={16} />
           <span>Logout</span>

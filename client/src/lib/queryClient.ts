@@ -2,6 +2,12 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
+function normalizeToken(value: string) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  return trimmed.replace(/^Bearer\s+/i, "");
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -14,20 +20,21 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  // Try to get token from localStorage, then cookies
-  let token = localStorage.getItem("token") || "";
-  if (!token && document.cookie) {
-    const match = document.cookie.match(/(?:^|; )token=([^;]*)/);
-    if (match) token = match[1];
+  // Prefer per-tab token. If absent, rely on cookie auth via credentials: include.
+  const token = normalizeToken(String(sessionStorage.getItem("token") || ""));
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+  };
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
   }
+
   const res = await fetch(url, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-      "Cache-Control": "no-cache, no-store, must-revalidate",
-      "Pragma": "no-cache",
-    },
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
     cache: "no-store",
@@ -40,14 +47,8 @@ export async function apiRequest(
 type UnauthorizedBehavior = "returnNull" | "throw";
 
 function getTokenFromStorageOrCookie(): string {
-  const fromStorage = localStorage.getItem("token") || "";
-  if (fromStorage) return fromStorage;
-
-  if (document.cookie) {
-    const match = document.cookie.match(/(?:^|; )token=([^;]*)/);
-    if (match) return match[1];
-  }
-  return "";
+  // Only use per-tab storage. Cookies are HTTP-only and not readable from JS.
+  return normalizeToken(String(sessionStorage.getItem("token") || ""));
 }
 
 export const getQueryFn: <T>(options: {

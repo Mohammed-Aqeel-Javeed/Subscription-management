@@ -27,7 +27,7 @@ type NotificationItem = {
 };
 
 export default function Header() {
-  const { user } = useUser();
+  const { user, isLoading } = useUser();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
@@ -39,17 +39,17 @@ export default function Header() {
   const { data: subscriptionNotifications = [] } = useQuery<NotificationItem[]>({
     queryKey: ['/api/notifications'],
     refetchInterval: 60_000,
-    enabled: !isGlobalAdmin,
+    enabled: !isLoading && Boolean(user) && !isGlobalAdmin,
   });
   const { data: complianceNotifications = [] } = useQuery<NotificationItem[]>({
     queryKey: ['/api/notifications/compliance'],
     refetchInterval: 60_000,
-    enabled: !isGlobalAdmin,
+    enabled: !isLoading && Boolean(user) && !isGlobalAdmin,
   });
   const { data: licenseNotifications = [] } = useQuery<NotificationItem[]>({
     queryKey: ['/api/notifications/license'],
     refetchInterval: 60_000,
-    enabled: !isGlobalAdmin,
+    enabled: !isLoading && Boolean(user) && !isGlobalAdmin,
   });
 
   const dueNotifications = useMemo(() => {
@@ -266,6 +266,8 @@ export default function Header() {
         method: "POST",
         credentials: "include",
       });
+      sessionStorage.removeItem("token");
+      localStorage.removeItem("token");
       sessionStorage.clear();
       navigate("/landing");
     } catch (error) {

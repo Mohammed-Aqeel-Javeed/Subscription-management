@@ -43,11 +43,16 @@ export default function AuthPage() {
 
       const data = await res.json().catch(() => null);
       const role = data?.user?.role;
+      const token = data?.token;
       
       // Clear all cached data from previous session/user
       queryClient.clear();
       sessionStorage.clear();
       sessionStorage.setItem("isAuthenticated", "true");
+      if (token) {
+        const normalized = String(token).trim().replace(/^Bearer\s+/i, "");
+        sessionStorage.setItem("token", normalized);
+      }
       
       // Force full page reload to ensure clean state for new user
       const target = role === "global_admin" ? "/platform-admin" : (nextParam || "/dashboard");

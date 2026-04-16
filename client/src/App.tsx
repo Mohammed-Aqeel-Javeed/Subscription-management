@@ -48,11 +48,13 @@ import LandingPage from "@/pages/landing";
 import Profile from "@/pages/profile";
 import SecureLinkRedirect from "@/pages/secure-link";
 import PlatformAdminPage from "@/pages/platform-admin";
+import PlatformSectionPage from "@/pages/platform-section";
 import UpgradePage from "@/pages/upgrade";
 import PaymentSuccessPage from "@/pages/payment-success";
 import TrialExpiredOverlay from "@/components/TrialExpiredOverlay";
 import { useUser } from "@/context/UserContext";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { isGlobalAdminPlatformPath } from "@/lib/platform-nav";
 
 function App() {
   return (
@@ -98,20 +100,8 @@ function AppWithSidebar() {
   // Determine if chatbot should be shown
   const showChatbot = !shouldHideChatbot;
 
-  // Clear session when window/tab is closed
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      // Clear session storage when browser/tab closes
-      sessionStorage.clear();
-    };
-
-    // Add event listener for window close
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, []);
+  // Note: sessionStorage is already tab-scoped and cleared automatically when the tab closes.
+  // Do not clear it on beforeunload; that also runs on reload/redirect and breaks auth.
 
   // Check authentication on every route change
   const checkAuth = React.useCallback(async () => {
@@ -147,19 +137,45 @@ function AppWithSidebar() {
         if (!res.ok) {
           // Only hard-redirect on real auth failures.
           if (res.status === 401 || res.status === 403) {
+            const hasTabToken = (() => {
+              try {
+                return Boolean(String(sessionStorage.getItem("token") || "").trim());
+              } catch {
+                return false;
+              }
+            })();
+
             console.log("[App Auth Guard] Not authenticated, redirecting to landing");
-            sessionStorage.clear();
-            navigate("/", { replace: true });
+            try {
+              // Do not clear the per-tab token on a single 401/403.
+              // Cookies may be temporarily unavailable or the backend may be restarting.
+              sessionStorage.removeItem("isAuthenticated");
+            } catch {
+              // ignore
+            }
+
+            // If this tab has a token, stay on the current page and let subsequent
+            // retries (focus/online) recover. This prevents platform pages from
+            // going "empty" on a hard refresh.
+            if (!hasTabToken) {
+              navigate("/", { replace: true });
+            }
           }
           return;
         }
 
         const me = await res.json().catch(() => null);
         if (me?.role === "global_admin") {
-          const allowed = new Set(["/platform-admin", "/profile"]);
-          if (!allowed.has(location.pathname)) {
+          if (!isGlobalAdminPlatformPath(location.pathname)) {
             navigate("/platform-admin", { replace: true });
           }
+          return;
+        }
+
+        // If a non-global user lands on a platform route (e.g., after refresh),
+        // redirect to the normal app shell.
+        if (isGlobalAdminPlatformPath(location.pathname)) {
+          navigate("/dashboard", { replace: true });
         }
       } catch (error) {
         // Likely wake-from-sleep/offline/server-restart: do not clear session or redirect.
@@ -228,6 +244,8 @@ function AppWithSidebar() {
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/s/:token" element={<SecureLinkRedirect />} />
               <Route path="/platform-admin" element={<PlatformAdminPage />} />
+              <Route path="/platform-admin/:section" element={<PlatformSectionPage />} />
+              <Route path="/platform-admin/:section/:subsection" element={<PlatformSectionPage />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/subscriptions/cancelled" element={<CancelledSubscriptionsPage />} />

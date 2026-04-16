@@ -54,6 +54,13 @@ export default function CompanySwitcher() {
         throw new Error("Failed to switch company");
       }
 
+      const data = await res.json().catch(() => ({} as any));
+      if (typeof (data as any)?.token === "string" && (data as any).token.length > 0) {
+        const normalized = String((data as any).token).trim().replace(/^Bearer\s+/i, "");
+        sessionStorage.setItem("token", normalized);
+        sessionStorage.setItem("isAuthenticated", "true");
+      }
+
       // Notify the app that tenant context changed.
       window.dispatchEvent(new Event('account-changed'));
 
@@ -64,7 +71,6 @@ export default function CompanySwitcher() {
       // Clear any persisted state
       try {
         localStorage.removeItem('REACT_QUERY_OFFLINE_CACHE');
-        sessionStorage.clear();
       } catch (e) {
         console.error('Failed to clear storage:', e);
       }

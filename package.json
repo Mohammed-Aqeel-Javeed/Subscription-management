@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
+    "backfill:stripe-metadata": "tsx server/backfill-stripe-metadata.ts",
     "build:client": "cd client && npm install && npm run build",
     "build:server": "tsc -p tsconfig.server.json",
     "build": "npm run build:client && npm run build:server",

@@ -1,11 +1,13 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
+import cookieParser from "cookie-parser";
 import cors from "cors";
 // @ts-ignore
 import { registerRoutes } from "./routes.js";
 import { enforceHttps, securityHeaders, sanitizeHeaders } from "./middleware/security.middleware.js";
 // @ts-ignore
 import { registerStripeRoutes } from "./stripe.routes.js";
+import net from "node:net";
 
 function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -65,16 +67,95 @@ function msUntilNextMidnightIST(nowUtc = new Date()): number {
   return Math.max(delay, 1000);
 }
 
+async function recordJobRun(event: {
+  taskName: string;
+  startedAt: Date;
+  finishedAt: Date;
+  success: boolean;
+  errorMessage?: string | null;
+}) {
+  try {
+    const { connectToDatabase } = await import("./mongo.js");
+    const db = await connectToDatabase();
+    const durationMs = event.finishedAt.getTime() - event.startedAt.getTime();
+
+    await db.collection("job_runs").insertOne({
+      taskName: event.taskName,
+      startedAt: event.startedAt,
+      finishedAt: event.finishedAt,
+      durationMs,
+      success: event.success,
+      errorMessage: event.errorMessage ?? null,
+      createdAt: new Date(),
+    });
+
+    // Also surface scheduler execution in the audit/activity stream.
+    // Keeps platform audit from being empty in real deployments.
+    await db.collection("history").insertOne({
+      tenantId: null,
+      type: "scheduler",
+      action: "SCHEDULER_RUN",
+      description: event.success
+        ? `Scheduler job completed: ${event.taskName}`
+        : `Scheduler job failed: ${event.taskName}`,
+      severity: event.success ? "info" : "error",
+      meta: {
+        taskName: event.taskName,
+        durationMs,
+        errorMessage: event.errorMessage ?? null,
+      },
+      timestamp: new Date(),
+      createdAt: new Date(),
+    });
+  } catch (e) {
+    log(`Failed to record job run (${event.taskName}): ${e}`, "scheduler");
+  }
+}
+
+async function runJobNow(taskName: string, task: () => Promise<void> | void) {
+  const startedAt = new Date();
+  let success = true;
+  let errorMessage: string | null = null;
+
+  try {
+    await task();
+  } catch (error) {
+    success = false;
+    errorMessage = error instanceof Error ? error.message : String(error);
+  } finally {
+    await recordJobRun({
+      taskName,
+      startedAt,
+      finishedAt: new Date(),
+      success,
+      errorMessage,
+    });
+  }
+}
+
 function scheduleDailyAtMidnightIST(taskName: string, task: () => Promise<void> | void) {
   const scheduleNext = () => {
     const delay = msUntilNextMidnightIST(new Date());
     setTimeout(async () => {
+      const startedAt = new Date();
+      let success = true;
+      let errorMessage: string | null = null;
+
       try {
         log(`Running scheduled task at 12:00 AM IST: ${taskName}`, "scheduler");
         await task();
       } catch (error) {
-        log(`Scheduled task failed (${taskName}): ${error}`, "scheduler");
+        success = false;
+        errorMessage = error instanceof Error ? error.message : String(error);
+        log(`Scheduled task failed (${taskName}): ${errorMessage}`, "scheduler");
       } finally {
+        await recordJobRun({
+          taskName,
+          startedAt,
+          finishedAt: new Date(),
+          success,
+          errorMessage,
+        });
         scheduleNext();
       }
     }, delay);
@@ -84,8 +165,67 @@ function scheduleDailyAtMidnightIST(taskName: string, task: () => Promise<void> 
   log(`Scheduler initialized: ${taskName} (runs daily at 12:00 AM IST)`, "scheduler");
 }
 
+async function assertPortAvailable(port: number, host = "0.0.0.0"): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const tester = net
+      .createServer()
+      .once("error", reject)
+      .once("listening", () => tester.close(() => resolve()))
+      .listen(port, host);
+  });
+}
 
 const app = express();
+
+// Process-level crash logging (best-effort, non-blocking).
+process.on("unhandledRejection", (reason) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  log(`UnhandledRejection: ${message}`, "process");
+  (async () => {
+    try {
+      const { connectToDatabase } = await import("./mongo.js");
+      const db = await connectToDatabase();
+      await db.collection("error_logs").insertOne({
+        kind: "process",
+        message: `unhandledRejection: ${String(message).slice(0, 500)}`,
+        createdAt: new Date(),
+      });
+    } catch {
+      // non-blocking
+    }
+  })();
+});
+
+process.on("uncaughtException", (err) => {
+  const message = err instanceof Error ? err.message : String(err);
+  log(`UncaughtException: ${message}`, "process");
+  (async () => {
+    try {
+      const { connectToDatabase } = await import("./mongo.js");
+      const db = await connectToDatabase();
+      await db.collection("error_logs").insertOne({
+        kind: "process",
+        message: `uncaughtException: ${String(message).slice(0, 500)}`,
+        createdAt: new Date(),
+      });
+    } catch {
+      // non-blocking
+    }
+  })();
+});
+
+// In-memory API health samples for platform monitoring.
+// Stored in app.locals so route handlers can summarize without sharing globals.
+type ApiMetricSample = {
+  ts: number;
+  method: string;
+  path: string;
+  statusCode: number;
+  durationMs: number;
+};
+
+const apiMetrics: ApiMetricSample[] = [];
+app.locals.apiMetrics = apiMetrics;
 
 // Security middleware - Must be first
 app.use(enforceHttps);
@@ -112,6 +252,9 @@ app.use(
   })
 );
 
+// Needed for JWT cookie auth (req.cookies)
+app.use(cookieParser());
+
 // Stripe webhook needs raw body for signature verification — must be registered BEFORE express.json()
 app.use("/api/stripe/webhook", express.raw({ type: "application/json" }));
 
@@ -136,6 +279,19 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
+      apiMetrics.push({
+        ts: Date.now(),
+        method: req.method,
+        path,
+        statusCode: res.statusCode,
+        durationMs: duration,
+      });
+
+      // Keep the buffer bounded to avoid unbounded memory growth.
+      const cutoff = Date.now() - 10 * 60 * 1000; // 10 minutes
+      while (apiMetrics.length > 3000) apiMetrics.shift();
+      while (apiMetrics.length && apiMetrics[0].ts < cutoff) apiMetrics.shift();
+
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
 
       if (logLine.length > 80) {
@@ -143,6 +299,32 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       }
 
       log(logLine);
+
+      // Best-effort persistent error logs (platform admin visibility).
+      if (res.statusCode >= 500) {
+        const msg =
+          capturedJsonResponse && typeof (capturedJsonResponse as any).message === "string"
+            ? String((capturedJsonResponse as any).message).slice(0, 500)
+            : null;
+
+        (async () => {
+          try {
+            const { connectToDatabase } = await import("./mongo.js");
+            const db = await connectToDatabase();
+            await db.collection("error_logs").insertOne({
+              kind: "api",
+              message: msg,
+              method: req.method,
+              path,
+              statusCode: res.statusCode,
+              durationMs: duration,
+              createdAt: new Date(),
+            });
+          } catch {
+            // non-blocking
+          }
+        })();
+      }
     }
   });
 
@@ -150,13 +332,40 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 (async () => {
-  // Ensure TTL indexes for notifications, reminders, compliance_notifications
-  const { ensureTTLIndexes, ensureHistoryIndexes, ensureSubscriptionIndexes, ensureLicenseIndexes, ensurePendingPurchasesIndexes } = await import("./mongo.js");
-  await ensureTTLIndexes();
-  await ensureHistoryIndexes();
-  await ensureSubscriptionIndexes();
-  await ensureLicenseIndexes();
-  await ensurePendingPurchasesIndexes();
+  const port = process.env.PORT ? Number(process.env.PORT) : 5000;
+
+  try {
+    await assertPortAvailable(port);
+  } catch (e: any) {
+    if (e?.code === "EADDRINUSE") {
+      log(
+        `Port ${port} is already in use. Stop the other process using it or run with PORT=${port + 1}.`,
+        "startup"
+      );
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  // Ensure indexes. If MongoDB is down in dev, don't hard-crash the entire server;
+  // surface it via monitoring and let API endpoints report failures as needed.
+  try {
+    const {
+      ensureTTLIndexes,
+      ensureHistoryIndexes,
+      ensureSubscriptionIndexes,
+      ensureLicenseIndexes,
+      ensurePendingPurchasesIndexes,
+    } = await import("./mongo.js");
+
+    await ensureTTLIndexes();
+    await ensureHistoryIndexes();
+    await ensureSubscriptionIndexes();
+    await ensureLicenseIndexes();
+    await ensurePendingPurchasesIndexes();
+  } catch (e) {
+    log(`MongoDB init skipped (unavailable): ${e}`, "startup");
+  }
 
   // One-time cleanup: remove compliance-only fields from subscription reminders
   try {
@@ -201,7 +410,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   };
 
   // Run cleanup immediately on startup
-  cleanupOldNotifications();
+  runJobNow("cleanupOldNotifications", cleanupOldNotifications);
 
   // Schedule cleanup to run daily at 12:00 AM IST
   scheduleDailyAtMidnightIST("cleanupOldNotifications", cleanupOldNotifications);
@@ -220,7 +429,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   };
 
   // Run reminder check immediately on startup (in case server restarted on the 13th)
-  checkMonthlyReminders();
+  runJobNow("checkMonthlyReminders", checkMonthlyReminders);
 
   // Schedule reminder check to run daily at 12:00 AM IST
   // This will automatically send emails on the 13th of each month
@@ -245,7 +454,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   };
 
   // Run on startup
-  checkDailyRenewalReminderEmails();
+  runJobNow("checkDailyRenewalReminderEmails", checkDailyRenewalReminderEmails);
 
   // Run daily at 12:00 AM IST
   scheduleDailyAtMidnightIST("checkDailyRenewalReminderEmails", checkDailyRenewalReminderEmails);
@@ -265,7 +474,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   };
 
   // Run yearly reminder check immediately on startup
-  checkYearlyReminders();
+  runJobNow("checkYearlyReminders", checkYearlyReminders);
 
   // Schedule yearly reminder check to run daily at 12:00 AM IST
   // This will check daily for any yearly subscriptions that need reminders
@@ -289,7 +498,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   };
 
   // Run on startup
-  checkComplianceReminders();
+  runJobNow("checkComplianceReminders", checkComplianceReminders);
 
   // Run daily at 12:00 AM IST
   scheduleDailyAtMidnightIST("checkComplianceReminders", checkComplianceReminders);
@@ -309,7 +518,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   };
 
   // Run auto-renewal check immediately on startup
-  checkAutoRenewals();
+  runJobNow("checkAutoRenewals", checkAutoRenewals);
 
   // Schedule auto-renewal check to run daily at 12:00 AM IST
   // This will automatically renew subscriptions when Next Payment Date = Today
@@ -334,7 +543,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   };
 
   // Run on startup
-  checkPaymentMethodExpiry();
+  runJobNow("checkPaymentMethodExpiry", checkPaymentMethodExpiry);
 
   // Run daily at 12:00 AM IST
   scheduleDailyAtMidnightIST("checkPaymentMethodExpiry", checkPaymentMethodExpiry);
@@ -357,7 +566,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   };
 
   // Run on startup
-  checkLicenseExpiryReminders();
+  runJobNow("checkLicenseExpiryReminders", checkLicenseExpiryReminders);
 
   // Run daily at 12:00 AM IST
   scheduleDailyAtMidnightIST("checkLicenseExpiryReminders", checkLicenseExpiryReminders);
@@ -471,7 +680,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   };
 
   // Run department notification check immediately on startup (if it's the 13th)
-  checkAndSendDepartmentNotifications();
+  runJobNow("checkAndSendDepartmentNotifications", checkAndSendDepartmentNotifications);
 
   // Schedule department notification check to run daily at 12:00 AM IST
   // This will check daily and send on the 13th of each month
@@ -496,12 +705,46 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     res.sendFile(path.join(publicPath, "index.html"));
   });
 
-  const port = process.env.PORT ? Number(process.env.PORT) : 5000;
+  server.on("error", (err: any) => {
+    if (err?.code === "EADDRINUSE") {
+      log(
+        `Port ${port} is already in use. Stop the other process using it or run with PORT=${port + 1}.`,
+        "startup"
+      );
+      process.exit(1);
+    }
+    throw err;
+  });
+
   server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+
+    // Record a platform-visible system event so the activity/audit streams are never empty.
+    // Non-blocking best-effort.
+    (async () => {
+      try {
+        const { connectToDatabase } = await import("./mongo.js");
+        const db = await connectToDatabase();
+        await db.collection("history").insertOne({
+          tenantId: null,
+          type: "system",
+          action: "SERVER_START",
+          description: `Server started on port ${port}`,
+          severity: "info",
+          meta: {
+            port,
+            nodeEnv: process.env.NODE_ENV ?? null,
+          },
+          timestamp: new Date(),
+          createdAt: new Date(),
+        });
+      } catch {
+        // ignore
+      }
+    })();
   });
 })();

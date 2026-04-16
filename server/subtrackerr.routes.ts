@@ -573,10 +573,11 @@ async function generateRemindersForSubscription(subscription: any, tenantId: str
 // JWT middleware to set req.user and req.user.tenantId
 router.use((req, res, next) => {
   let token;
+  const tabScoped = Boolean(req.headers["x-tab-auth"]);
   // Support both Authorization header and cookie
   if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
     token = req.headers.authorization.replace("Bearer ", "");
-  } else if (req.cookies && req.cookies.token) {
+  } else if (req.cookies && req.cookies.token && (!tabScoped || !req.headers.authorization)) {
     token = req.cookies.token;
   }
   if (token) {
@@ -4757,6 +4758,21 @@ router.post("/api/company-info", async (req, res) => {
       return res.status(400).json({ 
         message: "Company name, address, country, and financial year end are required" 
       });
+    }
+
+    // Prevent duplicate company names across tenants (case-insensitive)
+    const normalizedCompanyName = String(companyName).trim().toLowerCase();
+    if (normalizedCompanyName) {
+      const duplicate = await collection.findOne({
+        tenantId: { $ne: tenantId },
+        $expr: {
+          $eq: [{ $toLower: { $trim: { input: "$companyName" } } }, normalizedCompanyName],
+        },
+      });
+
+      if (duplicate) {
+        return res.status(409).json({ message: "Company name already exists. Please choose a unique name." });
+      }
     }
 
     const companyData: CompanyInfo = {
