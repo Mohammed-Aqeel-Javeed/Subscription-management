@@ -1,6 +1,6 @@
 import StripeLib from "stripe";
 import type { Stripe } from "stripe/cjs/stripe.core.js";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import crypto from "crypto";
 import type { Express, Request, Response } from "express";
 
@@ -48,7 +48,7 @@ async function ensureStripeMetadata(
 
 // Helper: fetch subscription period end from Stripe and apply to user document
 async function applySubscriptionPeriodEnd(
-  db: any,
+  db: Db,
   stripeSubscriptionId: string,
   userQuery: Record<string, any>
 ) {
@@ -64,7 +64,7 @@ async function applySubscriptionPeriodEnd(
   }
 }
 
-export function registerStripeRoutes(app: Express, connectToDatabase: () => Promise<any>) {
+export function registerStripeRoutes(app: Express, connectToDatabase: () => Promise<Db>) {
 
   // ===== Create Checkout Session =====
   app.post("/api/stripe/checkout-session", async (req: Request, res: Response) => {
