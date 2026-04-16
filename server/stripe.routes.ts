@@ -15,6 +15,8 @@ const PRICE_IDS: Record<string, string> = {
   professional: process.env.STRIPE_PROFESSIONAL_PRICE_ID || "",
 };
 
+type StripeWebhookEventDoc = { _id: string } & Record<string, any>;
+
 async function ensureStripeMetadata(
   customerId: string | null | undefined,
   subscriptionId: string | null | undefined,
@@ -192,7 +194,7 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
 
       try {
         const db = await connectToDatabase();
-        await db.collection<{ _id: string }>("stripe_webhook_events").insertOne({
+        await db.collection<StripeWebhookEventDoc>("stripe_webhook_events").insertOne({
           _id: `sigfail_${crypto.randomUUID()}`,
           type: "signature_verification_failed",
           status: "error",
@@ -224,7 +226,7 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
       summary: {},
     };
 
-    await db.collection<{ _id: string }>("stripe_webhook_events").updateOne(
+    await db.collection<StripeWebhookEventDoc>("stripe_webhook_events").updateOne(
       { _id: baseLog._id },
       {
         $setOnInsert: {
@@ -259,7 +261,7 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
         const stripeSubscriptionId = session.subscription as string;
         const paidAt = new Date(session.created * 1000);
 
-        await db.collection<{ _id: string }>("stripe_webhook_events").updateOne(
+        await db.collection<StripeWebhookEventDoc>("stripe_webhook_events").updateOne(
           { _id: String(event.id) },
           {
             $set: {
@@ -410,7 +412,7 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
         const stripeCustomerId = invoice.customer as string;
         const stripeSubscriptionId = (invoice as any).subscription as string;
 
-        await db.collection<{ _id: string }>("stripe_webhook_events").updateOne(
+        await db.collection<StripeWebhookEventDoc>("stripe_webhook_events").updateOne(
           { _id: String(event.id) },
           {
             $set: {
@@ -439,7 +441,7 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
         const stripeCustomerId = subscription.customer as string;
         const stripeSubscriptionId = String((subscription as any).id || "");
 
-        await db.collection<{ _id: string }>("stripe_webhook_events").updateOne(
+        await db.collection<StripeWebhookEventDoc>("stripe_webhook_events").updateOne(
           { _id: String(event.id) },
           {
             $set: {
@@ -472,7 +474,7 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
         const stripeCustomerId = invoice.customer as string;
         const stripeSubscriptionId = (invoice as any).subscription as string;
 
-        await db.collection<{ _id: string }>("stripe_webhook_events").updateOne(
+        await db.collection<StripeWebhookEventDoc>("stripe_webhook_events").updateOne(
           { _id: String(event.id) },
           {
             $set: {
@@ -501,7 +503,7 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
         }
       }
 
-      await db.collection<{ _id: string }>("stripe_webhook_events").updateOne(
+      await db.collection<StripeWebhookEventDoc>("stripe_webhook_events").updateOne(
         { _id: String(event.id) },
         { $set: { status: "processed", processedAt: new Date() } }
       );
@@ -511,7 +513,7 @@ export function registerStripeRoutes(app: Express, connectToDatabase: () => Prom
       console.error("[Stripe Webhook] Processing failed:", err);
 
       try {
-        await db.collection<{ _id: string }>("stripe_webhook_events").updateOne(
+        await db.collection<StripeWebhookEventDoc>("stripe_webhook_events").updateOne(
           { _id: String(event.id) },
           {
             $set: {
