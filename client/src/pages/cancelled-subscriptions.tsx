@@ -1,4 +1,3 @@
-import React from 'react';
 import Subscriptions from './subscriptions';
 
 // Wrapper page that forces cancelled status filter via location state or global event

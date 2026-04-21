@@ -1,9 +1,11 @@
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { Bell, MoreVertical } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api";
 
 type NotificationItem = {
   type?: 'subscription' | 'compliance' | 'license';
@@ -35,6 +37,35 @@ export default function Header() {
   const notificationsRef = useRef<HTMLDivElement>(null);
 
   const isGlobalAdmin = user?.role === "global_admin";
+  const isImpersonating = isGlobalAdmin && Boolean((user as any)?.actingTenantId);
+
+  const handleExitImpersonation = async () => {
+    try {
+      const res = await apiFetch("/api/platform/impersonation/exit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const json = (await res.json().catch(() => ({}))) as any;
+      const token = String(json?.token || "").trim();
+      if (token) {
+        try {
+          sessionStorage.setItem("token", token);
+        } catch {
+          // ignore
+        }
+      }
+
+      window.location.assign("/platform-admin/organizations");
+    } catch {
+      // ignore
+    }
+  };
 
   const { data: subscriptionNotifications = [] } = useQuery<NotificationItem[]>({
     queryKey: ['/api/notifications'],
@@ -277,7 +308,19 @@ export default function Header() {
 
   return (
     <div className="h-16 bg-white border-b border-gray-200 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-40">
-      <div className="flex-1" />
+      <div className="flex-1">
+        {isImpersonating ? (
+          <div className="flex items-center gap-2">
+            <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Impersonation Mode</Badge>
+            <span className="text-sm text-gray-700 truncate">
+              Impersonation Mode ({user?.companyName || user?.actingTenantId})
+            </span>
+            <Button variant="outline" size="sm" onClick={handleExitImpersonation}>
+              Exit
+            </Button>
+          </div>
+        ) : null}
+      </div>
 
       {/* Right Side Icons */}
       <div className="flex items-center gap-4">

@@ -51,12 +51,6 @@ const CalendarYearly: React.FC = () => {
   }, [complianceList, year]);
 
   const complianceMonthNames = monthNames.filter(m => complianceMonths[m].length > 0);
-  function handlePrevYear() {
-    setDate(prev => new Date(prev.getFullYear() - 1, 0, 1));
-  }
-  function handleNextYear() {
-    setDate(prev => new Date(prev.getFullYear() + 1, 0, 1));
-  }
   if (complianceLoading) {
     return (
       <div className="p-8">

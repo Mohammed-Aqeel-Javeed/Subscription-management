@@ -1,4 +1,3 @@
-import React from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { CategoryBreakdown } from '@shared/schema';
 
@@ -33,8 +32,6 @@ export default function CategoryChart({ data }: CategoryChartProps) {
     ...item,
     color: item.color || themeFallbackColors[index % themeFallbackColors.length],
   }));
-
-  const total = donutData.reduce((sum, item) => sum + item.amount, 0);
 
   const renderLabel = (props: any) => {
     const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;

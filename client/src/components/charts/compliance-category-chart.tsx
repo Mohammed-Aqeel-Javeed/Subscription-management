@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 type CategoryDatum = {
@@ -53,7 +53,6 @@ export default function ComplianceCategoryChart({ data }: Props) {
             fill="var(--chart-2)"
             radius={[0, 8, 8, 0]}
             barSize={22}
-            barGap={14}
           />
         </BarChart>
       </ResponsiveContainer>

@@ -185,5 +185,10 @@ export function findPlatformItem(pathname: string): PlatformNavItem | undefined 
 }
 
 export function isGlobalAdminPlatformPath(pathname: string): boolean {
-  return pathname === "/profile" || pathname === "/platform-admin" || pathname.startsWith("/platform-admin/");
+  return (
+    pathname === "/profile" ||
+    pathname === "/platform-admin" ||
+    pathname.startsWith("/platform-admin/") ||
+    pathname.startsWith("/platform/organizations/")
+  );
 }

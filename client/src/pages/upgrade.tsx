@@ -1,5 +1,4 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { API_BASE_URL } from "../lib/config";
 import { useUser } from "@/context/UserContext";
@@ -31,7 +30,6 @@ const ENTERPRISE_FEATURES = [
 
 export default function UpgradePage() {
   const { user } = useUser();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState("");
 

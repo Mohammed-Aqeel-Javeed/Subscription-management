@@ -49,6 +49,7 @@ import Profile from "@/pages/profile";
 import SecureLinkRedirect from "@/pages/secure-link";
 import PlatformAdminPage from "@/pages/platform-admin";
 import PlatformSectionPage from "@/pages/platform-section";
+import PlatformOrgDetailPage from "@/pages/platform-org-detail";
 import UpgradePage from "@/pages/upgrade";
 import PaymentSuccessPage from "@/pages/payment-success";
 import TrialExpiredOverlay from "@/components/TrialExpiredOverlay";
@@ -166,10 +167,14 @@ function AppWithSidebar() {
 
         const me = await res.json().catch(() => null);
         if (me?.role === "global_admin") {
-          if (!isGlobalAdminPlatformPath(location.pathname)) {
-            navigate("/platform-admin", { replace: true });
+          // In impersonation mode, allow the global admin to use the normal app shell
+          // while still having platform access.
+          if (!me?.actingTenantId) {
+            if (!isGlobalAdminPlatformPath(location.pathname)) {
+              navigate("/platform-admin", { replace: true });
+            }
+            return;
           }
-          return;
         }
 
         // If a non-global user lands on a platform route (e.g., after refresh),
@@ -244,6 +249,9 @@ function AppWithSidebar() {
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/s/:token" element={<SecureLinkRedirect />} />
               <Route path="/platform-admin" element={<PlatformAdminPage />} />
+              <Route path="/platform-admin/tenants/:tenantId" element={<PlatformOrgDetailPage />} />
+              <Route path="/organizations/:tenantId" element={<PlatformOrgDetailPage />} />
+              <Route path="/platform/organizations/:tenantId" element={<PlatformOrgDetailPage />} />
               <Route path="/platform-admin/:section" element={<PlatformSectionPage />} />
               <Route path="/platform-admin/:section/:subsection" element={<PlatformSectionPage />} />
               <Route path="/dashboard" element={<Dashboard />} />

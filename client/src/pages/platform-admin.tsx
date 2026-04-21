@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity as ActivityIcon,
@@ -532,7 +533,12 @@ export default function PlatformAdminPage() {
                     topCompanies.map((company) => (
                       <TableRow key={company.tenantId}>
                         <TableCell>
-                          <div className="font-medium text-gray-900">{formatCompanyName(company.companyName)}</div>
+                          <Link
+                            className="font-medium text-gray-900 underline underline-offset-2"
+                            to={`/platform/organizations/${company.tenantId}`}
+                          >
+                            {formatCompanyName(company.companyName)}
+                          </Link>
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className={companyStatusClass(company.status)}>

@@ -6,13 +6,30 @@ import { findPlatformItem, findPlatformSection } from "@/lib/platform-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, CheckCircle2, Clock3, CreditCard, Receipt, ShieldCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, Clock3, CreditCard, MoreHorizontal, Receipt, ShieldCheck } from "lucide-react";
 
 type PlatformStats = {
   totalCompanies: number;
@@ -37,6 +54,7 @@ type PlatformUser = {
   companyName?: string | null;
   tenantId?: string | null;
   role?: string | null;
+  plan?: string | null;
   status?: string | null;
   createdAt?: string | Date | null;
   lastLogin?: string | Date | null;
@@ -87,6 +105,8 @@ type BillingSubscription = {
   tenantId?: string | null;
   planName: string;
   status: string;
+  cancelAtPeriodEnd?: boolean;
+  pauseCollection?: boolean;
   currentPeriodEnd: string | Date | null;
 };
 
@@ -284,6 +304,28 @@ type JobRunsResponse = {
   items: JobRunItem[];
 };
 
+type TenantHealthItem = {
+  tenantId: string;
+  companyName: string;
+  plan?: string | null;
+  users?: number | null;
+  activeUsers?: number | null;
+  activeSessions?: number | null;
+  status?: string | null;
+  subscriptionCurrentPeriodEnd?: string | Date | null;
+  lastActivityAt?: string | Date | null;
+  hoursSinceLastActivity?: number | null;
+  eventsLast24h?: number | null;
+  activityStatus: "active" | "idle" | "inactive";
+};
+
+type TenantHealthResponse = {
+  activeHours: number;
+  idleDays: number;
+  timeoutMinutes?: number;
+  items: TenantHealthItem[];
+};
+
 const schedulerJobs = [
   { name: "Monthly Reminder", cadence: "Monthly", module: "Reminders", status: "Active" },
   { name: "Daily Renewal Reminder Email", cadence: "Daily", module: "Reminders", status: "Active" },
@@ -323,15 +365,6 @@ function formatMoney(value: unknown, currency = "USD") {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
-}
-
-function isAllCaps(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  // If there are letters, and all of them are uppercase (ignoring non-letters), treat as all-caps.
-  const letters = trimmed.replace(/[^a-zA-Z]/g, "");
-  if (!letters) return false;
-  return letters === letters.toUpperCase();
 }
 
 function toTitleCase(value: string) {
@@ -409,13 +442,6 @@ function invoiceDisplayLabel(row: { invoiceNumber?: string | null; invoiceRefere
   return raw;
 }
 
-function formatStripeIdShort(raw: unknown) {
-  const id = String(raw || "").trim();
-  if (!id) return "—";
-  if (id.length <= 14) return id;
-  return `${id.slice(0, 8)}…${id.slice(-4)}`;
-}
-
 function activityLabel(item: PlatformActivityItem) {
   return item.description || item.message || item.action || item.type || item.subscriptionName || item.serviceName || "Activity";
 }
@@ -460,7 +486,8 @@ export default function PlatformSectionPage() {
   const item = findPlatformItem(location.pathname);
 
   const isUsersSection = section?.id === "users";
-  const isBillingSection = section?.id === "billing" || section?.id === "plans" || section?.id === "settings" || item?.id === "system-health";
+  const isSystemHealth = item?.id === "system-health";
+  const isBillingSection = section?.id === "billing" || section?.id === "plans" || section?.id === "settings" || isSystemHealth;
   const isPlatformSettingsSection = item?.id === "platform-settings";
   const isSecurityControlPanel = item?.id === "security";
   const needsPlatformSettings = Boolean(isPlatformSettingsSection || isSecurityControlPanel);
@@ -470,6 +497,57 @@ export default function PlatformSectionPage() {
 
   const [userSearch, setUserSearch] = useState("");
   const [userStatusFilter, setUserStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const [subscriptionActionTarget, setSubscriptionActionTarget] = useState<null | {
+    subscriptionId: string;
+    action: "cancel" | "pause" | "resume";
+    companyName: string;
+    customerEmail?: string;
+  }>(null);
+  const [subscriptionPlanTarget, setSubscriptionPlanTarget] = useState<null | {
+    subscriptionId: string;
+    companyName: string;
+    currentPlan: string;
+    nextPlan: "starter" | "professional" | "premium" | "free";
+  }>(null);
+  const [refundTarget, setRefundTarget] = useState<null | {
+    invoiceId: string;
+    companyName: string;
+    customerEmail?: string;
+    amount: number;
+    currency: string;
+  }>(null);
+
+  const [userStatusTarget, setUserStatusTarget] = useState<null | {
+    userId: string;
+    email: string;
+    companyName: string;
+    nextStatus: "active" | "inactive";
+  }>(null);
+  const [userRoleTarget, setUserRoleTarget] = useState<null | {
+    userId: string;
+    email: string;
+    companyName: string;
+    nextRole: "super_admin" | "admin" | "contributor" | "viewer" | "department_editor" | "department_viewer";
+  }>(null);
+  const [userRevokeSessionsTarget, setUserRevokeSessionsTarget] = useState<null | {
+    userId?: string;
+    email?: string;
+    companyName: string;
+  }>(null);
+
+  const [sessionRevokeTarget, setSessionRevokeTarget] = useState<null | {
+    sessionId: string;
+    email: string;
+    lastSeenAt?: string | Date | null;
+  }>(null);
+
+  const [systemHealthDrilldown, setSystemHealthDrilldown] = useState<null | "tenants" | "api-errors" | "job-failures">(null);
+
+  const [errorLogKindFilter, setErrorLogKindFilter] = useState<string>("all");
+  const [selectedErrorLogId, setSelectedErrorLogId] = useState<string | null>(null);
+  const [jobRunsFailedOnly, setJobRunsFailedOnly] = useState<boolean>(true);
+  const [selectedJobRunId, setSelectedJobRunId] = useState<string | null>(null);
 
   const { data: stats } = useQuery<PlatformStats>({
     queryKey: ["/api/platform/stats"],
@@ -511,7 +589,19 @@ export default function PlatformSectionPage() {
       if (!res.ok) throw new Error("Failed to fetch monitoring");
       return res.json();
     },
-    enabled: item?.id === "system-health",
+    enabled: isSystemHealth,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: tenantHealth } = useQuery<TenantHealthResponse>({
+    queryKey: ["/api/platform/tenant-health"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/platform/tenant-health?limit=200");
+      if (!res.ok) throw new Error("Failed to fetch tenant health");
+      return res.json();
+    },
+    enabled: isSystemHealth,
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -571,7 +661,7 @@ export default function PlatformSectionPage() {
       if (!res.ok) throw new Error("Failed to fetch error logs");
       return res.json();
     },
-    enabled: isSecurityControlPanel,
+    enabled: isSecurityControlPanel || isSystemHealth,
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -583,7 +673,7 @@ export default function PlatformSectionPage() {
       if (!res.ok) throw new Error("Failed to fetch job runs");
       return res.json();
     },
-    enabled: isSecurityControlPanel,
+    enabled: isSecurityControlPanel || isSystemHealth,
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -614,6 +704,298 @@ export default function PlatformSectionPage() {
       toast({
         title: "Error",
         description: error?.message || "Failed to revoke sessions",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const revokeSingleSessionMutation = useMutation({
+    mutationFn: async (payload: { sessionId: string }) => {
+      const res = await apiFetch("/api/platform/security/sessions/revoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: payload.sessionId, reason: "platform_revoke" }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to revoke session");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.setQueryData<AuthSessionsResponse>(["/api/platform/security/sessions"], (prev) => {
+        if (!prev) return prev as any;
+        const nextItems = (prev.items || []).map((s) =>
+          s.id === variables.sessionId
+            ? { ...s, revokedAt: new Date().toISOString(), revokedReason: "platform_revoke", isActive: false }
+            : s
+        );
+        return { ...prev, items: nextItems };
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/platform/security/sessions"] });
+      toast({
+        title: "Session revoked",
+        description: "That one session was revoked.",
+        duration: 1200,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to revoke session",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const updateUserStatusMutation = useMutation({
+    mutationFn: async (payload: { userId: string; status: "active" | "inactive" }) => {
+      const res = await apiFetch(`/api/platform/users/${encodeURIComponent(payload.userId)}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: payload.status }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to update user status");
+      }
+      return res.json();
+    },
+    onSuccess: async (_data, variables) => {
+      queryClient.setQueryData<PlatformUser[]>(["/api/platform/users"], (prev) => {
+        if (!Array.isArray(prev)) return prev as any;
+        return prev.map((u) => (String(u.userId || "") === String(variables.userId) ? { ...u, status: variables.status } : u));
+      });
+      await queryClient.invalidateQueries({ queryKey: ["/api/platform/users"] });
+      toast({
+        title: "User updated",
+        description: variables.status === "active" ? "User reactivated." : "User deactivated and sessions revoked.",
+        duration: 1200,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to update user status",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const updateUserRoleMutation = useMutation({
+    mutationFn: async (payload: { userId: string; role: string; email: string }) => {
+      const res = await apiFetch(`/api/platform/users/${encodeURIComponent(payload.userId)}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: payload.role }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to update user role");
+      }
+      return res.json();
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/platform/users"] });
+      revokeUserSessionsMutation.mutate({ userId: variables.userId, email: variables.email });
+      toast({
+        title: "Role changed",
+        description: "Role updated and sessions revoked to apply immediately.",
+        duration: 1400,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to update user role",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const cancelStripeSubscriptionMutation = useMutation({
+    mutationFn: async (payload: { subscriptionId: string }) => {
+      const res = await apiFetch(`/api/platform/billing/subscriptions/${encodeURIComponent(payload.subscriptionId)}/cancel`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to cancel subscription");
+      }
+      return res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/platform/billing"] });
+      toast({
+        title: "Cancellation scheduled",
+        description: "Subscription will remain active until the end of the current period.",
+        duration: 1400,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to cancel subscription",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const pauseStripeSubscriptionMutation = useMutation({
+    mutationFn: async (payload: { subscriptionId: string }) => {
+      const res = await apiFetch(`/api/platform/billing/subscriptions/${encodeURIComponent(payload.subscriptionId)}/pause`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to pause subscription");
+      }
+      return res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/platform/billing"] });
+      toast({
+        title: "Subscription paused",
+        description: "Collection is paused in Stripe.",
+        duration: 1200,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to pause subscription",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const resumeStripeSubscriptionMutation = useMutation({
+    mutationFn: async (payload: { subscriptionId: string }) => {
+      const res = await apiFetch(`/api/platform/billing/subscriptions/${encodeURIComponent(payload.subscriptionId)}/resume`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to resume subscription");
+      }
+      return res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/platform/billing"] });
+      toast({
+        title: "Subscription resumed",
+        description: "Collection resumed in Stripe.",
+        duration: 1200,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to resume subscription",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const changeStripePlanMutation = useMutation({
+    mutationFn: async (payload: { subscriptionId: string; plan: string }) => {
+      const res = await apiFetch(`/api/platform/billing/subscriptions/${encodeURIComponent(payload.subscriptionId)}/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: payload.plan }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to change plan");
+      }
+      return res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/platform/billing"] });
+      toast({
+        title: "Success",
+        description: "Successfully plan has changed.",
+        duration: 1200,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to change plan",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const sendInvoiceEmailMutation = useMutation({
+    mutationFn: async (payload: { invoiceId: string }) => {
+      const res = await apiFetch(`/api/platform/billing/invoices/${encodeURIComponent(payload.invoiceId)}/send-email`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to send invoice email");
+      }
+      return res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/platform/billing"] });
+      toast({
+        title: "Invoice sent",
+        description: "Stripe invoice email has been sent.",
+        duration: 1200,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to send invoice",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const refundPaymentMutation = useMutation({
+    mutationFn: async (payload: { invoiceId: string }) => {
+      const res = await apiFetch(`/api/platform/billing/payments/${encodeURIComponent(payload.invoiceId)}/refund`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to refund payment");
+      }
+      return res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/platform/billing"] });
+      toast({
+        title: "Refund created",
+        description: "Stripe refund created successfully.",
+        duration: 1200,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to refund payment",
         variant: "destructive",
         duration: 1500,
       });
@@ -955,9 +1337,49 @@ export default function PlatformSectionPage() {
           });
         }
 
-        const alerts: AlertRow[] = Array.isArray(monitoring?.alerts) && monitoring.alerts.length
-          ? (monitoring.alerts as any)
-          : computedAlerts;
+        const monitoringAlerts: AlertRow[] = Array.isArray(monitoring?.alerts) && monitoring.alerts.length
+          ? ((monitoring.alerts as any) as AlertRow[])
+          : [];
+        const mergedAlerts = [...monitoringAlerts, ...computedAlerts];
+        const alerts: AlertRow[] = mergedAlerts.filter((alert, index) => {
+          const key = `${alert.severity}:${alert.service || ""}:${alert.title}`;
+          return mergedAlerts.findIndex((a) => `${a.severity}:${a.service || ""}:${a.title}` === key) === index;
+        });
+
+        const tenantItems = tenantHealth?.items || [];
+        const inactiveTenants = tenantItems.filter((t) => t.activityStatus === "inactive");
+        if (inactiveTenants.length) {
+          computedAlerts.push({
+            title: "Tenants are inactive",
+            severity: inactiveTenants.length >= 10 ? "critical" : "warning",
+            detail: `${inactiveTenants.length} tenant(s) are inactive based on activity thresholds.`,
+            service: "tenant-health",
+            suggestedAction: "Open Tenant Activity drilldown to identify inactive tenants.",
+            detectedAt: new Date(),
+          });
+        }
+
+        const drilldown = systemHealthDrilldown;
+        const drilldownTitle = drilldown === "tenants" ? "Tenant Activity" : drilldown === "api-errors" ? "API Errors" : drilldown === "job-failures" ? "Job Failures" : null;
+
+        const apiErrorItems = (errorLogs?.items || []).filter((e) => typeof e?.statusCode === "number" && (e.statusCode as number) >= 500);
+        const apiEndpointMap = new Map<string, { key: string; count: number; lastAt: string | Date | null; statusCode?: number | null }>();
+        for (const e of apiErrorItems) {
+          const key = `${e.method ? `${e.method} ` : ""}${e.path || "—"}`.trim();
+          const prev = apiEndpointMap.get(key);
+          const createdAt = e.createdAt ?? null;
+          const createdMs = createdAt ? new Date(String(createdAt)).getTime() : 0;
+          const prevMs = prev?.lastAt ? new Date(String(prev.lastAt)).getTime() : 0;
+          apiEndpointMap.set(key, {
+            key,
+            count: (prev?.count ?? 0) + 1,
+            lastAt: createdMs >= prevMs ? createdAt : prev?.lastAt ?? createdAt,
+            statusCode: e.statusCode ?? prev?.statusCode ?? null,
+          });
+        }
+        const apiEndpointRows = Array.from(apiEndpointMap.values()).sort((a, b) => b.count - a.count).slice(0, 15);
+
+        const failedJobItems = (jobRuns?.items || []).filter((j) => j.success === false);
 
         const signals = [
           { label: "Stripe Billing", ok: Boolean(billing?.configured), reason: billing?.configured ? "Stripe is configured." : "Stripe billing is not configured." },
@@ -975,12 +1397,82 @@ export default function PlatformSectionPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <MetricCard title="Stripe" value={billing?.configured ? "Connected" : "Not Configured"} detail="Billing data is sourced from the configured Stripe account." />
               <MetricCard title="MongoDB" value={mongoLabel} detail={mongoDetail} />
-              <MetricCard title="API" value={apiLabel} detail={apiDetail} />
-              <MetricCard title="Failed Jobs (24h)" value={jobsLabel} detail="Scheduled job failures recorded during the last 24 hours." />
+              <button
+                type="button"
+                className={"text-left w-full " + (systemHealthDrilldown === "api-errors" ? "ring-2 ring-indigo-300 rounded-xl" : "")}
+                onClick={() => setSystemHealthDrilldown((prev) => (prev === "api-errors" ? null : "api-errors"))}
+              >
+                <MetricCard title="API" value={apiLabel} detail={apiDetail} />
+              </button>
+              <button
+                type="button"
+                className={"text-left w-full " + (systemHealthDrilldown === "job-failures" ? "ring-2 ring-indigo-300 rounded-xl" : "")}
+                onClick={() => setSystemHealthDrilldown((prev) => (prev === "job-failures" ? null : "job-failures"))}
+              >
+                <MetricCard title="Failed Jobs (24h)" value={jobsLabel} detail="Scheduled job failures recorded during the last 24 hours." />
+              </button>
               <MetricCard title="Audit Events (24h)" value={auditLabel} detail="Audit/log entries created during the last 24 hours." />
-              <MetricCard title="Tenant Activity" value={tenantActivityLabel} detail={tenantActivityDetail} />
+              <button
+                type="button"
+                className={"text-left w-full " + (systemHealthDrilldown === "tenants" ? "ring-2 ring-indigo-300 rounded-xl" : "")}
+                onClick={() => setSystemHealthDrilldown((prev) => (prev === "tenants" ? null : "tenants"))}
+              >
+                <MetricCard title="Tenant Activity" value={tenantActivityLabel} detail={tenantActivityDetail} />
+              </button>
               <MetricCard title="Schedulers" value={String(schedulerJobs.length)} detail="Background jobs currently expected in the server runtime." />
             </div>
+
+            {renderTableShell(
+              "Tenant Activity (per tenant)",
+              "Who is using the system, per tenant (active/idle/inactive based on last recorded activity + active sessions).",
+              <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tenant</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Active users</TableHead>
+                      <TableHead className="text-right">Users</TableHead>
+                      <TableHead>Last activity</TableHead>
+                      <TableHead className="text-right">Events (24h)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tenantItems.length ? (
+                      tenantItems.slice(0, 200).map((t) => (
+                        <TableRow key={t.tenantId}>
+                          <TableCell className="font-medium text-indigo-900">{formatCompanyName(t.companyName)}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="secondary"
+                              className={
+                                t.activityStatus === "active"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : t.activityStatus === "idle"
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : "bg-rose-50 text-rose-700 border-rose-200"
+                              }
+                            >
+                              {t.activityStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-indigo-800">{typeof t.activeUsers === "number" ? t.activeUsers : "—"}</TableCell>
+                          <TableCell className="text-right text-indigo-800">{typeof t.users === "number" ? t.users : "—"}</TableCell>
+                          <TableCell className="text-indigo-800">{formatDateTime(t.lastActivityAt)}</TableCell>
+                          <TableCell className="text-right text-indigo-800">{typeof t.eventsLast24h === "number" ? t.eventsLast24h : "—"}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-indigo-700 py-6">
+                          No tenant activity data yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
 
             {renderTableShell(
               "Alerts",
@@ -1068,6 +1560,131 @@ export default function PlatformSectionPage() {
                 </div>
               )}
             </div>
+
+            {drilldownTitle ? (
+              <div className="space-y-4">
+                {renderTableShell(
+                  `Drilldown: ${drilldownTitle}`,
+                  drilldown === "tenants"
+                    ? "Tenant health based on last recorded activity."
+                    : drilldown === "api-errors"
+                      ? "Recent 5xx errors grouped by endpoint."
+                      : "Most recent failed job runs.",
+                  drilldown === "tenants" ? (
+                    <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Organization</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Users</TableHead>
+                            <TableHead>Plan</TableHead>
+                            <TableHead>Last activity</TableHead>
+                            <TableHead className="text-right">Events (24h)</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {tenantItems.length ? (
+                            tenantItems.slice(0, 200).map((t) => (
+                              <TableRow key={t.tenantId}>
+                                <TableCell className="font-medium text-indigo-900">{formatCompanyName(t.companyName)}</TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant="secondary"
+                                    className={
+                                      t.activityStatus === "active"
+                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                        : t.activityStatus === "idle"
+                                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                                          : "bg-rose-50 text-rose-700 border-rose-200"
+                                    }
+                                  >
+                                    {t.activityStatus}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right text-indigo-800">{typeof t.users === "number" ? t.users : "—"}</TableCell>
+                                <TableCell className="text-indigo-800">{formatPlanLabel(t.plan)}</TableCell>
+                                <TableCell className="text-indigo-800">{formatDateTime(t.lastActivityAt)}</TableCell>
+                                <TableCell className="text-right text-indigo-800">{typeof t.eventsLast24h === "number" ? t.eventsLast24h : "—"}</TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={6} className="text-center text-indigo-700 py-6">
+                                Tenant health data not available yet.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : drilldown === "api-errors" ? (
+                    <div className="space-y-3">
+                      <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Endpoint</TableHead>
+                              <TableHead className="text-right">Count</TableHead>
+                              <TableHead>Last seen</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {apiEndpointRows.length ? (
+                              apiEndpointRows.map((row) => (
+                                <TableRow key={row.key}>
+                                  <TableCell className="font-medium text-indigo-900">{row.key}</TableCell>
+                                  <TableCell className="text-right text-indigo-800">{row.count}</TableCell>
+                                  <TableCell className="text-indigo-800">{formatDateTime(row.lastAt)}</TableCell>
+                                </TableRow>
+                              ))
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={3} className="text-center text-indigo-700 py-6">
+                                  No 5xx errors recorded.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <div className="rounded-lg border border-indigo-200/50 bg-white/70 px-3 py-3 text-sm text-indigo-700">
+                        Tip: open Security → Error Logs for full meta payloads.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Task</TableHead>
+                            <TableHead>Started</TableHead>
+                            <TableHead>Error</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {failedJobItems.length ? (
+                            failedJobItems.slice(0, 25).map((j) => (
+                              <TableRow key={j.id}>
+                                <TableCell className="font-medium text-indigo-900">{j.taskName || "—"}</TableCell>
+                                <TableCell className="text-indigo-800">{formatDateTime(j.startedAt)}</TableCell>
+                                <TableCell className="text-indigo-800">{j.errorMessage || "—"}</TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={3} className="text-center text-indigo-700 py-6">
+                                No failed job runs recorded.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )
+                )}
+              </div>
+            ) : null}
           </div>
         );
       }
@@ -1167,20 +1784,118 @@ export default function PlatformSectionPage() {
                     <TableHead>Plan</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Current Period End</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {billing.subscriptions.map((subscription) => (
-                    <TableRow key={subscription.id}>
-                      <TableCell className="font-medium text-indigo-900">{billingCompanyLabel(subscription)}</TableCell>
-                      <TableCell className="text-indigo-800">{subscription.customerEmail || "—"}</TableCell>
-                      <TableCell className="text-indigo-800">{subscription.planName}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className={statusBadgeClass(subscription.status)}>{subscription.status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-indigo-800">{formatDate(subscription.currentPeriodEnd)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {billing.subscriptions.map((subscription) => {
+                    const companyName = billingCompanyLabel(subscription);
+                    const isPaused = Boolean(subscription.pauseCollection);
+                    const isEndingSoon =
+                      Boolean(subscription.cancelAtPeriodEnd) && ["active", "trialing"].includes(String(subscription.status || "").toLowerCase());
+
+                    const statusLabel = isPaused
+                      ? "Paused"
+                      : isEndingSoon
+                        ? "Active (ending soon)"
+                        : subscription.status;
+
+                    const statusClass = isPaused
+                      ? "bg-slate-100 text-slate-700 border-slate-200"
+                      : isEndingSoon
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : statusBadgeClass(subscription.status);
+
+                    const actionBusy =
+                      cancelStripeSubscriptionMutation.isPending ||
+                      pauseStripeSubscriptionMutation.isPending ||
+                      resumeStripeSubscriptionMutation.isPending ||
+                      changeStripePlanMutation.isPending;
+
+                    const canPause = !isPaused && ["active", "trialing"].includes(String(subscription.status || "").toLowerCase());
+                    const canResume = isPaused;
+                    const canCancel = !subscription.cancelAtPeriodEnd && ["active", "trialing"].includes(String(subscription.status || "").toLowerCase());
+
+                    return (
+                      <TableRow key={subscription.id}>
+                        <TableCell className="font-medium text-indigo-900">{companyName}</TableCell>
+                        <TableCell className="text-indigo-800">{subscription.customerEmail || "—"}</TableCell>
+                        <TableCell className="text-indigo-800">{subscription.planName}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className={statusClass}>
+                            {statusLabel}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-indigo-800">{formatDate(subscription.currentPeriodEnd)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" disabled={actionBusy}>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-56">
+                                <DropdownMenuItem
+                                  disabled={!canCancel || actionBusy}
+                                  onClick={() =>
+                                    setSubscriptionActionTarget({
+                                      subscriptionId: subscription.id,
+                                      action: "cancel",
+                                      companyName,
+                                      customerEmail: subscription.customerEmail,
+                                    })
+                                  }
+                                >
+                                  Cancel (end of period)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={!canPause || actionBusy}
+                                  onClick={() =>
+                                    setSubscriptionActionTarget({
+                                      subscriptionId: subscription.id,
+                                      action: "pause",
+                                      companyName,
+                                      customerEmail: subscription.customerEmail,
+                                    })
+                                  }
+                                >
+                                  Pause collection
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={!canResume || actionBusy}
+                                  onClick={() =>
+                                    setSubscriptionActionTarget({
+                                      subscriptionId: subscription.id,
+                                      action: "resume",
+                                      companyName,
+                                      customerEmail: subscription.customerEmail,
+                                    })
+                                  }
+                                >
+                                  Resume collection
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  disabled={actionBusy}
+                                  onClick={() =>
+                                    setSubscriptionPlanTarget({
+                                      subscriptionId: subscription.id,
+                                      companyName,
+                                      currentPlan: String(subscription.planName || "").trim(),
+                                      nextPlan: "professional",
+                                    })
+                                  }
+                                >
+                                  Upgrade / downgrade plan
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -1313,54 +2028,86 @@ export default function PlatformSectionPage() {
                     <TableHead>Status</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Invoice</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {billing.payments.map((payment) => (
-                    <TableRow key={payment.id}>
-                      <TableCell className="font-medium text-indigo-900">{billingCompanyLabel(payment)}</TableCell>
-                      <TableCell className="text-indigo-800">{payment.customerEmail || "—"}</TableCell>
-                      <TableCell className="text-indigo-800">{formatMoney(payment.amount, payment.currency)}</TableCell>
-                      <TableCell className="text-indigo-800">{String(payment.currency || "").toUpperCase()}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className={statusBadgeClass(payment.status)}>{payment.status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-indigo-800">{billingDateLabel(payment)}</TableCell>
-                      <TableCell className="text-indigo-800" title={payment.invoiceNumber || payment.invoiceReference || payment.id}>
-                        {payment.invoiceUrl ? (
-                          <a
-                            className="text-indigo-700 underline"
-                            href={payment.invoiceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={payment.invoiceNumber || payment.invoiceReference || payment.id}
-                          >
-                            {invoiceDisplayLabel(payment)}
-                          </a>
-                        ) : (
-                          <span title={payment.invoiceNumber || payment.invoiceReference || payment.id}>
-                            {invoiceDisplayLabel(payment)}
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {billing.payments.map((payment) => {
+                    const paymentStatus = String(payment.status || "").toLowerCase();
+                    const canRefund = paymentStatus === "paid";
+                    const busy = refundPaymentMutation.isPending;
+
+                    return (
+                      <TableRow key={payment.id}>
+                        <TableCell className="font-medium text-indigo-900">{billingCompanyLabel(payment)}</TableCell>
+                        <TableCell className="text-indigo-800">{payment.customerEmail || "—"}</TableCell>
+                        <TableCell className="text-indigo-800">{formatMoney(payment.amount, payment.currency)}</TableCell>
+                        <TableCell className="text-indigo-800">{String(payment.currency || "").toUpperCase()}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className={statusBadgeClass(payment.status)}>{payment.status}</Badge>
+                        </TableCell>
+                        <TableCell className="text-indigo-800">{billingDateLabel(payment)}</TableCell>
+                        <TableCell className="text-indigo-800">
+                          {payment.invoiceUrl ? (
+                            <a
+                              className="text-indigo-700 underline"
+                              href={payment.invoiceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={payment.invoiceNumber || payment.invoiceReference || payment.id}
+                            >
+                              {invoiceDisplayLabel(payment)}
+                            </a>
+                          ) : (
+                            <span title={payment.invoiceNumber || payment.invoiceReference || payment.id}>
+                              {invoiceDisplayLabel(payment)}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-9 w-9"
+                                  disabled={busy}
+                                  aria-label="Payment actions"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuItem
+                                  disabled={!canRefund || busy}
+                                  onClick={() =>
+                                    setRefundTarget({
+                                      invoiceId: payment.id,
+                                      companyName: billingCompanyLabel(payment),
+                                      customerEmail: payment.customerEmail,
+                                      amount: payment.amount,
+                                      currency: payment.currency,
+                                    })
+                                  }
+                                >
+                                  Refund
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
           ) : (
-            <EmptyState title="No payments available" description="Stripe payment history will appear here after the first successful or failed charge events are available." />
+            <EmptyState title="No payments yet" description="Once Stripe creates and finalizes invoices, recent charge outcomes will appear here." />
           )
         );
       case "invoices":
-        if (billingError) {
-          return (
-            <EmptyState
-              title="Billing data unavailable"
-              description={`The billing API call failed. ${String((billingError as any)?.message || billingError)}`}
-            />
-          );
-        }
         return renderTableShell(
           "Invoices",
           "Invoice list with payment status for the Stripe billing layer.",
@@ -1377,39 +2124,70 @@ export default function PlatformSectionPage() {
                     <TableHead>Status</TableHead>
                     <TableHead>Due</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {billing.invoices.map((invoice) => (
-                    <TableRow key={invoice.id}>
-                      <TableCell className="text-indigo-800" title={invoice.invoiceNumber || invoice.invoiceReference || invoice.id}>
-                        {invoice.invoiceUrl ? (
-                          <a
-                            className="text-indigo-700 underline"
-                            href={invoice.invoiceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={invoice.invoiceNumber || invoice.invoiceReference || invoice.id}
-                          >
-                            {invoiceDisplayLabel(invoice)}
-                          </a>
-                        ) : (
-                          <span title={invoice.invoiceNumber || invoice.invoiceReference || invoice.id}>
-                            {invoiceDisplayLabel(invoice)}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-medium text-indigo-900">{billingCompanyLabel(invoice)}</TableCell>
-                      <TableCell className="text-indigo-800">{invoice.customerEmail || "—"}</TableCell>
-                      <TableCell className="text-indigo-800">{formatMoney(invoice.amount, invoice.currency)}</TableCell>
-                      <TableCell className="text-indigo-800">{String(invoice.currency || "").toUpperCase()}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className={statusBadgeClass(invoice.status)}>{invoice.status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-indigo-800">{formatDate(invoice.dueDate)}</TableCell>
-                      <TableCell className="text-indigo-800">{formatDateTime(invoice.createdAt)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {billing.invoices.map((invoice) => {
+                    const busy = sendInvoiceEmailMutation.isPending;
+                    const canDownload = Boolean(invoice.invoiceUrl);
+
+                    return (
+                      <TableRow key={invoice.id}>
+                        <TableCell className="text-indigo-800" title={invoice.invoiceNumber || invoice.invoiceReference || invoice.id}>
+                          {invoice.invoiceUrl ? (
+                            <a
+                              className="text-indigo-700 underline"
+                              href={invoice.invoiceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={invoice.invoiceNumber || invoice.invoiceReference || invoice.id}
+                            >
+                              {invoiceDisplayLabel(invoice)}
+                            </a>
+                          ) : (
+                            <span title={invoice.invoiceNumber || invoice.invoiceReference || invoice.id}>
+                              {invoiceDisplayLabel(invoice)}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium text-indigo-900">{billingCompanyLabel(invoice)}</TableCell>
+                        <TableCell className="text-indigo-800">{invoice.customerEmail || "—"}</TableCell>
+                        <TableCell className="text-indigo-800">{formatMoney(invoice.amount, invoice.currency)}</TableCell>
+                        <TableCell className="text-indigo-800">{String(invoice.currency || "").toUpperCase()}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className={statusBadgeClass(invoice.status)}>{invoice.status}</Badge>
+                        </TableCell>
+                        <TableCell className="text-indigo-800">{formatDate(invoice.dueDate)}</TableCell>
+                        <TableCell className="text-indigo-800">{formatDateTime(invoice.createdAt)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-indigo-200"
+                              disabled={!canDownload}
+                              onClick={() => {
+                                if (!invoice.invoiceUrl) return;
+                                window.open(invoice.invoiceUrl, "_blank", "noopener,noreferrer");
+                              }}
+                            >
+                              Download
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-indigo-200"
+                              disabled={busy}
+                              onClick={() => sendInvoiceEmailMutation.mutate({ invoiceId: invoice.id })}
+                            >
+                              Send email
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -1466,10 +2244,11 @@ export default function PlatformSectionPage() {
                     <TableRow>
                       <TableHead>User</TableHead>
                       <TableHead>Company</TableHead>
-                      <TableHead>Role</TableHead>
+                      <TableHead className="text-center">Role</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Last Login</TableHead>
                       <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1477,6 +2256,16 @@ export default function PlatformSectionPage() {
                       const isUnlinked = !user.tenantId;
                       const primaryCompanyNameRaw = user.companyName ? formatCompanyName(user.companyName) : "";
                       const primaryCompanyName = primaryCompanyNameRaw === "Unnamed Company" ? "" : primaryCompanyNameRaw;
+
+                      const companyLabel = primaryCompanyName || (isUnlinked ? "No Company Assigned" : "—");
+                      const status = String(user.status || "").trim().toLowerCase();
+                      const isInactive = status === "inactive" || status === "disabled";
+                      const canMutateUser = Boolean(user.userId);
+
+                      const busyUser =
+                        revokeUserSessionsMutation.isPending ||
+                        updateUserStatusMutation.isPending ||
+                        updateUserRoleMutation.isPending;
 
                       const companies = Array.from(new Set((user.companyNames || [])
                         .map((c) => String(c || "").trim())
@@ -1507,12 +2296,103 @@ export default function PlatformSectionPage() {
                               </div>
                             )}
                           </TableCell>
-                          <TableCell className="text-indigo-800">{roleBadge(user.role)}</TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex justify-center">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 flex items-center justify-center gap-1"
+                                    disabled={!canMutateUser || busyUser}
+                                    aria-label="Change role"
+                                  >
+                                    {roleBadge(user.role)}
+                                    <ChevronDown className="h-3.5 w-3.5 text-indigo-500" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" className="w-56">
+                                {(
+                                  [
+                                    { value: "super_admin", label: "Super Admin" },
+                                    { value: "admin", label: "Admin" },
+                                    { value: "contributor", label: "Contributor" },
+                                    { value: "viewer", label: "Viewer" },
+                                    { value: "department_editor", label: "Department Editor" },
+                                    { value: "department_viewer", label: "Department Viewer" },
+                                  ] as const
+                                ).map((role) => (
+                                  <DropdownMenuItem
+                                    key={role.value}
+                                    className="text-indigo-700"
+                                    disabled={!canMutateUser || busyUser}
+                                    onClick={() =>
+                                      setUserRoleTarget({
+                                        userId: String(user.userId || ""),
+                                        email: user.email,
+                                        companyName: companyLabel,
+                                        nextRole: role.value,
+                                      })
+                                    }
+                                  >
+                                    {role.label}
+                                  </DropdownMenuItem>
+                                ))}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
                           <TableCell className="text-indigo-800 capitalize">{user.status || "—"}</TableCell>
                           <TableCell className="text-indigo-800">
                             {user.lastLogin ? formatDateTime(user.lastLogin) : <span className="text-indigo-700/70">Never Logged In</span>}
                           </TableCell>
                           <TableCell className="text-indigo-800">{formatDate(user.createdAt)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-9 w-9"
+                                    disabled={busyUser}
+                                    aria-label="User actions"
+                                  >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                  <DropdownMenuItem
+                                    className={isInactive ? "text-emerald-700" : "text-rose-700"}
+                                    disabled={!canMutateUser || busyUser}
+                                    onClick={() =>
+                                      setUserStatusTarget({
+                                        userId: String(user.userId || ""),
+                                        email: user.email,
+                                        companyName: companyLabel,
+                                        nextStatus: isInactive ? "active" : "inactive",
+                                      })
+                                    }
+                                  >
+                                    {isInactive ? "Reactivate" : "Deactivate"}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-amber-700"
+                                    disabled={busyUser}
+                                    onClick={() =>
+                                      setUserRevokeSessionsTarget({
+                                        userId: user.userId,
+                                        email: user.email,
+                                        companyName: companyLabel,
+                                      })
+                                    }
+                                  >
+                                    Revoke sessions
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -2205,6 +3085,22 @@ export default function PlatformSectionPage() {
         const errorItems = errorLogs?.items || [];
         const jobItems = jobRuns?.items || [];
 
+        const kindValues = Array.from(
+          new Set(errorItems.map((e) => String(e.kind || "unknown").trim() || "unknown"))
+        ).sort((a, b) => a.localeCompare(b));
+        const effectiveKindFilter = errorLogKindFilter === "all" ? "all" : errorLogKindFilter;
+        const filteredErrorItems = effectiveKindFilter === "all"
+          ? errorItems
+          : errorItems.filter((e) => String(e.kind || "unknown").trim() === effectiveKindFilter);
+        const selectedError = selectedErrorLogId
+          ? filteredErrorItems.find((e) => e.id === selectedErrorLogId) || errorItems.find((e) => e.id === selectedErrorLogId) || null
+          : null;
+
+        const filteredJobItems = jobRunsFailedOnly ? jobItems.filter((j) => j.success === false) : jobItems;
+        const selectedJobRun = selectedJobRunId
+          ? filteredJobItems.find((j) => j.id === selectedJobRunId) || jobItems.find((j) => j.id === selectedJobRunId) || null
+          : null;
+
         if (platformSettingsLoading && !draft) {
           return <EmptyState title="Loading security controls" description="Fetching platform security configuration." />;
         }
@@ -2537,20 +3433,34 @@ export default function PlatformSectionPage() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-gray-200"
-                                disabled={revokeUserSessionsMutation.isPending}
-                                onClick={() =>
-                                  revokeUserSessionsMutation.mutate({
-                                    userId: s.userId,
-                                    email: s.email,
-                                  })
-                                }
-                              >
-                                Logout all
-                              </Button>
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-rose-200 text-rose-700 hover:bg-rose-50"
+                                  disabled={Boolean(s.revokedAt) || revokeSingleSessionMutation.isPending}
+                                  onClick={() => {
+                                    if (s.revokedAt) return;
+                                    setSessionRevokeTarget({ sessionId: s.id, email: s.email, lastSeenAt: s.lastSeenAt ?? null });
+                                  }}
+                                >
+                                  Revoke
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-gray-200"
+                                  disabled={revokeUserSessionsMutation.isPending}
+                                  onClick={() =>
+                                    revokeUserSessionsMutation.mutate({
+                                      userId: s.userId,
+                                      email: s.email,
+                                    })
+                                  }
+                                >
+                                  Logout all
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))
@@ -2671,84 +3581,169 @@ export default function PlatformSectionPage() {
               {renderTableShell(
                 "Error Logs",
                 "Latest API/process errors persisted for platform diagnostics.",
-                <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>When</TableHead>
-                        <TableHead>Kind</TableHead>
-                        <TableHead>Route</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Message</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {errorItems.length ? (
-                        errorItems.slice(0, 200).map((e) => (
-                          <TableRow key={e.id}>
-                            <TableCell className="text-indigo-800">{formatDateTime(e.createdAt)}</TableCell>
-                            <TableCell className="text-indigo-800">{e.kind || "—"}</TableCell>
-                            <TableCell className="text-indigo-800">
-                              {e.method ? `${e.method} ` : ""}
-                              {e.path || "—"}
-                            </TableCell>
-                            <TableCell className="text-indigo-800">{e.statusCode ?? "—"}</TableCell>
-                            <TableCell className="text-indigo-900">{e.message || "—"}</TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="border-indigo-200 bg-white" disabled={!kindValues.length}>
+                          Filter: {effectiveKindFilter === "all" ? "All" : effectiveKindFilter}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-56">
+                        <DropdownMenuItem onClick={() => { setErrorLogKindFilter("all"); setSelectedErrorLogId(null); }}>
+                          All
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {kindValues.map((k) => (
+                          <DropdownMenuItem key={k} onClick={() => { setErrorLogKindFilter(k); setSelectedErrorLogId(null); }}>
+                            {k}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {selectedError ? (
+                      <Button variant="ghost" onClick={() => setSelectedErrorLogId(null)}>
+                        Clear selection
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                    <Table>
+                      <TableHeader>
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-indigo-700 py-6">
-                            No error logs recorded yet.
-                          </TableCell>
+                          <TableHead>When</TableHead>
+                          <TableHead>Kind</TableHead>
+                          <TableHead>Route</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Message</TableHead>
                         </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredErrorItems.length ? (
+                          filteredErrorItems.slice(0, 200).map((e) => (
+                            <TableRow
+                              key={e.id}
+                              className={selectedErrorLogId === e.id ? "bg-indigo-50/60" : ""}
+                              onClick={() => setSelectedErrorLogId((prev) => (prev === e.id ? null : e.id))}
+                              role="button"
+                            >
+                              <TableCell className="text-indigo-800">{formatDateTime(e.createdAt)}</TableCell>
+                              <TableCell className="text-indigo-800">{e.kind || "—"}</TableCell>
+                              <TableCell className="text-indigo-800">
+                                {e.method ? `${e.method} ` : ""}
+                                {e.path || "—"}
+                              </TableCell>
+                              <TableCell className="text-indigo-800">{e.statusCode ?? "—"}</TableCell>
+                              <TableCell className="text-indigo-900">{e.message || "—"}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-indigo-700 py-6">
+                              No error logs recorded yet.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {selectedError ? (
+                    <div className="rounded-lg border border-indigo-200/50 bg-white/70 px-3 py-3">
+                      <div className="text-sm font-medium text-indigo-900">Selected error</div>
+                      <div className="mt-1 text-xs text-indigo-700/80">
+                        {formatDateTime(selectedError.createdAt)} · {selectedError.kind || "unknown"} · {selectedError.method ? `${selectedError.method} ` : ""}{selectedError.path || "—"}
+                      </div>
+                      <div className="mt-2 text-sm text-indigo-900">{selectedError.message || "—"}</div>
+                      {selectedError.meta ? (
+                        <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-slate-950 text-slate-50 p-3 text-xs">
+{JSON.stringify(selectedError.meta, null, 2)}
+                        </pre>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               )}
 
               {renderTableShell(
                 "Scheduler Job Runs",
                 "Background job execution history and failures.",
-                <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Task</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Duration</TableHead>
-                        <TableHead>Started</TableHead>
-                        <TableHead>Error</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {jobItems.length ? (
-                        jobItems.slice(0, 100).map((j) => (
-                          <TableRow key={j.id}>
-                            <TableCell className="font-medium text-indigo-900">{j.taskName || "—"}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="secondary"
-                                className={j.success ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"}
-                              >
-                                {j.success ? "Success" : "Failed"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-indigo-800">{typeof j.durationMs === "number" ? `${j.durationMs}ms` : "—"}</TableCell>
-                            <TableCell className="text-indigo-800">{formatDateTime(j.startedAt)}</TableCell>
-                            <TableCell className="text-indigo-800">{j.errorMessage || "—"}</TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      className="border-indigo-200 bg-white"
+                      onClick={() => { setJobRunsFailedOnly((v) => !v); setSelectedJobRunId(null); }}
+                    >
+                      {jobRunsFailedOnly ? "Showing: Failed only" : "Showing: All"}
+                    </Button>
+                    {selectedJobRun ? (
+                      <Button variant="ghost" onClick={() => setSelectedJobRunId(null)}>
+                        Clear selection
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                    <Table>
+                      <TableHeader>
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-indigo-700 py-6">
-                            No job runs recorded yet.
-                          </TableCell>
+                          <TableHead>Task</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Duration</TableHead>
+                          <TableHead>Started</TableHead>
+                          <TableHead>Error</TableHead>
                         </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredJobItems.length ? (
+                          filteredJobItems.slice(0, 100).map((j) => (
+                            <TableRow
+                              key={j.id}
+                              className={selectedJobRunId === j.id ? "bg-indigo-50/60" : ""}
+                              onClick={() => setSelectedJobRunId((prev) => (prev === j.id ? null : j.id))}
+                              role="button"
+                            >
+                              <TableCell className="font-medium text-indigo-900">{j.taskName || "—"}</TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="secondary"
+                                  className={j.success ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"}
+                                >
+                                  {j.success ? "Success" : "Failed"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-indigo-800">{typeof j.durationMs === "number" ? `${j.durationMs}ms` : "—"}</TableCell>
+                              <TableCell className="text-indigo-800">{formatDateTime(j.startedAt)}</TableCell>
+                              <TableCell className="text-indigo-800">{j.errorMessage || "—"}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-indigo-700 py-6">
+                              No job runs recorded yet.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {selectedJobRun ? (
+                    <div className="rounded-lg border border-indigo-200/50 bg-white/70 px-3 py-3">
+                      <div className="text-sm font-medium text-indigo-900">Selected job run</div>
+                      <div className="mt-1 text-xs text-indigo-700/80">
+                        {selectedJobRun.taskName || "—"} · {formatDateTime(selectedJobRun.startedAt)} · {selectedJobRun.success ? "Success" : "Failed"}
+                      </div>
+                      {selectedJobRun.errorMessage ? (
+                        <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-slate-950 text-slate-50 p-3 text-xs">
+{String(selectedJobRun.errorMessage)}
+                        </pre>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -2789,6 +3784,302 @@ export default function PlatformSectionPage() {
           </div>
         </div>
         {renderContent()}
+
+        <AlertDialog
+          open={Boolean(subscriptionActionTarget)}
+          onOpenChange={(open) => (open ? null : setSubscriptionActionTarget(null))}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {subscriptionActionTarget?.action === "cancel"
+                  ? "Cancel subscription?"
+                  : subscriptionActionTarget?.action === "pause"
+                    ? "Pause subscription collection?"
+                    : "Resume subscription collection?"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-2">
+                  <div>
+                    Organization: <span className="font-medium text-foreground">{subscriptionActionTarget?.companyName || "—"}</span>
+                  </div>
+                  {subscriptionActionTarget?.customerEmail ? (
+                    <div className="text-muted-foreground">Billing email: {subscriptionActionTarget.customerEmail}</div>
+                  ) : null}
+                  {subscriptionActionTarget?.action === "cancel" ? (
+                    <div className="font-medium text-foreground">
+                      Access remains active until the end of the current billing period.
+                    </div>
+                  ) : null}
+                  {subscriptionActionTarget?.action === "pause" ? (
+                    <div className="font-medium text-foreground">This pauses collection in Stripe.</div>
+                  ) : null}
+                  {subscriptionActionTarget?.action === "resume" ? (
+                    <div className="font-medium text-foreground">This resumes collection in Stripe.</div>
+                  ) : null}
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setSubscriptionActionTarget(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className={
+                  subscriptionActionTarget?.action === "cancel" || subscriptionActionTarget?.action === "pause"
+                    ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    : ""
+                }
+                disabled={
+                  !subscriptionActionTarget ||
+                  cancelStripeSubscriptionMutation.isPending ||
+                  pauseStripeSubscriptionMutation.isPending ||
+                  resumeStripeSubscriptionMutation.isPending
+                }
+                onClick={() => {
+                  if (!subscriptionActionTarget) return;
+                  const subscriptionId = subscriptionActionTarget.subscriptionId;
+                  if (subscriptionActionTarget.action === "cancel") {
+                    cancelStripeSubscriptionMutation.mutate({ subscriptionId });
+                  } else if (subscriptionActionTarget.action === "pause") {
+                    pauseStripeSubscriptionMutation.mutate({ subscriptionId });
+                  } else {
+                    resumeStripeSubscriptionMutation.mutate({ subscriptionId });
+                  }
+                  setSubscriptionActionTarget(null);
+                }}
+              >
+                Confirm
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={Boolean(subscriptionPlanTarget)}
+          onOpenChange={(open) => (open ? null : setSubscriptionPlanTarget(null))}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Change subscription plan?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-4">
+                  <div>
+                    Organization: <span className="font-medium text-foreground">{subscriptionPlanTarget?.companyName || "—"}</span>
+                  </div>
+                  <div className="text-muted-foreground">Current plan: {subscriptionPlanTarget?.currentPlan || "—"}</div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">New plan</Label>
+                    <select
+                      value={subscriptionPlanTarget?.nextPlan || "professional"}
+                      onChange={(e) => {
+                        const value = String(e.target.value || "professional") as any;
+                        setSubscriptionPlanTarget((s) => (s ? { ...s, nextPlan: value } : s));
+                      }}
+                      className="w-full rounded-lg border border-indigo-200/50 bg-white px-3 py-2 text-sm text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    >
+                      <option value="starter">Starter</option>
+                      <option value="professional">Professional</option>
+                      <option value="premium">Premium</option>
+                      <option value="free">Free</option>
+                    </select>
+                  </div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setSubscriptionPlanTarget(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={!subscriptionPlanTarget || changeStripePlanMutation.isPending}
+                onClick={() => {
+                  if (!subscriptionPlanTarget) return;
+                  changeStripePlanMutation.mutate({
+                    subscriptionId: subscriptionPlanTarget.subscriptionId,
+                    plan: subscriptionPlanTarget.nextPlan,
+                  });
+                  setSubscriptionPlanTarget(null);
+                }}
+              >
+                Confirm
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={Boolean(refundTarget)} onOpenChange={(open) => (open ? null : setRefundTarget(null))}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Refund this payment?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-2">
+                  <div>
+                    Organization: <span className="font-medium text-foreground">{refundTarget?.companyName || "—"}</span>
+                  </div>
+                  {refundTarget?.customerEmail ? (
+                    <div className="text-muted-foreground">Billing email: {refundTarget.customerEmail}</div>
+                  ) : null}
+                  <div className="text-muted-foreground">
+                    Amount: {refundTarget ? formatMoney(refundTarget.amount, refundTarget.currency) : "—"}
+                  </div>
+                  <div className="font-medium text-foreground">This will create a refund in Stripe.</div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setRefundTarget(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={!refundTarget || refundPaymentMutation.isPending}
+                onClick={() => {
+                  if (!refundTarget) return;
+                  refundPaymentMutation.mutate({ invoiceId: refundTarget.invoiceId });
+                  setRefundTarget(null);
+                }}
+              >
+                Refund
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={Boolean(userStatusTarget)}
+          onOpenChange={(open) => (open ? null : setUserStatusTarget(null))}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {userStatusTarget?.nextStatus === "inactive" ? "Deactivate this user?" : "Reactivate this user?"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-2">
+                  <div>
+                    User: <span className="font-medium text-foreground">{userStatusTarget?.email || "—"}</span>
+                  </div>
+                  <div className="text-muted-foreground">Organization: {userStatusTarget?.companyName || "—"}</div>
+                  {userStatusTarget?.nextStatus === "inactive" ? (
+                    <div className="font-medium text-foreground">All sessions will be revoked immediately.</div>
+                  ) : null}
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setUserStatusTarget(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className={
+                  userStatusTarget?.nextStatus === "inactive" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""
+                }
+                disabled={!userStatusTarget || updateUserStatusMutation.isPending}
+                onClick={() => {
+                  if (!userStatusTarget) return;
+                  updateUserStatusMutation.mutate({ userId: userStatusTarget.userId, status: userStatusTarget.nextStatus });
+                  setUserStatusTarget(null);
+                }}
+              >
+                Confirm
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={Boolean(userRevokeSessionsTarget)} onOpenChange={(open) => (open ? null : setUserRevokeSessionsTarget(null))}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Revoke all sessions?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-2">
+                  <div>
+                    Organization: <span className="font-medium text-foreground">{userRevokeSessionsTarget?.companyName || "—"}</span>
+                  </div>
+                  <div className="text-muted-foreground">This forces the user to sign in again.</div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setUserRevokeSessionsTarget(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={!userRevokeSessionsTarget || revokeUserSessionsMutation.isPending}
+                onClick={() => {
+                  if (!userRevokeSessionsTarget) return;
+                  revokeUserSessionsMutation.mutate({
+                    userId: userRevokeSessionsTarget.userId,
+                    email: userRevokeSessionsTarget.email,
+                  });
+                  setUserRevokeSessionsTarget(null);
+                }}
+              >
+                Confirm
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={Boolean(userRoleTarget)} onOpenChange={(open) => (open ? null : setUserRoleTarget(null))}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Change user role?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-2">
+                  <div>
+                    User: <span className="font-medium text-foreground">{userRoleTarget?.email || "—"}</span>
+                  </div>
+                  <div className="text-muted-foreground">Organization: {userRoleTarget?.companyName || "—"}</div>
+                  <div className="font-medium text-foreground">New role: {userRoleTarget?.nextRole || "—"}</div>
+                  <div className="text-muted-foreground">Sessions will be revoked so permissions apply immediately.</div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setUserRoleTarget(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={!userRoleTarget || updateUserRoleMutation.isPending}
+                onClick={() => {
+                  if (!userRoleTarget) return;
+                  updateUserRoleMutation.mutate({
+                    userId: userRoleTarget.userId,
+                    role: userRoleTarget.nextRole,
+                    email: userRoleTarget.email,
+                  });
+                  setUserRoleTarget(null);
+                }}
+              >
+                Confirm
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={Boolean(sessionRevokeTarget)}
+          onOpenChange={(open) => (open ? null : setSessionRevokeTarget(null))}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Revoke this session?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-2">
+                  <div>
+                    User: <span className="font-medium text-foreground">{sessionRevokeTarget?.email || "—"}</span>
+                  </div>
+                  <div className="text-muted-foreground">Last seen: {formatDateTime(sessionRevokeTarget?.lastSeenAt)}</div>
+                  <div className="text-muted-foreground">This logs out only this one session.</div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setSessionRevokeTarget(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={!sessionRevokeTarget || revokeSingleSessionMutation.isPending}
+                onClick={() => {
+                  if (!sessionRevokeTarget) return;
+                  revokeSingleSessionMutation.mutate({ sessionId: sessionRevokeTarget.sessionId });
+                  setSessionRevokeTarget(null);
+                }}
+              >
+                Revoke
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );

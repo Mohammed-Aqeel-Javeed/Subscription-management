@@ -175,6 +175,23 @@ async function assertPortAvailable(port: number, host = "0.0.0.0"): Promise<void
   });
 }
 
+async function pickAvailablePort(startPort: number, host = "0.0.0.0", maxAttempts = 25): Promise<number> {
+  let port = startPort;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await assertPortAvailable(port, host);
+      return port;
+    } catch (e: any) {
+      if (e?.code === "EADDRINUSE") {
+        port += 1;
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error(`No available port found starting at ${startPort}`);
+}
+
 const app = express();
 
 // Process-level crash logging (best-effort, non-blocking).
@@ -332,20 +349,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 (async () => {
-  const port = process.env.PORT ? Number(process.env.PORT) : 5000;
-
-  try {
-    await assertPortAvailable(port);
-  } catch (e: any) {
-    if (e?.code === "EADDRINUSE") {
-      log(
-        `Port ${port} is already in use. Stop the other process using it or run with PORT=${port + 1}.`,
-        "startup"
-      );
-      process.exit(1);
-    }
-    throw e;
+  const requestedPort = process.env.PORT ? Number(process.env.PORT) : 5000;
+  const port = await pickAvailablePort(requestedPort);
+  if (port !== requestedPort) {
+    log(`Port ${requestedPort} is in use; using ${port} instead.`, "startup");
   }
+  process.env.PORT = String(port);
 
   // Ensure indexes. If MongoDB is down in dev, don't hard-crash the entire server;
   // surface it via monitoring and let API endpoints report failures as needed.

@@ -1,0 +1,1130 @@
+{
+  "generatedAt": "2026-04-17T02:52:01.616Z",
+  "pages": [
+    {
+      "pageKey": "not-found",
+      "filePath": "client/src/pages/not-found.tsx",
+      "routePaths": [
+        "*"
+      ],
+      "api": {
+        "all": [],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "landing",
+      "filePath": "client/src/pages/landing.tsx",
+      "routePaths": [
+        "/",
+        "/landing"
+      ],
+      "api": {
+        "all": [
+          "/api/stripe/checkout-session"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "auth",
+      "filePath": "client/src/pages/auth.tsx",
+      "routePaths": [
+        "/auth",
+        "/login"
+      ],
+      "api": {
+        "all": [
+          "/api/login"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "calendar",
+      "filePath": "client/src/pages/calendar.tsx",
+      "routePaths": [
+        "/calendar"
+      ],
+      "api": {
+        "all": [
+          "/api/compliance/list",
+          "/api/deeplink/token",
+          "/api/licenses",
+          "/api/subscriptions"
+        ],
+        "gets": [],
+        "posts": [
+          "/api/deeplink/token"
+        ],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "calendar-monthly",
+      "filePath": "client/src/pages/calendar-monthly.tsx",
+      "routePaths": [
+        "/calendar-monthly"
+      ],
+      "api": {
+        "all": [
+          "/api/compliance/list"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "calendar-yearly",
+      "filePath": "client/src/pages/calendar-yearly.tsx",
+      "routePaths": [
+        "/calendar-yearly"
+      ],
+      "api": {
+        "all": [
+          "/api/compliance/list"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "company-details",
+      "filePath": "client/src/pages/company-details.tsx",
+      "routePaths": [
+        "/company-details",
+        "/company-details/:section"
+      ],
+      "api": {
+        "all": [
+          "/api/company-info",
+          "/api/company-info/${companyData._id",
+          "/api/company/categories",
+          "/api/company/categories/${encodeURIComponent",
+          "/api/company/departments",
+          "/api/company/departments/${encodeURIComponent",
+          "/api/company/departments/${id",
+          "/api/currencies",
+          "/api/employees",
+          "/api/employees/${_id",
+          "/api/me",
+          "/api/secure-link/token",
+          "/api/subscriptions",
+          "/api/users",
+          "/api/users/${id"
+        ],
+        "gets": [
+          "/api/company-info",
+          "/api/me"
+        ],
+        "posts": [
+          "/api/company-info",
+          "/api/company/categories",
+          "/api/company/departments",
+          "/api/employees",
+          "/api/secure-link/token",
+          "/api/users"
+        ],
+        "puts": [
+          "/api/company-info/${companyData._id}",
+          "/api/company/departments/${id}",
+          "/api/employees/${_id}",
+          "/api/users/${id}"
+        ],
+        "deletes": [
+          "/api/company/categories/${encodeURIComponent(name)}",
+          "/api/company/departments/${encodeURIComponent(name)}",
+          "/api/employees/${_id}",
+          "/api/users/${id}"
+        ],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "compliance",
+      "filePath": "client/src/pages/compliance.tsx",
+      "routePaths": [
+        "/compliance"
+      ],
+      "api": {
+        "all": [
+          "/api/company/departments",
+          "/api/compliance/${_id",
+          "/api/compliance/authorities",
+          "/api/compliance/categories",
+          "/api/compliance/insert",
+          "/api/compliance/list",
+          "/api/config/compliance-fields",
+          "/api/deeplink/resolve?${qs",
+          "/api/deeplink/token",
+          "/api/employees",
+          "/api/ledger/insert",
+          "/api/me",
+          "/api/notifications/compliance",
+          "/api/payment",
+          "/api/secure-link/token",
+          "/api/users"
+        ],
+        "gets": [
+          "/api/compliance/list",
+          "/api/config/compliance-fields')",
+          "/api/employees",
+          "/api/users"
+        ],
+        "posts": [
+          "/api/company/departments",
+          "/api/compliance/insert",
+          "/api/deeplink/token",
+          "/api/employees",
+          "/api/employees\");",
+          "/api/ledger/insert",
+          "/api/payment",
+          "/api/secure-link/token"
+        ],
+        "puts": [
+          "/api/compliance/${_id}"
+        ],
+        "deletes": [
+          "/api/compliance/${_id}"
+        ],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "compliance-dashboard",
+      "filePath": "client/src/pages/compliance-dashboard.tsx",
+      "routePaths": [
+        "/compliance-dashboard"
+      ],
+      "api": {
+        "all": [
+          "/api/compliance/list"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "compliance-ledger",
+      "filePath": "client/src/pages/compliance-ledger.tsx",
+      "routePaths": [
+        "/compliance-ledger"
+      ],
+      "api": {
+        "all": [
+          "/api/deeplink/resolve?${qs",
+          "/api/deeplink/token",
+          "/api/ledger/list"
+        ],
+        "gets": [],
+        "posts": [
+          "/api/deeplink/token"
+        ],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "compliance-log",
+      "filePath": "client/src/pages/compliance-log.tsx",
+      "routePaths": [
+        "/compliance-log"
+      ],
+      "api": {
+        "all": [
+          "/api/deeplink/resolve?${qs",
+          "/api/deeplink/token",
+          "/api/licenses",
+          "/api/licenses/${encodeURIComponent"
+        ],
+        "gets": [],
+        "posts": [
+          "/api/deeplink/resolve?${qs}"
+        ],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "configuration",
+      "filePath": "client/src/pages/configuration.tsx",
+      "routePaths": [
+        "/configuration",
+        "/configuration/:section",
+        "/reminders"
+      ],
+      "api": {
+        "all": [
+          "/api/company-info",
+          "/api/config/compliance-fields",
+          "/api/config/compliance-fields/${field._id",
+          "/api/config/fields",
+          "/api/config/renewal-fields",
+          "/api/config/renewal-fields/${fieldId",
+          "/api/currencies",
+          "/api/currencies/${code",
+          "/api/currencies/${newCurrency.code.toUpperCase",
+          "/api/deeplink/resolve?${qs",
+          "/api/deeplink/token",
+          "/api/employees",
+          "/api/exchange-rates/batch",
+          "/api/exchange-rates/batch/latest",
+          "/api/payment",
+          "/api/payment/${editingPaymentId",
+          "/api/payment/${paymentToDelete._id",
+          "/api/secure-link/token",
+          "/api/subscriptions"
+        ],
+        "gets": [],
+        "posts": [
+          "/api/deeplink/token",
+          "/api/payment",
+          "/api/secure-link/token"
+        ],
+        "puts": [
+          "/api/payment/${editingPaymentId}"
+        ],
+        "deletes": [
+          "/api/deeplink/resolve?${qs}",
+          "/api/payment/${paymentToDelete._id}"
+        ],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "dashboard",
+      "filePath": "client/src/pages/dashboard.tsx",
+      "routePaths": [
+        "/dashboard"
+      ],
+      "api": {
+        "all": [
+          "/api/analytics",
+          "/api/analytics/categories",
+          "/api/analytics/categories?${analyticsQueryString",
+          "/api/analytics/dashboard",
+          "/api/analytics/trends",
+          "/api/analytics/trends?${analyticsQueryString",
+          "/api/me",
+          "/api/subscriptions"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "government-license",
+      "filePath": "client/src/pages/government-license.tsx",
+      "routePaths": [
+        "/government-license"
+      ],
+      "api": {
+        "all": [
+          "/api/company-info",
+          "/api/company/departments",
+          "/api/config/renewal-fields",
+          "/api/currencies",
+          "/api/deeplink/resolve?${qs",
+          "/api/deeplink/token",
+          "/api/employees",
+          "/api/licenses",
+          "/api/licenses/${editingLicense.id",
+          "/api/licenses/${encodeURIComponent",
+          "/api/licenses/${id",
+          "/api/licenses/${licenseId",
+          "/api/logs",
+          "/api/me",
+          "/api/notifications/license",
+          "/api/secure-link/token",
+          "/api/users"
+        ],
+        "gets": [
+          "/api/employees",
+          "/api/me",
+          "/api/users"
+        ],
+        "posts": [
+          "/api/company/departments",
+          "/api/deeplink/resolve?${qs}",
+          "/api/deeplink/token",
+          "/api/employees",
+          "/api/licenses",
+          "/api/secure-link/token"
+        ],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "notifications",
+      "filePath": "client/src/pages/notifications.tsx",
+      "routePaths": [
+        "/notifications"
+      ],
+      "api": {
+        "all": [
+          "/api/compliance/list",
+          "/api/notifications",
+          "/api/notifications/bulk-delete",
+          "/api/notifications/compliance",
+          "/api/notifications/license",
+          "/api/notifications/mark-read",
+          "/api/subscriptions",
+          "/api/subscriptions/${idStr"
+        ],
+        "gets": [
+          "/api/subscriptions/${idStr}"
+        ],
+        "posts": [
+          "/api/notifications/bulk-delete",
+          "/api/notifications/mark-read"
+        ],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "payment-success",
+      "filePath": "client/src/pages/payment-success.tsx",
+      "routePaths": [
+        "/payment-success"
+      ],
+      "api": {
+        "all": [
+          "/api/me",
+          "/api/stripe/verify-session?sessionId=${encodeURIComponent"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "platform-admin",
+      "filePath": "client/src/pages/platform-admin.tsx",
+      "routePaths": [
+        "/platform-admin"
+      ],
+      "api": {
+        "all": [
+          "/api/platform/activity",
+          "/api/platform/billing",
+          "/api/platform/companies",
+          "/api/platform/stats"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "platform-section",
+      "filePath": "client/src/pages/platform-section.tsx",
+      "routePaths": [
+        "/platform-admin/:section",
+        "/platform-admin/:section/:subsection"
+      ],
+      "api": {
+        "all": [
+          "/api/platform/activity",
+          "/api/platform/billing",
+          "/api/platform/companies",
+          "/api/platform/error-logs",
+          "/api/platform/error-logs?limit=200",
+          "/api/platform/job-runs",
+          "/api/platform/job-runs?limit=100",
+          "/api/platform/monitoring",
+          "/api/platform/security/audit-events",
+          "/api/platform/security/audit-events?limit=200",
+          "/api/platform/security/sessions",
+          "/api/platform/security/sessions?limit=200",
+          "/api/platform/security/sessions/logout-all",
+          "/api/platform/settings",
+          "/api/platform/stats",
+          "/api/platform/stripe/webhook-events",
+          "/api/platform/stripe/webhook-events?limit=200",
+          "/api/platform/users"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "profile",
+      "filePath": "client/src/pages/profile.tsx",
+      "routePaths": [
+        "/profile"
+      ],
+      "api": {
+        "all": [
+          "/api/me"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "renewal-dashboard",
+      "filePath": "client/src/pages/renewal-dashboard.tsx",
+      "routePaths": [
+        "/renewal-dashboard"
+      ],
+      "api": {
+        "all": [
+          "/api/licenses"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "renewal-log",
+      "filePath": "client/src/pages/renewal-log.tsx",
+      "routePaths": [
+        "/renewal-log"
+      ],
+      "api": {
+        "all": [
+          "/api/deeplink/resolve?${qs",
+          "/api/deeplink/token",
+          "/api/logs"
+        ],
+        "gets": [],
+        "posts": [
+          "/api/deeplink/token"
+        ],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "reports",
+      "filePath": "client/src/pages/reports.tsx",
+      "routePaths": [
+        "/reports"
+      ],
+      "api": {
+        "all": [],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "card-wise-spend-report",
+      "filePath": "client/src/pages/card-wise-spend-report.tsx",
+      "routePaths": [
+        "/reports/card-wise"
+      ],
+      "api": {
+        "all": [
+          "/api/history/list",
+          "/api/history/list?limit=2000",
+          "/api/subscriptions"
+        ],
+        "gets": [
+          "/api/history/list?limit=2000"
+        ],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "compliance-spend-audit-history-report",
+      "filePath": "client/src/pages/compliance-spend-audit-history-report.tsx",
+      "routePaths": [
+        "/reports/compliance-spend"
+      ],
+      "api": {
+        "all": [
+          "/api/compliance/list"
+        ],
+        "gets": [
+          "/api/compliance/list"
+        ],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "department-wise-renewals-report",
+      "filePath": "client/src/pages/department-wise-renewals-report.tsx",
+      "routePaths": [
+        "/reports/department-wise-renewals"
+      ],
+      "api": {
+        "all": [
+          "/api/licenses"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "departmental-compliance-scorecard-report",
+      "filePath": "client/src/pages/departmental-compliance-scorecard-report.tsx",
+      "routePaths": [
+        "/reports/departmental-scorecard"
+      ],
+      "api": {
+        "all": [
+          "/api/company/departments",
+          "/api/compliance/list"
+        ],
+        "gets": [
+          "/api/company/departments",
+          "/api/compliance/list"
+        ],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "expired-renewals-report",
+      "filePath": "client/src/pages/expired-renewals-report.tsx",
+      "routePaths": [
+        "/reports/expired-renewals"
+      ],
+      "api": {
+        "all": [
+          "/api/licenses"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "renewal-lead-time-analysis-report",
+      "filePath": "client/src/pages/renewal-lead-time-analysis-report.tsx",
+      "routePaths": [
+        "/reports/renewal-lead-time-analysis"
+      ],
+      "api": {
+        "all": [
+          "/api/licenses"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "renewal-responsibility-report",
+      "filePath": "client/src/pages/renewal-responsibility-report.tsx",
+      "routePaths": [
+        "/reports/renewal-responsibility"
+      ],
+      "api": {
+        "all": [
+          "/api/licenses"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "spending-analysis-report",
+      "filePath": "client/src/pages/spending-analysis-report.tsx",
+      "routePaths": [
+        "/reports/spending-analysis"
+      ],
+      "api": {
+        "all": [
+          "/api/history/list",
+          "/api/history/list?limit=2000",
+          "/api/subscriptions"
+        ],
+        "gets": [
+          "/api/history/list?limit=2000"
+        ],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "upcoming-filings-report",
+      "filePath": "client/src/pages/upcoming-filings-report.tsx",
+      "routePaths": [
+        "/reports/upcoming-filings"
+      ],
+      "api": {
+        "all": [
+          "/api/compliance/list"
+        ],
+        "gets": [
+          "/api/compliance/list"
+        ],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "upcoming-renewal-report",
+      "filePath": "client/src/pages/upcoming-renewal-report.tsx",
+      "routePaths": [
+        "/reports/upcoming-renewal"
+      ],
+      "api": {
+        "all": [
+          "/api/subscriptions"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "upcoming-renewals-report",
+      "filePath": "client/src/pages/upcoming-renewals-report.tsx",
+      "routePaths": [
+        "/reports/upcoming-renewals"
+      ],
+      "api": {
+        "all": [
+          "/api/licenses"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "secure-link",
+      "filePath": "client/src/pages/secure-link.tsx",
+      "routePaths": [
+        "/s/:token"
+      ],
+      "api": {
+        "all": [
+          "/api/secure-link/resolve?${qs"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "signup",
+      "filePath": "client/src/pages/signup.tsx",
+      "routePaths": [
+        "/signup"
+      ],
+      "api": {
+        "all": [
+          "/api/send-otp",
+          "/api/signup",
+          "/api/verify-otp"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "subscription-history",
+      "filePath": "client/src/pages/subscription-history.tsx",
+      "routePaths": [
+        "/subscription-history"
+      ],
+      "api": {
+        "all": [
+          "/api/deeplink/resolve?${qs",
+          "/api/deeplink/token",
+          "/api/history",
+          "/api/history/${effectiveSubscriptionId",
+          "/api/history/list",
+          "/api/subscriptions"
+        ],
+        "gets": [
+          "/api/subscriptions"
+        ],
+        "posts": [
+          "/api/deeplink/token"
+        ],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "subscription-user",
+      "filePath": "client/src/pages/subscription-user.tsx",
+      "routePaths": [
+        "/subscription-user"
+      ],
+      "api": {
+        "all": [
+          "/api/deeplink/resolve?${qs",
+          "/api/deeplink/token",
+          "/api/employees",
+          "/api/subscriptions",
+          "/api/subscriptions/${subscriptionId}/users"
+        ],
+        "gets": [],
+        "posts": [
+          "/api/deeplink/resolve?${qs}"
+        ],
+        "puts": [
+          "/api/employees",
+          "/api/subscriptions/${subscriptionId}/users"
+        ],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "subscriptions",
+      "filePath": "client/src/pages/subscriptions.tsx",
+      "routePaths": [
+        "/subscriptions"
+      ],
+      "api": {
+        "all": [
+          "/api/analytics/dashboard",
+          "/api/deeplink/resolve?${qs",
+          "/api/deeplink/token",
+          "/api/history/list?limit=200",
+          "/api/secure-link/token",
+          "/api/subscriptions",
+          "/api/subscriptions/${id",
+          "/api/subscriptions/${pendingOpenSubscriptionId"
+        ],
+        "gets": [
+          "/api/history/list?limit=200",
+          "/api/subscriptions/${pendingOpenSubscriptionId}"
+        ],
+        "posts": [
+          "/api/deeplink/token",
+          "/api/secure-link/token",
+          "/api/subscriptions"
+        ],
+        "puts": [],
+        "deletes": [
+          "/api/subscriptions/${id}"
+        ],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "cancelled-subscriptions",
+      "filePath": "client/src/pages/cancelled-subscriptions.tsx",
+      "routePaths": [
+        "/subscriptions/cancelled"
+      ],
+      "api": {
+        "all": [],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "upgrade",
+      "filePath": "client/src/pages/upgrade.tsx",
+      "routePaths": [
+        "/upgrade"
+      ],
+      "api": {
+        "all": [
+          "/api/stripe/checkout-session"
+        ],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    },
+    {
+      "pageKey": "chatbot",
+      "filePath": "client/src/pages/chatbot.tsx",
+      "routePaths": [],
+      "api": {
+        "all": [],
+        "gets": [],
+        "posts": [],
+        "puts": [],
+        "deletes": [],
+        "patches": []
+      }
+    }
+  ],
+  "serverEndpoints": [
+    {
+      "filePath": "server/routes.ts",
+      "endpoints": [
+        "DELETE /api/notifications/:id",
+        "DELETE /api/users/:id",
+        "GET /api/me",
+        "GET /api/notifications",
+        "GET /api/platform/activity",
+        "GET /api/platform/billing",
+        "GET /api/platform/companies",
+        "GET /api/platform/error-logs",
+        "GET /api/platform/job-runs",
+        "GET /api/platform/monitoring",
+        "GET /api/platform/security/audit-events",
+        "GET /api/platform/security/sessions",
+        "GET /api/platform/settings",
+        "GET /api/platform/stats",
+        "GET /api/platform/stripe/webhook-events",
+        "GET /api/platform/users",
+        "GET /api/reminders",
+        "GET /api/security/sessions",
+        "GET /api/subscriptions/:id",
+        "GET /api/user/companies",
+        "GET /api/users",
+        "GET /api/users/:id",
+        "POST /api/auth/refresh",
+        "POST /api/fix-company-names",
+        "POST /api/login",
+        "POST /api/logout",
+        "POST /api/notifications/bulk-delete",
+        "POST /api/notifications/cleanup",
+        "POST /api/notifications/mark-read",
+        "POST /api/notifications/test-create",
+        "POST /api/platform/security/sessions/logout-all",
+        "POST /api/reminders",
+        "POST /api/security/logout-all",
+        "POST /api/send-otp",
+        "POST /api/signup",
+        "POST /api/user/add-company",
+        "POST /api/user/switch-company",
+        "POST /api/verify-otp",
+        "PUT /api/me",
+        "PUT /api/platform/settings",
+        "PUT /api/reminders/:id"
+      ]
+    },
+    {
+      "filePath": "server/analytics.routes.ts",
+      "endpoints": [
+        "GET /api/analytics/activity",
+        "GET /api/analytics/categories",
+        "GET /api/analytics/dashboard",
+        "GET /api/analytics/trends"
+      ]
+    },
+    {
+      "filePath": "server/stripe.routes.ts",
+      "endpoints": [
+        "GET /api/stripe/verify-session",
+        "POST /api/stripe/checkout-session",
+        "POST /api/stripe/webhook"
+      ]
+    },
+    {
+      "filePath": "server/subtrackerr.routes.ts",
+      "endpoints": [
+        "DELETE /api/company-info/:id",
+        "DELETE /api/company/categories/:name",
+        "DELETE /api/company/departments/:name",
+        "DELETE /api/compliance/:id",
+        "DELETE /api/config/compliance-fields/:id",
+        "DELETE /api/config/renewal-fields/:id",
+        "DELETE /api/currencies/:code",
+        "DELETE /api/employees/:id",
+        "DELETE /api/ledger/:id",
+        "DELETE /api/licenses/:id",
+        "DELETE /api/payment/:id",
+        "DELETE /api/subscriptions/:id",
+        "DELETE /api/subtrackerr/:id",
+        "GET /api/company-info",
+        "GET /api/company/categories",
+        "GET /api/company/departments",
+        "GET /api/compliance/list",
+        "GET /api/config/compliance-fields",
+        "GET /api/config/fields",
+        "GET /api/config/renewal-fields",
+        "GET /api/currencies",
+        "GET /api/deeplink/resolve",
+        "GET /api/employees",
+        "GET /api/exchange-rates/:code",
+        "GET /api/exchange-rates/batch/latest",
+        "GET /api/history/:subscriptionId",
+        "GET /api/history/list",
+        "GET /api/ledger/list",
+        "GET /api/licenses",
+        "GET /api/licenses/:id/renewal-status-log",
+        "GET /api/logs",
+        "GET /api/notifications/compliance",
+        "GET /api/notifications/license",
+        "GET /api/payment",
+        "GET /api/secure-link/resolve",
+        "GET /api/subscriptions",
+        "GET /api/subscriptions/:id/users",
+        "GET /api/subscriptions/drafts",
+        "PATCH /api/company/departments/:name",
+        "PATCH /api/config/compliance-fields/:id",
+        "PATCH /api/config/renewal-fields/:id",
+        "POST /api/company-info",
+        "POST /api/company/categories",
+        "POST /api/company/departments",
+        "POST /api/compliance/insert",
+        "POST /api/config/compliance-fields",
+        "POST /api/config/fields",
+        "POST /api/config/renewal-fields",
+        "POST /api/currencies",
+        "POST /api/deeplink/token",
+        "POST /api/employees",
+        "POST /api/exchange-rates/:code",
+        "POST /api/history",
+        "POST /api/ledger/insert",
+        "POST /api/licenses",
+        "POST /api/logs",
+        "POST /api/payment",
+        "POST /api/secure-link/token",
+        "POST /api/subscriptions",
+        "POST /api/subscriptions/draft",
+        "POST /api/subscriptions/draft/:id/activate",
+        "POST /api/users",
+        "PUT /api/company-info/:id",
+        "PUT /api/company/departments/:id",
+        "PUT /api/compliance/:id",
+        "PUT /api/currencies/:code",
+        "PUT /api/employees/:id",
+        "PUT /api/licenses/:id",
+        "PUT /api/payment/:id",
+        "PUT /api/subscriptions/:id",
+        "PUT /api/subscriptions/:id/users",
+        "PUT /api/users/:_id"
+      ]
+    }
+  ],
+  "jobs": {
+    "immediate": [
+      "checkAndSendDepartmentNotifications",
+      "checkAutoRenewals",
+      "checkComplianceReminders",
+      "checkDailyRenewalReminderEmails",
+      "checkLicenseExpiryReminders",
+      "checkMonthlyReminders",
+      "checkPaymentMethodExpiry",
+      "checkYearlyReminders",
+      "cleanupOldNotifications"
+    ],
+    "dailyMidnightIST": [
+      "checkAndSendDepartmentNotifications",
+      "checkAutoRenewals",
+      "checkComplianceReminders",
+      "checkDailyRenewalReminderEmails",
+      "checkLicenseExpiryReminders",
+      "checkMonthlyReminders",
+      "checkPaymentMethodExpiry",
+      "checkYearlyReminders",
+      "cleanupOldNotifications"
+    ]
+  },
+  "collections": [
+    "Fields",
+    "Log",
+    "auth_sessions",
+    "categories",
+    "companyInfo",
+    "compliance",
+    "compliance_notifications",
+    "config",
+    "currencies",
+    "departments",
+    "employees",
+    "error_logs",
+    "exchange_rates",
+    "history",
+    "job_runs",
+    "ledger",
+    "license_reminder_log",
+    "licenses",
+    "login",
+    "notification_dismissals",
+    "notification_events",
+    "notifications",
+    "otps",
+    "payment",
+    "payment_expiry_notices",
+    "pending_purchases",
+    "platform_settings",
+    "reminders",
+    "renewal_reminder_email_log",
+    "signup",
+    "stripe_webhook_events",
+    "subscriptions",
+    "users"
+  ]
+}

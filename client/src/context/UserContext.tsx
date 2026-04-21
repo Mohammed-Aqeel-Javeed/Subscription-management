@@ -10,6 +10,7 @@ interface User {
   profileImage?: string | null;
   companyName: string | null;
   tenantId: string | null;
+  actingTenantId?: string | null;
   defaultCurrency: string | null;
   role: string;
   department?: string;

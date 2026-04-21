@@ -21,7 +21,7 @@ import { connectToDatabase } from "./mongo.js";
 import bcrypt from "bcrypt";
 import { decrypt } from "./encryption.service.js";
 import StripeLib from "stripe";
-import type { Stripe } from "stripe/cjs/stripe.core.js";
+import type { Stripe } from "stripe";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const StripeCtor: any = StripeLib as any;
@@ -1373,9 +1373,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      // Check if user is active (only for new user system)
-      if (isNewUserSystem && user.status !== "active") {
-        return res.status(401).json({ message: "Account is inactive" });
+      // Block access for suspended/disabled accounts (legacy + new user system)
+      // (global_admin is platform-level and should not be tenant-blocked)
+      if (String((user as any)?.role || "").toLowerCase() !== "global_admin") {
+        const status = String((user as any)?.status || "").trim().toLowerCase();
+        if (status && status !== "active") {
+          if (status === "suspended") {
+            return res.status(403).json({ message: "Your organization has been suspended. Contact support." });
+          }
+          if (status === "disabled") {
+            return res.status(403).json({ message: "Account is inactive" });
+          }
+          if (isNewUserSystem) {
+            return res.status(401).json({ message: "Account is inactive" });
+          }
+          return res.status(403).json({ message: "Account is inactive" });
+        }
       }
 
       const userCollectionName = isNewUserSystem ? "users" : "login";
@@ -1808,6 +1821,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const getStripePaymentStatus = (invoice: any): string => {
     const status = String(invoice?.status || "").toLowerCase();
+
+    try {
+      const charge = invoice?.charge && typeof invoice.charge === "object" ? invoice.charge : null;
+      const chargeRefunded = Number(charge?.amount_refunded || 0) > 0;
+
+      const paymentIntent = invoice?.payment_intent && typeof invoice.payment_intent === "object" ? invoice.payment_intent : null;
+      const charges = Array.isArray(paymentIntent?.charges?.data) ? paymentIntent.charges.data : [];
+      const intentRefunded = charges.some((c: any) => Number(c?.amount_refunded || 0) > 0);
+
+      if (status === "paid" && (chargeRefunded || intentRefunded)) return "refunded";
+    } catch {
+      // ignore - fall back to Stripe invoice status
+    }
+
     if (status === "paid") return "paid";
     if (["uncollectible", "void"].includes(status)) return "failed";
     if (invoice?.attempted && invoice?.paid === false && invoice?.next_payment_attempt === null) return "failed";
@@ -2026,6 +2053,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const timeoutMinutes = Math.max(1, Math.min(24 * 60, Number(platformSettings.security.sessionTimeoutMinutes ?? 30)));
       const cutoff = new Date(Date.now() - timeoutMinutes * 60 * 1000);
 
+      const parseDateMaybe = (raw: unknown): Date | null => {
+        if (!raw) return null;
+        if (raw instanceof Date) return Number.isFinite(raw.getTime()) ? raw : null;
+        const text = String(raw).trim();
+        if (!text || text.toLowerCase() === "null" || text.toLowerCase() === "undefined") return null;
+        const d = new Date(text);
+        return Number.isFinite(d.getTime()) ? d : null;
+      };
+
       const sessions = await db
         .collection("auth_sessions")
         .find({})
@@ -2034,8 +2070,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .toArray();
 
       const items = sessions.map((s: any) => {
-        const lastSeenAt = s?.lastSeenAt ? new Date(s.lastSeenAt) : null;
-        const isActive = Boolean(!s?.revokedAt && lastSeenAt && lastSeenAt >= cutoff);
+        const lastSeenAt = parseDateMaybe(s?.lastSeenAt);
+        const revokedAt = parseDateMaybe(s?.revokedAt);
+        const isActive = Boolean(!revokedAt && lastSeenAt && lastSeenAt >= cutoff);
         return {
           id: String(s._id),
           userId: String(s.userId),
@@ -2043,9 +2080,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: String(s.role || ""),
           tenantId: s.tenantId ?? null,
           actingTenantId: s.actingTenantId ?? null,
-          createdAt: s.createdAt ?? null,
-          lastSeenAt: s.lastSeenAt ?? null,
-          revokedAt: s.revokedAt ?? null,
+          createdAt: parseDateMaybe(s.createdAt)?.toISOString?.() ?? null,
+          lastSeenAt: lastSeenAt?.toISOString?.() ?? null,
+          revokedAt: revokedAt?.toISOString?.() ?? null,
           revokedReason: s.revokedReason ?? null,
           ip: s.ip ?? null,
           userAgent: s.userAgent ?? null,
@@ -2093,6 +2130,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(200).json({ revokedCount: result?.modifiedCount ?? 0 });
     } catch {
       return res.status(500).json({ message: "Failed to revoke sessions" });
+    }
+  });
+
+  app.post("/api/platform/security/sessions/revoke", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const sessionId = String((req.body as any)?.sessionId || "").trim();
+      const reason = String((req.body as any)?.reason || "platform_revoke").trim() || "platform_revoke";
+
+      if (!sessionId) return res.status(400).json({ message: "sessionId is required" });
+      if (!ObjectId.isValid(sessionId)) return res.status(400).json({ message: "Invalid sessionId" });
+
+      const db = await connectToDatabase();
+      const _id = new ObjectId(sessionId);
+
+      const session = await db
+        .collection("auth_sessions")
+        .findOne({ _id }, { projection: { userId: 1, email: 1, tenantId: 1, revokedAt: 1 } });
+      if (!session) return res.status(404).json({ message: "Session not found" });
+
+      const result = await db
+        .collection("auth_sessions")
+        .updateOne({ _id, revokedAt: null }, { $set: { revokedAt: new Date(), revokedReason: reason } });
+
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "SESSION_REVOKED",
+        description: "Platform admin revoked a session",
+        email: (req.user as any)?.email || null,
+        severity: "warning",
+        meta: {
+          sessionId,
+          targetUserId: session?.userId ? String(session.userId) : undefined,
+          targetEmail: session?.email ? String(session.email) : undefined,
+          targetTenantId: session?.tenantId ? String(session.tenantId) : undefined,
+          modifiedCount: result?.modifiedCount ?? 0,
+        },
+      });
+
+      return res.status(200).json({ sessionId, revoked: Boolean(result?.modifiedCount), modifiedCount: result?.modifiedCount ?? 0 });
+    } catch {
+      return res.status(500).json({ message: "Failed to revoke session" });
     }
   });
 
@@ -2605,6 +2685,180 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/platform/tenant-health", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const limitRaw = Number((req.query as any)?.limit ?? 200);
+      const limit = Math.max(1, Math.min(500, Number.isFinite(limitRaw) ? limitRaw : 200));
+
+      const activeHoursRaw = Number((req.query as any)?.activeHours ?? 24);
+      const activeHours = Math.max(1, Math.min(168, Number.isFinite(activeHoursRaw) ? activeHoursRaw : 24));
+
+      const idleDaysRaw = Number((req.query as any)?.idleDays ?? 7);
+      const idleDays = Math.max(1, Math.min(90, Number.isFinite(idleDaysRaw) ? idleDaysRaw : 7));
+
+      const db = await connectToDatabase();
+
+      const platformSettings = await getPlatformSettingsCached(db);
+      const timeoutMinutes = Math.max(1, Math.min(24 * 60, Number(platformSettings.security.sessionTimeoutMinutes ?? 30)));
+      const cutoff = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+
+      const tenants = await db
+        .collection("login")
+        .aggregate([
+          {
+            $match: {
+              tenantId: { $ne: null },
+              role: { $ne: "global_admin" },
+            },
+          },
+          {
+            $group: {
+              _id: "$tenantId",
+              companyName: { $max: "$companyName" },
+              createdAt: { $min: "$createdAt" },
+              status: { $max: "$status" },
+              plan: { $max: "$plan" },
+              subscriptionCurrentPeriodEnd: { $max: "$subscriptionCurrentPeriodEnd" },
+              emails: { $addToSet: "$email" },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              tenantId: { $toString: "$_id" },
+              companyName: 1,
+              createdAt: 1,
+              status: 1,
+              plan: 1,
+              subscriptionCurrentPeriodEnd: 1,
+              users: { $size: "$emails" },
+            },
+          },
+          { $sort: { createdAt: -1 } },
+          { $limit: limit },
+        ])
+        .toArray();
+
+      const tenantIds = tenants.map((t: any) => String(t.tenantId)).filter(Boolean);
+
+      // Prefer companyInfo name when available
+      const companyInfoList = await db
+        .collection("companyInfo")
+        .find({ tenantId: { $in: tenantIds } }, { projection: { tenantId: 1, companyName: 1 } })
+        .toArray();
+      const companyInfoMap = new Map(companyInfoList.map((ci: any) => [String(ci.tenantId), String(ci.companyName || "")]));
+
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const activityAgg = await db
+        .collection("history")
+        .aggregate([
+          { $match: { tenantId: { $in: tenantIds } } },
+          {
+            $group: {
+              _id: "$tenantId",
+              lastEventAt: { $max: "$timestamp" },
+              eventsLast24h: {
+                $sum: {
+                  $cond: [{ $gte: ["$timestamp", dayAgo] }, 1, 0],
+                },
+              },
+            },
+          },
+        ])
+        .toArray();
+
+      const activityMap = new Map(
+        activityAgg.map((row: any) => [
+          String(row._id),
+          { lastEventAt: row.lastEventAt ?? null, eventsLast24h: row.eventsLast24h ?? 0 },
+        ])
+      );
+
+      const sessionAgg = await db
+        .collection("auth_sessions")
+        .aggregate([
+          {
+            $match: {
+              tenantId: { $in: tenantIds },
+              revokedAt: null,
+              lastSeenAt: { $gte: cutoff },
+            },
+          },
+          {
+            $group: {
+              _id: "$tenantId",
+              activeSessionCount: { $sum: 1 },
+              activeUsers: { $addToSet: "$userId" },
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              activeSessionCount: 1,
+              activeUserCount: { $size: "$activeUsers" },
+            },
+          },
+        ])
+        .toArray();
+
+      const sessionMap = new Map(
+        sessionAgg.map((row: any) => [String(row._id), { activeUsers: row.activeUserCount ?? 0, activeSessions: row.activeSessionCount ?? 0 }])
+      );
+
+      const now = Date.now();
+      const items = tenants.map((t: any) => {
+        const tenantId = String(t.tenantId);
+        const activity = activityMap.get(tenantId);
+        const sessionInfo = sessionMap.get(tenantId);
+
+        const lastActivityAt = activity?.lastEventAt ? new Date(activity.lastEventAt) : null;
+        const lastOk = lastActivityAt && Number.isFinite(lastActivityAt.getTime()) ? lastActivityAt : null;
+        const hoursSinceLastActivity = lastOk ? (now - lastOk.getTime()) / (60 * 60 * 1000) : null;
+        const daysSince = typeof hoursSinceLastActivity === "number" ? hoursSinceLastActivity / 24 : null;
+
+        let activityStatus: "active" | "idle" | "inactive" = "inactive";
+        if (typeof hoursSinceLastActivity === "number") {
+          if (hoursSinceLastActivity <= activeHours) activityStatus = "active";
+          else if (typeof daysSince === "number" && daysSince <= idleDays) activityStatus = "idle";
+          else activityStatus = "inactive";
+        }
+
+        return {
+          tenantId,
+          companyName: companyInfoMap.get(tenantId) || t.companyName || "Unnamed Company",
+          plan: t.plan ?? null,
+          users: t.users ?? null,
+          activeUsers: sessionInfo?.activeUsers ?? 0,
+          activeSessions: sessionInfo?.activeSessions ?? 0,
+          status: t.status ?? null,
+          subscriptionCurrentPeriodEnd: t.subscriptionCurrentPeriodEnd ?? null,
+          lastActivityAt: lastOk ? lastOk.toISOString() : null,
+          hoursSinceLastActivity: typeof hoursSinceLastActivity === "number" ? Number(hoursSinceLastActivity.toFixed(2)) : null,
+          eventsLast24h: activity?.eventsLast24h ?? 0,
+          activityStatus,
+        };
+      });
+
+      const statusRank: Record<string, number> = { active: 0, idle: 1, inactive: 2 };
+      items.sort((a: any, b: any) => {
+        const ra = statusRank[String(a.activityStatus)] ?? 9;
+        const rb = statusRank[String(b.activityStatus)] ?? 9;
+        if (ra !== rb) return ra - rb;
+
+        const ta = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
+        const tb = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
+        return tb - ta;
+      });
+
+      return res.status(200).json({ activeHours, idleDays, timeoutMinutes, items });
+    } catch {
+      return res.status(500).json({ message: "Failed to load tenant health" });
+    }
+  });
+
   const PLATFORM_STATS_CACHE_TTL_MS = 60_000;
   let platformStatsCache: { fetchedAt: number; data: any } | null = null;
   let platformStatsInFlight: Promise<any> | null = null;
@@ -2880,6 +3134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const planPriority = (plan: unknown) => {
         const normalized = String(plan ?? "").trim().toLowerCase();
+        if (normalized === "premium") return 5;
         if (normalized === "professional" || normalized === "pro") return 4;
         if (normalized === "starter") return 3;
         if (normalized === "trial") return 2;
@@ -2968,6 +3223,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const currentRenewal = parseDateMaybe(current.subscriptionCurrentPeriodEnd);
         const nextRenewal = parseDateMaybe(c.subscriptionCurrentPeriodEnd);
 
+        const currentTrial = parseDateMaybe(current.trialEndsAt);
+        const nextTrial = parseDateMaybe(c.trialEndsAt);
+        const currentActivated = parseDateMaybe(current.planActivatedAt);
+        const nextActivated = parseDateMaybe(c.planActivatedAt);
+        const currentExpired = parseDateMaybe(current.planExpiredAt);
+        const nextExpired = parseDateMaybe(c.planExpiredAt);
+
         dedupedMap.set(key, {
           ...current,
           ...(keepNextAsCanonical ? { tenantId: c.tenantId } : null),
@@ -2980,6 +3242,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             currentRenewal && nextRenewal
               ? (currentRenewal > nextRenewal ? currentRenewal : nextRenewal)
               : (current.subscriptionCurrentPeriodEnd || c.subscriptionCurrentPeriodEnd || null),
+          trialEndsAt:
+            currentTrial && nextTrial
+              ? (currentTrial > nextTrial ? currentTrial : nextTrial)
+              : (current.trialEndsAt || c.trialEndsAt || null),
+          planActivatedAt:
+            currentActivated && nextActivated
+              ? (currentActivated > nextActivated ? currentActivated : nextActivated)
+              : (current.planActivatedAt || c.planActivatedAt || null),
+          planExpiredAt:
+            currentExpired && nextExpired
+              ? (currentExpired > nextExpired ? currentExpired : nextExpired)
+              : (current.planExpiredAt || c.planExpiredAt || null),
           plan: bestPlan(current.plan, c.plan),
           users: currentUsers + nextUsers,
           status: String(current.status || "").toLowerCase() === "active" || String(c.status || "").toLowerCase() === "active" ? "active" : (current.status || c.status),
@@ -2994,18 +3268,412 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .map((c: any) => ({
           tenantId: c.tenantId ? String(c.tenantId) : null,
-          companyName: c.companyName || "Unnamed Company",
+          companyName: String(c.companyName || "").trim() || (c.tenantId ? `Tenant ${String(c.tenantId)}` : "Organization"),
           plan: c.plan || null,
           users: Number(c.users || 0),
           status: c.status || null,
           createdAt: c.createdAt || null,
           subscriptionCurrentPeriodEnd: c.subscriptionCurrentPeriodEnd || null,
+          trialEndsAt: c.trialEndsAt || null,
+          planActivatedAt: c.planActivatedAt || null,
+          planExpiredAt: c.planExpiredAt || null,
         }));
 
       res.status(200).json(response);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       res.status(500).json({ message: "Failed to fetch companies", error: errMsg });
+    }
+  });
+
+  app.get("/api/platform/companies/:tenantId", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const tenantId = String((req.params as any)?.tenantId || "").trim();
+      if (!tenantId) return res.status(400).json({ message: "tenantId is required" });
+
+      const db = await connectToDatabase();
+
+      const companyInfo = await db
+        .collection("companyInfo")
+        .findOne({ tenantId }, { projection: { tenantId: 1, companyName: 1, createdAt: 1 } });
+
+      const users = await db
+        .collection("login")
+        .find(
+          { tenantId, role: { $ne: "global_admin" } },
+          {
+            projection: {
+              _id: 1,
+              email: 1,
+              fullName: 1,
+              role: 1,
+              status: 1,
+              createdAt: 1,
+              lastLogin: 1,
+              plan: 1,
+              subscriptionCurrentPeriodEnd: 1,
+              stripeCustomerId: 1,
+              stripeSubscriptionId: 1,
+              trialEndsAt: 1,
+              planActivatedAt: 1,
+              planExpiredAt: 1,
+            },
+          }
+        )
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .toArray();
+
+      const normalizeDate = (raw: unknown): Date | null => {
+        if (!raw) return null;
+        const d = raw instanceof Date ? raw : new Date(String(raw));
+        return Number.isFinite(d.getTime()) ? d : null;
+      };
+
+      const companyNameFromUsers = users
+        .map((u: any) => String(u?.companyName || "").trim())
+        .find((n: string) => Boolean(n));
+
+      const deriveNameFromEmail = (email: unknown) => {
+        const value = String(email || "").trim().toLowerCase();
+        const at = value.indexOf("@");
+        if (at < 0) return "";
+        const domain = value.slice(at + 1).split("/")[0].trim();
+        if (!domain) return "";
+        const base = domain.split(".")[0] || domain;
+        const cleaned = base.replace(/[^a-z0-9]+/gi, " ").trim();
+        if (!cleaned) return domain;
+        return cleaned
+          .split(/\s+/)
+          .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+          .join(" ");
+      };
+
+      const companyNameFromEmail = users
+        .map((u: any) => deriveNameFromEmail(u?.email))
+        .find((n: string) => Boolean(String(n || "").trim()));
+
+      const company = {
+        tenantId,
+        companyName: String(companyInfo?.companyName || companyNameFromUsers || companyNameFromEmail || `Tenant ${tenantId}`),
+        createdAt: companyInfo?.createdAt || null,
+        users: users.length,
+        status: users.find((u: any) => String(u?.status || "").toLowerCase() === "active")
+          ? "active"
+          : (users[0]?.status || null),
+        plan: users.map((u: any) => u?.plan).find((p: any) => Boolean(String(p || "").trim())) || null,
+        stripeCustomerId: users.map((u: any) => u?.stripeCustomerId).find((v: any) => Boolean(String(v || "").trim())) || null,
+        stripeSubscriptionId: users.map((u: any) => u?.stripeSubscriptionId).find((v: any) => Boolean(String(v || "").trim())) || null,
+        subscriptionCurrentPeriodEnd: normalizeDate(
+          users
+            .map((u: any) => normalizeDate(u?.subscriptionCurrentPeriodEnd))
+            .filter(Boolean)
+            .sort((a: any, b: any) => (a as Date).getTime() - (b as Date).getTime())
+            .slice(-1)[0]
+        ),
+        trialEndsAt: normalizeDate(
+          users
+            .map((u: any) => normalizeDate(u?.trialEndsAt))
+            .filter(Boolean)
+            .sort((a: any, b: any) => (a as Date).getTime() - (b as Date).getTime())
+            .slice(-1)[0]
+        ),
+        planActivatedAt: normalizeDate(
+          users
+            .map((u: any) => normalizeDate(u?.planActivatedAt))
+            .filter(Boolean)
+            .sort((a: any, b: any) => (a as Date).getTime() - (b as Date).getTime())
+            .slice(-1)[0]
+        ),
+        planExpiredAt: normalizeDate(
+          users
+            .map((u: any) => normalizeDate(u?.planExpiredAt))
+            .filter(Boolean)
+            .sort((a: any, b: any) => (a as Date).getTime() - (b as Date).getTime())
+            .slice(-1)[0]
+        ),
+      };
+
+      return res.status(200).json({ company, users });
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({ message: "Failed to fetch company detail", error: errMsg });
+    }
+  });
+
+  app.patch("/api/platform/companies/:tenantId", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const tenantId = String((req.params as any)?.tenantId || "").trim();
+      if (!tenantId) return res.status(400).json({ message: "tenantId is required" });
+
+      const companyName = typeof (req.body as any)?.companyName === "string" ? String((req.body as any).companyName).trim() : "";
+      const planRaw = typeof (req.body as any)?.plan === "string" ? String((req.body as any).plan).trim().toLowerCase() : "";
+
+      if (!companyName && !planRaw) {
+        return res.status(400).json({ message: "At least one field (companyName, plan) is required" });
+      }
+      if (companyName && companyName.length > 200) return res.status(400).json({ message: "companyName is too long" });
+
+      const allowedPlans = new Set(["free", "professional", "pro", "premium"]);
+      const plan = planRaw ? (allowedPlans.has(planRaw) ? (planRaw === "pro" ? "professional" : planRaw) : "") : "";
+      if (planRaw && !plan) {
+        return res.status(400).json({ message: "plan must be free, professional, or premium" });
+      }
+
+      const db = await connectToDatabase();
+
+      if (companyName) {
+        await db.collection("companyInfo").updateOne(
+          { tenantId },
+          { $set: { tenantId, companyName, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+          { upsert: true }
+        );
+
+        await db.collection("login").updateMany(
+          { tenantId, role: { $ne: "global_admin" } },
+          { $set: { companyName } }
+        );
+      }
+
+      if (plan) {
+        const now = new Date();
+        await db.collection("login").updateMany(
+          { tenantId, role: { $ne: "global_admin" } },
+          {
+            $set: {
+              plan,
+              planActivatedAt: now,
+              planExpiredAt: null,
+            },
+          }
+        );
+
+        await db.collection("signup").updateMany(
+          { tenantId },
+          {
+            $set: {
+              plan,
+              planActivatedAt: now,
+              planExpiredAt: null,
+            },
+          }
+        );
+      }
+
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "TENANT_COMPANY_UPDATED",
+        description: "Platform admin updated tenant company profile",
+        email: (req.user as any)?.email || null,
+        severity: "info",
+        meta: { tenantId, ...(companyName ? { companyName } : {}), ...(plan ? { plan } : {}) },
+      });
+
+      return res.status(200).json({ tenantId, ...(companyName ? { companyName } : {}), ...(plan ? { plan } : {}) });
+    } catch {
+      return res.status(500).json({ message: "Failed to update company" });
+    }
+  });
+
+  app.get("/api/platform/companies/:tenantId/usage", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const tenantId = String((req.params as any)?.tenantId || "").trim();
+      if (!tenantId) return res.status(400).json({ message: "tenantId is required" });
+
+      const db = await connectToDatabase();
+
+      const [usersTotal, usersActive, licensesTotal, complianceTotal] = await Promise.all([
+        db.collection("login").countDocuments({ tenantId, role: { $ne: "global_admin" } }),
+        db.collection("login").countDocuments({ tenantId, role: { $ne: "global_admin" }, status: "active" }),
+        db.collection("licenses").countDocuments({ tenantId }),
+        db.collection("compliance").countDocuments({ tenantId }),
+      ]);
+
+      return res.status(200).json({
+        tenantId,
+        usersTotal,
+        usersActive,
+        licensesTotal,
+        complianceTotal,
+      });
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({ message: "Failed to fetch tenant usage", error: errMsg });
+    }
+  });
+
+  app.post("/api/platform/companies/:tenantId/impersonate", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const tenantId = String((req.params as any)?.tenantId || "").trim();
+      if (!tenantId) return res.status(400).json({ message: "tenantId is required" });
+
+      const db = await connectToDatabase();
+      const settings = await getPlatformSettingsCached(db);
+      const allowImpersonation = settings?.security?.allowImpersonation !== false;
+      if (!allowImpersonation) return res.status(403).json({ message: "Impersonation is disabled in platform settings" });
+
+      const actor = req.user as any;
+      const tokenPayload: any = {
+        userId: String(actor?.userId || ""),
+        email: String(actor?.email || ""),
+        tenantId: null,
+        actingTenantId: tenantId,
+        role: "global_admin",
+        department: actor?.department ?? null,
+      };
+
+      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const token = settings?.security?.jwtExpiryEnabled
+        ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${settings.security.jwtExpiryMinutes}m` })
+        : jwt.sign(tokenPayload, jwtSecret);
+
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "TENANT_IMPERSONATION_STARTED",
+        description: "Platform admin started impersonation session",
+        email: String(actor?.email || "") || null,
+        severity: "warning",
+        meta: { actingTenantId: tenantId },
+      });
+
+      return res.status(200).json({ token });
+    } catch {
+      return res.status(500).json({ message: "Failed to start impersonation" });
+    }
+  });
+
+  app.post("/api/platform/impersonation/exit", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const db = await connectToDatabase();
+      const settings = await getPlatformSettingsCached(db);
+
+      const actor = req.user as any;
+      const tokenPayload: any = {
+        userId: String(actor?.userId || ""),
+        email: String(actor?.email || ""),
+        tenantId: null,
+        actingTenantId: null,
+        role: "global_admin",
+        department: actor?.department ?? null,
+      };
+
+      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const token = settings?.security?.jwtExpiryEnabled
+        ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${settings.security.jwtExpiryMinutes}m` })
+        : jwt.sign(tokenPayload, jwtSecret);
+
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "TENANT_IMPERSONATION_ENDED",
+        description: "Platform admin exited impersonation mode",
+        email: String(actor?.email || "") || null,
+        severity: "info",
+        meta: { previousActingTenantId: String(actor?.actingTenantId || "") || null },
+      });
+
+      return res.status(200).json({ token });
+    } catch {
+      return res.status(500).json({ message: "Failed to exit impersonation" });
+    }
+  });
+
+  app.patch("/api/platform/companies/:tenantId/status", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const tenantId = String((req.params as any)?.tenantId || "").trim();
+      const statusRaw = String((req.body as any)?.status || "").trim().toLowerCase();
+      if (!tenantId) return res.status(400).json({ message: "tenantId is required" });
+      if (!statusRaw) return res.status(400).json({ message: "status is required" });
+
+      const nextStatus = statusRaw === "active" ? "active" : statusRaw === "suspended" ? "suspended" : "";
+      if (!nextStatus) return res.status(400).json({ message: "status must be active or suspended" });
+
+      const db = await connectToDatabase();
+      const baseFilter = { tenantId, role: { $ne: "global_admin" } };
+      const filter =
+        nextStatus === "active"
+          ? { ...baseFilter, status: "suspended" }
+          : {
+              ...baseFilter,
+              $or: [
+                { status: "active" },
+                { status: { $exists: false } },
+                { status: null },
+                { status: "" },
+              ],
+            };
+
+      const result = await db.collection("login").updateMany(filter, { $set: { status: nextStatus } });
+
+      if (nextStatus !== "active") {
+        const userIds = await db.collection("login").find(baseFilter, { projection: { _id: 1 } }).toArray();
+        const ids = userIds.map((u: any) => String(u._id)).filter(Boolean);
+        if (ids.length) {
+          await db.collection("auth_sessions").updateMany(
+            { userId: { $in: ids }, revokedAt: null },
+            { $set: { revokedAt: new Date(), revokedReason: "tenant_suspended" } }
+          );
+        }
+      }
+
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "TENANT_STATUS_UPDATED",
+        description: `Platform admin set tenant status to ${nextStatus}`,
+        email: (req.user as any)?.email || null,
+        severity: nextStatus === "active" ? "info" : "warning",
+        meta: { tenantId, status: nextStatus, modifiedCount: result?.modifiedCount ?? 0 },
+      });
+
+      return res.status(200).json({ tenantId, status: nextStatus, modifiedCount: result?.modifiedCount ?? 0 });
+    } catch {
+      return res.status(500).json({ message: "Failed to update company status" });
+    }
+  });
+
+  app.post("/api/platform/companies/:tenantId/offboard", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const tenantId = String((req.params as any)?.tenantId || "").trim();
+      if (!tenantId) return res.status(400).json({ message: "tenantId is required" });
+
+      const db = await connectToDatabase();
+      const filter = { tenantId, role: { $ne: "global_admin" } };
+      const result = await db.collection("login").updateMany(filter, { $set: { status: "disabled" } });
+
+      const userIds = await db.collection("login").find(filter, { projection: { _id: 1 } }).toArray();
+      const ids = userIds.map((u: any) => String(u._id)).filter(Boolean);
+      if (ids.length) {
+        await db.collection("auth_sessions").updateMany(
+          { userId: { $in: ids }, revokedAt: null },
+          { $set: { revokedAt: new Date(), revokedReason: "tenant_offboarded" } }
+        );
+      }
+
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "TENANT_OFFBOARDED",
+        description: "Platform admin offboarded tenant (soft disable)",
+        email: (req.user as any)?.email || null,
+        severity: "warning",
+        meta: { tenantId, modifiedCount: result?.modifiedCount ?? 0 },
+      });
+
+      return res.status(200).json({ tenantId, modifiedCount: result?.modifiedCount ?? 0 });
+    } catch {
+      return res.status(500).json({ message: "Failed to offboard tenant" });
     }
   });
 
@@ -3123,6 +3791,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       res.status(500).json({ message: "Failed to fetch platform users", error: errMsg });
+    }
+  });
+
+  app.patch("/api/platform/users/:userId/status", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const userId = String((req.params as any)?.userId || "").trim();
+      const statusRaw = String((req.body as any)?.status || "").trim().toLowerCase();
+      if (!userId) return res.status(400).json({ message: "userId is required" });
+      if (!statusRaw) return res.status(400).json({ message: "status is required" });
+
+      const nextStatus = statusRaw === "active" ? "active" : statusRaw === "inactive" ? "inactive" : "";
+      if (!nextStatus) return res.status(400).json({ message: "status must be active or inactive" });
+
+      const db = await connectToDatabase();
+      const _id = ObjectId.isValid(userId) ? new ObjectId(userId) : null;
+      if (!_id) return res.status(400).json({ message: "Invalid userId" });
+
+      const user = await db.collection("login").findOne({ _id }, { projection: { email: 1, tenantId: 1, role: 1 } });
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (String(user.role || "").toLowerCase() === "global_admin") {
+        return res.status(400).json({ message: "Cannot modify a global admin account" });
+      }
+
+      const normalizeEmail = (raw: unknown) => String(raw ?? "").trim().toLowerCase();
+      const email = normalizeEmail(user?.email);
+
+      const relatedAccounts = email
+        ? await db
+            .collection("login")
+            .find(
+              {
+                email: { $regex: `^${email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+                role: { $ne: "global_admin" },
+              },
+              { projection: { _id: 1 } }
+            )
+            .toArray()
+        : [];
+      const affectedIds = relatedAccounts.length ? relatedAccounts.map((r: any) => r._id).filter(Boolean) : [_id];
+      const affectedUserIds = affectedIds.map((id: any) => String(id));
+
+      const result = await db.collection("login").updateMany({ _id: { $in: affectedIds } }, { $set: { status: nextStatus } });
+
+      if (nextStatus !== "active") {
+        await db.collection("auth_sessions").updateMany(
+          { userId: { $in: affectedUserIds }, revokedAt: null },
+          { $set: { revokedAt: new Date(), revokedReason: "user_deactivated" } }
+        );
+      }
+
+      await writeAuditEvent(db, {
+        tenantId: user?.tenantId ?? null,
+        action: "USER_STATUS_UPDATED",
+        description: `Platform admin set user status to ${nextStatus}`,
+        email: (req.user as any)?.email || null,
+        severity: nextStatus === "active" ? "info" : "warning",
+        meta: { userId, targetEmail: user?.email || null, status: nextStatus, affectedUserIds },
+      });
+
+      return res.status(200).json({ userId, status: nextStatus, modifiedCount: result?.modifiedCount ?? 0, affectedUserIds });
+    } catch {
+      return res.status(500).json({ message: "Failed to update user status" });
+    }
+  });
+
+  app.patch("/api/platform/users/:userId/role", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const userId = String((req.params as any)?.userId || "").trim();
+      const roleRaw = String((req.body as any)?.role || "").trim().toLowerCase();
+      if (!userId) return res.status(400).json({ message: "userId is required" });
+      if (!roleRaw) return res.status(400).json({ message: "role is required" });
+
+      const allowed = new Set(["super_admin", "viewer", "department_editor", "department_viewer", "admin", "contributor"]);
+      if (!allowed.has(roleRaw)) {
+        return res.status(400).json({ message: `Invalid role. Allowed: ${Array.from(allowed).join(", ")}` });
+      }
+
+      const db = await connectToDatabase();
+      const _id = ObjectId.isValid(userId) ? new ObjectId(userId) : null;
+      if (!_id) return res.status(400).json({ message: "Invalid userId" });
+
+      const user = await db.collection("login").findOne({ _id }, { projection: { email: 1, tenantId: 1, role: 1 } });
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (String(user.role || "").toLowerCase() === "global_admin") {
+        return res.status(400).json({ message: "Cannot modify a global admin account" });
+      }
+
+      const tenantId = user?.tenantId ? String(user.tenantId) : "";
+      const currentRole = String(user?.role || "").trim().toLowerCase();
+      if (tenantId && currentRole === "super_admin" && roleRaw !== "super_admin") {
+        const remaining = await db.collection("login").countDocuments({ tenantId, role: "super_admin", _id: { $ne: _id } });
+        if (remaining <= 0) {
+          return res.status(409).json({ message: "Cannot remove the last super_admin for this tenant" });
+        }
+      }
+
+      const result = await db.collection("login").updateOne({ _id }, { $set: { role: roleRaw } });
+
+      await writeAuditEvent(db, {
+        tenantId: user?.tenantId ?? null,
+        action: "USER_ROLE_UPDATED",
+        description: `Platform admin set user role to ${roleRaw}`,
+        email: (req.user as any)?.email || null,
+        severity: "warning",
+        meta: { userId, targetEmail: user?.email || null, role: roleRaw },
+      });
+
+      return res.status(200).json({ userId, role: roleRaw, modifiedCount: result?.modifiedCount ?? 0 });
+    } catch {
+      return res.status(500).json({ message: "Failed to update user role" });
     }
   });
 
@@ -3280,7 +4062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (stripe) {
         const [stripeInvoices, stripeSubscriptions] = await Promise.all([
-          stripe.invoices.list({ limit: 100, expand: ["data.customer"] as any }),
+          stripe.invoices.list({ limit: 100, expand: ["data.customer", "data.charge", "data.payment_intent"] as any }),
           stripe.subscriptions.list({ limit: 100, status: "all", expand: ["data.customer"] as any }),
         ]);
 
@@ -3409,7 +4191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         payments = invoices
           .filter((invoice: any) => {
             const s = String(invoice?.paymentStatus || "").toLowerCase();
-            return s === "paid" || s === "failed";
+            return s === "paid" || s === "failed" || s === "refunded";
           })
           .map((invoice: any) => ({
             ...invoice,
@@ -3468,6 +4250,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             tenantId: accountMatch?.tenantId || (metaTenantId || null),
             planName,
             status: String(subscription.status || "unknown"),
+            cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
+            pauseCollection: Boolean(subscription.pause_collection),
             amountMonthly: Number(monthlyAmount.toFixed(2)),
             currentPeriodEnd: subscription.current_period_end
               ? new Date(subscription.current_period_end * 1000).toISOString()
@@ -3583,6 +4367,264 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(200).json({ ...platformBillingCache.data, stale: true, error: errMsg });
       }
       return res.status(500).json({ message: "Failed to fetch platform billing", error: errMsg });
+    }
+  });
+
+  app.post("/api/platform/billing/subscriptions/:subscriptionId/cancel", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+      if (!stripe) return res.status(400).json({ message: "Stripe is not configured" });
+
+      const subscriptionId = String((req.params as any)?.subscriptionId || "").trim();
+      if (!subscriptionId) return res.status(400).json({ message: "subscriptionId is required" });
+
+      const updated = await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
+
+      platformBillingCache = null;
+
+      const db = await connectToDatabase();
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "STRIPE_SUBSCRIPTION_CANCELLED",
+        description: "Platform admin cancelled Stripe subscription (end of period)",
+        email: (req.user as any)?.email || null,
+        severity: "warning",
+        meta: { subscriptionId, cancel_at_period_end: true },
+      });
+
+      return res.status(200).json({ id: updated.id, status: updated.status, cancel_at_period_end: updated.cancel_at_period_end });
+    } catch (e) {
+      return res.status(500).json({ message: "Failed to cancel subscription" });
+    }
+  });
+
+  app.post("/api/platform/billing/subscriptions/:subscriptionId/pause", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+      if (!stripe) return res.status(400).json({ message: "Stripe is not configured" });
+
+      const subscriptionId = String((req.params as any)?.subscriptionId || "").trim();
+      if (!subscriptionId) return res.status(400).json({ message: "subscriptionId is required" });
+
+      const updated = await stripe.subscriptions.update(subscriptionId, {
+        pause_collection: { behavior: "keep_as_draft" },
+      });
+
+      platformBillingCache = null;
+
+      const db = await connectToDatabase();
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "STRIPE_SUBSCRIPTION_PAUSED",
+        description: "Platform admin paused Stripe subscription",
+        email: (req.user as any)?.email || null,
+        severity: "warning",
+        meta: { subscriptionId },
+      });
+
+      return res.status(200).json({ id: updated.id, status: updated.status, pause_collection: updated.pause_collection || null });
+    } catch {
+      return res.status(500).json({ message: "Failed to pause subscription" });
+    }
+  });
+
+  app.post("/api/platform/billing/subscriptions/:subscriptionId/resume", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+      if (!stripe) return res.status(400).json({ message: "Stripe is not configured" });
+
+      const subscriptionId = String((req.params as any)?.subscriptionId || "").trim();
+      if (!subscriptionId) return res.status(400).json({ message: "subscriptionId is required" });
+
+      const updated = await stripe.subscriptions.update(subscriptionId, {
+        pause_collection: null as any,
+      });
+
+      platformBillingCache = null;
+
+      const db = await connectToDatabase();
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "STRIPE_SUBSCRIPTION_RESUMED",
+        description: "Platform admin resumed Stripe subscription",
+        email: (req.user as any)?.email || null,
+        severity: "info",
+        meta: { subscriptionId },
+      });
+
+      return res.status(200).json({ id: updated.id, status: updated.status, pause_collection: updated.pause_collection || null });
+    } catch {
+      return res.status(500).json({ message: "Failed to resume subscription" });
+    }
+  });
+
+  app.post("/api/platform/billing/subscriptions/:subscriptionId/plan", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+      if (!stripe) return res.status(400).json({ message: "Stripe is not configured" });
+
+      const subscriptionId = String((req.params as any)?.subscriptionId || "").trim();
+      const plan = String((req.body as any)?.plan || "").trim().toLowerCase();
+      if (!subscriptionId) return res.status(400).json({ message: "subscriptionId is required" });
+      if (!plan) return res.status(400).json({ message: "plan is required" });
+
+      const PRICE_IDS = {
+        starter: String(process.env.STRIPE_STARTER_PRICE_ID || ""),
+        professional: String(process.env.STRIPE_PROFESSIONAL_PRICE_ID || ""),
+        premium: String(process.env.STRIPE_PREMIUM_PRICE_ID || ""),
+      };
+
+      if (!PRICE_IDS.starter && !PRICE_IDS.professional) {
+        return res.status(400).json({ message: "Stripe price IDs are not configured" });
+      }
+
+      if (plan === "free") {
+        // Immediate downgrade: cancel subscription now and mark the tenant as free.
+        const deleted = await stripe.subscriptions.cancel(subscriptionId);
+
+        const db = await connectToDatabase();
+        const now = new Date();
+        await db.collection("login").updateMany(
+          { stripeSubscriptionId: subscriptionId },
+          {
+            $set: {
+              plan: "free",
+              planActivatedAt: now,
+              planExpiredAt: null,
+              subscriptionCurrentPeriodEnd: null,
+              stripeSubscriptionId: null,
+            },
+          }
+        );
+        await db.collection("signup").updateMany(
+          { stripeSubscriptionId: subscriptionId },
+          {
+            $set: {
+              plan: "free",
+              planActivatedAt: now,
+              planExpiredAt: null,
+              subscriptionCurrentPeriodEnd: null,
+              stripeSubscriptionId: null,
+            },
+          }
+        );
+
+        platformBillingCache = null;
+
+        await writeAuditEvent(db, {
+          tenantId: null,
+          action: "STRIPE_SUBSCRIPTION_PLAN_CHANGED",
+          description: "Platform admin downgraded subscription to free (cancelled)",
+          email: (req.user as any)?.email || null,
+          severity: "warning",
+          meta: { subscriptionId, plan: "free" },
+        });
+
+        return res.status(200).json({ id: deleted.id, status: deleted.status, plan: "free" });
+      }
+
+      const nextPriceId =
+        plan === "professional" || plan === "pro"
+          ? PRICE_IDS.professional
+          : plan === "premium"
+            ? PRICE_IDS.premium
+          : plan === "starter"
+            ? PRICE_IDS.starter
+            : "";
+
+      if (!nextPriceId) {
+        return res.status(400).json({ message: "plan must be free, starter, professional, or premium" });
+      }
+
+      const sub: any = await stripe.subscriptions.retrieve(subscriptionId);
+      const firstItem = sub?.items?.data?.[0];
+      const itemId = firstItem?.id ? String(firstItem.id) : "";
+      if (!itemId) return res.status(400).json({ message: "Subscription has no items to update" });
+
+      const updated = await stripe.subscriptions.update(subscriptionId, {
+        items: [{ id: itemId, price: nextPriceId }],
+        metadata: { ...(sub?.metadata || {}), plan },
+      });
+
+      platformBillingCache = null;
+
+      const db = await connectToDatabase();
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "STRIPE_SUBSCRIPTION_PLAN_CHANGED",
+        description: "Platform admin changed Stripe subscription plan",
+        email: (req.user as any)?.email || null,
+        severity: "warning",
+        meta: { subscriptionId, plan },
+      });
+
+      return res.status(200).json({ id: updated.id, status: updated.status });
+    } catch {
+      return res.status(500).json({ message: "Failed to change plan" });
+    }
+  });
+
+  app.post("/api/platform/billing/invoices/:invoiceId/send-email", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+      if (!stripe) return res.status(400).json({ message: "Stripe is not configured" });
+
+      const invoiceId = String((req.params as any)?.invoiceId || "").trim();
+      if (!invoiceId) return res.status(400).json({ message: "invoiceId is required" });
+
+      const sent = await stripe.invoices.sendInvoice(invoiceId);
+      platformBillingCache = null;
+
+      const db = await connectToDatabase();
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "STRIPE_INVOICE_SENT",
+        description: "Platform admin triggered Stripe invoice email",
+        email: (req.user as any)?.email || null,
+        severity: "info",
+        meta: { invoiceId },
+      });
+
+      return res.status(200).json({ id: sent.id, status: sent.status });
+    } catch {
+      return res.status(500).json({ message: "Failed to send invoice" });
+    }
+  });
+
+  app.post("/api/platform/billing/payments/:invoiceId/refund", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+      if (!stripe) return res.status(400).json({ message: "Stripe is not configured" });
+
+      const invoiceId = String((req.params as any)?.invoiceId || "").trim();
+      if (!invoiceId) return res.status(400).json({ message: "invoiceId is required" });
+
+      const invoice: any = await stripe.invoices.retrieve(invoiceId, { expand: ["payment_intent", "charge"] as any });
+      const pi = invoice?.payment_intent && typeof invoice.payment_intent === "object" ? invoice.payment_intent : null;
+      const charge = invoice?.charge && typeof invoice.charge === "object" ? invoice.charge : null;
+      const paymentIntentId = typeof invoice?.payment_intent === "string" ? String(invoice.payment_intent) : (pi?.id ? String(pi.id) : "");
+      const chargeId = typeof invoice?.charge === "string" ? String(invoice.charge) : (charge?.id ? String(charge.id) : "");
+
+      if (!paymentIntentId && !chargeId) {
+        return res.status(400).json({ message: "Invoice has no refundable payment intent/charge" });
+      }
+
+      const refund = await stripe.refunds.create(paymentIntentId ? { payment_intent: paymentIntentId } : { charge: chargeId });
+      platformBillingCache = null;
+
+      const db = await connectToDatabase();
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "STRIPE_PAYMENT_REFUNDED",
+        description: "Platform admin created Stripe refund",
+        email: (req.user as any)?.email || null,
+        severity: "warning",
+        meta: { invoiceId, refundId: refund?.id || null, paymentIntentId: paymentIntentId || null, chargeId: chargeId || null },
+      });
+
+      return res.status(200).json({ refundId: refund?.id || null, status: refund?.status || null });
+    } catch {
+      return res.status(500).json({ message: "Failed to refund payment" });
     }
   });
 
