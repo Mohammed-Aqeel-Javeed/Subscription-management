@@ -42,7 +42,8 @@ const GOVERNING_AUTHORITIES = [
   "ACRA", 
   "CPF",
   "AGD",
-  "MOM"
+  "MOM",
+  "Other"
 ];
 
 // Define the Department interface
@@ -430,7 +431,13 @@ export default function Compliance() {
       ])
       .then(([categoriesData, authoritiesData]) => {
         if (Array.isArray(categoriesData)) setCategories(categoriesData);
-        if (Array.isArray(authoritiesData)) setGoverningAuthorities(authoritiesData);
+        if (Array.isArray(authoritiesData)) {
+          const list = authoritiesData
+            .map((v: any) => String(v || '').trim())
+            .filter(Boolean);
+          if (!list.some((v) => v.toLowerCase() === 'other')) list.push('Other');
+          setGoverningAuthorities(Array.from(new Set(list)));
+        }
       })
       .catch(() => {
         setCategories([]);
@@ -734,6 +741,12 @@ export default function Compliance() {
   });
 
   const [form, setForm] = useState(createEmptyForm);
+
+  // Keep a synchronous reference to the latest form state (avoids stale reads during validation)
+  const formRef = useRef(form);
+  useEffect(() => {
+    formRef.current = form;
+  }, [form]);
   
   // Department management state
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
@@ -1632,6 +1645,8 @@ export default function Compliance() {
   }>({});
 
   const [submittedByError, setSubmittedByError] = useState<string>("");
+  const [ownerDuplicateError, setOwnerDuplicateError] = useState<string>("");
+  const [submissionAmountError, setSubmissionAmountError] = useState<string>("");
 
   // Date validation helper functions
   const parseDateValue = (dateValue: string): Date | null => {
@@ -1645,6 +1660,9 @@ export default function Compliance() {
     } else if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) {
       // Some imports/legacy values can be dd-MM-yyyy
       parsed = parse(raw, 'dd-MM-yyyy', new Date());
+    } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+      // UI can display dd/MM/yyyy
+      parsed = parse(raw, 'dd/MM/yyyy', new Date());
     } else {
       // Last resort (avoid relying on this for dd-MM-yyyy)
       parsed = new Date(raw);
@@ -1655,7 +1673,12 @@ export default function Compliance() {
     return parsed;
   };
 
-  const validateDate = (dateValue: string, fieldName: string, allowFuture: boolean = false): string => {
+  const validateDate = (
+    dateValue: string,
+    fieldName: string,
+    allowFuture: boolean = false,
+    ctxForm: typeof form = form
+  ): string => {
     if (!dateValue) return "";
 
     const inputDate = parseDateValue(dateValue);
@@ -1669,8 +1692,8 @@ export default function Compliance() {
     // Special handling for submission date - allow future dates within submission window
     if (fieldName === "Submission Date" && !allowFuture && inputDate > today) {
       // Check if we have end date and submission deadline to determine valid window
-      const endDate = parseDateValue(form.filingEndDate);
-      const submissionDeadline = parseDateValue(form.filingSubmissionDeadline);
+      const endDate = parseDateValue(ctxForm.filingEndDate);
+      const submissionDeadline = parseDateValue(ctxForm.filingSubmissionDeadline);
       
       if (endDate && submissionDeadline) {
         // Allow future submission dates if they're within the valid submission window
@@ -1690,29 +1713,29 @@ export default function Compliance() {
     return "";
   };
 
-  const validateDateLogic = (): boolean => {
+  const validateDateLogic = (ctxForm: typeof form = form): boolean => {
     const errors: typeof dateErrors = {};
     let isValid = true;
     
-    const startDate = parseDateValue(form.filingStartDate);
-    const endDate = parseDateValue(form.filingEndDate);
-    const submissionDeadline = parseDateValue(form.filingSubmissionDeadline);
-    const submissionDate = parseDateValue(form.filingSubmissionDate);
+    const startDate = parseDateValue(ctxForm.filingStartDate);
+    const endDate = parseDateValue(ctxForm.filingEndDate);
+    const submissionDeadline = parseDateValue(ctxForm.filingSubmissionDeadline);
+    const submissionDate = parseDateValue(ctxForm.filingSubmissionDate);
     
     // Validate individual dates
-    const startDateError = validateDate(form.filingStartDate, "Start Date", true);
+    const startDateError = validateDate(ctxForm.filingStartDate, "Start Date", true, ctxForm);
     if (startDateError) {
       errors.startDate = startDateError;
       isValid = false;
     }
     
-    const submissionDateError = validateDate(form.filingSubmissionDate, "Submission Date", false);
+    const submissionDateError = validateDate(ctxForm.filingSubmissionDate, "Submission Date", false, ctxForm);
     if (submissionDateError) {
       errors.submissionDate = submissionDateError;
       isValid = false;
     }
     
-    const paymentDateError = validateDate(form.paymentDate, "Payment Date", false);
+    const paymentDateError = validateDate(ctxForm.paymentDate, "Payment Date", false, ctxForm);
     if (paymentDateError) {
       errors.paymentDate = paymentDateError;
       isValid = false;
@@ -1750,6 +1773,7 @@ export default function Compliance() {
     const requiredFields = [
       { field: 'filingName', label: 'Filing Name' },
       { field: 'filingComplianceCategory', label: 'Compliance Category' },
+      { field: 'filingGoverningAuthority', label: 'Governing Authority' },
       { field: 'filingStartDate', label: 'Start Date' },
       { field: 'filingEndDate', label: 'End Date' }
     ];
@@ -1780,18 +1804,42 @@ export default function Compliance() {
           .join(' ');
       }
     }
-    setForm((prev) => {
-      const newState = { ...prev, [field]: value };
+    // Prevent Owner and Owner2 being the same person
+    if (field === 'owner' || field === 'owner2') {
+      const nextValue = String(value || '').trim();
+      const otherField = field === 'owner' ? 'owner2' : 'owner';
+      const otherValue = String((form as any)[otherField] || '').trim();
+      if (nextValue && otherValue && nextValue.toLowerCase() === otherValue.toLowerCase()) {
+        setOwnerDuplicateError('Owner and Owner2 cannot be the same user');
+        toast({
+          title: 'Validation Error',
+          description: 'Owner and Owner2 cannot be the same user',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (ownerDuplicateError) setOwnerDuplicateError('');
+    }
+
+    if (field === 'submissionAmount') {
+      if (submissionAmountError) setSubmissionAmountError('');
+    }
+
+    // Compute next form state synchronously so validation uses latest values
+    const prev = formRef.current;
+    const nextForm = (() => {
+      const base = { ...prev, [field]: value };
       if (field === "filingStartDate" || field === "filingFrequency") {
         const startDate = field === "filingStartDate" ? value : prev.filingStartDate;
         const frequency = field === "filingFrequency" ? value : prev.filingFrequency;
-        const endDate = calculateEndDate(startDate, frequency);
-        newState.filingEndDate = endDate;
+        base.filingEndDate = calculateEndDate(startDate, frequency);
       }
-      return newState;
-    });
-    // Validate dates after form update
-    setTimeout(() => validateDateLogic(), 0);
+      return base;
+    })();
+
+    formRef.current = nextForm;
+    setForm(nextForm);
+    validateDateLogic(nextForm);
   };
   
   // For dynamic compliance fields
@@ -3690,7 +3738,9 @@ export default function Compliance() {
                     })()}
                   </div>
                   <div className="space-y-3">
-                    <label className="block text-sm font-medium text-slate-700">Amount</label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Amount <span className="text-red-500">*</span>
+                    </label>
                     <Input
                       className="w-full border-slate-300 rounded-lg p-2 text-base"
                       type="number"
@@ -3715,7 +3765,20 @@ export default function Compliance() {
                         }
                         handleFormChange("submissionAmount", val);
                       }}
+                      onBlur={() => {
+                        const raw = String(form.submissionAmount || '').trim();
+                        if (!raw) return;
+                        const n = parseFloat(raw);
+                        if (!Number.isFinite(n)) return;
+                        handleFormChange('submissionAmount', n.toFixed(2));
+                      }}
                     />
+                    {submissionAmountError && (
+                      <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {submissionAmountError}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -3786,7 +3849,9 @@ export default function Compliance() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Governing Authority</label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Governing Authority <span className="text-red-500">*</span>
+                </label>
                 {(() => {
                   const authorities = (Array.isArray(governingAuthorities) && governingAuthorities.length > 0)
                     ? governingAuthorities
@@ -4029,6 +4094,18 @@ export default function Compliance() {
                                   selected ? 'bg-blue-50 text-blue-700' : ''
                                 }`}
                                 onClick={() => {
+                                  if (!selected) {
+                                    const other = String((form as any).owner2 || '').trim();
+                                    if (other && name && other.toLowerCase() === name.toLowerCase()) {
+                                      setOwnerDuplicateError('Owner and Owner2 cannot be the same user');
+                                      toast({
+                                        title: 'Validation Error',
+                                        description: 'Owner and Owner2 cannot be the same user',
+                                        variant: 'destructive',
+                                      });
+                                      return;
+                                    }
+                                  }
                                   handleFormChange('owner', selected ? '' : name);
                                   setOwnerOpen(false);
                                   setOwnerSearch('');
@@ -4128,6 +4205,18 @@ export default function Compliance() {
                                   selected ? 'bg-blue-50 text-blue-700' : ''
                                 }`}
                                 onClick={() => {
+                                  if (!selected) {
+                                    const other = String((form as any).owner || '').trim();
+                                    if (other && name && other.toLowerCase() === name.toLowerCase()) {
+                                      setOwnerDuplicateError('Owner and Owner2 cannot be the same user');
+                                      toast({
+                                        title: 'Validation Error',
+                                        description: 'Owner and Owner2 cannot be the same user',
+                                        variant: 'destructive',
+                                      });
+                                      return;
+                                    }
+                                  }
                                   handleFormChange('owner2', selected ? '' : name);
                                   setOwner2Open(false);
                                   setOwner2Search('');
@@ -4160,6 +4249,13 @@ export default function Compliance() {
                   </div>
                 )}
               </div>
+
+              {ownerDuplicateError && (
+                <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {ownerDuplicateError}
+                </p>
+              )}
               
               {/* Added date range & deadline fields moved from previous Submission Details section */}
               <div className="space-y-2">
@@ -4495,6 +4591,7 @@ export default function Compliance() {
                 onClick={async () => {
                   try {
                     if (showSubmissionDetails) {
+                      setSubmissionAmountError('');
                       setSubmittedByError('');
 
                     if (!form.filingSubmissionDate) {
@@ -4514,6 +4611,40 @@ export default function Compliance() {
                         variant: 'destructive',
                       });
                       return;
+                    }
+
+                    const amountRaw = String(form.submissionAmount || '').trim();
+                    if (!amountRaw) {
+                      setSubmissionAmountError('Amount is required');
+                      toast({
+                        title: 'Validation Error',
+                        description: 'Amount is required',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    const amountNum = parseFloat(amountRaw);
+                    if (!Number.isFinite(amountNum)) {
+                      setSubmissionAmountError('Amount must be a valid number');
+                      toast({
+                        title: 'Validation Error',
+                        description: 'Amount must be a valid number',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    if (amountNum < 0 || amountNum > AMOUNT_MAX_10CR) {
+                      setSubmissionAmountError(`Amount must be between 0 and ${AMOUNT_MAX_10CR}`);
+                      toast({
+                        title: 'Validation Error',
+                        description: `Amount must be between 0 and ${AMOUNT_MAX_10CR}`,
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    // Normalize to decimal with 2 places
+                    if (amountRaw !== amountNum.toFixed(2)) {
+                      handleFormChange('submissionAmount', amountNum.toFixed(2));
                     }
 
                     if (!validateDateLogic()) {
@@ -4598,15 +4729,15 @@ export default function Compliance() {
                     complianceId = complianceItems[editIndex]._id;
                   }
                   if (hasSubmissionDate && hasSubmittedBy) {
-                    const currentEndDate = new Date(form.filingEndDate);
-                    if (!isNaN(currentEndDate.getTime())) {
+                    const currentEndDate = parseDateValue(form.filingEndDate);
+                    if (currentEndDate) {
                       const nextStartDateObj = new Date(currentEndDate);
                       nextStartDateObj.setDate(currentEndDate.getDate() + 1);
                       newStartDate = `${nextStartDateObj.getFullYear()}-${String(nextStartDateObj.getMonth() + 1).padStart(2, "0")}-${String(nextStartDateObj.getDate()).padStart(2, "0")}`;
                       newEndDate = calculateEndDate(newStartDate, frequency);
-                      let prevDeadline = new Date(form.filingSubmissionDeadline);
-                      if (!isNaN(prevDeadline.getTime())) {
-                        let nextDeadline = new Date(prevDeadline);
+                      const prevDeadline = parseDateValue(form.filingSubmissionDeadline);
+                      if (prevDeadline) {
+                        const nextDeadline = new Date(prevDeadline);
                         if (frequency === "Monthly") {
                           nextDeadline.setMonth(prevDeadline.getMonth() + 1);
                         } else if (frequency === "Quarterly") {

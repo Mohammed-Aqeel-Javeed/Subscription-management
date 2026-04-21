@@ -511,6 +511,24 @@ const licenseSchema = z
 })
   .passthrough()
   .superRefine((data, ctx) => {
+    const category = String(data.category || '').trim();
+    if (!category) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['category'],
+        message: 'Category is required',
+      });
+    }
+
+    const beneficiaryType = String(data.beneficiaryType || '').trim();
+    if (!beneficiaryType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['beneficiaryType'],
+        message: 'Beneficiary Type is required',
+      });
+    }
+
     const start = String(data.startDate || '').trim();
     const end = String(data.endDate || '').trim();
     if (start && end) {
@@ -2544,7 +2562,7 @@ export default function GovernmentLicense() {
       
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/license"] });
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
@@ -2553,8 +2571,36 @@ export default function GovernmentLicense() {
         description: `License ${editingLicense ? 'updated' : 'created'} successfully`,
         variant: "success",
       });
+      // If opened via secure-link/deeplink, remove token from URL but keep UI state.
+      if (modalUrlRestoreRef.current) {
+        window.history.replaceState(null, '', modalUrlRestoreRef.current);
+        modalUrlRestoreRef.current = null;
+      }
+
+      // When saving from the Renewal Submit view, stay in the same modal (no navigation, no close).
+      if (showSubmissionDetails) {
+        if (result) {
+          setEditingLicense((prev) => (prev ? ({ ...prev, ...result } as any) : (result as any)));
+        }
+        const currentValues = form.getValues() as LicenseFormData;
+        initialFormSnapshotRef.current = cloneSnapshot({
+          ...currentValues,
+          departments: selectedDepartments,
+        });
+        initialSelectedDepartmentsRef.current = [...selectedDepartments];
+        setRenewalFeeText('');
+        setRenewalAmountText('');
+        return;
+      }
+
+      // Normal Save/Update: close modal and return to the list (same page; no route navigation).
       setIsModalOpen(false);
+      setShowSubmissionDetails(false);
+      setSubmissionOpenedFromTable(false);
       setEditingLicense(null);
+      setSelectedDepartments([]);
+      setRenewalFeeText('');
+      setRenewalAmountText('');
       form.reset();
     },
     onError: (error: any) => {
@@ -3143,6 +3189,25 @@ export default function GovernmentLicense() {
         return;
       }
     }
+
+    const category = String(data.category || '').trim();
+    if (!category) {
+      toast({
+        title: 'Validation Error',
+        description: 'Category is required',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const beneficiaryType = String(data.beneficiaryType || '').trim();
+    if (!beneficiaryType) {
+      toast({
+        title: 'Validation Error',
+        description: 'Beneficiary Type is required',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     const currentStatus = String(form.getValues('status') || data.status || '').trim();
     if (editingLicense && currentStatus === 'Cancelled') {
@@ -3166,11 +3231,16 @@ export default function GovernmentLicense() {
     const normalizedRenewalCycleTime =
       String(license.renewalCycleTime || '').trim() === 'Annual' ? 'Yearly' : (license.renewalCycleTime || "");
 
+    const normalizeOthers = (v: any) => {
+      const s = String(v || '').trim();
+      return s === 'Other' ? 'Others' : s;
+    };
+
     const resetValues: LicenseFormData = {
       licenseName: license.licenseName || "",
       entityOwner: (license as any).entityOwner || "",
-      category: (license as any).category || "",
-      beneficiaryType: (license as any).beneficiaryType || "",
+      category: normalizeOthers((license as any).category) || "",
+      beneficiaryType: normalizeOthers((license as any).beneficiaryType) || "",
       beneficiaryNameNo: (license as any).beneficiaryNameNo || "",
       issuingAuthorityName: license.issuingAuthorityName || "",
       startDate: license.startDate || "",
@@ -4100,8 +4170,8 @@ export default function GovernmentLicense() {
                     Renewal Submit
                   </Button>
                 )}
-                {/* History Button (visible even before clicking Renewal Submit) */}
-                {editingLicense?.id && (
+                {/* History Button (hide during Renewal Submit view; keep only Log there) */}
+                {editingLicense?.id && !showSubmissionDetails && (
                   <Button
                     type="button"
                     variant="outline"
@@ -4187,7 +4257,7 @@ export default function GovernmentLicense() {
                             openToken: token,
                             name,
                           }).toString();
-                          navigate(`/compliance-log?${qs}`, {
+                          navigate(`/renewal-log?${qs}`, {
                             state: {
                               returnOpenLicenseId: licenseId,
                               returnPath: location.pathname,
@@ -4198,7 +4268,7 @@ export default function GovernmentLicense() {
                             id: String(licenseId),
                             name,
                           }).toString();
-                          navigate(`/compliance-log?${qs}`, {
+                          navigate(`/renewal-log?${qs}`, {
                             state: {
                               returnOpenLicenseId: licenseId,
                               returnPath: location.pathname,
@@ -4407,7 +4477,6 @@ export default function GovernmentLicense() {
                             <FormItem>
                               <FormLabel className="block text-sm font-medium text-slate-700">
                                 Renewal amount (if any):
-                                <span className="text-red-500"> *</span>
                               </FormLabel>
                               <FormControl>
                                 <Input
@@ -4617,13 +4686,15 @@ export default function GovernmentLicense() {
 
                       {/* Category */}
                       <div className="space-y-2">
-                        <label className="block text-sm font-medium text-slate-700">Category</label>
+                        <label className="block text-sm font-medium text-slate-700">
+                          Category <span className="text-red-500">*</span>
+                        </label>
                         <SearchableStringDropdown
                           value={form.watch('category') || ''}
                           onChange={(value) => {
                             form.setValue('category', value);
                           }}
-                          options={['Visa', 'E-Pass', 'Govt. License', 'Insurance', 'Contract', 'Agreement', 'Maintenance', 'Other']}
+                          options={['Visa', 'E-Pass', 'Govt. License', 'Insurance', 'Contract', 'Agreement', 'Maintenance', 'Others']}
                           placeholder="Select category"
                           className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
                         />
@@ -4631,7 +4702,9 @@ export default function GovernmentLicense() {
 
                       {/* Beneficiary Type */}
                       <div className="space-y-2">
-                        <label className="block text-sm font-medium text-slate-700">Beneficiary Type</label>
+                        <label className="block text-sm font-medium text-slate-700">
+                          Beneficiary Type <span className="text-red-500">*</span>
+                        </label>
                         <SearchableStringDropdown
                           value={form.watch('beneficiaryType') || ''}
                           onChange={(value) => {
@@ -4639,7 +4712,7 @@ export default function GovernmentLicense() {
                             // Clear Beneficiary Name/No when type changes
                             form.setValue('beneficiaryNameNo', '');
                           }}
-                          options={['Employee', 'Company', 'Vehicle', 'Customer', 'Department', 'Other']}
+                          options={['Employee', 'Company', 'Vehicle', 'Customer', 'Department', 'Others']}
                           placeholder="Select type"
                           className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
                         />
@@ -4658,7 +4731,6 @@ export default function GovernmentLicense() {
                                   value={String(field.value || '')}
                                   onChange={field.onChange}
                                   employees={employeesRaw as any}
-                                  onAddNew={() => setEmployeeModal({ show: true, target: 'beneficiaryNameNo' })}
                                 />
                               </FormControl>
                               <FormMessage className="text-red-500" />

@@ -6,9 +6,9 @@ interface TrendsChartProps {
 }
 
 export default function TrendsChart({ data }: TrendsChartProps) {
-  // NOTE: CSS vars already contain full color values (e.g. "hsl(221, 83%, 53%)").
-  const primary = 'var(--chart-1)';
-  const primaryMuted = 'var(--muted-foreground)';
+  // CSS variables are stored as raw HSL triples (e.g. "221 83% 53%"), so wrap with hsl(...).
+  const primary = 'hsl(var(--chart-1))';
+  const primaryMuted = 'hsl(var(--muted-foreground))';
 
   const parseMonth = (value: string) => {
     // API returns YYYY-MM
@@ -81,15 +81,15 @@ export default function TrendsChart({ data }: TrendsChartProps) {
     return (
       <div
         style={{
-          background: 'var(--card)',
-          border: '1px solid var(--border)',
+          background: 'hsl(var(--card))',
+          border: '1px solid hsl(var(--border))',
           borderRadius: 8,
           boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
           padding: 12,
           minWidth: 220,
         }}
       >
-        <div style={{ color: 'var(--foreground)', fontWeight: 600, marginBottom: 10 }}>
+        <div style={{ color: 'hsl(var(--foreground))', fontWeight: 600, marginBottom: 10 }}>
           {formatMonthTitle(String(label))}
         </div>
 
@@ -98,14 +98,14 @@ export default function TrendsChart({ data }: TrendsChartProps) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 10, height: 10, borderRadius: 999, background: primary }} />
               <div style={{ color: primary, fontWeight: 500 }}>Actual Spend</div>
-              <div style={{ marginLeft: 'auto', color: 'var(--foreground)', fontWeight: 700 }}>{formatMoney(actual.value)}</div>
+              <div style={{ marginLeft: 'auto', color: 'hsl(var(--foreground))', fontWeight: 700 }}>{formatMoney(actual.value)}</div>
             </div>
           ) : null}
           {budget ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 10, height: 10, borderRadius: 999, background: primary, opacity: 0.45 }} />
-              <div style={{ color: 'var(--muted-foreground)', fontWeight: 500 }}>Budget</div>
-              <div style={{ marginLeft: 'auto', color: 'var(--foreground)', fontWeight: 700 }}>{formatMoney(budget.value)}</div>
+              <div style={{ color: 'hsl(var(--muted-foreground))', fontWeight: 500 }}>Budget</div>
+              <div style={{ marginLeft: 'auto', color: 'hsl(var(--foreground))', fontWeight: 700 }}>{formatMoney(budget.value)}</div>
             </div>
           ) : null}
         </div>
@@ -123,7 +123,7 @@ export default function TrendsChart({ data }: TrendsChartProps) {
           </linearGradient>
         </defs>
 
-        <CartesianGrid strokeDasharray="0" stroke="var(--border)" strokeOpacity={0.55} vertical={false} />
+        <CartesianGrid strokeDasharray="0" stroke="hsl(var(--border))" strokeOpacity={0.55} vertical={false} />
         <XAxis
           dataKey="month"
           axisLine={false}
@@ -141,7 +141,7 @@ export default function TrendsChart({ data }: TrendsChartProps) {
         />
         <Tooltip
           content={<CustomTooltip />}
-          cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
+          cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
         />
 
         <Area
@@ -150,8 +150,8 @@ export default function TrendsChart({ data }: TrendsChartProps) {
           stroke={primary}
           strokeWidth={2.5}
           fill="url(#actualGradient)"
-          dot={{ r: 3.5, fill: 'var(--card)', stroke: primary, strokeWidth: 2 }}
-          activeDot={{ r: 6.5, fill: 'var(--card)', stroke: primary, strokeWidth: 2 }}
+          dot={{ r: 3.5, fill: 'hsl(var(--card))', stroke: primary, strokeWidth: 2 }}
+          activeDot={{ r: 6.5, fill: 'hsl(var(--card))', stroke: primary, strokeWidth: 2 }}
         />
         <Line
           type="monotone"

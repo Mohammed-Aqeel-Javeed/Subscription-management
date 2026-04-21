@@ -196,10 +196,10 @@ export default function ComplianceDashboard() {
 
   const statusBuckets = useMemo(() => {
     const colors = {
-      "No Due": "var(--chart-3)",
-      Draft: "var(--chart-4)",
-      Due: "var(--chart-2)",
-      Late: "var(--chart-1)",
+      "No Due": "hsl(var(--chart-3))",
+      Draft: "hsl(var(--chart-4))",
+      Due: "hsl(var(--chart-2))",
+      Late: "hsl(var(--chart-1))",
     } as const;
 
     const counts: Record<keyof typeof colors, number> = {
@@ -532,13 +532,13 @@ export default function ComplianceDashboard() {
                               <Tooltip
                                 formatter={(value: number) => [`${Number(value).toLocaleString()} filings`, 'Filings']}
                                 contentStyle={{
-                                  backgroundColor: 'var(--card)',
-                                  border: '1px solid var(--border)',
+                                  backgroundColor: 'hsl(var(--card))',
+                                  border: '1px solid hsl(var(--border))',
                                   borderRadius: '8px',
                                   boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
                                   padding: '12px',
                                 }}
-                                labelStyle={{ color: 'var(--foreground)', fontWeight: 600, marginBottom: 6 }}
+                                labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600, marginBottom: 6 }}
                               />
                             </PieChart>
                           </ResponsiveContainer>

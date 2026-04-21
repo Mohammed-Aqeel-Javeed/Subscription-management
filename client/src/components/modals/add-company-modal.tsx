@@ -89,7 +89,13 @@ export default function AddCompanyModal({ open, onOpenChange, onSuccess }: AddCo
         throw new Error(data.message || "Failed to add company");
       }
 
-      await res.json();
+      const data = await res.json().catch(() => ({} as any));
+      if (typeof (data as any)?.token === "string" && String((data as any).token).trim()) {
+        const normalized = String((data as any).token).trim().replace(/^Bearer\s+/i, "");
+        sessionStorage.setItem("token", normalized);
+        sessionStorage.setItem("isAuthenticated", "true");
+        window.dispatchEvent(new Event("account-changed"));
+      }
       
       toast({
         title: "Success!",

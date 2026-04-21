@@ -41,16 +41,16 @@ export default function ComplianceCategoryChart({ data }: Props) {
             formatter={(value: number) => [`${Number(value).toLocaleString()} filings`, "Filings"]}
             cursor={{ fill: "transparent" }}
             contentStyle={{
-              backgroundColor: "var(--card)",
-              border: "1px solid var(--border)",
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
               borderRadius: "8px",
               padding: "12px",
             }}
-            labelStyle={{ color: "var(--foreground)", fontWeight: 600, marginBottom: 6 }}
+            labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600, marginBottom: 6 }}
           />
           <Bar
             dataKey="count"
-            fill="var(--chart-2)"
+            fill="hsl(var(--chart-2))"
             radius={[0, 8, 8, 0]}
             barSize={22}
           />

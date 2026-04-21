@@ -1347,7 +1347,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Prefer platform-level global_admin record if present
       let user = await db.collection("login").findOne({ email: { $regex: emailRegex }, role: "global_admin" });
       if (!user) {
-        user = await db.collection("login").findOne({ email: { $regex: emailRegex } });
+        // If multiple tenant-bound records exist for the same email, prefer the user's chosen default.
+        user =
+          (await db.collection("login").findOne({ email: { $regex: emailRegex }, isDefaultCompany: true })) ||
+          (await db.collection("login").findOne({ email: { $regex: emailRegex } }));
       }
       let isNewUserSystem = false;
       
@@ -4881,46 +4884,171 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const db = await connectToDatabase();
 
-      const isGlobalAdmin = user?.role === 'global_admin';
+      const isGlobalAdmin = user?.role === "global_admin";
+
+      const normalizeEmail = (raw: unknown) => String(raw ?? "").trim().toLowerCase();
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const makeEmailRegex = (raw: unknown) => {
+        const key = normalizeEmail(raw);
+        if (!key) return null;
+        return new RegExp(`^${escapeRegExp(key)}$`, "i");
+      };
 
       // Global admin sees ALL companies (tenants). Normal users are pinned to their active tenant.
-      let companies: any[] = [];
+      // IMPORTANT: company names may be stored in `companyInfo` even when `login.companyName` is missing.
+      let companyList: Array<{ tenantId: string; companyName: string; isActive: boolean }> = [];
       if (isGlobalAdmin) {
-        const rawCompanies = await db
-          .collection('login')
-          .find({ tenantId: { $ne: null }, companyName: { $exists: true } }, { projection: { tenantId: 1, companyName: 1 } })
-          .toArray();
+        const [tenantIdsFromLogin, tenantIdsFromCompanyInfo] = await Promise.all([
+          db.collection("login").distinct("tenantId", { tenantId: { $ne: null } }),
+          db.collection("companyInfo").distinct("tenantId", { tenantId: { $ne: null } }),
+        ]);
 
-        const byTenant = new Map<string, any>();
-        for (const c of rawCompanies as any[]) {
-          const tid = String(c?.tenantId || "");
-          if (!tid) continue;
-          if (!byTenant.has(tid)) byTenant.set(tid, c);
-        }
-        companies = Array.from(byTenant.values());
-      } else {
-        const dbUser = await db.collection("login").findOne({ _id: new ObjectId(user.userId) }, { projection: { tenantId: 1 } });
-        const activeTenantId = (user as any)?.tenantId || dbUser?.tenantId;
-        if (!activeTenantId) {
+        const tenantIds = Array.from(
+          new Set(
+            [...tenantIdsFromLogin, ...tenantIdsFromCompanyInfo]
+              .map((t: any) => (t == null ? "" : String(t)))
+              .map((t) => t.trim())
+              .filter((t) => {
+                if (!t) return false;
+                const lower = t.toLowerCase();
+                if (lower === "null" || lower === "undefined") return false;
+                return true;
+              })
+          )
+        );
+
+        if (tenantIds.length === 0) {
           return res.status(200).json([]);
         }
 
-        const company = await db
-          .collection('login')
-          .findOne({ tenantId: String(activeTenantId), companyName: { $exists: true } }, { projection: { tenantId: 1, companyName: 1 } });
+        const [companyInfoList, loginNameAgg] = await Promise.all([
+          db
+            .collection("companyInfo")
+            .find({ tenantId: { $in: tenantIds } }, { projection: { tenantId: 1, companyName: 1 } })
+            .toArray(),
+          db
+            .collection("login")
+            .aggregate([
+              { $match: { tenantId: { $in: tenantIds }, companyName: { $exists: true, $ne: null } } },
+              { $group: { _id: "$tenantId", companyName: { $max: "$companyName" } } },
+            ])
+            .toArray(),
+        ]);
 
-        companies = company ? [company] : [];
-      }
+        const companyInfoMap = new Map(
+          (companyInfoList as any[]).map((ci: any) => [String(ci.tenantId), String(ci.companyName || "").trim()])
+        );
+        const loginNameMap = new Map(
+          (loginNameAgg as any[]).map((row: any) => [String(row._id), String(row.companyName || "").trim()])
+        );
 
-      const companyList = companies
-        .filter((c: any) => !!c?.tenantId)
-        .map((c: any) => ({
-          tenantId: c.tenantId,
-          companyName: c.companyName || 'Unnamed Company',
-          isActive: c.tenantId === ((user as any)?.actingTenantId ?? user.tenantId),
+        const activeTenant = String(((user as any)?.actingTenantId ?? user.tenantId) ?? "");
+        companyList = tenantIds.map((tid) => ({
+          tenantId: tid,
+          companyName: companyInfoMap.get(tid) || loginNameMap.get(tid) || "Unnamed Company",
+          isActive: tid === activeTenant,
         }));
+
+        companyList.sort((a, b) => a.companyName.localeCompare(b.companyName));
+      } else {
+        // Non-admins can switch ONLY between companies where the same email exists in multiple tenant records.
+        const tokenEmail = normalizeEmail((user as any)?.email);
+        const dbUser = await db
+          .collection("login")
+          .findOne(
+            { _id: new ObjectId(user.userId) },
+            { projection: { email: 1, tenantId: 1 } }
+          );
+
+        const emailKey = tokenEmail || normalizeEmail((dbUser as any)?.email);
+        const emailRegex = makeEmailRegex(emailKey);
+
+        const activeTenantId = (user as any)?.tenantId || (dbUser as any)?.tenantId;
+        const activeTenant = String(((user as any)?.actingTenantId ?? activeTenantId) ?? "").trim();
+
+        if (!emailRegex) {
+          // Fall back to the active tenant only.
+          const tid = String(activeTenantId || "").trim();
+          if (!tid) return res.status(200).json([]);
+          const companyInfo = await db
+            .collection("companyInfo")
+            .findOne({ tenantId: tid }, { projection: { tenantId: 1, companyName: 1 } });
+          const loginCompany = await db
+            .collection("login")
+            .findOne({ tenantId: tid, companyName: { $exists: true, $ne: null } }, { projection: { tenantId: 1, companyName: 1 } });
+          const name =
+            String((companyInfo as any)?.companyName || "").trim() ||
+            String((loginCompany as any)?.companyName || "").trim() ||
+            "Unnamed Company";
+          companyList = [{ tenantId: tid, companyName: name, isActive: tid === activeTenant }];
+          return res.status(200).json(companyList);
+        }
+
+        const tenantIdsRaw = await db.collection("login").distinct("tenantId", {
+          email: { $regex: emailRegex },
+          tenantId: { $ne: null },
+        });
+
+        const tenantIds = Array.from(
+          new Set(
+            (tenantIdsRaw as any[])
+              .map((t: any) => (t == null ? "" : String(t)))
+              .map((t) => t.trim())
+              .filter((t) => {
+                if (!t) return false;
+                const lower = t.toLowerCase();
+                if (lower === "null" || lower === "undefined") return false;
+                return true;
+              })
+          )
+        );
+
+        if (!tenantIds.length) {
+          // Fall back to the active tenant only.
+          const tid = String(activeTenantId || "").trim();
+          if (!tid) return res.status(200).json([]);
+          companyList = [{ tenantId: tid, companyName: "Unnamed Company", isActive: tid === activeTenant }];
+          return res.status(200).json(companyList);
+        }
+
+        const [companyInfoList, loginNameAgg] = await Promise.all([
+          db
+            .collection("companyInfo")
+            .find({ tenantId: { $in: tenantIds } }, { projection: { tenantId: 1, companyName: 1 } })
+            .toArray(),
+          db
+            .collection("login")
+            .aggregate([
+              {
+                $match: {
+                  tenantId: { $in: tenantIds },
+                  email: { $regex: emailRegex },
+                  companyName: { $exists: true, $ne: null },
+                },
+              },
+              { $group: { _id: "$tenantId", companyName: { $max: "$companyName" } } },
+            ])
+            .toArray(),
+        ]);
+
+        const companyInfoMap = new Map(
+          (companyInfoList as any[]).map((ci: any) => [String(ci.tenantId), String(ci.companyName || "").trim()])
+        );
+        const loginNameMap = new Map(
+          (loginNameAgg as any[]).map((row: any) => [String(row._id), String(row.companyName || "").trim()])
+        );
+
+        companyList = tenantIds
+          .map((tid) => ({
+            tenantId: tid,
+            companyName: companyInfoMap.get(tid) || loginNameMap.get(tid) || "Unnamed Company",
+            isActive: tid === activeTenant,
+          }))
+          .sort((a, b) => a.companyName.localeCompare(b.companyName));
+      }
       
-      res.status(200).json(companyList);
+      res.setHeader("X-Company-Count", String(companyList.length));
+      return res.status(200).json(companyList);
     } catch (err) {
       console.error("Failed to fetch companies:", err);
       res.status(500).json({ message: "Failed to fetch companies" });
@@ -4951,29 +5079,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Ensure tenant exists when global admin switches
       if (isGlobalAdmin) {
-        const companyExists = await db.collection('login').findOne({ tenantId, companyName: { $exists: true } });
-        if (!companyExists) {
+        const tenantKey = String(tenantId).trim();
+        const [existsInCompanyInfo, existsInLogin] = await Promise.all([
+          db.collection("companyInfo").findOne({ tenantId: tenantKey }, { projection: { tenantId: 1 } }),
+          db.collection("login").findOne({ tenantId: tenantKey }, { projection: { tenantId: 1 } }),
+        ]);
+        if (!existsInCompanyInfo && !existsInLogin) {
           return res.status(404).json({ message: 'Company not found' });
         }
       }
       
-      // Option A: 1 user = 1 company. Only global admin can switch tenant context.
+      const normalizeEmail = (raw: unknown) => String(raw ?? "").trim().toLowerCase();
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const makeEmailRegex = (raw: unknown) => {
+        const key = normalizeEmail(raw);
+        if (!key) return null;
+        return new RegExp(`^${escapeRegExp(key)}$`, "i");
+      };
+
+      // Non-global-admin switching is allowed ONLY when the same email exists in the target tenant.
+      // This supports multi-company users without opening cross-tenant access.
+      const tenantKey = String(tenantId).trim();
+      if (!tenantKey) {
+        return res.status(400).json({ message: "tenantId is required" });
+      }
+
+      let effectiveUser = dbUser as any;
       if (!isGlobalAdmin) {
-        return res.status(403).json({ message: "Company switching is only available for global admin." });
+        const emailRegex = makeEmailRegex((dbUser as any)?.email || (user as any)?.email);
+        if (!emailRegex) {
+          return res.status(403).json({ message: "Company switching is not available for this account." });
+        }
+        const match = await db.collection("login").findOne({
+          email: { $regex: emailRegex },
+          tenantId: tenantKey,
+        });
+        if (!match) {
+          return res.status(403).json({ message: "You do not have access to this company." });
+        }
+        effectiveUser = match;
       }
 
       // Generate new token
       const tokenPayload: any = {
-        userId: user.userId,
-        email: dbUser.email,
-        role: dbUser.role || user.role || 'viewer',
+        userId: String((effectiveUser as any)._id || user.userId),
+        email: String((effectiveUser as any).email || dbUser.email || user.email || ""),
+        role: (effectiveUser as any).role || dbUser.role || user.role || 'viewer',
       };
       tokenPayload.jti = crypto.randomUUID();
       if (isGlobalAdmin) {
         tokenPayload.tenantId = null;
-        tokenPayload.actingTenantId = tenantId;
+        tokenPayload.actingTenantId = tenantKey;
       } else {
-        tokenPayload.tenantId = tenantId;
+        tokenPayload.tenantId = tenantKey;
       }
       
       const platformSettings = await getPlatformSettingsCached(db);
@@ -5067,10 +5225,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Option A: 1 user = 1 company. Do not create additional tenant records for the same email.
-      return res.status(409).json({
-        message: "A user can belong to only one company. Use a different email address to create another company.",
-      });
+      // Multi-company mode: create a new tenant + a tenant-bound login record for the SAME email.
+      // This preserves existing per-tenant data partitioning (tenantId) and works with the company switcher.
+      const tenantId = `tenant-${new ObjectId().toHexString()}`;
+      const now = new Date();
+
+      const emailKey = String(email).trim().toLowerCase();
+      const fullName = String((dbUser as any)?.fullName || (dbUser as any)?.name || "").trim();
+
+      const newLoginDoc: any = {
+        email: emailKey,
+        password: (dbUser as any).password,
+        fullName: fullName || null,
+        name: (dbUser as any)?.name || null,
+        tenantId,
+        companyName: String(companyName).trim(),
+        defaultCurrency: String(defaultCurrency).trim().toUpperCase(),
+        role: "super_admin",
+        status: "active",
+        createdAt: now,
+        lastLogin: null,
+        isDefaultCompany: Boolean(setAsDefault),
+      };
+
+      if (setAsDefault) {
+        await db.collection("login").updateMany(
+          { email: emailKey, tenantId: { $ne: null } },
+          { $set: { isDefaultCompany: false } }
+        );
+      }
+
+      const insertResult = await db.collection("login").insertOne(newLoginDoc);
+
+      // Seed companyInfo (so the company name shows consistently in dashboards/platform views).
+      try {
+        await db.collection("companyInfo").updateOne(
+          { tenantId },
+          {
+            $setOnInsert: {
+              tenantId,
+              companyName: String(companyName).trim(),
+              defaultCurrency: String(defaultCurrency).trim().toUpperCase(),
+              createdAt: now,
+            },
+          },
+          { upsert: true }
+        );
+      } catch {
+        // non-blocking
+      }
+
+      // If requested, switch the current session into the new tenant immediately.
+      if (setAsDefault) {
+        const platformSettings = await getPlatformSettingsCached(db);
+        const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+        const tokenPayload: any = {
+          userId: insertResult.insertedId?.toString?.() || String(insertResult.insertedId),
+          email: emailKey,
+          tenantId,
+          role: "super_admin",
+        };
+        tokenPayload.jti = crypto.randomUUID();
+
+        const token = platformSettings.security.jwtExpiryEnabled
+          ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${platformSettings.security.jwtExpiryMinutes}m` })
+          : jwt.sign(tokenPayload, jwtSecret);
+
+        try {
+          await db.collection("auth_sessions").insertOne({
+            _id: tokenPayload.jti,
+            userId: String(tokenPayload.userId),
+            email: emailKey,
+            tenantId,
+            actingTenantId: null,
+            role: "super_admin",
+            createdAt: now,
+            lastSeenAt: now,
+            revokedAt: null,
+          });
+        } catch {
+          // non-blocking
+        }
+
+        const isProd = process.env.NODE_ENV === "production";
+        res.cookie("token", token, {
+          httpOnly: true,
+          secure: isProd,
+          sameSite: (isProd ? "none" : "lax") as any,
+          path: "/",
+        });
+
+        return res.status(200).json({ message: "Company added", tenantId, token });
+      }
+
+      return res.status(200).json({ message: "Company added", tenantId });
     } catch (err) {
       console.error("Failed to add company:", err);
       res.status(500).json({ message: "Failed to add company" });

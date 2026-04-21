@@ -293,10 +293,10 @@ export default function RenewalDashboard() {
 
   const statusBuckets = useMemo(() => {
     const colors = {
-      Active: "var(--chart-3)",
-      "Expiring Soon": "var(--chart-4)",
-      Expired: "var(--chart-5)",
-      Pending: "var(--chart-2)",
+      Active: "hsl(var(--chart-3))",
+      "Expiring Soon": "hsl(var(--chart-4))",
+      Expired: "hsl(var(--chart-5))",
+      Pending: "hsl(var(--chart-2))",
     } as const;
 
     const counts: Record<keyof typeof colors, number> = {
@@ -656,7 +656,7 @@ export default function RenewalDashboard() {
                             boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
                           }}
                         />
-                        <Bar dataKey="count" fill="var(--chart-2)" radius={[6, 6, 6, 6]} />
+                        <Bar dataKey="count" fill="hsl(var(--chart-2))" radius={[6, 6, 6, 6]} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}

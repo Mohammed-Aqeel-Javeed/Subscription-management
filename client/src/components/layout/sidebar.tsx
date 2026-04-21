@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Can } from "@/components/Can";
 import { useSidebarSlot } from "@/context/SidebarSlotContext";
 import { findPlatformSection, platformNavSections } from "@/lib/platform-nav";
+import AddCompanyModal from "../modals/add-company-modal";
 
 type Company = {
   tenantId: string;
@@ -17,9 +18,9 @@ type Company = {
 
 function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [addCompanyOpen, setAddCompanyOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const navigate = useNavigate();
 
   const { data: companies = [], isLoading } = useQuery<Company[]>({
     queryKey: ["/api/user/companies"],
@@ -28,7 +29,9 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
       if (!res.ok) throw new Error("Failed to fetch companies");
       return res.json();
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const filteredCompanies = companies.filter((company) =>
@@ -104,6 +107,13 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
       onClick={onClose}
     >
+      <AddCompanyModal
+        open={addCompanyOpen}
+        onOpenChange={setAddCompanyOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/user/companies"] });
+        }}
+      />
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-fade-in border border-gray-200"
         onClick={(e) => e.stopPropagation()}
@@ -150,9 +160,9 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
                 {filteredCompanies.map((company) => (
                   <button
                     key={company.tenantId}
-                    onClick={() => {
+                    onClick={async () => {
                       if (!company.isActive) {
-                        handleSwitchCompany(company.tenantId);
+                        await handleSwitchCompany(company.tenantId);
                       }
                       onClose();
                     }}
@@ -177,32 +187,7 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
           <div className="mt-4 pt-4 border-t border-gray-200">
             <button
               onClick={async () => {
-                try {
-                  // Logout first
-                  await fetch("/api/logout", { method: "POST", credentials: "include" });
-
-                  // Clear session storage
-                  sessionStorage.removeItem("isAuthenticated");
-                  sessionStorage.clear();
-
-                  // Clear all React Query cache
-                  queryClient.clear();
-
-                  // Dispatch logout event
-                  window.dispatchEvent(new Event("logout"));
-
-                  // Close dialog
-                  onClose();
-
-                  // Navigate to signup with a flag to open the add company modal
-                  navigate("/signup?addCompany=true", { replace: true });
-                } catch {
-                  toast({
-                    title: "Error",
-                    description: "Failed to logout. Please try again.",
-                    variant: "destructive",
-                  });
-                }
+                setAddCompanyOpen(true);
               }}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium rounded-lg transition-all shadow-sm"
             >
