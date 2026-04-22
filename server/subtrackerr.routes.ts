@@ -1522,6 +1522,7 @@ if (!tenantId) {
       const amount = sub.amount ? decrypt(sub.amount) : sub.amount;
       const vendor = sub.vendor ? decrypt(sub.vendor) : sub.vendor;
       const paymentMethod = sub.paymentMethod ? decrypt(sub.paymentMethod) : sub.paymentMethod;
+      const category = sub.category ? decrypt(sub.category) : sub.category;
       
       return {
         ...sub,
@@ -1529,6 +1530,7 @@ if (!tenantId) {
         amount,
         vendor,
         paymentMethod,
+        category,
         // Don't decrypt description, notes unless needed
         id: sub._id?.toString(),
         _id: sub._id?.toString()

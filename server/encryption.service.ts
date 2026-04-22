@@ -255,10 +255,10 @@ function isLikelyEncrypted(str: string): boolean {
 
   // Guardrails:
   // - keep minimum length low enough to support legacy ciphertext
-  // - avoid attempting decrypt on long human-readable strings (letters only)
-  const minLen = 40;
-  const hasNonLetter = /[^A-Za-z]/.test(str);
-  return base64OrUrlRegex.test(str) && str.length >= minLen && hasNonLetter;
+  // Note: ciphertext can be letters-only by chance, so don't require digits/symbols.
+  // 32 bytes (legacy IV+TAG) base64-encodes to 44 chars, so use that as a floor.
+  const minLen = 44;
+  return base64OrUrlRegex.test(str) && str.length >= minLen;
 }
 
 /**
