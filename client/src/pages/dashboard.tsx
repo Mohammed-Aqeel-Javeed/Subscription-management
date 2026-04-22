@@ -742,7 +742,10 @@ export default function Dashboard() {
                       </TableCell>
                       <TableCell className="px-3 py-3 text-right w-[120px]">
                         <span className="text-sm font-semibold text-gray-900">
-                          ${parseFloat(String(subscription.amount)).toFixed(2)}
+                          {(() => {
+                            const n = Number.parseFloat(String(subscription.amount));
+                            return Number.isFinite(n) ? `$${n.toFixed(2)}` : '—';
+                          })()}
                         </span>
                       </TableCell>
                       <TableCell className="px-4 py-3 w-[110px] capitalize text-gray-700">
@@ -826,7 +829,10 @@ export default function Dashboard() {
                         </TableCell>
                         <TableCell className="px-3 py-3 text-right w-[120px]">
                           <span className="text-sm font-semibold text-gray-900">
-                            ${parseFloat(String(subscription.amount)).toFixed(2)}
+                            {(() => {
+                              const n = Number.parseFloat(String(subscription.amount));
+                              return Number.isFinite(n) ? `$${n.toFixed(2)}` : '—';
+                            })()}
                           </span>
                         </TableCell>
                         <TableCell className="px-4 py-3 w-[140px] text-gray-700">

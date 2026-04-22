@@ -42,8 +42,19 @@ function getEncryptionKey(): Buffer {
   
   const key = process.env.ENCRYPTION_KEY;
   if (!key) {
+    const isHostedProd =
+      process.env.NODE_ENV === 'production' ||
+      !!process.env.RENDER ||
+      !!process.env.RENDER_SERVICE_ID ||
+      !!process.env.RENDER_EXTERNAL_URL;
+
+    if (isHostedProd) {
+      throw new Error(
+        'ENCRYPTION_KEY is missing. Set it in your environment (Render dashboard → Environment) to decrypt existing data and avoid writing insecure encrypted rows.'
+      );
+    }
+
     console.warn('ENCRYPTION_KEY not set in environment. Using default (NOT SECURE FOR PRODUCTION)');
-    // In production, this should throw an error
     cachedEncryptionKey = crypto.scryptSync('default-key-change-this', 'salt', 32);
     return cachedEncryptionKey;
   }

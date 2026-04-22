@@ -1537,7 +1537,10 @@ export default function Subscriptions() {
 
                       <TableCell className="px-3 py-3 text-right w-[140px]">
                         <span className="text-sm font-medium text-gray-900">
-                          ${parseFloat(String(subscription.amount)).toFixed(2)}
+                          {(() => {
+                            const n = Number.parseFloat(String(subscription.amount));
+                            return Number.isFinite(n) ? `$${n.toFixed(2)}` : '—';
+                          })()}
                         </span>
                       </TableCell>
 
