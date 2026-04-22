@@ -322,10 +322,34 @@ router.get("/api/analytics/categories", async (req, res) => {
       amount: Number(amount.toFixed(2))
     }));
     
-    const colors = [
-      "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316", "#6366F1", "#84CC16"
-    ];
-    const categoriesWithColors = categories.map((cat, index) => ({ ...cat, color: colors[index % colors.length] }));
+    const hashString = (value: string, seed = 0) => {
+      // Deterministic, cheap string hash (stable across runs)
+      let hash = seed | 0;
+      for (let i = 0; i < value.length; i++) {
+        hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+      }
+      return hash;
+    };
+
+    const pickColorForCategory = (category: string) => {
+      const normalized = normToken(category || "other") || "other";
+      const h1 = Math.abs(hashString(normalized, 0));
+      const h2 = Math.abs(hashString(normalized, 131));
+      const h3 = Math.abs(hashString(normalized, 997));
+
+      const hue = h1 % 360;
+      const sat = 62 + (h2 % 18); // 62–79%
+      const light = 44 + (h3 % 12); // 44–55%
+      return `hsl(${hue} ${sat}% ${light}%)`;
+    };
+
+    const categoriesWithColors = categories.map((cat) => {
+      const categoryName = String(cat.category ?? "Other");
+      return {
+        ...cat,
+        color: pickColorForCategory(categoryName),
+      };
+    });
     
     res.status(200).json(categoriesWithColors);
   } catch (error) {

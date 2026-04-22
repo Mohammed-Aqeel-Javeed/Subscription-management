@@ -12,13 +12,25 @@ type DonutItem = {
 };
 
 export default function CategoryChart({ data }: CategoryChartProps) {
-  const themeFallbackColors = [
-    'hsl(var(--chart-5))',
-    'hsl(var(--chart-1))',
-    'hsl(var(--chart-2))',
-    'hsl(var(--chart-3))',
-    'hsl(var(--chart-4))',
-  ];
+  const hashString = (value: string, seed = 0) => {
+    let hash = seed | 0;
+    for (let i = 0; i < value.length; i++) {
+      hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+    }
+    return hash;
+  };
+
+  const pickColorForCategory = (categoryInput: unknown) => {
+    const normalized = String(categoryInput ?? 'other').trim().toLowerCase() || 'other';
+    const h1 = Math.abs(hashString(normalized, 0));
+    const h2 = Math.abs(hashString(normalized, 131));
+    const h3 = Math.abs(hashString(normalized, 997));
+
+    const hue = h1 % 360;
+    const sat = 62 + (h2 % 18); // 62–79%
+    const light = 44 + (h3 % 12); // 44–55%
+    return `hsl(${hue} ${sat}% ${light}%)`;
+  };
 
   const sorted = [...data]
     .map((item) => ({
@@ -28,18 +40,32 @@ export default function CategoryChart({ data }: CategoryChartProps) {
     }))
     .sort((a, b) => b.amount - a.amount);
 
-  const donutData: DonutItem[] = sorted.map((item, index) => ({
+  const donutData: DonutItem[] = sorted.map((item) => ({
     ...item,
-    color: item.color || themeFallbackColors[index % themeFallbackColors.length],
+    // Always ensure a stable, non-repeating color per category.
+    // If API provides a color, keep it; otherwise compute one.
+    color: item.color || pickColorForCategory(item.category),
   }));
 
   const renderLabel = (props: any) => {
     const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
     if (typeof percent !== 'number' || percent < 0.08) return null;
+
+    const cxNum = Number(cx);
+    const cyNum = Number(cy);
+    if (!Number.isFinite(cxNum) || !Number.isFinite(cyNum)) return null;
+
     const RADIAN = Math.PI / 180;
     const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    const rawX = cxNum + radius * Math.cos(-midAngle * RADIAN);
+    const rawY = cyNum + radius * Math.sin(-midAngle * RADIAN);
+
+    // Clamp labels inside the chart to avoid SVG clipping at edges
+    // (can happen when only a single slice is rendered).
+    const pad = 36;
+    const x = Math.max(pad, Math.min(rawX, (cxNum * 2) - pad));
+    const y = Math.max(pad, Math.min(rawY, (cyNum * 2) - pad));
+
     return (
       <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600}>
         {(percent * 100).toFixed(1)}%
@@ -64,8 +90,8 @@ export default function CategoryChart({ data }: CategoryChartProps) {
               label={renderLabel}
               labelLine={false}
             >
-              {donutData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
+              {donutData.map((entry) => (
+                <Cell key={`cell-${entry.category}`} fill={entry.color} />
               ))}
             </Pie>
             <Tooltip
@@ -86,9 +112,9 @@ export default function CategoryChart({ data }: CategoryChartProps) {
       <div className="w-full sm:w-60">
         <div className="max-h-[280px] overflow-y-auto custom-scrollbar pr-2">
           <div className="space-y-4">
-          {donutData.map((item, index) => {
+          {donutData.map((item) => {
             return (
-              <div key={`${item.category}-${index}`} className="flex items-center gap-3">
+              <div key={item.category} className="flex items-center gap-3">
                 <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: item.color }} />
                 <div className="text-sm text-gray-700">{item.category}</div>
               </div>
