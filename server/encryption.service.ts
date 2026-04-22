@@ -166,16 +166,28 @@ export function decrypt(encryptedData: string | number): string {
   
   try {
     const combined = Buffer.from(normalizeBase64OrUrl(dataStr), 'base64');
-    
-    // Check if buffer is valid size
-    if (combined.length < ENCRYPTED_POSITION) {
-      console.warn('Buffer too short for encrypted data, returning as-is');
-      return dataStr; // Return plain if too short to be encrypted
+
+    // Support both:
+    // - Current format: salt(64) + iv(16) + tag(16) + ciphertext
+    // - Legacy format: iv(16) + tag(16) + ciphertext
+    const LEGACY_MIN = IV_LENGTH + TAG_LENGTH; // 32 bytes
+
+    if (combined.length < LEGACY_MIN) {
+      // Too short to be any supported ciphertext payload.
+      return dataStr;
     }
-    
-    const iv = combined.subarray(SALT_LENGTH, TAG_POSITION);
-    const tag = combined.subarray(TAG_POSITION, ENCRYPTED_POSITION);
-    const encrypted = combined.subarray(ENCRYPTED_POSITION);
+
+    const isCurrentFormat = combined.length >= ENCRYPTED_POSITION;
+
+    const iv = isCurrentFormat
+      ? combined.subarray(SALT_LENGTH, TAG_POSITION)
+      : combined.subarray(0, IV_LENGTH);
+    const tag = isCurrentFormat
+      ? combined.subarray(TAG_POSITION, ENCRYPTED_POSITION)
+      : combined.subarray(IV_LENGTH, LEGACY_MIN);
+    const encrypted = isCurrentFormat
+      ? combined.subarray(ENCRYPTED_POSITION)
+      : combined.subarray(LEGACY_MIN);
 
     const tryDecryptWithKey = (key: Buffer): string | null => {
       try {
@@ -240,7 +252,13 @@ function isLikelyEncrypted(str: string): boolean {
   // - base64: A-Z a-z 0-9 + / and optional padding '='
   // - base64url: A-Z a-z 0-9 - _ and no padding
   const base64OrUrlRegex = /^[A-Za-z0-9+/_=-]+$/;
-  return base64OrUrlRegex.test(str) && str.length > 100;
+
+  // Guardrails:
+  // - keep minimum length low enough to support legacy ciphertext
+  // - avoid attempting decrypt on long human-readable strings (letters only)
+  const minLen = 40;
+  const hasNonLetter = /[^A-Za-z]/.test(str);
+  return base64OrUrlRegex.test(str) && str.length >= minLen && hasNonLetter;
 }
 
 /**

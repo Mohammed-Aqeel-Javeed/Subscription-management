@@ -5423,12 +5423,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
-      // Destructure to avoid duplicate property issue
-      const { id: subId, amount, ...restWithoutId } = subscription;
+      const sub: any = subscription as any;
+
+      // Normalize id/_id for frontend expectations
+      const normalizedId = sub?._id != null ? String(sub._id) : (sub?.id != null ? String(sub.id) : "");
+
+      // Decrypt UI-facing fields to match /api/subscriptions list behavior
+      const serviceName = sub?.serviceName ? decrypt(sub.serviceName) : sub?.serviceName;
+      const vendor = sub?.vendor ? decrypt(sub.vendor) : sub?.vendor;
+      const paymentMethod = sub?.paymentMethod ? decrypt(sub.paymentMethod) : sub?.paymentMethod;
+      const category = sub?.category ? decrypt(sub.category) : sub?.category;
+      const currency = sub?.currency ? decrypt(sub.currency) : sub?.currency;
+
+      const amountRaw = sub?.amount != null ? decrypt(sub.amount) : sub?.amount;
+      const amountNumber = typeof amountRaw === "number" ? amountRaw : parseFloat(String(amountRaw ?? "0"));
+
       res.json({
-        ...restWithoutId,
-        id: subId !== undefined && subId !== null ? String(subId) : "",
-        amount: typeof amount === "number" ? amount : parseFloat(amount ?? "0")
+        ...sub,
+        id: normalizedId,
+        _id: normalizedId,
+        serviceName,
+        vendor,
+        paymentMethod,
+        category,
+        currency,
+        amount: Number.isFinite(amountNumber) ? amountNumber : 0,
       });
     } catch {
       res.status(500).json({ message: "Failed to fetch subscription" });
