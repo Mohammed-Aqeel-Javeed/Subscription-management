@@ -12,6 +12,16 @@ const ENCRYPTED_POSITION = TAG_POSITION + TAG_LENGTH;
 let cachedEncryptionKey: Buffer | null = null;
 let cachedDefaultEncryptionKey: Buffer | null = null;
 
+let didLogKeyFingerprint = false;
+
+function normalizeEnvSecret(raw: string): string {
+  // Render env vars sometimes get pasted with quotes or trailing whitespace.
+  // Normalizing prevents accidental key mismatches between local and hosted.
+  const trimmed = String(raw ?? '').trim();
+  const unquoted = trimmed.replace(/^['"]/, '').replace(/['"]$/, '');
+  return unquoted;
+}
+
 function toBase64Url(base64: string): string {
   // Convert standard base64 -> base64url (RFC 4648 §5)
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
@@ -40,7 +50,8 @@ function getEncryptionKey(): Buffer {
     return cachedEncryptionKey;
   }
   
-  const key = process.env.ENCRYPTION_KEY;
+  const keyRaw = process.env.ENCRYPTION_KEY;
+  const key = keyRaw ? normalizeEnvSecret(keyRaw) : '';
   if (!key) {
     const isHostedProd =
       process.env.NODE_ENV === 'production' ||
@@ -58,6 +69,17 @@ function getEncryptionKey(): Buffer {
     cachedEncryptionKey = crypto.scryptSync('default-key-change-this', 'salt', 32);
     return cachedEncryptionKey;
   }
+
+  if (!didLogKeyFingerprint) {
+    didLogKeyFingerprint = true;
+    const shouldLogFingerprint = process.env.LOG_ENCRYPTION_KEY_FINGERPRINT === 'true' || process.env.NODE_ENV !== 'production';
+    if (shouldLogFingerprint) {
+      const fp = crypto.createHash('sha256').update(key).digest('hex').slice(0, 10);
+      const changedByNormalization = keyRaw != null && key !== keyRaw;
+      console.log(`[encryption] ENCRYPTION_KEY fingerprint=${fp}${changedByNormalization ? ' (normalized)' : ''}`);
+    }
+  }
+
   // Derive a 256-bit key from the provided key (expensive operation - cache it!)
   cachedEncryptionKey = crypto.scryptSync(key, 'salt', 32);
   return cachedEncryptionKey;
