@@ -152,7 +152,7 @@ export class MongoStorage implements IStorage {
         billingCycle: s.billingCycle && s.billingCycle !== "" ? s.billingCycle : "monthly",
         commitmentCycle: s.commitmentCycle || null,
         paymentFrequency: s.paymentFrequency || null,
-        paymentMethod: s.paymentMethod || null,
+        paymentMethod: decrypted.paymentMethod || null,
         category: s.category && s.category !== "" ? s.category : "Software",
         departments: s.departments || [],
         department: s.department || null,
@@ -162,12 +162,13 @@ export class MongoStorage implements IStorage {
         status: s.status && s.status !== "" ? s.status : "Active",
         reminderDays: s.reminderDays || 7,
         reminderPolicy: s.reminderPolicy && s.reminderPolicy !== "" ? s.reminderPolicy : "One time",
-        notes: s.notes || null,
+        notes: decrypted.notes || null,
         isActive: typeof s.isActive === 'boolean' ? s.isActive : true,
         createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
         updatedBy: s.updatedBy || null,
-        owner: decrypted.owner || null,
-        ownerEmail: decrypted.ownerEmail || null,
+        // Owner fields were never encrypted; preserve them from the stored doc.
+        owner: s.owner || null,
+        ownerEmail: s.ownerEmail || null,
         autoRenewal: typeof s.autoRenewal === 'boolean' ? s.autoRenewal : false
       } as any);
       });
@@ -208,8 +209,9 @@ export class MongoStorage implements IStorage {
         isActive: typeof subscription.isActive === 'boolean' ? subscription.isActive : true,
         createdAt: subscription.createdAt ? new Date(subscription.createdAt) : new Date(),
         updatedBy: subscription.updatedBy || null,
-        owner: decrypted.owner || null,
-        ownerEmail: decrypted.ownerEmail || null,
+        // Owner fields were never encrypted; preserve them from the stored doc.
+        owner: (subscription as any).owner || null,
+        ownerEmail: (subscription as any).ownerEmail || null,
         autoRenewal: typeof subscription.autoRenewal === 'boolean' ? subscription.autoRenewal : false,
         documents: subscription.documents || undefined
       } as any;
