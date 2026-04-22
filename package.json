@@ -17,6 +17,7 @@
     "generate-keys": "tsx server/generate-keys.ts",
     "migrate-encrypt": "tsx server/migrate-encrypt.ts",
     "verify-encryption": "tsx server/verify-encryption.ts",
+    "test:decrypt": "tsx server/test-decrypt.ts",
     "compliance:reminders": "tsx scripts/dailyComplianceReminderCheck.js"
   },
   "dependencies": {
