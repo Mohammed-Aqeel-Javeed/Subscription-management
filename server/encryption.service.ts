@@ -11,6 +11,7 @@ const ENCRYPTED_POSITION = TAG_POSITION + TAG_LENGTH;
 // Cache the derived encryption key to avoid expensive scrypt calls on every decrypt
 let cachedEncryptionKey: Buffer | null = null;
 let cachedDefaultEncryptionKey: Buffer | null = null;
+const cachedDerivedKeysBySecret = new Map<string, Buffer>();
 
 let didLogKeyFingerprint = false;
 
@@ -20,6 +21,31 @@ function normalizeEnvSecret(raw: string): string {
   const trimmed = String(raw ?? '').trim();
   const unquoted = trimmed.replace(/^['"]/, '').replace(/['"]$/, '');
   return unquoted;
+}
+
+function getDerivedKeyFromSecret(secret: string): Buffer {
+  const normalized = normalizeEnvSecret(secret);
+  const existing = cachedDerivedKeysBySecret.get(normalized);
+  if (existing) return existing;
+  const derived = crypto.scryptSync(normalized, 'salt', 32);
+  cachedDerivedKeysBySecret.set(normalized, derived);
+  return derived;
+}
+
+function getFallbackEncryptionSecrets(): string[] {
+  const raw = String(process.env.ENCRYPTION_KEY_FALLBACKS ?? '').trim();
+  if (!raw) return [];
+  const parts = raw
+    .split(',')
+    .map((p) => normalizeEnvSecret(p))
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return Array.from(new Set(parts));
+}
+
+function getFallbackEncryptionKeys(primarySecret: string): Buffer[] {
+  const fallbacks = getFallbackEncryptionSecrets().filter((s) => s && s !== primarySecret);
+  return fallbacks.map((s) => getDerivedKeyFromSecret(s));
 }
 
 function toBase64Url(base64: string): string {
@@ -81,7 +107,7 @@ function getEncryptionKey(): Buffer {
   }
 
   // Derive a 256-bit key from the provided key (expensive operation - cache it!)
-  cachedEncryptionKey = crypto.scryptSync(key, 'salt', 32);
+  cachedEncryptionKey = getDerivedKeyFromSecret(key);
   return cachedEncryptionKey;
 }
 
@@ -147,42 +173,44 @@ export function decrypt(encryptedData: string | number): string {
       return dataStr; // Return plain if too short to be encrypted
     }
     
-    const salt = combined.subarray(0, SALT_LENGTH);
     const iv = combined.subarray(SALT_LENGTH, TAG_POSITION);
     const tag = combined.subarray(TAG_POSITION, ENCRYPTED_POSITION);
     const encrypted = combined.subarray(ENCRYPTED_POSITION);
-    
-    const key = getEncryptionKey();
-    
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(tag);
-    
-    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-    const result = decrypted.toString('utf8');
-    return result;
-  } catch (error) {
+
+    const tryDecryptWithKey = (key: Buffer): string | null => {
+      try {
+        const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+        decipher.setAuthTag(tag);
+        const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+        return decrypted.toString('utf8');
+      } catch {
+        return null;
+      }
+    };
+
+    // Try primary key first, then optional fallbacks, then default-key fallback (legacy).
+    const primaryKey = getEncryptionKey();
+    const primarySecret = normalizeEnvSecret(String(process.env.ENCRYPTION_KEY ?? ''));
+
+    const primaryResult = tryDecryptWithKey(primaryKey);
+    if (primaryResult != null) return primaryResult;
+
+    const fallbackKeys = primarySecret ? getFallbackEncryptionKeys(primarySecret) : [];
+    for (const fk of fallbackKeys) {
+      const r = tryDecryptWithKey(fk);
+      if (r != null) return r;
+    }
+
     // Backward-compat: if ENCRYPTION_KEY is now set but some rows were encrypted
     // when it was missing (default key), try the default key once.
     if (process.env.ENCRYPTION_KEY) {
-      try {
-        const combined = Buffer.from(normalizeBase64OrUrl(dataStr), 'base64');
-        if (combined.length >= ENCRYPTED_POSITION) {
-          const iv = combined.subarray(SALT_LENGTH, TAG_POSITION);
-          const tag = combined.subarray(TAG_POSITION, ENCRYPTED_POSITION);
-          const encrypted = combined.subarray(ENCRYPTED_POSITION);
-
-          const fallbackKey = getDefaultEncryptionKey();
-          const decipher = crypto.createDecipheriv(ALGORITHM, fallbackKey, iv);
-          decipher.setAuthTag(tag);
-          const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-          const result = decrypted.toString('utf8');
-          return result;
-        }
-      } catch {
-        // ignore and fall through to return as-is
-      }
+      const fallbackKey = getDefaultEncryptionKey();
+      const r = tryDecryptWithKey(fallbackKey);
+      if (r != null) return r;
     }
 
+    throw new Error('Decryption failed for all keys');
+  } catch (error) {
     // If decryption fails, return original (likely plain text or wrong key).
     // Avoid spamming logs on every field/record in production, which can severely hurt performance.
     const shouldLog = process.env.LOG_DECRYPT_ERRORS === 'true' || process.env.NODE_ENV !== 'production';
@@ -196,6 +224,7 @@ export function decrypt(encryptedData: string | number): string {
           dataLength: dataStr.length,
           dataPreview: dataStr.substring(0, 50) + '...',
           hasEncryptionKey: !!process.env.ENCRYPTION_KEY,
+          hasFallbacks: Boolean(String(process.env.ENCRYPTION_KEY_FALLBACKS ?? '').trim()),
         });
       }
     }
