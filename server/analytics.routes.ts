@@ -321,34 +321,11 @@ router.get("/api/analytics/categories", async (req, res) => {
       category,
       amount: Number(amount.toFixed(2))
     }));
-
+    
     const colors = [
-      "#3B82F6",
-      "#10B981",
-      "#F59E0B",
-      "#EF4444",
-      "#8B5CF6",
-      "#EC4899",
-      "#14B8A6",
-      "#F97316",
-      "#6366F1",
-      "#84CC16",
+      "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316", "#6366F1", "#84CC16"
     ];
-
-    const stableColorForCategory = (category: string) => {
-      const token = normToken(category || "Other") || "other";
-      // Simple deterministic hash (unsigned 32-bit)
-      let hash = 0;
-      for (let i = 0; i < token.length; i++) {
-        hash = (hash * 31 + token.charCodeAt(i)) >>> 0;
-      }
-      return colors[hash % colors.length];
-    };
-
-    const categoriesWithColors = categories.map((cat) => ({
-      ...cat,
-      color: stableColorForCategory(cat.category),
-    }));
+    const categoriesWithColors = categories.map((cat, index) => ({ ...cat, color: colors[index % colors.length] }));
     
     res.status(200).json(categoriesWithColors);
   } catch (error) {
