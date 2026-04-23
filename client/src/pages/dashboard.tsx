@@ -364,12 +364,13 @@ export default function Dashboard() {
   // Calculate filtered metrics
   const calculateMonthlySpend = () => {
     return filteredSubscriptions.reduce((total, sub) => {
-      const amount = parseFloat(String(sub.amount)) || 0;
+      const amount = parseFloat(String((sub as any)?.lcyAmount ?? sub.amount)) || 0;
       const cycle = norm(sub.billingCycle);
       switch(cycle) {
         case "monthly": return total + amount;
         case "yearly": return total + (amount / 12);
         case "quarterly": return total + (amount / 3);
+        case "weekly": return total + (amount * 4);
         default: return total;
       }
     }, 0);
@@ -377,12 +378,13 @@ export default function Dashboard() {
 
   const calculateYearlySpend = () => {
     return filteredSubscriptions.reduce((total, sub) => {
-      const amount = parseFloat(String(sub.amount)) || 0;
+      const amount = parseFloat(String((sub as any)?.lcyAmount ?? sub.amount)) || 0;
       const cycle = norm(sub.billingCycle);
       switch(cycle) {
         case "monthly": return total + (amount * 12);
         case "yearly": return total + amount;
         case "quarterly": return total + (amount * 4);
+        case "weekly": return total + (amount * 52);
         default: return total;
       }
     }, 0);
@@ -711,7 +713,7 @@ export default function Dashboard() {
                       VENDOR
                     </TableHead>
                     <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-3 text-right text-xs font-bold text-slate-900 uppercase tracking-wide w-[120px]">
-                      AMOUNT
+                      AMOUNT(Lcy)
                     </TableHead>
                     <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[110px]">
                       BILLING
@@ -743,8 +745,9 @@ export default function Dashboard() {
                       <TableCell className="px-3 py-3 text-right w-[120px]">
                         <span className="text-sm font-semibold text-gray-900">
                           {(() => {
-                            const n = Number.parseFloat(String(subscription.amount));
-                            return Number.isFinite(n) ? `$${n.toFixed(2)}` : '—';
+                            const raw = (subscription as any)?.lcyAmount ?? subscription.amount;
+                            const n = Number.parseFloat(String(raw));
+                            return Number.isFinite(n) ? n.toFixed(2) : '—';
                           })()}
                         </span>
                       </TableCell>
@@ -796,7 +799,7 @@ export default function Dashboard() {
                       VENDOR
                     </TableHead>
                     <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-3 text-right text-xs font-bold text-slate-900 uppercase tracking-wide w-[120px]">
-                      AMOUNT
+                      AMOUNT(Lcy)
                     </TableHead>
                     <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[140px]">
                       RENEWAL DATE
@@ -830,8 +833,9 @@ export default function Dashboard() {
                         <TableCell className="px-3 py-3 text-right w-[120px]">
                           <span className="text-sm font-semibold text-gray-900">
                             {(() => {
-                              const n = Number.parseFloat(String(subscription.amount));
-                              return Number.isFinite(n) ? `$${n.toFixed(2)}` : '—';
+                              const raw = (subscription as any)?.lcyAmount ?? subscription.amount;
+                              const n = Number.parseFloat(String(raw));
+                              return Number.isFinite(n) ? n.toFixed(2) : '—';
                             })()}
                           </span>
                         </TableCell>

@@ -1996,22 +1996,39 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
       // Force LCY calculation after form reset with a small delay
       setTimeout(() => {
-        const totalAmount = subscription.totalAmount !== undefined && subscription.totalAmount !== null ? Number(subscription.totalAmount).toFixed(2) : "";
+        const totalAmountExclTax =
+          subscription.totalAmount !== undefined && subscription.totalAmount !== null ? Number(subscription.totalAmount).toFixed(2) : "";
+        const taxAmountRaw = Number((subscription as any)?.taxAmount);
+        const taxAmountNum = Number.isFinite(taxAmountRaw) ? taxAmountRaw : 0;
+        const totalAmountInclTaxFromSub =
+          (subscription as any)?.totalAmountInclTax !== undefined && (subscription as any)?.totalAmountInclTax !== null
+            ? Number((subscription as any).totalAmountInclTax).toFixed(2)
+            : "";
+
+        // LCY must be based on Total Amount Incl. Tax.
+        const totalAmountForLcy =
+          totalAmountInclTaxFromSub ||
+          (() => {
+            const excl = parseFloat(totalAmountExclTax);
+            if (!Number.isFinite(excl)) return "";
+            const incl = excl + taxAmountNum;
+            return Number.isFinite(incl) ? incl.toFixed(2) : "";
+          })();
         const currency = subscription.currency || "";
         const localCurrency = companyInfo?.defaultCurrency;
         
-        if (totalAmount && currency && localCurrency && currency !== localCurrency) {
+        if (totalAmountForLcy && currency && localCurrency && currency !== localCurrency) {
           const selectedCurrency = currencies.find((curr: any) => curr.code === currency);
           const exchangeRate = selectedCurrency?.exchangeRate ? parseFloat(selectedCurrency.exchangeRate) : null;
           
           if (exchangeRate && exchangeRate > 0) {
-            const totalAmountNum = parseFloat(totalAmount);
+            const totalAmountNum = parseFloat(totalAmountForLcy);
             // Invert the exchange rate: LCY Amount = Total Amount ÷ Exchange Rate
             const convertedAmount = totalAmountNum / exchangeRate;
             setLcyAmount(convertedAmount.toFixed(2));
           }
-        } else if (currency === localCurrency && totalAmount) {
-          setLcyAmount(totalAmount);
+        } else if (currency === localCurrency && totalAmountForLcy) {
+          setLcyAmount(totalAmountForLcy);
         }
       }, 100);
     } else {
@@ -2075,15 +2092,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     }
   }, [startDate, billingCycle, form]);
 
-  // Calculate LCY Amount based on totalAmount, currency, and exchange rate (inverted)
+  // Calculate LCY Amount based on totalAmountInclTax, currency, and exchange rate (inverted)
   useEffect(() => {
     const calculateLcyAmount = () => {
-      const totalAmount = form.watch('totalAmount');
+      const totalAmountForLcy = totalAmountInclTax || form.watch('totalAmount');
       const currency = form.watch('currency');
       const localCurrency = companyInfo?.defaultCurrency;
       
-      if (!totalAmount || !currency || !localCurrency || currency === localCurrency) {
-        setLcyAmount(currency === localCurrency ? totalAmount?.toString() || '' : '');
+      if (!totalAmountForLcy || !currency || !localCurrency || currency === localCurrency) {
+        setLcyAmount(currency === localCurrency ? totalAmountForLcy?.toString() || '' : '');
         return;
       }
       
@@ -2092,7 +2109,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const exchangeRate = selectedCurrency?.exchangeRate ? parseFloat(selectedCurrency.exchangeRate) : null;
       
       if (exchangeRate && exchangeRate > 0) {
-        const totalAmountNum = parseFloat(totalAmount?.toString() || '0');
+        const totalAmountNum = parseFloat(totalAmountForLcy?.toString() || '0');
         // Invert the exchange rate: LCY Amount = Total Amount ÷ Exchange Rate
         const convertedAmount = totalAmountNum / exchangeRate;
         setLcyAmount(convertedAmount.toFixed(2));
@@ -2102,7 +2119,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     };
     
     calculateLcyAmount();
-  }, [form.watch('totalAmount'), form.watch('currency'), companyInfo?.defaultCurrency, currencies, subscription]);
+  }, [totalAmountInclTax, form.watch('currency'), companyInfo?.defaultCurrency, currencies, subscription]);
 
   // Force recalculation when window regains focus (in case exchange rates were updated in another tab)
   useEffect(() => {

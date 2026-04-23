@@ -61,6 +61,74 @@ const parseDateSafe = (raw: unknown): Date | null => {
   return Number.isFinite(d.getTime()) ? d : null;
 };
 
+const parseNumberLike = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  const n = Number.parseFloat(String(value));
+  return Number.isFinite(n) ? n : null;
+};
+
+const buildTenantExchangeRateMap = async (db: any, tenantId: string) => {
+  const currencyRows = await db
+    .collection("currencies")
+    .find({ tenantId }, { projection: { code: 1, exchangeRate: 1 } })
+    .toArray();
+
+  const exchangeRateByCode = new Map<string, number>();
+  for (const row of currencyRows) {
+    const code = String((row as any)?.code || "").trim().toUpperCase();
+    const rate = Number((row as any)?.exchangeRate);
+    if (code && Number.isFinite(rate) && rate > 0) exchangeRateByCode.set(code, rate);
+  }
+  return exchangeRateByCode;
+};
+
+const getTenantLocalCurrency = async (db: any, tenantId: string) => {
+  const companyInfo = await db.collection("companyInfo").findOne({ tenantId });
+  return String((companyInfo as any)?.defaultCurrency || "").trim().toUpperCase();
+};
+
+const computeSubscriptionAmountLcy = (args: {
+  sub: any;
+  localCurrency: string;
+  exchangeRateByCode: Map<string, number>;
+}) => {
+  const { sub, localCurrency, exchangeRateByCode } = args;
+
+  const currencyCode = String(sub.currency || "").trim().toUpperCase();
+
+  // Base amount should match Amount(Lcy) column: Total Amount Incl. Tax.
+  // Prefer stored totals; fall back to qty*amount + tax.
+  const totalInclNum = parseNumberLike(sub.totalAmountInclTax);
+  const totalExclNum =
+    parseNumberLike(sub.totalAmount) ??
+    (() => {
+      const qty = parseNumberLike(sub.qty) ?? 1;
+      const perUnit = parseNumberLike(sub.amount) ?? 0;
+      return qty * perUnit;
+    })();
+  const taxNum = parseNumberLike(sub.taxAmount) ?? 0;
+  const totalForLcy = totalInclNum ?? (Number.isFinite(totalExclNum) ? totalExclNum + taxNum : null);
+  if (totalForLcy == null || !Number.isFinite(totalForLcy)) return null;
+
+  // If we don't know the tenant's LCY yet, treat the value as LCY.
+  if (!localCurrency) return Number(totalForLcy.toFixed(2));
+
+  if (localCurrency && currencyCode && currencyCode === localCurrency) {
+    return Number(totalForLcy.toFixed(2));
+  }
+
+  if (localCurrency && currencyCode && currencyCode !== localCurrency) {
+    const rate = exchangeRateByCode.get(currencyCode);
+    if (rate && rate > 0) {
+      // Invert the exchange rate: LCY = foreign / exchangeRate
+      return Number((totalForLcy / rate).toFixed(2));
+    }
+  }
+
+  // Missing currency code or exchange rate: return raw total instead of dropping to 0.
+  return Number(totalForLcy.toFixed(2));
+};
+
 const buildSubscriptionScopeFilter = (user: any, tenantId: string) => {
   const userRole = user?.role;
   const userId = user?.userId || user?.id;
@@ -119,6 +187,11 @@ router.get("/api/analytics/dashboard", async (req, res) => {
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     const scopeFilter = buildSubscriptionScopeFilter(req.user, tenantId);
+
+    const [localCurrency, exchangeRateByCode] = await Promise.all([
+      getTenantLocalCurrency(db, tenantId),
+      buildTenantExchangeRateMap(db, tenantId),
+    ]);
     
     // Count active subscriptions for tenant
     const activeSubscriptions = await collection.countDocuments({ ...scopeFilter, status: "Active" });
@@ -133,16 +206,26 @@ router.get("/api/analytics/dashboard", async (req, res) => {
     // OPTIMIZED: Only fetch amount and billingCycle, not full documents
     const subscriptions = await collection.find(
       { ...scopeFilter, status: "Active" },
-      { projection: { amount: 1, billingCycle: 1 } }
+      { projection: { amount: 1, qty: 1, taxAmount: 1, totalAmount: 1, totalAmountInclTax: 1, currency: 1, billingCycle: 1 } }
     ).toArray();
     
     let monthlySpend = 0;
     let yearlySpend = 0;
     
     subscriptions.forEach(sub => {
-      // Decrypt the amount
-      const decryptedAmount = decrypt(sub.amount);
-      const amount = parseFloat(decryptedAmount) || 0;
+      // Decrypt fields needed for LCY calc
+      const subForCalc = {
+        amount: sub.amount ? decrypt(sub.amount) : sub.amount,
+        qty: (sub as any)?.qty,
+        taxAmount: (sub as any)?.taxAmount != null ? decrypt((sub as any).taxAmount) : (sub as any)?.taxAmount,
+        totalAmount: (sub as any)?.totalAmount != null ? decrypt((sub as any).totalAmount) : (sub as any)?.totalAmount,
+        totalAmountInclTax:
+          (sub as any)?.totalAmountInclTax != null ? decrypt((sub as any).totalAmountInclTax) : (sub as any)?.totalAmountInclTax,
+        currency: (sub as any)?.currency != null ? decrypt((sub as any).currency) : (sub as any)?.currency,
+      };
+
+      const amountLcy = computeSubscriptionAmountLcy({ sub: subForCalc, localCurrency, exchangeRateByCode });
+      const amount = amountLcy ?? 0;
       
       // Calculate monthly equivalent
       const billingCycle = (sub.billingCycle || 'monthly').toLowerCase();
@@ -189,6 +272,11 @@ router.get("/api/analytics/trends", async (req, res) => {
 
     const scopeFilter = buildSubscriptionScopeFilter(req.user, tenantId);
 
+    const [localCurrency, exchangeRateByCode] = await Promise.all([
+      getTenantLocalCurrency(db, tenantId),
+      buildTenantExchangeRateMap(db, tenantId),
+    ]);
+
     const months = Math.min(
       Math.max(parseMonthsParam((req.query as any)?.months ?? (req.query as any)?.range) ?? 6, 1),
       24
@@ -213,7 +301,20 @@ router.get("/api/analytics/trends", async (req, res) => {
     // OPTIMIZED: Only fetch needed fields
     const subscriptions = await collection.find(
       { ...scopeFilter, status: "Active" },
-      { projection: { amount: 1, status: 1, startDate: 1, nextRenewal: 1, category: 1 } }
+      {
+        projection: {
+          amount: 1,
+          qty: 1,
+          taxAmount: 1,
+          totalAmount: 1,
+          totalAmountInclTax: 1,
+          currency: 1,
+          status: 1,
+          startDate: 1,
+          nextRenewal: 1,
+          category: 1,
+        },
+      }
     ).toArray();
     
     // Calculate monthly spend for each month
@@ -229,8 +330,17 @@ router.get("/api/analytics/trends", async (req, res) => {
         }
         
         // Decrypt amount
-        const decryptedAmount = decrypt(sub.amount);
-        const amount = parseFloat(decryptedAmount) || 0;
+        const subForCalc = {
+          amount: sub.amount ? decrypt(sub.amount) : sub.amount,
+          qty: (sub as any)?.qty,
+          taxAmount: (sub as any)?.taxAmount != null ? decrypt((sub as any).taxAmount) : (sub as any)?.taxAmount,
+          totalAmount: (sub as any)?.totalAmount != null ? decrypt((sub as any).totalAmount) : (sub as any)?.totalAmount,
+          totalAmountInclTax:
+            (sub as any)?.totalAmountInclTax != null ? decrypt((sub as any).totalAmountInclTax) : (sub as any)?.totalAmountInclTax,
+          currency: (sub as any)?.currency != null ? decrypt((sub as any).currency) : (sub as any)?.currency,
+        };
+
+        const amount = computeSubscriptionAmountLcy({ sub: subForCalc, localCurrency, exchangeRateByCode }) ?? 0;
 
         const startDate = parseDateSafe(sub.startDate);
         const renewalDate = parseDateSafe(sub.nextRenewal);
@@ -266,6 +376,11 @@ router.get("/api/analytics/categories", async (req, res) => {
 
     const scopeFilter = buildSubscriptionScopeFilter(req.user, tenantId);
 
+    const [localCurrency, exchangeRateByCode] = await Promise.all([
+      getTenantLocalCurrency(db, tenantId),
+      buildTenantExchangeRateMap(db, tenantId),
+    ]);
+
     const months = parseMonthsParam((req.query as any)?.months ?? (req.query as any)?.range);
     const monthsClamped = months != null ? Math.min(Math.max(months, 1), 24) : null;
     const categoryParamRaw = String(((req.query as any)?.category ?? "")).trim();
@@ -284,7 +399,19 @@ router.get("/api/analytics/categories", async (req, res) => {
     // OPTIMIZED: Only fetch category and amount
     const subscriptions = await collection.find(
       { ...scopeFilter, status: "Active" },
-      { projection: { category: 1, amount: 1, startDate: 1, nextRenewal: 1 } }
+      {
+        projection: {
+          category: 1,
+          amount: 1,
+          qty: 1,
+          taxAmount: 1,
+          totalAmount: 1,
+          totalAmountInclTax: 1,
+          currency: 1,
+          startDate: 1,
+          nextRenewal: 1,
+        },
+      }
     ).toArray();
     
     // Group by category and sum amounts (after decryption)
@@ -309,9 +436,18 @@ router.get("/api/analytics/categories", async (req, res) => {
       }
 
       const category = sub.category || "Other";
-      // Decrypt amount
-      const decryptedAmount = decrypt(sub.amount);
-      const amount = parseFloat(decryptedAmount) || 0;
+      // Decrypt fields needed for LCY calc
+      const subForCalc = {
+        amount: sub.amount ? decrypt(sub.amount) : sub.amount,
+        qty: (sub as any)?.qty,
+        taxAmount: (sub as any)?.taxAmount != null ? decrypt((sub as any).taxAmount) : (sub as any)?.taxAmount,
+        totalAmount: (sub as any)?.totalAmount != null ? decrypt((sub as any).totalAmount) : (sub as any)?.totalAmount,
+        totalAmountInclTax:
+          (sub as any)?.totalAmountInclTax != null ? decrypt((sub as any).totalAmountInclTax) : (sub as any)?.totalAmountInclTax,
+        currency: (sub as any)?.currency != null ? decrypt((sub as any).currency) : (sub as any)?.currency,
+      };
+
+      const amount = computeSubscriptionAmountLcy({ sub: subForCalc, localCurrency, exchangeRateByCode }) ?? 0;
       
       categoryMap.set(category, (categoryMap.get(category) || 0) + amount);
     });

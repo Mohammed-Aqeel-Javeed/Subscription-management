@@ -1514,6 +1514,26 @@ if (!tenantId) {
 
     // CRITICAL: Fetch all subscriptions but limit to essential fields
     const subscriptions = await collection.find(filter).toArray();
+
+    // Fetch tenant currency configuration once for LCY calculations
+    const companyInfo = await db.collection("companyInfo").findOne({ tenantId });
+    const localCurrency = String((companyInfo as any)?.defaultCurrency || "").trim();
+    const currencyRows = await db
+      .collection("currencies")
+      .find({ tenantId }, { projection: { code: 1, exchangeRate: 1 } })
+      .toArray();
+    const exchangeRateByCode = new Map<string, number>();
+    for (const row of currencyRows) {
+      const code = String((row as any)?.code || "").trim().toUpperCase();
+      const rate = Number((row as any)?.exchangeRate);
+      if (code && Number.isFinite(rate) && rate > 0) exchangeRateByCode.set(code, rate);
+    }
+
+    const parseNumberLike = (value: any) => {
+      if (value === null || value === undefined) return null;
+      const n = Number.parseFloat(String(value));
+      return Number.isFinite(n) ? n : null;
+    };
     
     // OPTIMIZED: Only decrypt fields that are displayed in the UI
     const transformedSubscriptions = subscriptions.map(sub => {
@@ -1523,6 +1543,32 @@ if (!tenantId) {
       const vendor = sub.vendor ? decrypt(sub.vendor) : sub.vendor;
       const paymentMethod = sub.paymentMethod ? decrypt(sub.paymentMethod) : sub.paymentMethod;
       const category = sub.category ? decrypt(sub.category) : sub.category;
+
+      // LCY Amount must be based on Total Amount Incl. Tax
+      const currency = sub.currency ? decrypt(sub.currency) : sub.currency;
+      const totalInclRaw = (sub as any)?.totalAmountInclTax != null ? decrypt((sub as any).totalAmountInclTax) : (sub as any)?.totalAmountInclTax;
+      const totalExclRaw = (sub as any)?.totalAmount != null ? decrypt((sub as any).totalAmount) : (sub as any)?.totalAmount;
+      const taxRaw = (sub as any)?.taxAmount != null ? decrypt((sub as any).taxAmount) : (sub as any)?.taxAmount;
+
+      const totalInclNum = parseNumberLike(totalInclRaw);
+      const totalExclNum = parseNumberLike(totalExclRaw);
+      const taxNum = parseNumberLike(taxRaw) ?? 0;
+      const totalForLcyNum = totalInclNum ?? (totalExclNum != null ? (totalExclNum + taxNum) : null);
+
+      const currencyCode = String(currency || "").trim().toUpperCase();
+      const localCurrencyCode = String(localCurrency || "").trim().toUpperCase();
+
+      let lcyAmount: number | undefined;
+      if (totalForLcyNum != null && Number.isFinite(totalForLcyNum)) {
+        if (localCurrencyCode && currencyCode && currencyCode === localCurrencyCode) {
+          lcyAmount = Number(totalForLcyNum.toFixed(2));
+        } else if (localCurrencyCode && currencyCode && currencyCode !== localCurrencyCode) {
+          const rate = exchangeRateByCode.get(currencyCode);
+          if (rate && rate > 0) {
+            lcyAmount = Number((totalForLcyNum / rate).toFixed(2));
+          }
+        }
+      }
       
       return {
         ...sub,
@@ -1531,6 +1577,7 @@ if (!tenantId) {
         vendor,
         paymentMethod,
         category,
+        lcyAmount,
         // Don't decrypt description, notes unless needed
         id: sub._id?.toString(),
         _id: sub._id?.toString()

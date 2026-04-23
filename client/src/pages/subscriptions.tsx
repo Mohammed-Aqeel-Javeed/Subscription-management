@@ -680,8 +680,8 @@ export default function Subscriptions() {
     }
     
     if (sortField === "amount") {
-      const aVal = parseFloat(String(a.amount)) || 0;
-      const bVal = parseFloat(String(b.amount)) || 0;
+      const aVal = parseFloat(String((a as any)?.lcyAmount ?? a.amount)) || 0;
+      const bVal = parseFloat(String((b as any)?.lcyAmount ?? b.amount)) || 0;
       return sortDirection === "asc" 
         ? aVal - bVal
         : bVal - aVal;
@@ -1383,7 +1383,7 @@ export default function Subscriptions() {
                       onClick={() => handleSort("amount")}
                       className="flex items-center justify-end w-full font-bold hover:text-blue-600 transition-colors cursor-pointer"
                     >
-                      AMOUNT
+                      AMOUNT(LCY)
                       {getSortIcon("amount")}
                     </button>
                   </TableHead>
@@ -1538,8 +1538,9 @@ export default function Subscriptions() {
                       <TableCell className="px-3 py-3 text-right w-[140px]">
                         <span className="text-sm font-medium text-gray-900">
                           {(() => {
-                            const n = Number.parseFloat(String(subscription.amount));
-                            return Number.isFinite(n) ? `$${n.toFixed(2)}` : '—';
+                            const raw = (subscription as any)?.lcyAmount ?? subscription.amount;
+                            const n = Number.parseFloat(String(raw));
+                            return Number.isFinite(n) ? n.toFixed(2) : '—';
                           })()}
                         </span>
                       </TableCell>
