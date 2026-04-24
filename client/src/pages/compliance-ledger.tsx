@@ -235,24 +235,16 @@ export default function ComplianceLedger() {
 
   // Handle back navigation to compliance page with modal reopened
   const handleBackToCompliance = () => {
-    const complianceIdFromRow = displayedLedgerItems?.[0]?.complianceId ? String(displayedLedgerItems[0].complianceId) : null;
-    const idToOpen = complianceIdFromRow || resolvedComplianceId || idParam;
+    const idToOpen = resolvedComplianceId || idParam;
 
     if (!idToOpen) {
       navigate('/compliance', { replace: true });
       return;
     }
 
-    void (async () => {
-      try {
-        const token = await mintDeeplinkToken(String(idToOpen));
-        const qs = new URLSearchParams({ openToken: token }).toString();
-        navigate(`/compliance?${qs}`, { replace: true });
-      } catch {
-        const qs = new URLSearchParams({ open: String(idToOpen) }).toString();
-        navigate(`/compliance?${qs}`, { replace: true });
-      }
-    })();
+    // Use direct open=<id> navigation (no async token) to avoid back-navigation blink.
+    const qs = new URLSearchParams({ open: String(idToOpen) }).toString();
+    navigate(`/compliance?${qs}`, { replace: true });
   };
   
   const derivedName = displayedLedgerItems?.[0]?.filingName || displayedLedgerItems?.[0]?.policy;
@@ -301,21 +293,22 @@ export default function ComplianceLedger() {
 
         <Card className="shadow-lg border-0 overflow-hidden bg-white/80 backdrop-blur-sm flex-1 min-h-0">
           <CardContent className="p-0 h-full">
-            <div className="overflow-auto h-full">
-              <Table>
-                <TableHeader className="bg-gray-200">
-                  <TableRow className="border-b border-gray-300">
-                    {!isFilteredById && (
-                      <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200">Filing Name</TableHead>
-                    )}
-                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">Category</TableHead>
-                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">Start Date</TableHead>
-                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">End Date</TableHead>
-                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">Submission Date</TableHead>
-                    <TableHead className="sticky top-0 z-20 font-semibold text-gray-800 bg-gray-200 text-left">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            <Table containerClassName="flex-1 min-h-0 h-full overflow-auto" className="w-full table-fixed">
+              <TableHeader>
+                <TableRow className="border-b border-gray-300 bg-gray-200">
+                  {!isFilteredById && (
+                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800">
+                      Filing Name
+                    </TableHead>
+                  )}
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800 text-left">Category</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800 text-left">Start Date</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800 text-left">End Date</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800 text-left">Submission Date</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800 text-left">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                   {loading || isResolvingToken ? (
                     <TableRow>
                       <TableCell colSpan={tableColumnCount} className="text-center py-12">
@@ -398,9 +391,8 @@ export default function ComplianceLedger() {
                       );
                     })
                   )}
-                </TableBody>
-              </Table>
-            </div>
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, BarChart3, ChevronDown, Check, MoreVertical, AlertCircle, Building, Tags, UserCog } from "lucide-react";
+import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, BarChart3, ChevronDown, Check, MoreVertical, AlertCircle, Building, Tags, UserCog } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -3432,18 +3432,6 @@ useEffect(() => {
 return (
   <div className="h-full min-h-0 bg-gray-50 font-inter">
     <div className="w-full px-4 sm:px-6 lg:px-8 py-6 h-full min-h-0">
-      <div className="mb-4">
-        <Button
-          type="button"
-          variant="default"
-          onClick={() => navigate("/company-details")}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-      </div>
-
       {/* Import Confirm Dialog (Company Details Excel) */}
       <AlertDialog open={companyImportConfirmOpen} onOpenChange={setCompanyImportConfirmOpen}>
         <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">

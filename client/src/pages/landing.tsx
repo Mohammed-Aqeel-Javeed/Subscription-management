@@ -52,47 +52,47 @@ export default function LandingPage() {
   const features = [
     {
       icon: <Bell className="w-6 h-6" />,
-      title: "Smart Reminders",
-      description: "Never miss a renewal with intelligent notification system"
+      title: "Renewal & filing reminders",
+      description: "Set lead times, escalate ownership, and stay ahead of deadlines."
     },
     {
       icon: <Calendar className="w-6 h-6" />,
-      title: "Calendar View",
-      description: "Visualize all subscriptions in monthly and yearly calendars"
+      title: "Unified calendar",
+      description: "See subscriptions, compliance deadlines, and renewals in one view."
     },
     {
       icon: <TrendingUp className="w-6 h-6" />,
-      title: "Cost Analytics",
-      description: "Track spending trends and optimize your subscription costs"
+      title: "Spend analytics (LCY)",
+      description: "Track totals in local currency with trends you can act on."
     },
     {
       icon: <Shield className="w-6 h-6" />,
-      title: "Compliance Ready",
-      description: "Stay compliant with built-in compliance tracking and reporting"
+      title: "Compliance workflows",
+      description: "Track category, authority, status, submission dates, and evidence."
     },
     {
       icon: <Users className="w-6 h-6" />,
-      title: "Team Management",
-      description: "Manage employees, departments, and subscription assignments"
+      title: "Ownership by team",
+      description: "Assign owners by employee/department so nothing falls through."
     },
     {
       icon: <BarChart3 className="w-6 h-6" />,
-      title: "Detailed Reports",
-      description: "Generate comprehensive reports for better decision making"
+      title: "Import/export ready",
+      description: "Start fast with Excel import and export clean reports anytime."
     }
   ];
 
   const benefits = [
-    "Centralized subscription management",
-    "Automated renewal tracking",
-    "Cost optimization insights",
-    "Multi-user collaboration",
-    "Secure data encryption",
-    "Export and import capabilities"
+    "A single source of truth for recurring services and deadlines",
+    "Stop surprise renewals with proactive lead-time reminders",
+    "Track compliance filings with status, notes, and submission evidence",
+    "Understand spend with local-currency (LCY) reporting and trends",
+    "Assign ownership by employee and department for accountability",
+    "Move fast with Excel import/export and share-ready reporting"
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif" }}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Navigation Header */}
       <nav className="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4">
@@ -102,10 +102,7 @@ export default function LandingPage() {
               <img 
                 src="/assets/logo.png" 
                 alt="Trackla Logo" 
-                className="h-10 w-10 object-contain"
-                style={{
-                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1)) brightness(1.1) contrast(1.2)'
-                }}
+                className="h-10 w-10 object-contain drop-shadow-sm"
               />
               <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                 Trackla
@@ -151,18 +148,18 @@ export default function LandingPage() {
           className="text-center"
         >
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-            Bring the power of organized
+            Turn recurring work into
             <br />
             <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              subscription management
+              clear ownership & control
             </span>
             <br />
-            to your team
+            with Trackla
           </h1>
           
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Trackla helps teams track, manage, and optimize all their subscriptions in one place. 
-            Never miss a renewal, reduce costs, and stay compliant.
+            Trackla brings subscriptions, compliance filings, and renewals into one secure workspace.
+            Track every due date, assign owners, and see spend trends in local currency—without spreadsheets.
           </p>
 
           <div className="flex items-center justify-center gap-4">
@@ -171,7 +168,7 @@ export default function LandingPage() {
               onClick={() => navigate("/signup")}
               className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-lg px-8 py-6 shadow-xl hover:shadow-2xl transition-all"
             >
-              Try it free
+              Get started free
               <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
           </div>
@@ -222,10 +219,10 @@ export default function LandingPage() {
           className="text-center mb-8"
         >
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Everything you need to manage subscriptions
+            Everything you need to run recurring operations
           </h2>
           <p className="text-xl text-gray-600">
-            Powerful features designed for modern teams
+            Subscriptions, compliance, and renewals—built for teams.
           </p>
         </motion.div>
       </section>
@@ -244,18 +241,18 @@ export default function LandingPage() {
             <span className="text-sm font-semibold text-blue-600 tracking-wider uppercase">CORE MODULES</span>
           </div>
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Three powerful modules.
+            Three modules.
             <br />
             <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              One unified platform.
+              One system of record.
             </span>
           </h2>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-            Trackla isn't just around three tightly integrated modules that give your team complete control over every subscription — from the moment it's created, through compliance checks, all the way to renewal.
+            Trackla is built around three tightly integrated modules that cover the entire lifecycle—from onboarding a subscription, to meeting filing deadlines, to renewal decisions.
           </p>
         </motion.div>
 
-        {/* Module 1: Subscription Management */}
+        {/* Module 1: Subscriptions */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -268,34 +265,34 @@ export default function LandingPage() {
               <div className="inline-block mb-4">
                 <span className="text-sm font-semibold text-blue-600 tracking-wider uppercase">MODULE 1</span>
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-4">Subscription Management</h3>
+              <h3 className="text-3xl font-bold text-gray-900 mb-4">Subscriptions</h3>
               <p className="text-gray-600 mb-6">
-                Take full control of every subscription your organization manages. Trackla's Subscription module provides a centralized hub as well as register, monitor, and optimize all your subscriptions — whether it's SaaS tools, vendor contracts, or recurring services.
+                Capture every subscription in one place—cost, cycle, owners, and next renewal. Trackla helps you understand what you pay for, who owns it, and what’s coming next.
               </p>
               <ul className="space-y-3">
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Centralized dashboard with real-time subscription status, cost tracking, and usage insights</span>
+                  <span className="text-gray-700">Central dashboard with status, owners, vendors, and next renewal at a glance</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Smart categorization by vendor, department, cost center, or custom tags</span>
+                  <span className="text-gray-700">Categorize by department, vendor, and custom fields—standardize across the company</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Calendar view to visualize upcoming charges, bills & cycles and payment schedules</span>
+                  <span className="text-gray-700">Calendar view for upcoming renewals and key dates—reschedule without losing context</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Automated cost analytics and spending trend reports to eliminate waste</span>
+                  <span className="text-gray-700">LCY-based analytics to spot growth, waste, and renewal risk</span>
                 </li>
               </ul>
             </div>
             <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl p-8 shadow-lg border border-blue-200">
               <div className="bg-white rounded-xl p-6 shadow-md">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-bold text-gray-900">Subscription Overview</h4>
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Live</span>
+                  <h4 className="font-bold text-gray-900">Overview</h4>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Trackla</span>
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
@@ -303,7 +300,7 @@ export default function LandingPage() {
                     <span className="text-lg font-bold text-blue-600">24</span>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-700">Monthly Spend</span>
+                    <span className="text-sm font-medium text-gray-700">Monthly Spend (LCY)</span>
                     <span className="text-lg font-bold text-green-600">$2,000</span>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
@@ -353,22 +350,22 @@ export default function LandingPage() {
               <div className="inline-block mb-4">
                 <span className="text-sm font-semibold text-green-600 tracking-wider uppercase">MODULE 2</span>
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-4">Compliance Tracking</h3>
+              <h3 className="text-3xl font-bold text-gray-900 mb-4">Compliance</h3>
               <p className="text-gray-600 mb-6">
-                Stay audit-ready and eliminate compliance gaps. Trackla's Compliance module helps your team track regulatory requirements, maintain documentation, and ensure every subscription meets your organization's internal policies and industry standards.
+                Track filing obligations with clear deadlines, statuses, and evidence. Trackla keeps your team aligned on what’s due, who owns it, and what was submitted.
               </p>
               <ul className="space-y-3">
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Built-in compliance checklists mapped to industry frameworks: SOC 2, GDPR, ISO 22301</span>
+                  <span className="text-gray-700">Track category and governing authority per filing with due dates and recurrence</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Document upload for contracts, SRAs, SLAs, and vendor certifications</span>
+                  <span className="text-gray-700">Store notes and supporting documents for each submission</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Compliance scoring per subscription with real-time notification and audit trail</span>
+                  <span className="text-gray-700">Reminders and status tracking so pending items don’t turn into late penalties</span>
                 </li>
               </ul>
             </div>
@@ -388,26 +385,26 @@ export default function LandingPage() {
               <div className="inline-block mb-4">
                 <span className="text-sm font-semibold text-orange-600 tracking-wider uppercase">MODULE 3</span>
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-4">Renewal Automation</h3>
+              <h3 className="text-3xl font-bold text-gray-900 mb-4">Renewals</h3>
               <p className="text-gray-600 mb-6">
-                Never miss a renewal or unintentionally auto-renew again. Trackla's Renewal module provides proactive reminders, streamlined approval workflows, and detailed renewal histories — so your team can make informed decisions well before deadlines.
+                Plan renewals early and keep a clean history. Trackla surfaces what’s expiring, what changed, and what needs a decision—before the deadline.
               </p>
               <ul className="space-y-3">
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Smart renewal reminders sent 90, 60, and 30 days before expiration with auto-escalation</span>
+                  <span className="text-gray-700">Configurable lead-time reminders and escalations to the right stakeholders</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Multi-step approval workflows to ensure the right stakeholders review before committing</span>
+                  <span className="text-gray-700">Track renewal status, notes, and documents in one place—no email threads</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Renewal history and cost change analysis to negotiate better terms with vendors</span>
+                  <span className="text-gray-700">Understand renewals with history and cost-change context to negotiate better terms</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Auto-cancel or auto-renew options for unattended subscriptions to prevent unintentionally spend</span>
+                  <span className="text-gray-700">Avoid accidental renewals by tracking owners and decision points before expiry</span>
                 </li>
               </ul>
             </div>
@@ -486,7 +483,7 @@ export default function LandingPage() {
               Simple, transparent pricing
             </h2>
             <p className="text-xl text-gray-600">
-              Choose the plan that's right for your team
+              Start free and upgrade when your team grows
             </p>
             {pricingError && (
               <div className="mt-4 inline-flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm max-w-md mx-auto">
@@ -509,7 +506,7 @@ export default function LandingPage() {
             >
               <div className="text-center mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Starter</h3>
-                <p className="text-gray-600 mb-4">Perfect for small teams</p>
+                <p className="text-gray-600 mb-4">For getting organized fast</p>
                 <div className="flex items-baseline justify-center gap-2">
                   <span className="text-5xl font-bold text-gray-900">$29</span>
                   <span className="text-gray-600">/month</span>
@@ -518,7 +515,7 @@ export default function LandingPage() {
               <ul className="space-y-4 mb-8">
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Up to 50 subscriptions</span>
+                  <span className="text-gray-700">Up to 50 records (subscriptions/filings/renewals)</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
@@ -526,11 +523,11 @@ export default function LandingPage() {
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Email reminders</span>
+                  <span className="text-gray-700">Reminders and calendar view</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700">Basic reports</span>
+                  <span className="text-gray-700">Basic dashboards and exports</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
@@ -561,7 +558,7 @@ export default function LandingPage() {
               </div>
               <div className="text-center mb-6">
                 <h3 className="text-2xl font-bold text-white mb-2">Professional</h3>
-                <p className="text-blue-100 mb-4">For growing teams</p>
+                <p className="text-blue-100 mb-4">For teams that run on Trackla</p>
                 <div className="flex items-baseline justify-center gap-2">
                   <span className="text-5xl font-bold text-white">$79</span>
                   <span className="text-blue-100">/month</span>
@@ -570,7 +567,7 @@ export default function LandingPage() {
               <ul className="space-y-4 mb-8">
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-300 flex-shrink-0 mt-0.5" />
-                  <span className="text-white">Unlimited subscriptions</span>
+                  <span className="text-white">Unlimited records</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-300 flex-shrink-0 mt-0.5" />
@@ -578,15 +575,15 @@ export default function LandingPage() {
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-300 flex-shrink-0 mt-0.5" />
-                  <span className="text-white">Advanced reminders</span>
+                  <span className="text-white">Advanced reminders and escalations</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-300 flex-shrink-0 mt-0.5" />
-                  <span className="text-white">Advanced analytics</span>
+                  <span className="text-white">Advanced analytics and trends</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-300 flex-shrink-0 mt-0.5" />
-                  <span className="text-white">Compliance tracking</span>
+                  <span className="text-white">Compliance tracking and histories</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-300 flex-shrink-0 mt-0.5" />
@@ -716,10 +713,10 @@ export default function LandingPage() {
           className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-12 text-center shadow-2xl"
         >
           <h2 className="text-4xl font-bold text-white mb-4">
-            Ready to take control of your subscriptions?
+            Ready to run renewals and compliance on time?
           </h2>
           <p className="text-xl text-blue-100 mb-8">
-            Join teams already managing their subscriptions with Trackla
+            Start with one module—grow into a single system of record.
           </p>
           <Button
             size="lg"

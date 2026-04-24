@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { useUser } from "@/context/UserContext";
 
 type CategoryKey = "all" | "subscriptions" | "compliance" | "renewals";
@@ -33,6 +35,7 @@ type TaskItem = {
   statusText?: string;
   description?: string;
   sourceId?: string;
+  source?: any;
 };
 
 type CacheEnvelope<T> = {
@@ -81,6 +84,58 @@ function endOfMonth(date: Date) {
 
 function isValidDate(d: Date) {
   return !Number.isNaN(d.getTime());
+}
+
+function toISODateString(d: Date) {
+  const dt = new Date(d);
+  if (!isValidDate(dt)) return "";
+  const yyyy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function addMonths(date: Date, months: number) {
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + months);
+  if (d.getDate() < day) d.setDate(0);
+  return d;
+}
+
+function addYears(date: Date, years: number) {
+  const d = new Date(date);
+  d.setFullYear(d.getFullYear() + years);
+  return d;
+}
+
+function addDays(date: Date, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function normalizeToken(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function computeNextDateForSubscription(currentDue: Date, billingCycleRaw: unknown) {
+  const cycle = normalizeToken(billingCycleRaw);
+  if (cycle === "yearly" || cycle === "annual") return addYears(currentDue, 1);
+  if (cycle === "quarterly") return addMonths(currentDue, 3);
+  if (cycle === "weekly") return addDays(currentDue, 7);
+  return addMonths(currentDue, 1);
+}
+
+function computeNextDateForRenewal(currentDue: Date, renewalCycleRaw: unknown) {
+  const cycle = normalizeToken(renewalCycleRaw);
+  if (cycle === "monthly") return addMonths(currentDue, 1);
+  if (cycle === "quarterly") return addMonths(currentDue, 3);
+  if (cycle === "6 months" || cycle === "6months") return addMonths(currentDue, 6);
+  if (cycle === "yearly" || cycle === "annual") return addYears(currentDue, 1);
+  if (cycle === "2 years" || cycle === "2years") return addYears(currentDue, 2);
+  if (cycle === "3 years" || cycle === "3years") return addYears(currentDue, 3);
+  return null;
 }
 
 function getViewButtonClass(active: boolean) {
@@ -174,6 +229,7 @@ export default function CalendarPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useUser();
+  const queryClient = useQueryClient();
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -198,41 +254,114 @@ export default function CalendarPage() {
 
   const [detailsOpen, setDetailsOpen] = React.useState(false);
   const [selectedTask, setSelectedTask] = React.useState<TaskItem | null>(null);
-
-  const mintDeeplinkToken = React.useCallback(async (entityType: 'subscription' | 'compliance' | 'license', id: string) => {
-    const res = await fetch('/api/deeplink/token', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entityType, id }),
-    });
-    if (!res.ok) throw new Error('Failed to create deeplink token');
-    const data = (await res.json()) as { token?: string };
-    if (!data?.token) throw new Error('Invalid deeplink token response');
-    return String(data.token);
-  }, []);
+  const [detailsMode, setDetailsMode] = React.useState<"view" | "reschedule">("view");
+  const [rescheduleDate, setRescheduleDate] = React.useState<string>("");
+  const [detailsBusy, setDetailsBusy] = React.useState(false);
+  const [detailsError, setDetailsError] = React.useState<string>("");
 
   const openRecordModal = React.useCallback(
     (task: TaskItem) => {
       const id = String(task.sourceId ?? "").trim();
       if (!id) return;
-
-      const entityType: 'subscription' | 'compliance' | 'license' =
-        task.category === 'subscriptions' ? 'subscription' : task.category === 'compliance' ? 'compliance' : 'license';
-
       const route = task.category === 'subscriptions' ? '/subscriptions' : task.category === 'compliance' ? '/compliance' : '/government-license';
 
-      void (async () => {
-        try {
-          const token = await mintDeeplinkToken(entityType, id);
-          const search = new URLSearchParams({ openToken: token }).toString();
-          navigate(`${route}?${search}`, { state: { returnTo: '/calendar' } });
-        } catch {
-          navigate(route, { state: { returnTo: '/calendar' } });
-        }
-      })();
+      const search = new URLSearchParams({ open: id }).toString();
+      navigate(`${route}?${search}`, { state: { returnTo: '/calendar' } });
     },
-    [navigate, mintDeeplinkToken]
+    [navigate]
+  );
+
+  const updateDueDate = React.useCallback(
+    async (task: TaskItem, nextIsoDate: string) => {
+      const id = String(task.sourceId ?? "").trim();
+      if (!id) throw new Error("Missing record id");
+      if (!nextIsoDate) throw new Error("Missing date");
+
+      const url =
+        task.category === "subscriptions"
+          ? `/api/subscriptions/${encodeURIComponent(id)}`
+          : task.category === "compliance"
+            ? `/api/compliance/${encodeURIComponent(id)}`
+            : `/api/licenses/${encodeURIComponent(id)}`;
+
+      const body =
+        task.category === "subscriptions"
+          ? { nextRenewal: nextIsoDate }
+          : task.category === "compliance"
+            ? { submissionDeadline: nextIsoDate }
+            : { endDate: nextIsoDate };
+
+      const res = await fetch(url, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => "");
+        throw new Error(msg || "Failed to update record");
+      }
+
+      const queryKey =
+        task.category === "subscriptions"
+          ? ["/api/subscriptions"]
+          : task.category === "compliance"
+            ? ["/api/compliance/list"]
+            : ["/api/licenses"];
+
+      await queryClient.invalidateQueries({ queryKey });
+    },
+    [queryClient]
+  );
+
+  const markCompleted = React.useCallback(
+    async (task: TaskItem) => {
+      const id = String(task.sourceId ?? "").trim();
+      if (!id) throw new Error("Missing record id");
+
+      if (task.category === "subscriptions") {
+        const sub = task.source;
+        const next = computeNextDateForSubscription(task.date, sub?.billingCycle ?? sub?.cycle ?? sub?.billing);
+        await updateDueDate(task, toISODateString(next));
+        return;
+      }
+
+      if (task.category === "compliance") {
+        const todayIso = toISODateString(new Date());
+        const res = await fetch(`/api/compliance/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ submissionDate: todayIso, status: "Completed" }),
+        });
+        if (!res.ok) {
+          const msg = await res.text().catch(() => "");
+          throw new Error(msg || "Failed to mark completed");
+        }
+        await queryClient.invalidateQueries({ queryKey: ["/api/compliance/list"] });
+        return;
+      }
+
+      const lic = task.source;
+      const next = computeNextDateForRenewal(task.date, lic?.renewalCycleTime ?? lic?.renewalFrequency ?? lic?.frequency);
+      if (next) {
+        await updateDueDate(task, toISODateString(next));
+        return;
+      }
+
+      const res = await fetch(`/api/licenses/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Completed" }),
+      });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => "");
+        throw new Error(msg || "Failed to mark completed");
+      }
+      await queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
+    },
+    [queryClient, updateDueDate]
   );
 
   const openDayList = React.useCallback((date: Date, tasks: TaskItem[]) => {
@@ -251,6 +380,9 @@ export default function CalendarPage() {
 
   const openDetails = React.useCallback((task: TaskItem) => {
     setSelectedTask(task);
+    setDetailsMode("view");
+    setRescheduleDate(toISODateString(task.date));
+    setDetailsError("");
     setDetailsOpen(true);
   }, []);
 
@@ -333,12 +465,14 @@ export default function CalendarPage() {
         statusText: String(sub?.status ?? "").trim() || undefined,
         description: String(sub?.description ?? sub?.notes ?? "").trim() || undefined,
         sourceId: String(sub?.id ?? sub?._id ?? "").trim() || undefined,
+        source: sub,
       });
     });
 
     (Array.isArray(complianceList) ? complianceList : []).forEach((c) => {
       const status = String(c?.status ?? "").toLowerCase();
-      if (status === "draft") return;
+      const submissionDateRaw = String(c?.submissionDate ?? c?.filingSubmissionDate ?? "").trim();
+      if (status === "draft" || status === "completed" || Boolean(submissionDateRaw)) return;
 
       const raw = c?.submissionDeadline;
       if (!raw) return;
@@ -354,12 +488,13 @@ export default function CalendarPage() {
         statusText: String(c?.status ?? "").trim() || undefined,
         description: String(c?.description ?? c?.notes ?? "").trim() || undefined,
         sourceId: String(c?._id ?? c?.id ?? "").trim() || undefined,
+        source: c,
       });
     });
 
     (Array.isArray(licenses) ? licenses : []).forEach((lic) => {
       const status = String(lic?.status ?? "").toLowerCase();
-      if (status === "cancelled" || status === "draft") return;
+      if (status === "cancelled" || status === "draft" || status === "completed") return;
 
       const raw = lic?.endDate;
       if (!raw) return;
@@ -375,6 +510,7 @@ export default function CalendarPage() {
         statusText: String(lic?.status ?? "").trim() || undefined,
         description: String(lic?.description ?? lic?.notes ?? "").trim() || undefined,
         sourceId: String(lic?.id ?? lic?._id ?? "").trim() || undefined,
+        source: lic,
       });
     });
 
@@ -557,15 +693,23 @@ export default function CalendarPage() {
           open={detailsOpen}
           onOpenChange={(open) => {
             setDetailsOpen(open);
-            if (!open) setSelectedTask(null);
+            if (!open) {
+              setSelectedTask(null);
+              setDetailsMode("view");
+              setRescheduleDate("");
+              setDetailsBusy(false);
+              setDetailsError("");
+            }
           }}
         >
           <DialogContent className="max-w-2xl bg-white text-slate-900 border-slate-200 shadow-2xl rounded-2xl">
             {selectedTask ? (
               <div>
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-2xl font-semibold text-slate-900">{selectedTask.title}</div>
+                <div className="flex w-full items-start gap-4">
+                  <div className="w-0 flex-1 min-w-0 pr-12 overflow-hidden">
+                    <div className="text-2xl font-semibold text-slate-900 truncate" title={selectedTask.title}>
+                      {selectedTask.title}
+                    </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       {(() => {
                         const Icon = getCategoryIcon(selectedTask.category);
@@ -610,55 +754,121 @@ export default function CalendarPage() {
                 </div>
 
                 <div className="mt-5 text-slate-700">
-                  {selectedTask.description ? (
+                  {detailsError ? (
+                    <div className="text-sm text-red-600">{detailsError}</div>
+                  ) : selectedTask.description ? (
                     <div className="text-sm">{selectedTask.description}</div>
                   ) : (
                     <div className="text-sm text-slate-500">No description available.</div>
                   )}
                 </div>
 
-                <div className="mt-6 border-t border-slate-200 pt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Button
-                    className="h-11 justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => setDetailsOpen(false)}
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Mark Completed
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-11 justify-center gap-2"
-                    onClick={() => {
-                      setDetailsOpen(false);
-                      openRecordModal(selectedTask);
-                    }}
-                  >
-                    <CalendarClock className="h-4 w-4" />
-                    Reschedule
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-11 justify-center gap-2"
-                    onClick={() => {
-                      setDetailsOpen(false);
-                      openRecordModal(selectedTask);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Edit Event
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-11 justify-center gap-2 text-purple-700 border-purple-200 hover:bg-purple-50"
-                    onClick={() => {
-                      setDetailsOpen(false);
-                      openRecordModal(selectedTask);
-                    }}
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    View Record
-                  </Button>
-                </div>
+                {detailsMode === "reschedule" ? (
+                  <div className="mt-6 border-t border-slate-200 pt-5">
+                    <div className="text-sm font-semibold text-slate-900">Reschedule Due Date</div>
+                    <div className="mt-3 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+                      <div className="flex-1">
+                        <div className="text-xs font-semibold tracking-wide text-slate-500">NEW DUE DATE</div>
+                        <Input
+                          type="date"
+                          value={rescheduleDate}
+                          onChange={(e) => setRescheduleDate(e.target.value)}
+                          className="mt-2"
+                          disabled={detailsBusy}
+                        />
+                      </div>
+                      <Button
+                        className="h-11 justify-center bg-purple-600 hover:bg-purple-700 text-white"
+                        disabled={detailsBusy || !rescheduleDate}
+                        onClick={async () => {
+                          if (!selectedTask) return;
+                          setDetailsBusy(true);
+                          setDetailsError("");
+                          try {
+                            await updateDueDate(selectedTask, rescheduleDate);
+                            setDetailsOpen(false);
+                          } catch (e: any) {
+                            setDetailsError(e?.message || "Failed to reschedule");
+                          } finally {
+                            setDetailsBusy(false);
+                          }
+                        }}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-11 justify-center"
+                        disabled={detailsBusy}
+                        onClick={() => {
+                          setDetailsMode("view");
+                          setDetailsError("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-6 border-t border-slate-200 pt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Button
+                      className="h-11 justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={detailsBusy}
+                      onClick={async () => {
+                        if (!selectedTask) return;
+                        setDetailsBusy(true);
+                        setDetailsError("");
+                        try {
+                          await markCompleted(selectedTask);
+                          setDetailsOpen(false);
+                        } catch (e: any) {
+                          setDetailsError(e?.message || "Failed to mark completed");
+                        } finally {
+                          setDetailsBusy(false);
+                        }
+                      }}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Mark Completed
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-11 justify-center gap-2"
+                      disabled={detailsBusy}
+                      onClick={() => {
+                        setDetailsMode("reschedule");
+                        setDetailsError("");
+                      }}
+                    >
+                      <CalendarClock className="h-4 w-4" />
+                      Reschedule
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-11 justify-center gap-2"
+                      disabled={detailsBusy}
+                      onClick={() => {
+                        setDetailsOpen(false);
+                        openRecordModal(selectedTask);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit Event
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-11 justify-center gap-2 text-purple-700 border-purple-200 hover:bg-purple-50"
+                      disabled={detailsBusy}
+                      onClick={() => {
+                        setDetailsOpen(false);
+                        openRecordModal(selectedTask);
+                      }}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      View Record
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : null}
           </DialogContent>

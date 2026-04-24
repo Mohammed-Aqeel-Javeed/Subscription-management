@@ -5014,46 +5014,32 @@ export default function GovernmentLicense() {
                         />
                       </div>
 
+                      {enabledRenewalFieldDefs.map((field: any) => {
+                        const fieldId = String(field._id);
+                        const name = String(field.name || '').trim() || 'Custom Field';
+                        const path = `customFields.${fieldId}`;
+                        const value = String(form.watch(path as any) || '');
+
+                        return (
+                          <div key={fieldId} className="space-y-2">
+                            <label className="block text-sm font-medium text-slate-700">{name}</label>
+                            <Input
+                              type="text"
+                              className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                              value={value}
+                              onChange={(e) => {
+                                form.setValue(path as any, e.target.value, { shouldDirty: true });
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+
                       {/* Renewel freq */}
                      
 
                       {/* Remarks field removed */}
                     </div>
-                    </div>
-                  </div>
-
-                  {/* Custom Fields Section */}
-                  <div className="bg-white border border-gray-200 mb-6 shadow-md">
-                    <h3 className="text-base font-semibold text-slate-800 px-6 py-4 border-b border-gray-200 bg-gray-50">Custom Fields</h3>
-                    <div className="p-6">
-                      {enabledRenewalFieldDefs.length === 0 ? (
-                        <div className="text-sm text-slate-600">
-                          No renewal custom fields configured.
-                        </div>
-                      ) : (
-                        <div className={`grid gap-4 ${isFullscreen ? 'grid-cols-4' : 'grid-cols-2'}`}>
-                          {enabledRenewalFieldDefs.map((field: any) => {
-                            const fieldId = String(field._id);
-                            const name = String(field.name || '').trim() || 'Custom Field';
-                            const path = `customFields.${fieldId}`;
-                            const value = String(form.watch(path as any) || '');
-
-                            return (
-                              <div key={fieldId} className="space-y-2">
-                                <label className="block text-sm font-medium text-slate-700">{name}</label>
-                                <Input
-                                  type="text"
-                                  className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                                  value={value}
-                                  onChange={(e) => {
-                                    form.setValue(path as any, e.target.value, { shouldDirty: true });
-                                  }}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
                     </div>
                   </div>
 

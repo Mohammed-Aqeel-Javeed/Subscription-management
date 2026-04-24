@@ -14,7 +14,7 @@ import { ChevronDown, Check } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ArrowLeft, Plus, Settings, Eye, EyeOff, CreditCard, Shield, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X, MoreVertical, BadgeDollarSign, WalletCards, Layers, ShieldCheck } from "lucide-react";
+import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X, MoreVertical, BadgeDollarSign, WalletCards, Layers, ShieldCheck } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -2257,18 +2257,6 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
   return (
     <div className="h-full bg-gray-50 flex flex-col min-h-0 overflow-hidden">
       <div className="w-full px-4 sm:px-6 lg:px-8 py-6 flex flex-col min-h-0">
-        <div className="mb-4">
-          <Button
-            type="button"
-            variant="default"
-            onClick={() => navigate("/configuration")}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-        </div>
-
         {/* Import Confirm Dialog (Configuration Excel) */}
         <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
           <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
