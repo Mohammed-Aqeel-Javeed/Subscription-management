@@ -935,6 +935,189 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== Password Reset (OTP) =====
+  app.post("/api/password-reset/request", async (req, res) => {
+    try {
+      const rawEmail = (req.body as any)?.email;
+      const email = String(rawEmail ?? "").trim().toLowerCase();
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      if (!isValidEmail(email)) {
+        return res.status(400).json({ message: "Invalid email format" });
+      }
+
+      const db = await connectToDatabase();
+
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const emailRegex = new RegExp(`^${escapeRegExp(email)}$`, "i");
+
+      // Avoid account enumeration: always return 200.
+      const accountExists = Boolean(
+        (await db.collection("login").findOne({ email: { $regex: emailRegex } }, { projection: { _id: 1 } })) ||
+          (await db.collection("users").findOne({ email: { $regex: emailRegex } }, { projection: { _id: 1 } }))
+      );
+
+      if (!accountExists) {
+        return res.status(200).json({ message: "If the account exists, a reset code has been sent." });
+      }
+
+      const otp = generateOTP();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      await db.collection("password_reset_otps").deleteMany({ email: { $regex: emailRegex } });
+      await db.collection("password_reset_otps").updateOne(
+        { email },
+        {
+          $set: {
+            email,
+            otp,
+            expiresAt,
+            createdAt: new Date(),
+            usedAt: null,
+          },
+        },
+        { upsert: true }
+      );
+
+      const { emailService } = await import("./email.service.js");
+      const emailSent = await emailService.sendEmail({
+        to: email,
+        subject: "Your password reset code",
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc;">
+            <div style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);">
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">🔑 Password Reset</h1>
+              </div>
+              <div style="padding: 40px 30px;">
+                <p style="color: #334155; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+                  Use this one-time code to reset your password:
+                </p>
+                <div style="background: #f1f5f9; border: 2px dashed #3b82f6; border-radius: 8px; padding: 24px; text-align: center; margin: 24px 0;">
+                  <p style="color: #3b82f6; font-size: 42px; font-weight: bold; margin: 0; letter-spacing: 8px; font-family: 'Courier New', monospace;">${otp}</p>
+                </div>
+                <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 24px 0 0 0; text-align: center;">
+                  This code will expire in <strong>10 minutes</strong>.
+                </p>
+                <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 12px 0 0 0; text-align: center;">
+                  If you didn't request this, you can ignore this email.
+                </p>
+              </div>
+              <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">Subscription Tracker - Password Reset</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
+      });
+
+      if (!emailSent) {
+        console.warn("⚠️ Email service not configured. Password reset OTP:", otp);
+      }
+
+      return res.status(200).json({
+        message: "If the account exists, a reset code has been sent.",
+        emailSent: Boolean(emailSent),
+        devOtp: process.env.NODE_ENV === "development" ? otp : undefined,
+      });
+    } catch (err) {
+      console.error("Password reset request error:", err);
+      return res.status(500).json({ message: "Failed to request password reset" });
+    }
+  });
+
+  app.post("/api/password-reset/confirm", async (req, res) => {
+    try {
+      const email = String((req.body as any)?.email ?? "").trim().toLowerCase();
+      const otp = String((req.body as any)?.otp ?? "").trim();
+      const newPassword = String((req.body as any)?.newPassword ?? "");
+
+      if (!email || !otp || !newPassword) {
+        return res.status(400).json({ message: "email, otp, and newPassword are required" });
+      }
+      if (!isValidEmail(email)) {
+        return res.status(400).json({ message: "Invalid email format" });
+      }
+
+      const db = await connectToDatabase();
+      const platformSettings = await getPlatformSettingsCached(db);
+
+      if (platformSettings.security.forceStrongPasswords) {
+        const validation = validatePasswordPolicy(newPassword);
+        if (!validation.valid) {
+          return res.status(400).json({ message: validation.message });
+        }
+      } else if (newPassword.length < 6) {
+        return res.status(400).json({ message: "New password must be at least 6 characters" });
+      }
+
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const emailRegex = new RegExp(`^${escapeRegExp(email)}$`, "i");
+
+      const record = await db.collection("password_reset_otps").findOne({ email: { $regex: emailRegex } });
+      if (!record) {
+        return res.status(400).json({ message: "Reset code not found or expired. Please request a new code." });
+      }
+      if (record?.usedAt) {
+        return res.status(400).json({ message: "Reset code already used. Please request a new code." });
+      }
+      if (new Date() > new Date(record.expiresAt)) {
+        return res.status(400).json({ message: "Reset code expired. Please request a new code." });
+      }
+      if (String(record.otp) !== otp) {
+        return res.status(400).json({ message: "Invalid reset code. Please try again." });
+      }
+
+      await db.collection("password_reset_otps").updateOne(
+        { _id: record._id },
+        { $set: { usedAt: new Date(), usedByIp: String(req.ip || "") } }
+      );
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      const [loginUpdate, usersUpdate] = await Promise.all([
+        db.collection("login").updateMany(
+          { email: { $regex: emailRegex } },
+          { $set: { password: hashedPassword, passwordResetRequired: false, failedLoginCount: 0, lockUntil: null } }
+        ),
+        db.collection("users").updateMany(
+          { email: { $regex: emailRegex }, password: { $exists: true } },
+          { $set: { password: hashedPassword, passwordResetRequired: false, failedLoginCount: 0, lockUntil: null } }
+        ),
+      ]);
+
+      await db.collection("auth_sessions").updateMany(
+        { email, revokedAt: null },
+        { $set: { revokedAt: new Date(), revokedReason: "password_reset" } }
+      );
+
+      await writeAuditEvent(db, {
+        tenantId: null,
+        action: "PASSWORD_RESET",
+        description: "Password reset completed",
+        email,
+        severity: "warning",
+        meta: {
+          loginModified: loginUpdate?.modifiedCount ?? 0,
+          usersModified: usersUpdate?.modifiedCount ?? 0,
+        },
+      });
+
+      return res.status(200).json({ message: "Password reset successful" });
+    } catch (err) {
+      console.error("Password reset confirm error:", err);
+      return res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
   // Password policy validation function
   const validatePasswordPolicy = (password: string): { valid: boolean; message?: string } => {
     if (password.length < 8) {
@@ -1457,6 +1640,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      // Enforce admin-required password reset (user must use Forgot Password flow)
+      if (Boolean((user as any)?.passwordResetRequired)) {
+        await writeAuditEvent(db, {
+          tenantId: (user?.tenantId ?? null) as any,
+          action: "LOGIN_BLOCKED",
+          description: "Login blocked (password reset required)",
+          email: emailKey,
+          severity: "warning",
+          meta: {
+            role: user?.role,
+            ip: securitySettings.ipTrackingEnabled ? clientIp : undefined,
+            userAgent: securitySettings.ipTrackingEnabled ? userAgent : undefined,
+          },
+        });
+        return res.status(403).json({
+          message: "Password reset required. Click Forgot Password to reset your password.",
+          code: "PASSWORD_RESET_REQUIRED",
+        });
       }
 
       // Successful login: reset protection counters + record last login
@@ -3421,10 +3624,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (companyName && companyName.length > 200) return res.status(400).json({ message: "companyName is too long" });
 
-      const allowedPlans = new Set(["free", "professional", "pro", "premium"]);
+      const allowedPlans = new Set(["free", "starter", "professional", "pro", "premium"]);
       const plan = planRaw ? (allowedPlans.has(planRaw) ? (planRaw === "pro" ? "professional" : planRaw) : "") : "";
       if (planRaw && !plan) {
-        return res.status(400).json({ message: "plan must be free, professional, or premium" });
+        return res.status(400).json({ message: "plan must be free, starter, professional, or premium" });
       }
 
       const db = await connectToDatabase();
@@ -3908,6 +4111,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(200).json({ userId, role: roleRaw, modifiedCount: result?.modifiedCount ?? 0 });
     } catch {
       return res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+
+  app.post("/api/platform/users/:userId/force-password-reset", async (req, res) => {
+    try {
+      if (!requireGlobalAdmin(req, res)) return;
+
+      const userId = String((req.params as any)?.userId || "").trim();
+      if (!userId) return res.status(400).json({ message: "userId is required" });
+
+      const db = await connectToDatabase();
+      const _id = ObjectId.isValid(userId) ? new ObjectId(userId) : null;
+      if (!_id) return res.status(400).json({ message: "Invalid userId" });
+
+      const user = await db.collection("login").findOne(
+        { _id },
+        { projection: { email: 1, tenantId: 1, role: 1, fullName: 1 } }
+      );
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (String(user.role || "").toLowerCase() === "global_admin") {
+        return res.status(400).json({ message: "Cannot modify a global admin account" });
+      }
+
+      const normalizeEmail = (raw: unknown) => String(raw ?? "").trim().toLowerCase();
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const emailKey = normalizeEmail(user.email);
+      if (!emailKey) return res.status(400).json({ message: "User email is missing" });
+      const emailRegex = new RegExp(`^${escapeRegExp(emailKey)}$`, "i");
+
+      const relatedAccounts = await db
+        .collection("login")
+        .find(
+          {
+            email: { $regex: emailRegex },
+            role: { $ne: "global_admin" },
+          },
+          { projection: { _id: 1 } }
+        )
+        .toArray();
+      const affectedIds = relatedAccounts.length ? relatedAccounts.map((r: any) => r._id).filter(Boolean) : [_id];
+      const affectedUserIds = affectedIds.map((id: any) => String(id));
+
+      const result = await db.collection("login").updateMany(
+        { _id: { $in: affectedIds } },
+        { $set: { passwordResetRequired: true } }
+      );
+
+      await db.collection("auth_sessions").updateMany(
+        { userId: { $in: affectedUserIds }, revokedAt: null },
+        { $set: { revokedAt: new Date(), revokedReason: "password_reset_required" } }
+      );
+
+      // Proactively send a reset code (non-blocking if email isn't configured)
+      const otp = generateOTP();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      await db.collection("password_reset_otps").deleteMany({ email: { $regex: emailRegex } });
+      await db.collection("password_reset_otps").updateOne(
+        { email: emailKey },
+        { $set: { email: emailKey, otp, expiresAt, createdAt: new Date(), usedAt: null } },
+        { upsert: true }
+      );
+
+      let emailSent = false;
+      try {
+        const { emailService } = await import("./email.service.js");
+        emailSent = await emailService.sendEmail({
+          to: emailKey,
+          subject: "Action required: reset your password",
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px;">
+              <h2 style="margin: 0 0 12px 0;">Password reset required</h2>
+              <p style="margin: 0 0 16px 0; color: #334155; line-height: 1.6;">An administrator has required you to reset your password. Use the code below on the <strong>Forgot Password</strong> screen.</p>
+              <div style="background: #f1f5f9; border: 2px dashed #3b82f6; border-radius: 8px; padding: 16px; text-align: center; max-width: 320px;">
+                <div style="font-size: 34px; font-weight: 700; letter-spacing: 6px; font-family: 'Courier New', monospace; color: #3b82f6;">${otp}</div>
+              </div>
+              <p style="margin: 16px 0 0 0; color: #64748b;">This code expires in 10 minutes.</p>
+            </div>
+          `,
+        });
+      } catch {
+        emailSent = false;
+      }
+
+      await writeAuditEvent(db, {
+        tenantId: user?.tenantId ?? null,
+        action: "PASSWORD_RESET_REQUIRED",
+        description: "Platform admin required password reset",
+        email: (req.user as any)?.email || null,
+        severity: "warning",
+        meta: {
+          targetUserId: userId,
+          targetEmail: emailKey,
+          affectedUserIds,
+          modifiedCount: result?.modifiedCount ?? 0,
+          emailSent,
+        },
+      });
+
+      return res.status(200).json({
+        userId,
+        targetEmail: emailKey,
+        modifiedCount: result?.modifiedCount ?? 0,
+        revokedSessions: true,
+        emailSent,
+        devOtp: process.env.NODE_ENV === "development" ? otp : undefined,
+      });
+    } catch (err) {
+      console.error("Force password reset error:", err);
+      return res.status(500).json({ message: "Failed to force password reset" });
     }
   });
 

@@ -2246,7 +2246,6 @@ router.delete("/api/company/departments/:name", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
-    const subsCollection = db.collection("subscriptions");
     const name = req.params.name;
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Department name required" });
@@ -2260,28 +2259,6 @@ router.delete("/api/company/departments/:name", async (req, res) => {
     const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const trimmed = name.trim();
     const deptNameRegex = `^${escapeRegex(trimmed)}$`;
-    const deptQuotedRegex = new RegExp(`\\"${escapeRegex(trimmed)}\\"`, 'i');
-
-    const linkedCount = await subsCollection.countDocuments({
-      tenantId,
-      $or: [
-        // stored as array
-        { departments: { $regex: deptNameRegex, $options: "i" } },
-        { departments: trimmed },
-        // stored as plain string
-        { department: { $regex: deptNameRegex, $options: "i" } },
-        { department: trimmed },
-        // stored as JSON string
-        { departments: { $regex: deptQuotedRegex } },
-        { department: { $regex: deptQuotedRegex } }
-      ]
-    });
-    if (linkedCount > 0) {
-      return res.status(409).json({
-        message: "Please reassign the department before deleting.",
-        linkedCount,
-      });
-    }
 
     // Case-insensitive and trimmed match (within tenant)
     const result = await collection.deleteOne({ tenantId, name: { $regex: deptNameRegex, $options: "i" } });

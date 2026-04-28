@@ -325,7 +325,8 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
     console.log('Trimmed manager:', managerValue);
     
     const nextPaymentForm = {
-      title: method.title || method.name || '',
+      // Prefer canonical field from backend
+      title: method.name || method.title || '',
       type: method.type || '',
       owner: ownerValue,
       manager: managerValue,
@@ -337,7 +338,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
     setPaymentForm(nextPaymentForm);
     paymentSnapshotRef.current = JSON.stringify(nextPaymentForm);
     setEditPaymentModalOpen(true);
-    setEditingPaymentId(method._id);
+    setEditingPaymentId(String(method?._id ?? ''));
 
     if (method?._id) {
       void setSecureUrlForConfigEditModal('payment', 'paymentMethod', String(method._id));
@@ -354,6 +355,9 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
       toast({ title: "Error", description: "Cannot update: missing id", variant: "destructive" });
       return;
     }
+
+    const paymentId = editingPaymentId;
+    const nextName = paymentForm.title.trim();
     
     // Check for duplicate payment method name (excluding the current one being edited)
     const duplicateName = paymentMethods.find(
@@ -383,11 +387,13 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
       }
     }
     
-  fetch(`/api/payment/${editingPaymentId}`, {
+    fetch(`/api/payment/${paymentId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: paymentForm.title,
+        // Keep both keys for backward compatibility with any older data/UI usage
+        name: nextName,
+        title: nextName,
         type: paymentForm.type,
         owner: paymentForm.owner,
         manager: paymentForm.manager,
@@ -396,19 +402,54 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
         lastFourDigits: paymentForm.lastFourDigits,
       }),
     })
-      .then(res => res.json())
+      .then(async (res) => {
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = (json as any)?.message || 'Failed to update payment method';
+          throw new Error(msg);
+        }
+        return json;
+      })
       .then(() => {
-        // Close modal and show toast immediately
+        // Update cached list immediately so reopening the modal shows the updated values
+        queryClient.setQueryData(["/api/payment"], (prev: any) => {
+          if (!Array.isArray(prev)) return prev;
+          return prev.map((pm: any) => {
+            const pmId = String(pm?._id ?? pm?.id ?? '');
+            if (pmId !== paymentId) return pm;
+            return {
+              ...pm,
+              name: nextName,
+              title: nextName,
+              type: paymentForm.type,
+              owner: paymentForm.owner,
+              manager: paymentForm.manager,
+              expiresAt: paymentForm.expiresAt,
+              financialInstitution: paymentForm.financialInstitution,
+              lastFourDigits: paymentForm.lastFourDigits,
+            };
+          });
+        });
+
+        // Close modal and show toast
         closeEditPaymentModal();
         setEditingPaymentId(null);
         toast({
           title: "Payment Method Updated",
-          description: `Payment method has been updated successfully`,
+          description: "Payment method has been updated successfully",
           variant: "success",
         });
-        
-        // Only use queryClient to invalidate and refetch
+
+        // Sync with server
         queryClient.invalidateQueries({ queryKey: ["/api/payment"] });
+        void queryClient.refetchQueries({ queryKey: ["/api/payment"] });
+      })
+      .catch((err) => {
+        toast({
+          title: 'Error',
+          description: err?.message || 'Failed to update payment method',
+          variant: 'destructive',
+        });
       });
   };
   
@@ -2337,111 +2378,124 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <Card className="p-6 bg-transparent border-0 shadow-none">
-                        <div className="sticky top-[72px] z-10 bg-white pb-6 -mt-6 pt-6 flex justify-between items-center mb-6 border-b border-gray-200">
-                          <div className="flex gap-2 items-center">
-                            <DollarSign className="w-5 h-5" />
-                            <h3 className="text-xl font-semibold">Currency Management</h3>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            {/* Local Currency Display */}
-                            <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
-                              <div className="text-center">
-                                <span className="text-sm text-gray-600 font-medium block">Local Currency</span>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-lg font-semibold text-blue-600">
-                                    {companyInfo.defaultCurrency || 'Not Set'}
-                                  </span>
-                                  {companyInfo.defaultCurrency && (
-                                    <span className="text-sm text-gray-500">
-                                      ({currencies.find(c => c.code === companyInfo.defaultCurrency)?.symbol || '$'})
-                                    </span>
-                                  )}
-                                </div>
+                      <Card className="p-0 bg-transparent border-0 shadow-none h-full flex flex-col">
+                        {/* ── Currency Section Header ── */}
+                        <div className="sticky top-0 z-10 bg-gray-50 pb-4 mb-4">
+                          <div className="flex flex-wrap justify-between items-center gap-4">
+
+                            {/* Left: icon + title + local currency chip */}
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center justify-center w-11 h-11 rounded-2xl bg-indigo-600">
+                                <DollarSign className="w-5 h-5 text-white" />
                               </div>
+                              <h2 className="text-2xl font-extrabold text-gray-900 leading-tight tracking-tight">Currency Management</h2>
+
+                              {/* Local Currency chip — no border, soft background */}
+                              {companyInfo.defaultCurrency && (
+                                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50">
+                                  {getCountryCodeForCurrency(companyInfo.defaultCurrency) && (
+                                    <ReactCountryFlag
+                                      svg
+                                      countryCode={getCountryCodeForCurrency(companyInfo.defaultCurrency)!}
+                                      style={{ width: '1.4rem', height: '1.4rem', borderRadius: '4px' }}
+                                    />
+                                  )}
+                                  <div className="leading-none">
+                                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Local Currency</p>
+                                    <p className="text-sm font-bold text-indigo-700 mt-0.5">
+                                      {companyInfo.defaultCurrency}
+                                      {currencies.find(c => c.code === companyInfo.defaultCurrency)?.symbol && (
+                                        <span className="ml-1 text-indigo-400 font-medium text-xs">
+                                          ({currencies.find(c => c.code === companyInfo.defaultCurrency)?.symbol})
+                                        </span>
+                                      )}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            
-                            {/* Data Management Dropdown */}
-                            <input
-                              ref={currencyFileInputRef}
-                              type="file"
-                              accept=".xlsx,.xls"
-                              onChange={importCurrencies}
-                              className="hidden"
-                            />
-                            <Select
-                              key={currencyDataManagementSelectKey}
-                              onValueChange={(value) => {
-                                if (value === 'export') {
-                                  exportCurrencies();
-                                } else if (value === 'import') {
-                                  setCurrencyImportConfirmOpen(true);
-                                }
-                                setCurrencyDataManagementSelectKey((k) => k + 1);
-                              }}
-                            >
-                              <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
-                                <SelectValue placeholder="Data Management" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="import" className="cursor-pointer">
-                                  <div className="flex items-center">
-                                    <Upload className="h-4 w-4 mr-2" />
-                                    Import
-                                  </div>
-                                </SelectItem>
-                                <SelectItem value="export" className="cursor-pointer">
-                                  <div className="flex items-center">
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Export
-                                  </div>
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            
-                            {/* Action Buttons */}
-                            <div className="flex gap-2">
+
+                            {/* Right: controls */}
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {/* Data Management Dropdown */}
+                              <input
+                                ref={currencyFileInputRef}
+                                type="file"
+                                accept=".xlsx,.xls"
+                                onChange={importCurrencies}
+                                className="hidden"
+                              />
+                              <Select
+                                key={currencyDataManagementSelectKey}
+                                onValueChange={(value) => {
+                                  if (value === 'export') {
+                                    exportCurrencies();
+                                  } else if (value === 'import') {
+                                    setCurrencyImportConfirmOpen(true);
+                                  }
+                                  setCurrencyDataManagementSelectKey((k) => k + 1);
+                                }}
+                              >
+                                <SelectTrigger className="w-44 bg-gray-100 border-0 text-gray-700 hover:bg-gray-200 font-medium transition-all duration-200 rounded-xl h-10 text-sm shadow-none">
+                                  <SelectValue placeholder="Import/Export" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="import" className="cursor-pointer">
+                                    <div className="flex items-center">
+                                      <Upload className="h-4 w-4 mr-2" />
+                                      Import
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="export" className="cursor-pointer">
+                                    <div className="flex items-center">
+                                      <Download className="h-4 w-4 mr-2" />
+                                      Export
+                                    </div>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+
+                              {/* Action Buttons */}
                               {isUpdateMode ? (
-                                <>
+                                <div className="flex gap-2">
                                   <Button
                                     variant="outline"
                                     onClick={cancelUpdateMode}
                                     disabled={isUpdatingCurrencyRates}
-                                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                                    className="h-10 px-5 rounded-xl border-0 bg-gray-100 text-gray-700 hover:bg-gray-200 font-semibold text-sm shadow-none"
                                   >
                                     Cancel
                                   </Button>
                                   <Button
                                     onClick={updateCurrencyRates}
                                     disabled={isUpdatingCurrencyRates}
-                                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold shadow-md disabled:opacity-60 disabled:pointer-events-none"
+                                    className="h-10 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-200 disabled:opacity-60 disabled:pointer-events-none text-sm border-0"
                                   >
                                     {isUpdatingCurrencyRates ? "Saving..." : "Save Changes"}
                                   </Button>
-                                </>
+                                </div>
                               ) : (
-                                <>
+                                <div className="flex gap-2">
                                   <Button
                                     variant="outline"
                                     onClick={enterUpdateMode}
                                     disabled={currencies.length === 0}
-                                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                                    className="h-10 px-5 rounded-xl border-0 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-sm shadow-none"
                                   >
                                     <Edit className="w-4 h-4 mr-2" />
-                                    Update Currency
+                                    Update Rates
                                   </Button>
                                   <Button
-                                    className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md"
-                                    style={{ boxShadow: '0 2px 8px rgba(99,102,241,0.15)' }}
+                                    className="h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md shadow-indigo-200 text-sm border-0"
                                     onClick={() => {
                                       setIsEditMode(false);
                                       setAddCurrencyOpen(true);
                                     }}
-                                    
                                   >
-                                  <Plus className="w-4 h-4 mr-2" />  
-                                  New Currency</Button>
-                                </>
+                                    <Plus className="w-4 h-4 mr-2" />
+                                    New Currency
+                                  </Button>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -2688,172 +2742,198 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                         </Dialog>
 
                         {currenciesLoading ? (
-                          <div className="flex items-center justify-center py-12">
-                            <div className="text-gray-500">Loading currencies...</div>
+                          <div className="flex flex-col items-center justify-center py-20 gap-4">
+                            <div className="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin" />
+                            <p className="text-sm text-gray-400 font-medium">Loading currencies…</p>
                           </div>
                         ) : (
-                          <div className="space-y-6">
-                          <div className="shadow-lg border-0 overflow-hidden bg-white rounded-xl h-[calc(100vh-350px)] flex flex-col">
-                            <div className="flex-1 overflow-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                              <thead>
-                                <tr className="border-b-2 border-gray-400 bg-gray-200">
-                                  <th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">CURRENCY</th>
-                                  <th className={`sticky top-0 z-10 h-12 px-4 text-right text-xs font-bold uppercase tracking-wide ${isUpdateMode ? 'text-blue-600 bg-blue-50' : 'text-gray-800 bg-gray-200'}`}>
-                                    Exch.Rate against 1 LCY {isUpdateMode && <span className="text-xs">(Editable)</span>}
-                                  </th>
-                                  <th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">CREATED</th>
-                                  <th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">LAST UPDATED</th>
-                                  <th className="sticky top-0 z-10 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200">ACTIONS</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-100 bg-white">
-                                {currencies.length === 0 ? (
-                                  <tr>
-                                    <td colSpan={5} className="py-8 text-center text-gray-500">
-                                      No currencies found. Add your first currency to get started.
-                                    </td>
+                          <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-md bg-white flex flex-col" style={{ height: 'calc(100vh - 220px)' }}>
+                            <div className="flex-1 overflow-y-auto">
+                              <table className="min-w-full">
+                                {/* ── Table header ── */}
+                                <thead className="sticky top-0 z-20">
+                                  <tr className="bg-blue-600">
+                                    <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Currency</th>
+                                    <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">
+                                      Exch. Rate / 1 LCY
+                                      {isUpdateMode && <span className="ml-2 text-xs font-semibold bg-white/25 text-white px-2 py-0.5 rounded-full normal-case">Editable</span>}
+                                    </th>
+                                    <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Created</th>
+                                    <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Last Updated</th>
+                                    <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Actions</th>
                                   </tr>
-                                ) : (
-                                  [...currencies].reverse().map((currency, index) => (
-                                  <tr
-                                    key={currency.code}
-                                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
-                                    }`}
-                                  >
-                                    <td className="py-3 px-4 text-sm text-gray-800">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setNewCurrency({
-                                            name: currency.name || '',
-                                            code: currency.code || '',
-                                            symbol: currency.symbol || '',
-                                            isoNumber: '', // Not used
-                                            exchangeRate: currency.exchangeRate || '',
-                                            visible: currency.visible,
-                                            created: currency.created || ''
-                                          });
-                                          setIsEditMode(true);
-                                          setAddCurrencyOpen(true);
+                                </thead>
 
-                                          const code = String(currency.code || '').toUpperCase().trim();
-                                          if (code) {
-                                            void setSecureUrlForConfigEditModal('currency', 'currency', code);
-                                          }
-                                        }}
-                                        title={`${currency.symbol || ''} ${currency.name || ''} (${currency.code || ''})`.trim()}
-                                        className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap text-left"
-                                      >
-                                        {currency.symbol} {currency.name} ({currency.code})
-                                      </button>
-                                    </td>
-                                    <td className="py-3 px-4 text-sm text-gray-500 text-right">
-                                      {isUpdateMode ? (
-                                        <Input
-                                          type="number"
-                                          step="0.0001"
-                                          min="0"
-                                          value={editingRates[currency.code] || ''}
-                                          onChange={(e) => handleRateChange(currency.code, e.target.value)}
-                                          className="w-24 h-8 text-sm border-blue-300 focus:border-blue-500 focus:ring-blue-500 ml-auto text-right"
-                                          placeholder="Rate"
-                                        />
-                                      ) : (
-                                        currency.exchangeRate ? parseFloat(currency.exchangeRate).toFixed(2) : '-'
-                                      )}
-                                    </td>
-                                    <td className="py-3 px-4 text-sm text-gray-500">
-                                      {currency.created || 'Sep 25, 2025'}
-                                    </td>
-                                    <td className="py-3 px-4 text-sm text-gray-500">
-                                      {currency.lastUpdated ? (
-                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                                          {currency.lastUpdated}
-                                        </span>
-                                      ) : (
-                                        <span className="text-gray-400">-</span>
-                                      )}
-                                    </td>
-                                    <td className="py-3 px-4 text-right">
-                                      {!isUpdateMode && (() => {
-                                        const rowCode = String(currency.code || '').toUpperCase().trim();
-                                        if (!rowCode) return null;
-                                        const isOpen = openCurrencyActionsMenuForCode === rowCode;
-                                        const isAnotherRowOpen = !!openCurrencyActionsMenuForCode && openCurrencyActionsMenuForCode !== rowCode;
-                                        return (
-                                          <DropdownMenu
-                                            open={isOpen}
-                                            onOpenChange={(open) => setOpenCurrencyActionsMenuForCode(open ? rowCode : null)}
-                                          >
-                                            <DropdownMenuTrigger asChild>
-                                              <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
-                                                  isAnotherRowOpen ? 'invisible' : ''
-                                                }`}
-                                              >
-                                                <MoreVertical className="h-4 w-4" />
-                                              </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent
-                                              align="end"
-                                              className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+                                {/* ── Table body ── */}
+                                <tbody className="divide-y divide-gray-50">
+                                  {currencies.length === 0 ? (
+                                    <tr>
+                                      <td colSpan={5}>
+                                        <div className="flex flex-col items-center justify-center py-16 gap-3">
+                                          <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                                            <DollarSign className="w-7 h-7 text-indigo-400" />
+                                          </div>
+                                          <p className="text-sm font-semibold text-gray-500">No currencies yet</p>
+                                          <p className="text-xs text-gray-400">Add your first currency to get started</p>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ) : (
+                                    [...currencies].reverse().map((currency, index) => {
+                                      const flagCode = getCountryCodeForCurrency(String(currency.code || '').toUpperCase());
+                                      return (
+                                        <tr
+                                          key={currency.code}
+                                          className={`group transition-colors duration-150 ${
+                                            index % 2 === 0 ? 'bg-white hover:bg-indigo-50/40' : 'bg-slate-50/60 hover:bg-indigo-50/40'
+                                          }`}
+                                        >
+                                          {/* Currency name + flag */}
+                                          <td className="py-3.5 px-5">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setNewCurrency({
+                                                  name: currency.name || '',
+                                                  code: currency.code || '',
+                                                  symbol: currency.symbol || '',
+                                                  isoNumber: '', // Not used
+                                                  exchangeRate: currency.exchangeRate || '',
+                                                  visible: currency.visible,
+                                                  created: currency.created || ''
+                                                });
+                                                setIsEditMode(true);
+                                                setAddCurrencyOpen(true);
+                                                const code = String(currency.code || '').toUpperCase().trim();
+                                                if (code) void setSecureUrlForConfigEditModal('currency', 'currency', code);
+                                              }}
+                                              title={`${currency.symbol || ''} ${currency.name || ''} (${currency.code || ''})`.trim()}
+                                              className="flex items-center gap-3 text-left w-full group/btn"
                                             >
-                                              <DropdownMenuItem
-                                                onClick={() => {
-                                                  setNewCurrency({
-                                                    name: currency.name || '',
-                                                    code: currency.code || '',
-                                                    symbol: currency.symbol || '',
-                                                    isoNumber: '', // Not used
-                                                    exchangeRate: currency.exchangeRate || '',
-                                                    visible: currency.visible,
-                                                    created: currency.created || ''
-                                                  });
-                                                  setIsEditMode(true);
-                                                  setAddCurrencyOpen(true);
+                                              <div className="flex-shrink-0 w-8 h-8 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                                                {flagCode ? (
+                                                  <ReactCountryFlag svg countryCode={flagCode} style={{ width: '2rem', height: '1.5rem', objectFit: 'cover' }} />
+                                                ) : (
+                                                  <span className="text-xs font-bold text-gray-500">{(currency.code || '').slice(0, 2)}</span>
+                                                )}
+                                              </div>
+                                              <div className="min-w-0">
+                                                <p className="text-sm font-semibold text-gray-800 truncate group-hover/btn:text-indigo-700 transition-colors">
+                                                  {currency.name || currency.code}
+                                                </p>
+                                                <p className="text-xs text-gray-400">{currency.symbol} · {currency.code}</p>
+                                              </div>
+                                            </button>
+                                          </td>
 
-                                                  const code = String(currency.code || '').toUpperCase().trim();
-                                                  if (code) {
-                                                    void setSecureUrlForConfigEditModal('currency', 'currency', code);
-                                                  }
-                                                }}
-                                                className="cursor-pointer"
-                                              >
-                                                <Edit className="h-4 w-4 mr-2" />
-                                                Edit
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem
-                                                onClick={() => {
-                                                  const inUseCount = getCurrencySubscriptions(rowCode).length;
-                                                  setCurrencyToDelete({
-                                                    code: rowCode,
-                                                    name: currency.name,
-                                                    inUseCount,
-                                                  });
-                                                  setCurrencyDeleteOpen(true);
-                                                }}
-                                                className="cursor-pointer text-red-600 focus:text-red-600"
-                                              >
-                                                <Trash2 className="h-4 w-4 mr-2" />
-                                                Delete
-                                              </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
-                                        );
-                                      })()}
-                                    </td>
-                                  </tr>
-                                  ))
-                                )}
-                              </tbody>
-                            </table>
+                                          {/* Exchange rate */}
+                                          <td className="py-3.5 px-5 text-left">
+                                            {isUpdateMode ? (
+                                              <Input
+                                                type="number"
+                                                step="0.0001"
+                                                min="0"
+                                                value={editingRates[currency.code] || ''}
+                                                onChange={(e) => handleRateChange(currency.code, e.target.value)}
+                                                className="w-28 h-8 text-sm border-blue-300 focus:border-blue-500 focus:ring-blue-500 text-right rounded-lg"
+                                                placeholder="Rate"
+                                              />
+                                            ) : (
+                                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold tabular-nums">
+                                                {currency.exchangeRate ? parseFloat(currency.exchangeRate).toFixed(2) : '—'}
+                                              </span>
+                                            )}
+                                          </td>
+
+                                          {/* Created */}
+                                          <td className="py-3.5 px-5 text-sm text-gray-500">
+                                            {currency.created || '—'}
+                                          </td>
+
+                                          {/* Last updated */}
+                                          <td className="py-3.5 px-5">
+                                            {currency.lastUpdated ? (
+                                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                {currency.lastUpdated}
+                                              </span>
+                                            ) : (
+                                              <span className="text-gray-300 text-sm">—</span>
+                                            )}
+                                          </td>
+
+                                          {/* Actions */}
+                                          <td className="py-3.5 px-5">
+                                            {!isUpdateMode && (() => {
+                                              const rowCode = String(currency.code || '').toUpperCase().trim();
+                                              if (!rowCode) return null;
+                                              const isOpen = openCurrencyActionsMenuForCode === rowCode;
+                                              const isAnotherRowOpen = !!openCurrencyActionsMenuForCode && openCurrencyActionsMenuForCode !== rowCode;
+                                              return (
+                                                <DropdownMenu
+                                                  open={isOpen}
+                                                  onOpenChange={(open) => setOpenCurrencyActionsMenuForCode(open ? rowCode : null)}
+                                                >
+                                                  <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      className={`h-8 w-8 p-0 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+                                                        isAnotherRowOpen ? 'invisible' : ''
+                                                      }`}
+                                                    >
+                                                      <MoreVertical className="h-4 w-4" />
+                                                    </Button>
+                                                  </DropdownMenuTrigger>
+                                                  <DropdownMenuContent
+                                                    align="end"
+                                                    className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg rounded-xl"
+                                                  >
+                                                    <DropdownMenuItem
+                                                      onClick={() => {
+                                                        setNewCurrency({
+                                                          name: currency.name || '',
+                                                          code: currency.code || '',
+                                                          symbol: currency.symbol || '',
+                                                          isoNumber: '', // Not used
+                                                          exchangeRate: currency.exchangeRate || '',
+                                                          visible: currency.visible,
+                                                          created: currency.created || ''
+                                                        });
+                                                        setIsEditMode(true);
+                                                        setAddCurrencyOpen(true);
+                                                        const code = String(currency.code || '').toUpperCase().trim();
+                                                        if (code) void setSecureUrlForConfigEditModal('currency', 'currency', code);
+                                                      }}
+                                                      className="cursor-pointer"
+                                                    >
+                                                      <Edit className="h-4 w-4 mr-2" />
+                                                      Edit
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                      onClick={() => {
+                                                        const inUseCount = getCurrencySubscriptions(rowCode).length;
+                                                        setCurrencyToDelete({ code: rowCode, name: currency.name, inUseCount });
+                                                        setCurrencyDeleteOpen(true);
+                                                      }}
+                                                      className="cursor-pointer text-red-600 focus:text-red-600"
+                                                    >
+                                                      <Trash2 className="h-4 w-4 mr-2" />
+                                                      Delete
+                                                    </DropdownMenuItem>
+                                                  </DropdownMenuContent>
+                                                </DropdownMenu>
+                                              );
+                                            })()}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })
+                                  )}
+                                </tbody>
+                              </table>
                             </div>
                           </div>
-                        </div>
                         )}
                       </Card>
                     </motion.div>
@@ -2923,77 +3003,80 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                 </AlertDialogContent>
               </AlertDialog>
 
-              <TabsContent value="payment" className="mt-4 h-[calc(100vh-240px)] overflow-hidden" id="payment-methods-section">
+              <TabsContent value="payment" className="mt-4" id="payment-methods-section">
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.3 }}
-                  className="h-full"
                 >
-                  <Card className="bg-transparent border-0 shadow-none p-6 rounded-xl h-full flex flex-col min-h-0">
-                    <div className="flex-shrink-0 bg-white pb-6 -mt-6 pt-6 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-gray-200">
-                      <div className="flex items-center gap-4">
-                        <div className="relative flex-1 max-w-md">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                          <Input
-                            value={paymentSearchTerm}
-                            onChange={(e) => setPaymentSearchTerm(e.target.value)}
-                            className="pl-10 w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-gray-50 focus:bg-white transition-all duration-200"
-                          />
+                  <Card className="bg-transparent border-0 shadow-none p-0 rounded-xl flex flex-col">
+                    {/* ── Payment Methods Header ── */}
+                    <div className="flex-shrink-0 bg-gray-50 pb-4 mb-4">
+                      <div className="flex flex-wrap items-center justify-between gap-4">
+                        {/* Left: icon + title + search */}
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center justify-center w-11 h-11 rounded-2xl bg-indigo-600">
+                            <CreditCard className="w-5 h-5 text-white" />
+                          </div>
+                          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Payment Methods</h2>
+
+                          {/* Search box */}
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+                            <Input
+                              value={paymentSearchTerm}
+                              onChange={(e) => setPaymentSearchTerm(e.target.value)}
+                              placeholder="Search..."
+                              className="pl-9 w-52 bg-gray-100 border-0 rounded-xl h-10 text-sm shadow-none focus:ring-0 focus:bg-white transition-all"
+                            />
+                          </div>
                         </div>
-                        <input
-                          type="file"
-                          ref={paymentFileInputRef}
-                          className="hidden"
-                          accept=".xlsx,.xls"
-                          onChange={importPaymentMethods}
-                        />
-                        <Select
-                          key={paymentDataManagementSelectKey}
-                          onValueChange={(value) => {
-                            if (value === 'export') {
-                              exportPaymentMethods();
-                            } else if (value === 'import') {
-                              setPaymentImportConfirmOpen(true);
-                            }
-                            setPaymentDataManagementSelectKey((k) => k + 1);
-                          }}
-                        >
-                          <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
-                            <SelectValue placeholder="Data Management" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="export" className="cursor-pointer">
-                              <div className="flex items-center">
-                                <Download className="h-4 w-4 mr-2" />
-                                Export
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="import" className="cursor-pointer">
-                              <div className="flex items-center">
-                                <Upload className="h-4 w-4 mr-2" />
-                                Import
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
 
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setPaymentMethodsView((v) => (v === 'tiles' ? 'table' : 'tiles'))}
-                          className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                        >
-                          {paymentMethodsView === 'tiles' ? 'Table View' : 'Card View'}
-                        </Button>
+                        {/* Right: controls */}
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="file"
+                            ref={paymentFileInputRef}
+                            className="hidden"
+                            accept=".xlsx,.xls"
+                            onChange={importPaymentMethods}
+                          />
+                          <Select
+                            key={paymentDataManagementSelectKey}
+                            onValueChange={(value) => {
+                              if (value === 'export') {
+                                exportPaymentMethods();
+                              } else if (value === 'import') {
+                                setPaymentImportConfirmOpen(true);
+                              }
+                              setPaymentDataManagementSelectKey((k) => k + 1);
+                            }}
+                          >
+                            <SelectTrigger className="w-44 bg-gray-100 border-0 text-gray-700 hover:bg-gray-200 font-medium transition-all duration-200 rounded-xl h-10 text-sm shadow-none">
+                              <SelectValue placeholder="Import/Export" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="export" className="cursor-pointer">
+                                <div className="flex items-center"><Download className="h-4 w-4 mr-2" />Export</div>
+                              </SelectItem>
+                              <SelectItem value="import" className="cursor-pointer">
+                                <div className="flex items-center"><Upload className="h-4 w-4 mr-2" />Import</div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
 
-                        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setPaymentMethodsView((v) => (v === 'tiles' ? 'table' : 'tiles'))}
+                            className="h-10 px-4 rounded-xl border-0 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-sm shadow-none"
+                          >
+                            {paymentMethodsView === 'tiles' ? 'Table View' : 'Card View'}
+                          </Button>
+
                           <Button
                             onClick={() => {
-                              // Reset form when opening add payment modal
                               const nextPaymentForm = {
                                 title: '',
                                 type: '',
@@ -3009,35 +3092,37 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                               setPmManagerSearch('');
                               setAddPaymentModalOpen(true);
                             }}
-                            className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg"
+                            className="h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md shadow-indigo-200 text-sm border-0"
                           >
                             <Plus className="w-4 h-4 mr-2" />
                             New Payment Method
                           </Button>
-                        </motion.div>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex-1 min-h-0">
+                    <div>
                     {/* Payment Methods List */}
                     {(() => {
                       const filteredPaymentMethods = [...paymentMethods]
                         .reverse()
                         .filter((method) =>
-                          method.name.toLowerCase().includes(paymentSearchTerm.toLowerCase()) ||
-                          method.type.toLowerCase().includes(paymentSearchTerm.toLowerCase())
+                          String(method.name || '').toLowerCase().includes(paymentSearchTerm.toLowerCase()) ||
+                          String(method.type || '').toLowerCase().includes(paymentSearchTerm.toLowerCase())
                         );
 
                       if (filteredPaymentMethods.length === 0) {
                         return (
-                          <div className="mt-6 flex flex-col items-center justify-center py-12 text-gray-500">
-                            <CreditCard className="w-12 h-12 mb-4 text-gray-300" />
-                            <h3 className="text-lg font-medium text-gray-600 mb-2">
+                          <div className="flex flex-col items-center justify-center py-20 gap-4">
+                            <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                              <CreditCard className="w-8 h-8 text-indigo-400" />
+                            </div>
+                            <p className="text-base font-semibold text-gray-500">
                               {paymentSearchTerm ? 'No payment methods found' : 'No payment methods yet'}
-                            </h3>
-                            <p className="text-center max-w-md">
+                            </p>
+                            <p className="text-sm text-gray-400 text-center max-w-xs">
                               {paymentSearchTerm
-                                ? `No payment methods match "${paymentSearchTerm}". Try adjusting your search.`
-                                : 'Add your first payment method to get started with managing your subscription payments.'}
+                                ? `No results for "${paymentSearchTerm}". Try a different search.`
+                                : 'Add your first payment method to get started.'}
                             </p>
                           </div>
                         );
@@ -3045,15 +3130,15 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
 
                       if (paymentMethodsView === 'table') {
                         return (
-                          <div className="mt-6 bg-white border border-gray-200 shadow-md overflow-hidden rounded-xl h-full flex flex-col min-h-0">
-                            <div className="flex-1 min-h-0 overflow-auto">
+                          <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-md bg-white flex flex-col h-full">
+                            <div className="flex-1 overflow-y-auto">
                             <table className="min-w-full table-fixed">
-                              <thead>
-                                <tr className="border-b-2 border-gray-400 bg-gray-200">
-                                  <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[260px]">NAME</th>
-                                  <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">TYPE</th>
-                                  <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">SUBSCRIPTIONS</th>
-                                  <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">ACTIONS</th>
+                              <thead className="sticky top-0 z-20">
+                                <tr className="bg-blue-600">
+                                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600 w-[260px]">Name</th>
+                                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600 w-[220px]">Type</th>
+                                  <th className="py-4 px-5 text-center text-sm font-bold text-white uppercase tracking-wide bg-blue-600 w-[150px]">Subscriptions</th>
+                                  <th className="py-4 px-5 text-right text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Actions</th>
                                 </tr>
                               </thead>
                               <tbody className="bg-white">
@@ -3137,50 +3222,114 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                       }
 
                       return (
-                        <div className="mt-6 h-full min-h-0 overflow-auto overflow-x-hidden">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full min-w-0">
+                        <div className="overflow-y-auto overflow-x-hidden" style={{ height: 'calc(100vh - 220px)' }}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full min-w-0 pb-4">
                           {filteredPaymentMethods.map((method, idx) => {
                             const subsCount = getPaymentMethodSubscriptions(method.name).length;
+
+                            // Determine active / inactive from expiry date
+                            let isActive = true;
+                            if (method.expiresAt) {
+                              const [year, month] = String(method.expiresAt).split('-');
+                              const expiry = new Date(parseInt(year), parseInt(month) - 1);
+                              const today = new Date();
+                              today.setDate(1); today.setHours(0,0,0,0);
+                              isActive = expiry >= today;
+                            }
+
+                            // Card gradient — uniform blue for all types
+                            const cardGrad = 'from-indigo-600 via-blue-600 to-blue-700';
+
+                            // Format expiry
+                            const expiryDisplay = method.expiresAt
+                              ? (() => { const [y, m] = String(method.expiresAt).split('-'); return `${m}/${String(y).slice(2)}`; })()
+                              : '-- / --';
+
+                            // Last 4 digits dots
+                            const last4 = method.lastFourDigits ? String(method.lastFourDigits).slice(-4) : '••••';
+
                             return (
                               <motion.div
                                 key={idx}
-                                whileHover={{ scale: 1.02 }}
-                                className="bg-white border border-gray-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-200"
+                                whileHover={{ y: -3, boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }}
+                                transition={{ duration: 0.18 }}
+                                className="flex flex-col rounded-2xl overflow-hidden shadow-md border border-gray-100 bg-white"
                               >
-                                <div className="flex items-center gap-3 mb-3">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="font-semibold text-gray-900 truncate">{method.name}</div>
-                                    <div className="text-sm text-gray-500">{method.type}</div>
+                                {/* ── Small gradient header: icon + active badge only ── */}
+                                <div className={`relative bg-gradient-to-r ${cardGrad} px-5 py-4 overflow-hidden`}>
+                                  {/* Subtle decorative circle */}
+                                  <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10" />
+                                  <div className="relative flex items-center justify-between">
+                                    {/* Icon */}
+                                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                                      <CreditCard className="w-5 h-5 text-white" />
+                                    </div>
+                                    {/* Active / Inactive badge — solid white bg for max visibility on any gradient */}
+                                    <span className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-white shadow-sm ${
+                                      isActive ? 'text-emerald-600' : 'text-red-500'
+                                    }`}>
+                                      <span className={`relative flex h-2 w-2`}>
+                                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isActive ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                                        <span className={`relative inline-flex rounded-full h-2 w-2 ${isActive ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                      </span>
+                                      {isActive ? 'Active' : 'Inactive'}
+                                    </span>
                                   </div>
-                                  {/* Subscription Count Badge */}
-                                  <button
-                                    onClick={() => openPaymentSubsModal(method.name)}
-                                    className="flex-shrink-0 bg-blue-100 text-blue-700 rounded-full w-8 h-8 flex items-center justify-center font-semibold text-sm hover:bg-blue-200 transition-colors cursor-pointer"
-                                    title="View subscriptions using this payment method"
-                                  >
-                                    {subsCount}
-                                  </button>
                                 </div>
 
-                                <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => openEditPayment(method)}
-                                    className="text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 rounded-lg px-3 py-1 h-8 font-medium"
+                                {/* ── White body ── */}
+                                <div className="px-5 pt-4 pb-2">
+                                  {/* Name */}
+                                  <p className="font-bold text-gray-900 text-base leading-tight truncate">{method.name}</p>
+                                  {/* Institution / type */}
+                                  {method.financialInstitution
+                                    ? <p className="text-sm text-gray-400 mt-0.5 truncate">{method.financialInstitution}</p>
+                                    : <p className="text-sm text-gray-400 mt-0.5">{method.type || 'Card'}</p>
+                                  }
+
+                                  {/* Card number row — grey pill */}
+                                  <div className="mt-3 flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-xl px-4 py-2.5 font-mono tracking-widest text-sm text-gray-700">
+                                    <span className="text-gray-400 text-base">•••• •••• ••••</span>
+                                    <span className="font-bold">{last4}</span>
+                                  </div>
+
+                                  {/* Type + expiry row */}
+                                  <div className="mt-3 flex items-center justify-between">
+                                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{method.type}</span>
+                                    {method.expiresAt && (
+                                      <span className="text-xs font-mono text-gray-400">Exp: {expiryDisplay}</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* ── Footer: subscription count + Edit / Delete ── */}
+                                <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 mt-1">
+                                  <button
+                                    onClick={() => openPaymentSubsModal(method.name)}
+                                    className="flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 transition-colors"
+                                    title="View subscriptions"
                                   >
-                                    <Edit className="w-3 h-3 mr-1" />
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleDeletePaymentMethod(method)}
-                                    className="text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg px-3 py-1 h-8 font-medium"
-                                  >
-                                    <Trash2 className="w-3 h-3 mr-1" />
-                                    Delete
-                                  </Button>
+                                    <span className="w-6 h-6 rounded-lg bg-indigo-50 flex items-center justify-center font-bold text-xs">{subsCount}</span>
+                                    <span className="text-xs font-semibold">Subscriptions</span>
+                                  </button>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => openEditPayment(method)}
+                                      className="h-8 px-3 rounded-xl text-indigo-600 hover:bg-indigo-50 font-semibold text-xs"
+                                    >
+                                      <Edit className="w-3 h-3 mr-1" />Edit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleDeletePaymentMethod(method)}
+                                      className="h-8 px-3 rounded-xl text-red-500 hover:bg-red-50 font-semibold text-xs"
+                                    >
+                                      <Trash2 className="w-3 h-3 mr-1" />Delete
+                                    </Button>
+                                  </div>
                                 </div>
                               </motion.div>
                             );

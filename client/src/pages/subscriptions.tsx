@@ -1302,7 +1302,7 @@ export default function Subscriptions() {
               }}
             >
               <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
-                <SelectValue placeholder="Data Management" />
+                <SelectValue placeholder="Import/Export" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="export" className="cursor-pointer">

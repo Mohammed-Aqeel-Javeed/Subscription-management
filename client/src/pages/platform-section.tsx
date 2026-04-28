@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { findPlatformItem, findPlatformSection } from "@/lib/platform-nav";
@@ -29,7 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, CheckCircle2, ChevronDown, Clock3, CreditCard, MoreHorizontal, Receipt, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, Clock3, CreditCard, MoreHorizontal, Receipt, ShieldCheck } from "lucide-react";
 
 type PlatformStats = {
   totalCompanies: number;
@@ -96,6 +96,8 @@ type BillingRow = {
   invoiceUrl?: string | null;
   subscriptionId?: string | null;
 };
+
+type PaymentSortField = "company" | "email" | "amount" | "currency" | "status" | "date" | "invoice";
 
 type BillingSubscription = {
   id: string;
@@ -356,6 +358,20 @@ function formatDateTime(raw: unknown) {
   return Number.isFinite(date.getTime()) ? date.toLocaleString() : "—";
 }
 
+function parseDateMaybe(raw: unknown): Date | null {
+  if (!raw) return null;
+  const date = raw instanceof Date ? raw : new Date(String(raw));
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function isWithinDays(raw: unknown, days: number) {
+  const date = parseDateMaybe(raw);
+  if (!date) return false;
+  const ms = date.getTime() - Date.now();
+  if (!Number.isFinite(ms)) return false;
+  return ms >= 0 && ms <= days * 24 * 60 * 60 * 1000;
+}
+
 function formatMoney(value: unknown, currency = "USD") {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return "—";
@@ -391,9 +407,12 @@ function formatCompanyName(raw: unknown) {
 
 function formatPlanLabel(plan: unknown) {
   const normalized = String(plan ?? "").trim();
-  if (!normalized) return "Free Plan";
   const lower = normalized.toLowerCase();
-  if (lower === "pro") return "Professional";
+  if (!lower || lower === "free" || lower === "free_plan") return "Free";
+  if (lower === "pro" || lower === "professional") return "Professional";
+  if (lower === "premium") return "Premium";
+  if (lower === "trial" || lower === "trialing") return "Trial";
+  if (lower === "starter") return "Starter";
   return lower
     .replace(/_/g, " ")
     .split(/\s+/)
@@ -495,8 +514,72 @@ export default function PlatformSectionPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const handlePaymentSort = (field: PaymentSortField) => {
+    if (paymentSortField === field) {
+      if (paymentSortDirection === "asc") {
+        setPaymentSortDirection("desc");
+      } else {
+        setPaymentSortField(null);
+        setPaymentSortDirection("asc");
+      }
+    } else {
+      setPaymentSortField(field);
+      setPaymentSortDirection("asc");
+    }
+  };
+
+  const getPaymentSortIcon = (field: PaymentSortField) => {
+    if (paymentSortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 inline-block opacity-40" />;
+    }
+    return paymentSortDirection === "asc" ? (
+      <ArrowUp className="h-3 w-3 ml-1 inline-block" />
+    ) : (
+      <ArrowDown className="h-3 w-3 ml-1 inline-block" />
+    );
+  };
+
+  type OrgSortField = "companyName" | "tenantId" | "createdAt" | "plan" | "users" | "status" | "renewal";
+
+  const handleOrgSort = (field: OrgSortField) => {
+    if (orgSortField === field) {
+      if (orgSortDirection === "asc") {
+        setOrgSortDirection("desc");
+      } else {
+        setOrgSortField(null);
+        setOrgSortDirection("asc");
+      }
+    } else {
+      setOrgSortField(field);
+      setOrgSortDirection("asc");
+    }
+  };
+
+  const getOrgSortIcon = (field: OrgSortField) => {
+    if (orgSortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 inline-block opacity-40" />;
+    }
+    return orgSortDirection === "asc" ? (
+      <ArrowUp className="h-3 w-3 ml-1 inline-block" />
+    ) : (
+      <ArrowDown className="h-3 w-3 ml-1 inline-block" />
+    );
+  };
+
+  const [orgSearch, setOrgSearch] = useState("");
+  const [orgStatusFilter, setOrgStatusFilter] = useState<"all" | "active" | "suspended" | "disabled">("all");
+  const [orgSortField, setOrgSortField] = useState<OrgSortField | null>(null);
+  const [orgSortDirection, setOrgSortDirection] = useState<"asc" | "desc">("asc");
   const [userSearch, setUserSearch] = useState("");
   const [userStatusFilter, setUserStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const [billingSubscriptionSearch, setBillingSubscriptionSearch] = useState("");
+  const [billingPaymentSearch, setBillingPaymentSearch] = useState("");
+  const [billingInvoiceSearch, setBillingInvoiceSearch] = useState("");
+
+  const [billingPaymentStatusFilter, setBillingPaymentStatusFilter] = useState<string>("all");
+  const [paymentSortField, setPaymentSortField] = useState<PaymentSortField | null>(null);
+  const [paymentSortDirection, setPaymentSortDirection] = useState<"asc" | "desc">("asc");
 
   const [subscriptionActionTarget, setSubscriptionActionTarget] = useState<null | {
     subscriptionId: string;
@@ -518,6 +601,18 @@ export default function PlatformSectionPage() {
     currency: string;
   }>(null);
 
+  const [orgStatusTarget, setOrgStatusTarget] = useState<null | {
+    tenantId: string;
+    companyName: string;
+    nextStatus: "active" | "suspended";
+    actionLabel: string;
+    description: string;
+  }>(null);
+  const [orgOffboardTarget, setOrgOffboardTarget] = useState<null | {
+    tenantId: string;
+    companyName: string;
+  }>(null);
+
   const [userStatusTarget, setUserStatusTarget] = useState<null | {
     userId: string;
     email: string;
@@ -533,6 +628,12 @@ export default function PlatformSectionPage() {
   const [userRevokeSessionsTarget, setUserRevokeSessionsTarget] = useState<null | {
     userId?: string;
     email?: string;
+    companyName: string;
+  }>(null);
+
+  const [userForcePasswordResetTarget, setUserForcePasswordResetTarget] = useState<null | {
+    userId: string;
+    email: string;
     companyName: string;
   }>(null);
 
@@ -814,6 +915,106 @@ export default function PlatformSectionPage() {
       toast({
         title: "Error",
         description: error?.message || "Failed to update user role",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const forcePasswordResetMutation = useMutation({
+    mutationFn: async (payload: { userId: string }) => {
+      const res = await apiFetch(`/api/platform/users/${encodeURIComponent(payload.userId)}/force-password-reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to force password reset");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Password reset required",
+        description: "User sessions were revoked and a password reset is now required.",
+        duration: 1500,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to force password reset",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const updateTenantStatusMutation = useMutation({
+    mutationFn: async (payload: { tenantId: string; status: "active" | "suspended" }) => {
+      const res = await apiFetch(`/api/platform/companies/${encodeURIComponent(payload.tenantId)}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: payload.status }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to update organization status");
+      }
+      return res.json();
+    },
+    onSuccess: async (_data, variables) => {
+      queryClient.setQueryData<PlatformCompany[]>(["/api/platform/companies"], (prev) => {
+        if (!Array.isArray(prev)) return prev as any;
+        return prev.map((c) => (c.tenantId === variables.tenantId ? { ...c, status: variables.status } : c));
+      });
+      await queryClient.invalidateQueries({ queryKey: ["/api/platform/companies"] });
+      toast({
+        title: "Organization updated",
+        description: variables.status === "active" ? "Organization reactivated." : "Organization suspended.",
+        duration: 1200,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to update organization",
+        variant: "destructive",
+        duration: 1500,
+      });
+    },
+  });
+
+  const offboardTenantMutation = useMutation({
+    mutationFn: async (payload: { tenantId: string }) => {
+      const res = await apiFetch(`/api/platform/companies/${encodeURIComponent(payload.tenantId)}/offboard`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to offboard organization");
+      }
+      return res.json();
+    },
+    onSuccess: async (_data, variables) => {
+      queryClient.setQueryData<PlatformCompany[]>(["/api/platform/companies"], (prev) => {
+        if (!Array.isArray(prev)) return prev as any;
+        return prev.map((c) => (c.tenantId === variables.tenantId ? { ...c, status: "disabled" } : c));
+      });
+      await queryClient.invalidateQueries({ queryKey: ["/api/platform/companies"] });
+      toast({
+        title: "Organization offboarded",
+        description: "Tenant access has been disabled.",
+        duration: 1400,
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to offboard organization",
         variant: "destructive",
         duration: 1500,
       });
@@ -1111,12 +1312,97 @@ export default function PlatformSectionPage() {
   }
 
   const tenantUsage = companies.reduce((total, company) => total + Number(company.users || 0), 0);
-  const averageUsersPerTenant = companies.length ? (tenantUsage / companies.length).toFixed(1) : "0.0";
   const planCounts = (billing?.linkedAccounts || []).reduce<Record<string, number>>((acc, row) => {
     const key = String(row.plan || "unknown").toLowerCase();
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
+
+  const filteredCompanies = useMemo(() => {
+    const query = orgSearch.trim().toLowerCase();
+
+    return companies.filter((company) => {
+      const status = String(company.status || "active").trim().toLowerCase();
+      if (orgStatusFilter !== "all" && status !== orgStatusFilter) return false;
+
+      if (!query) return true;
+
+      const haystack = [
+        String(company.companyName || ""),
+        String(company.tenantId || ""),
+        String(company.plan || ""),
+        String(company.status || ""),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [companies, orgSearch, orgStatusFilter]);
+
+  const sortedCompanies = useMemo(() => {
+    const list = [...filteredCompanies];
+    if (!orgSortField) return list;
+
+    const direction = orgSortDirection === "asc" ? 1 : -1;
+    const safeString = (value: unknown) => String(value ?? "").trim().toLowerCase();
+    const safeNumber = (value: unknown) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    };
+
+    return list.sort((a, b) => {
+      if (orgSortField === "companyName") {
+        return direction * safeString(formatCompanyName(a.companyName)).localeCompare(safeString(formatCompanyName(b.companyName)));
+      }
+      if (orgSortField === "tenantId") {
+        return direction * safeString(a.tenantId).localeCompare(safeString(b.tenantId));
+      }
+      if (orgSortField === "createdAt") {
+        const aTime = parseDateMaybe((a as any)?.createdAt)?.getTime() ?? 0;
+        const bTime = parseDateMaybe((b as any)?.createdAt)?.getTime() ?? 0;
+        return direction * (aTime - bTime);
+      }
+      if (orgSortField === "plan") {
+        return direction * safeString(formatPlanLabel(a.plan)).localeCompare(safeString(formatPlanLabel(b.plan)));
+      }
+      if (orgSortField === "users") {
+        return direction * (safeNumber(a.users) - safeNumber(b.users));
+      }
+      if (orgSortField === "status") {
+        return direction * safeString(a.status || "active").localeCompare(safeString(b.status || "active"));
+      }
+      if (orgSortField === "renewal") {
+        const aTime = parseDateMaybe((a as any)?.subscriptionCurrentPeriodEnd)?.getTime() ?? 0;
+        const bTime = parseDateMaybe((b as any)?.subscriptionCurrentPeriodEnd)?.getTime() ?? 0;
+        return direction * (aTime - bTime);
+      }
+      return 0;
+    });
+  }, [filteredCompanies, orgSortField, orgSortDirection]);
+
+  const escapeCsv = (value: unknown) => {
+    const raw = value === null || value === undefined ? "" : String(value);
+    if (/[\n\r",]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`;
+    return raw;
+  };
+
+  const downloadCsv = (filename: string, headers: string[], rows: Array<Record<string, unknown>>) => {
+    const lines: string[] = [];
+    lines.push(headers.map(escapeCsv).join(","));
+    for (const row of rows) {
+      lines.push(headers.map((h) => escapeCsv(row[h])).join(","));
+    }
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const renderTableShell = (title: string, description: string, content: React.ReactNode) => (
     <Card className="bg-white rounded-xl shadow-sm border border-gray-200">
@@ -1692,46 +1978,242 @@ export default function PlatformSectionPage() {
       case "tenant-usage":
         return (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <MetricCard title="Organizations" value={String(companies.length)} detail="Tenant companies currently visible to the platform admin." />
-              <MetricCard title="Tenant Users" value={String(tenantUsage)} detail="Total users across all listed tenant accounts." />
-              <MetricCard title="Average Usage" value={averageUsersPerTenant} detail="Average user count per tenant company." />
-            </div>
             {renderTableShell(
               item.id === "organizations" ? "Organizations" : "Tenant Usage",
               item.id === "organizations"
                 ? "Manage and review all tenant companies."
                 : "Read user counts, plans, and renewal windows by tenant.",
-              <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Organization</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Plan</TableHead>
-                      <TableHead className="text-right">Users</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Renewal</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {companies.map((company) => (
-                      <TableRow key={company.tenantId}>
-                        <TableCell className="font-medium text-indigo-900">{formatCompanyName(company.companyName)}</TableCell>
-                        <TableCell className="text-indigo-800">{formatDate(company.createdAt)}</TableCell>
-                        <TableCell className="text-indigo-800">{formatPlanLabel(company.plan)}</TableCell>
-                        <TableCell className="text-right text-indigo-800">{company.users}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className={statusBadgeClass(company.status || "active")}>
-                            {String(company.status || "active").toLowerCase() === "active" ? "Active" : String(company.status || "").replace(/_/g, " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-indigo-800">{formatRenewalDate(company)}</TableCell>
+              item.id === "organizations" ? (
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex-1">
+                      <input
+                        value={orgSearch}
+                        onChange={(e) => setOrgSearch(e.target.value)}
+                        placeholder="Search organizations"
+                        className="w-full rounded-lg border border-indigo-200/50 bg-white px-3 py-2 text-sm text-indigo-900 placeholder:text-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={orgStatusFilter}
+                        onChange={(e) => setOrgStatusFilter(e.target.value as any)}
+                        className="rounded-lg border border-indigo-200/50 bg-white px-3 py-2 text-sm text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      >
+                        <option value="all">All</option>
+                        <option value="active">Active</option>
+                        <option value="suspended">Suspended</option>
+                        <option value="disabled">Disabled</option>
+                      </select>
+                      <div className="text-xs text-indigo-700/70 whitespace-nowrap">
+                        {filteredCompanies.length} / {companies.length}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>
+                            <button
+                              onClick={() => handleOrgSort("companyName")}
+                              className="flex items-center font-semibold hover:text-indigo-700 transition-colors cursor-pointer"
+                            >
+                              Organization
+                              {getOrgSortIcon("companyName")}
+                            </button>
+                          </TableHead>
+                          <TableHead>
+                            <button
+                              onClick={() => handleOrgSort("createdAt")}
+                              className="flex items-center font-semibold hover:text-indigo-700 transition-colors cursor-pointer"
+                            >
+                              Created
+                              {getOrgSortIcon("createdAt")}
+                            </button>
+                          </TableHead>
+                          <TableHead>
+                            <button
+                              onClick={() => handleOrgSort("plan")}
+                              className="flex items-center font-semibold hover:text-indigo-700 transition-colors cursor-pointer"
+                            >
+                              Plan
+                              {getOrgSortIcon("plan")}
+                            </button>
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <button
+                              onClick={() => handleOrgSort("users")}
+                              className="flex items-center justify-end w-full font-semibold hover:text-indigo-700 transition-colors cursor-pointer"
+                            >
+                              Users
+                              {getOrgSortIcon("users")}
+                            </button>
+                          </TableHead>
+                          <TableHead>
+                            <button
+                              onClick={() => handleOrgSort("status")}
+                              className="flex items-center font-semibold hover:text-indigo-700 transition-colors cursor-pointer"
+                            >
+                              Status
+                              {getOrgSortIcon("status")}
+                            </button>
+                          </TableHead>
+                          <TableHead>
+                            <button
+                              onClick={() => handleOrgSort("renewal")}
+                              className="flex items-center font-semibold hover:text-indigo-700 transition-colors cursor-pointer"
+                            >
+                              Renewal
+                              {getOrgSortIcon("renewal")}
+                            </button>
+                          </TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sortedCompanies.map((company) => {
+                          const status = String(company.status || "active").trim().toLowerCase();
+                          const isDisabled = status === "disabled";
+                          const canSuspend = !isDisabled && status === "active";
+                          const canReactivate = !isDisabled && status === "suspended";
+                          const actionBusy = updateTenantStatusMutation.isPending || offboardTenantMutation.isPending;
+
+                          return (
+                            <TableRow key={company.tenantId}>
+                              <TableCell>
+                                <Link
+                                  className="font-medium text-indigo-900 underline underline-offset-2"
+                                  to={`/platform/organizations/${company.tenantId}`}
+                                >
+                                  {formatCompanyName(company.companyName)}
+                                </Link>
+                              </TableCell>
+                              <TableCell className="text-indigo-800">{formatDate(company.createdAt)}</TableCell>
+                              <TableCell className="text-indigo-800">{formatPlanLabel(company.plan)}</TableCell>
+                              <TableCell className="text-right text-indigo-800">{company.users}</TableCell>
+                              <TableCell>
+                                <Badge variant="secondary" className={statusBadgeClass(company.status || "active")}>
+                                  {String(company.status || "active").toLowerCase() === "active" ? "Active" : String(company.status || "").replace(/_/g, " ")}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-indigo-800">{formatRenewalDate(company)}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-8 w-8"
+                                        disabled={actionBusy}
+                                        aria-label="Organization actions"
+                                      >
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-56">
+                                      <DropdownMenuItem asChild>
+                                        <Link to={`/platform/organizations/${company.tenantId}`}>Open</Link>
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem asChild>
+                                        <Link to={`/platform/organizations/${company.tenantId}?plan=1`}>Change plan</Link>
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        disabled={!canSuspend || actionBusy}
+                                        className="text-rose-700"
+                                        onClick={() =>
+                                          setOrgStatusTarget({
+                                            tenantId: company.tenantId,
+                                            companyName: formatCompanyName(company.companyName),
+                                            nextStatus: "suspended",
+                                            actionLabel: "Suspend",
+                                            description: "This will suspend tenant users and revoke active sessions.",
+                                          })
+                                        }
+                                      >
+                                        Suspend
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        disabled={!canReactivate || actionBusy}
+                                        className="text-emerald-700"
+                                        onClick={() =>
+                                          setOrgStatusTarget({
+                                            tenantId: company.tenantId,
+                                            companyName: formatCompanyName(company.companyName),
+                                            nextStatus: "active",
+                                            actionLabel: "Reactivate",
+                                            description: "This will reactivate the tenant.",
+                                          })
+                                        }
+                                      >
+                                        Reactivate
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        disabled={isDisabled || actionBusy}
+                                        className="text-rose-700"
+                                        onClick={() =>
+                                          setOrgOffboardTarget({
+                                            tenantId: company.tenantId,
+                                            companyName: formatCompanyName(company.companyName),
+                                          })
+                                        }
+                                      >
+                                        Offboard
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Organization</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead>Plan</TableHead>
+                        <TableHead className="text-right">Users</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Renewal</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {companies.map((company) => (
+                        <TableRow key={company.tenantId}>
+                          <TableCell>
+                            <Link
+                              className="font-medium text-indigo-900 underline underline-offset-2"
+                              to={`/platform/organizations/${company.tenantId}`}
+                            >
+                              {formatCompanyName(company.companyName)}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-indigo-800">{formatDate(company.createdAt)}</TableCell>
+                          <TableCell className="text-indigo-800">{formatPlanLabel(company.plan)}</TableCell>
+                          <TableCell className="text-right text-indigo-800">{company.users}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className={statusBadgeClass(company.status || "active")}>
+                              {String(company.status || "active").toLowerCase() === "active" ? "Active" : String(company.status || "").replace(/_/g, " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-indigo-800">{formatRenewalDate(company)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )
             )}
           </div>
         );
@@ -1775,34 +2257,97 @@ export default function PlatformSectionPage() {
           "Stripe Subscriptions",
           "Core SaaS plan and subscription mapping for global admin review.",
           billing?.subscriptions?.length ? (
-            <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Current Period End</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {billing.subscriptions.map((subscription) => {
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex-1">
+                  <input
+                    value={billingSubscriptionSearch}
+                    onChange={(e) => setBillingSubscriptionSearch(e.target.value)}
+                    placeholder="Search subscriptions"
+                    className="w-full rounded-lg border border-indigo-200/50 bg-white px-3 py-2 text-sm text-indigo-900 placeholder:text-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-indigo-200"
+                    onClick={() => {
+                      const q = billingSubscriptionSearch.trim().toLowerCase();
+                      const items = (billing?.subscriptions || []).filter((s) => {
+                        if (!q) return true;
+                        const haystack = [billingCompanyLabel(s), s.customerEmail, s.planName, s.status, s.id]
+                          .join(" ")
+                          .toLowerCase();
+                        return haystack.includes(q);
+                      });
+                      downloadCsv(
+                        "stripe-subscriptions.csv",
+                        ["Company", "Email", "Plan", "Status", "Current Period End", "Subscription ID"],
+                        items.map((s) => ({
+                          Company: billingCompanyLabel(s),
+                          Email: s.customerEmail || "",
+                          Plan: formatPlanLabel(s.planName),
+                          Status: s.status || "",
+                          "Current Period End": formatDate(s.currentPeriodEnd),
+                          "Subscription ID": s.id,
+                        }))
+                      );
+                    }}
+                  >
+                    Export CSV
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Current Period End</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {billing.subscriptions
+                      .filter((subscription) => {
+                        const q = billingSubscriptionSearch.trim().toLowerCase();
+                        if (!q) return true;
+                        const haystack = [
+                          billingCompanyLabel(subscription),
+                          subscription.customerEmail,
+                          subscription.planName,
+                          subscription.status,
+                          subscription.id,
+                        ]
+                          .join(" ")
+                          .toLowerCase();
+                        return haystack.includes(q);
+                      })
+                      .map((subscription) => {
                     const companyName = billingCompanyLabel(subscription);
                     const isPaused = Boolean(subscription.pauseCollection);
-                    const isEndingSoon =
-                      Boolean(subscription.cancelAtPeriodEnd) && ["active", "trialing"].includes(String(subscription.status || "").toLowerCase());
+                    const normalizedStatus = String(subscription.status || "").toLowerCase();
+                    const isActiveish = ["active", "trialing"].includes(normalizedStatus);
+
+                    const isEndingSoon = Boolean(subscription.cancelAtPeriodEnd) && isActiveish;
+                    const isRenewingSoon = !subscription.cancelAtPeriodEnd && isActiveish && isWithinDays(subscription.currentPeriodEnd, 7);
 
                     const statusLabel = isPaused
                       ? "Paused"
                       : isEndingSoon
                         ? "Active (ending soon)"
+                        : isRenewingSoon
+                          ? "Active (renews soon)"
                         : subscription.status;
 
                     const statusClass = isPaused
                       ? "bg-slate-100 text-slate-700 border-slate-200"
-                      : isEndingSoon
+                      : isEndingSoon || isRenewingSoon
                         ? "bg-amber-50 text-amber-700 border-amber-200"
                         : statusBadgeClass(subscription.status);
 
@@ -1820,7 +2365,7 @@ export default function PlatformSectionPage() {
                       <TableRow key={subscription.id}>
                         <TableCell className="font-medium text-indigo-900">{companyName}</TableCell>
                         <TableCell className="text-indigo-800">{subscription.customerEmail || "—"}</TableCell>
-                        <TableCell className="text-indigo-800">{subscription.planName}</TableCell>
+                        <TableCell className="text-indigo-800">{formatPlanLabel(subscription.planName)}</TableCell>
                         <TableCell>
                           <Badge variant="secondary" className={statusClass}>
                             {statusLabel}
@@ -1896,8 +2441,9 @@ export default function PlatformSectionPage() {
                       </TableRow>
                     );
                   })}
-                </TableBody>
-              </Table>
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           ) : (
             <EmptyState title="No Stripe subscriptions returned" description="This page will populate once the configured Stripe account has active subscriptions available to list." />
@@ -2013,26 +2559,172 @@ export default function PlatformSectionPage() {
             />
           );
         }
+
+        const paymentStatusOptions = Array.from(
+          new Set(
+            (billing?.payments || [])
+              .map((p) => String(p.status || "").trim())
+              .filter(Boolean)
+          )
+        ).sort();
+
+        const filteredAndSortedPayments = (billing?.payments || [])
+          .filter((payment) => {
+            const q = billingPaymentSearch.trim().toLowerCase();
+            const statusFilter = String(billingPaymentStatusFilter || "all").toLowerCase();
+            const paymentStatus = String(payment.status || "").trim().toLowerCase();
+
+            if (statusFilter !== "all" && paymentStatus !== statusFilter) return false;
+
+            if (!q) return true;
+            const haystack = [
+              billingCompanyLabel(payment),
+              payment.customerEmail,
+              payment.status,
+              payment.currency,
+              payment.id,
+              payment.invoiceNumber,
+              payment.invoiceReference,
+            ]
+              .join(" ")
+              .toLowerCase();
+            return haystack.includes(q);
+          })
+          .sort((a, b) => {
+            const paymentTimeMs = (p: BillingRow) => {
+              const d = new Date((p as any)?.paidAt || (p as any)?.createdAt || 0);
+              const t = d.getTime();
+              return Number.isFinite(t) ? t : 0;
+            };
+
+            if (!paymentSortField) {
+              return paymentTimeMs(b) - paymentTimeMs(a);
+            }
+
+            const dir = paymentSortDirection === "asc" ? 1 : -1;
+            if (paymentSortField === "company") {
+              const aVal = billingCompanyLabel(a).toLowerCase();
+              const bVal = billingCompanyLabel(b).toLowerCase();
+              return dir * aVal.localeCompare(bVal);
+            }
+            if (paymentSortField === "email") {
+              const aVal = String(a.customerEmail || "").toLowerCase();
+              const bVal = String(b.customerEmail || "").toLowerCase();
+              return dir * aVal.localeCompare(bVal);
+            }
+            if (paymentSortField === "amount") {
+              const aVal = Number(a.amount) || 0;
+              const bVal = Number(b.amount) || 0;
+              return dir * (aVal - bVal);
+            }
+            if (paymentSortField === "currency") {
+              const aVal = String(a.currency || "").toLowerCase();
+              const bVal = String(b.currency || "").toLowerCase();
+              return dir * aVal.localeCompare(bVal);
+            }
+            if (paymentSortField === "status") {
+              const aVal = String(a.status || "").toLowerCase();
+              const bVal = String(b.status || "").toLowerCase();
+              return dir * aVal.localeCompare(bVal);
+            }
+            if (paymentSortField === "date") {
+              return dir * (paymentTimeMs(a) - paymentTimeMs(b));
+            }
+            if (paymentSortField === "invoice") {
+              const aVal = invoiceDisplayLabel(a).toLowerCase();
+              const bVal = invoiceDisplayLabel(b).toLowerCase();
+              return dir * aVal.localeCompare(bVal);
+            }
+
+            return 0;
+          });
+
         return renderTableShell(
           "Payments",
           "Subscription charges and payment outcomes sourced from Stripe invoices.",
           billing?.payments?.length ? (
-            <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Currency</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Invoice</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {billing.payments.map((payment) => {
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex-1">
+                  <input
+                    value={billingPaymentSearch}
+                    onChange={(e) => setBillingPaymentSearch(e.target.value)}
+                    placeholder="Search payments"
+                    className="w-full rounded-lg border border-indigo-200/50 bg-white px-3 py-2 text-sm text-indigo-900 placeholder:text-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={billingPaymentStatusFilter}
+                    onChange={(e) => setBillingPaymentStatusFilter(e.target.value)}
+                    className="rounded-lg border border-indigo-200/50 bg-white px-3 py-2 text-sm text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    aria-label="Filter payment status"
+                  >
+                    <option value="all">All statuses</option>
+                    {paymentStatusOptions.map((status) => (
+                      <option key={status} value={status.toLowerCase()}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-indigo-200"
+                    onClick={() => {
+                      const items = filteredAndSortedPayments;
+                      downloadCsv(
+                        "payments.csv",
+                        ["Company", "Email", "Amount", "Currency", "Status", "Date", "Invoice", "Invoice URL", "Payment ID"],
+                        items.map((p) => ({
+                          Company: billingCompanyLabel(p),
+                          Email: p.customerEmail || "",
+                          Amount: formatMoney(p.amount, p.currency),
+                          Currency: String(p.currency || "").toUpperCase(),
+                          Status: p.status || "",
+                          Date: billingDateLabel(p),
+                          Invoice: invoiceDisplayLabel(p),
+                          "Invoice URL": p.invoiceUrl || "",
+                          "Payment ID": p.id,
+                        }))
+                      );
+                    }}
+                  >
+                    Export CSV
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <button type="button" className="inline-flex items-center" onClick={() => handlePaymentSort("company")}>Company{getPaymentSortIcon("company")}</button>
+                      </TableHead>
+                      <TableHead>
+                        <button type="button" className="inline-flex items-center" onClick={() => handlePaymentSort("email")}>Email{getPaymentSortIcon("email")}</button>
+                      </TableHead>
+                      <TableHead>
+                        <button type="button" className="inline-flex items-center" onClick={() => handlePaymentSort("amount")}>Amount{getPaymentSortIcon("amount")}</button>
+                      </TableHead>
+                      <TableHead>
+                        <button type="button" className="inline-flex items-center" onClick={() => handlePaymentSort("currency")}>Currency{getPaymentSortIcon("currency")}</button>
+                      </TableHead>
+                      <TableHead>
+                        <button type="button" className="inline-flex items-center" onClick={() => handlePaymentSort("status")}>Status{getPaymentSortIcon("status")}</button>
+                      </TableHead>
+                      <TableHead>
+                        <button type="button" className="inline-flex items-center" onClick={() => handlePaymentSort("date")}>Date{getPaymentSortIcon("date")}</button>
+                      </TableHead>
+                      <TableHead>
+                        <button type="button" className="inline-flex items-center" onClick={() => handlePaymentSort("invoice")}>Invoice{getPaymentSortIcon("invoice")}</button>
+                      </TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAndSortedPayments.map((payment) => {
                     const paymentStatus = String(payment.status || "").toLowerCase();
                     const canRefund = paymentStatus === "paid";
                     const busy = refundPaymentMutation.isPending;
@@ -2100,8 +2792,9 @@ export default function PlatformSectionPage() {
                       </TableRow>
                     );
                   })}
-                </TableBody>
-              </Table>
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           ) : (
             <EmptyState title="No payments yet" description="Once Stripe creates and finalizes invoices, recent charge outcomes will appear here." />
@@ -2112,23 +2805,95 @@ export default function PlatformSectionPage() {
           "Invoices",
           "Invoice list with payment status for the Stripe billing layer.",
           billing?.invoices?.length ? (
-            <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice</TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Currency</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Due</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {billing.invoices.map((invoice) => {
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex-1">
+                  <input
+                    value={billingInvoiceSearch}
+                    onChange={(e) => setBillingInvoiceSearch(e.target.value)}
+                    placeholder="Search invoices"
+                    className="w-full rounded-lg border border-indigo-200/50 bg-white px-3 py-2 text-sm text-indigo-900 placeholder:text-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-indigo-200"
+                    onClick={() => {
+                      const q = billingInvoiceSearch.trim().toLowerCase();
+                      const items = (billing?.invoices || []).filter((inv) => {
+                        if (!q) return true;
+                        const haystack = [
+                          billingCompanyLabel(inv),
+                          inv.customerEmail,
+                          inv.status,
+                          inv.currency,
+                          inv.id,
+                          inv.invoiceNumber,
+                          inv.invoiceReference,
+                        ]
+                          .join(" ")
+                          .toLowerCase();
+                        return haystack.includes(q);
+                      });
+                      downloadCsv(
+                        "invoices.csv",
+                        ["Company", "Email", "Amount", "Currency", "Status", "Due Date", "Created", "Invoice", "Invoice URL", "Invoice ID"],
+                        items.map((inv) => ({
+                          Company: billingCompanyLabel(inv),
+                          Email: inv.customerEmail || "",
+                          Amount: formatMoney(inv.amount, inv.currency),
+                          Currency: String(inv.currency || "").toUpperCase(),
+                          Status: inv.status || "",
+                          "Due Date": formatDate(inv.dueDate),
+                          Created: formatDateTime(inv.createdAt),
+                          Invoice: invoiceDisplayLabel(inv),
+                          "Invoice URL": inv.invoiceUrl || "",
+                          "Invoice ID": inv.id,
+                        }))
+                      );
+                    }}
+                  >
+                    Export CSV
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-indigo-200/50 bg-white/60 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Currency</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Due</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {billing.invoices
+                      .filter((invoice) => {
+                        const q = billingInvoiceSearch.trim().toLowerCase();
+                        if (!q) return true;
+                        const haystack = [
+                          billingCompanyLabel(invoice),
+                          invoice.customerEmail,
+                          invoice.status,
+                          invoice.currency,
+                          invoice.id,
+                          invoice.invoiceNumber,
+                          invoice.invoiceReference,
+                        ]
+                          .join(" ")
+                          .toLowerCase();
+                        return haystack.includes(q);
+                      })
+                      .map((invoice) => {
                     const busy = sendInvoiceEmailMutation.isPending;
                     const canDownload = Boolean(invoice.invoiceUrl);
 
@@ -2188,8 +2953,9 @@ export default function PlatformSectionPage() {
                       </TableRow>
                     );
                   })}
-                </TableBody>
-              </Table>
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           ) : (
             <EmptyState title="No invoices available" description="Invoices will populate once the connected Stripe account has billing activity to display." />
@@ -2265,7 +3031,8 @@ export default function PlatformSectionPage() {
                       const busyUser =
                         revokeUserSessionsMutation.isPending ||
                         updateUserStatusMutation.isPending ||
-                        updateUserRoleMutation.isPending;
+                        updateUserRoleMutation.isPending ||
+                        forcePasswordResetMutation.isPending;
 
                       const companies = Array.from(new Set((user.companyNames || [])
                         .map((c) => String(c || "").trim())
@@ -2388,6 +3155,22 @@ export default function PlatformSectionPage() {
                                     }
                                   >
                                     Revoke sessions
+                                  </DropdownMenuItem>
+
+                                  <DropdownMenuSeparator />
+
+                                  <DropdownMenuItem
+                                    className="text-amber-700"
+                                    disabled={!canMutateUser || busyUser}
+                                    onClick={() =>
+                                      setUserForcePasswordResetTarget({
+                                        userId: String(user.userId || ""),
+                                        email: user.email,
+                                        companyName: companyLabel,
+                                      })
+                                    }
+                                  >
+                                    Force password reset
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
@@ -3865,7 +4648,7 @@ export default function PlatformSectionPage() {
                   <div>
                     Organization: <span className="font-medium text-foreground">{subscriptionPlanTarget?.companyName || "—"}</span>
                   </div>
-                  <div className="text-muted-foreground">Current plan: {subscriptionPlanTarget?.currentPlan || "—"}</div>
+                  <div className="text-muted-foreground">Current plan: {formatPlanLabel(subscriptionPlanTarget?.currentPlan) || "—"}</div>
                   <div className="space-y-2">
                     <Label className="text-sm">New plan</Label>
                     <select
@@ -3941,6 +4724,75 @@ export default function PlatformSectionPage() {
         </AlertDialog>
 
         <AlertDialog
+          open={Boolean(orgStatusTarget)}
+          onOpenChange={(open) => (open ? null : setOrgStatusTarget(null))}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{orgStatusTarget?.actionLabel || "Update organization?"}</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-2">
+                  <div>
+                    Organization: <span className="font-medium text-foreground">{orgStatusTarget?.companyName || "—"}</span>
+                  </div>
+                  <div className="text-muted-foreground">{orgStatusTarget?.description || ""}</div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setOrgStatusTarget(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className={orgStatusTarget?.nextStatus === "suspended" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
+                disabled={!orgStatusTarget || updateTenantStatusMutation.isPending}
+                onClick={() => {
+                  if (!orgStatusTarget) return;
+                  updateTenantStatusMutation.mutate({
+                    tenantId: orgStatusTarget.tenantId,
+                    status: orgStatusTarget.nextStatus,
+                  });
+                  setOrgStatusTarget(null);
+                }}
+              >
+                Confirm
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={Boolean(orgOffboardTarget)}
+          onOpenChange={(open) => (open ? null : setOrgOffboardTarget(null))}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Offboard this organization?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-2">
+                  <div>
+                    Organization: <span className="font-medium text-foreground">{orgOffboardTarget?.companyName || "—"}</span>
+                  </div>
+                  <div className="font-medium text-foreground">This will disable tenant access.</div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setOrgOffboardTarget(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={!orgOffboardTarget || offboardTenantMutation.isPending}
+                onClick={() => {
+                  if (!orgOffboardTarget) return;
+                  offboardTenantMutation.mutate({ tenantId: orgOffboardTarget.tenantId });
+                  setOrgOffboardTarget(null);
+                }}
+              >
+                Offboard
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
           open={Boolean(userStatusTarget)}
           onOpenChange={(open) => (open ? null : setUserStatusTarget(null))}
         >
@@ -4007,6 +4859,40 @@ export default function PlatformSectionPage() {
                 }}
               >
                 Confirm
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={Boolean(userForcePasswordResetTarget)}
+          onOpenChange={(open) => (open ? null : setUserForcePasswordResetTarget(null))}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Force password reset?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-2">
+                  <div>
+                    User: <span className="font-medium text-foreground">{userForcePasswordResetTarget?.email || "—"}</span>
+                  </div>
+                  <div className="text-muted-foreground">Organization: {userForcePasswordResetTarget?.companyName || "—"}</div>
+                  <div className="font-medium text-foreground">All sessions will be revoked and the user must reset their password to sign in.</div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setUserForcePasswordResetTarget(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={!userForcePasswordResetTarget || forcePasswordResetMutation.isPending}
+                onClick={() => {
+                  if (!userForcePasswordResetTarget) return;
+                  forcePasswordResetMutation.mutate({ userId: userForcePasswordResetTarget.userId });
+                  setUserForcePasswordResetTarget(null);
+                }}
+              >
+                Force reset
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

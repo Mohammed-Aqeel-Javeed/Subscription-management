@@ -61,7 +61,7 @@ export default function Header() {
         }
       }
 
-      window.location.assign("/platform-admin/organizations");
+      window.location.assign("/platform-admin/tenants");
     } catch {
       // ignore
     }

@@ -139,21 +139,6 @@ export default function ComplianceLedger() {
   const [tokenError, setTokenError] = React.useState<string | null>(null);
   const [isResolvingToken, setIsResolvingToken] = React.useState(() => Boolean(openToken && !idParam));
 
-  // Function to mint deeplink token
-  const mintDeeplinkToken = async (id: string) => {
-    const res = await fetch('/api/deeplink/token', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entityType: 'compliance', id: String(id) }),
-    });
-    if (!res.ok) throw new Error('Failed to create deeplink token');
-    const data = (await res.json()) as { token?: string };
-    if (!data?.token) throw new Error('Invalid deeplink token response');
-    return String(data.token);
-  };
-
-
   React.useEffect(() => {
     if (idParam) {
       setIsResolvingToken(false);

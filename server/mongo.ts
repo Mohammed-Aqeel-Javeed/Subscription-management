@@ -60,6 +60,16 @@ export async function ensureTTLIndexes() {
     // Ignore index creation errors (e.g., permissions)
   }
 
+  // Password reset OTP TTL (expire at the exact time stored in expiresAt)
+  try {
+    await db.collection("password_reset_otps").createIndex(
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 }
+    );
+  } catch {
+    // Ignore index creation errors (e.g., permissions)
+  }
+
   // Notification events TTL
   await db.collection("notification_events").createIndex(
     { createdAt: 1 },

@@ -115,6 +115,7 @@ export default function PlatformOrgDetailPage() {
   const { tenantId } = useParams();
   const [searchParams] = useSearchParams();
   const editMode = searchParams.get("edit") === "1";
+  const planMode = searchParams.get("plan") === "1";
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -130,7 +131,7 @@ export default function PlatformOrgDetailPage() {
     description: string;
   } | null>(null);
   const [planOpen, setPlanOpen] = React.useState(false);
-  const [planDraft, setPlanDraft] = React.useState<"free" | "professional" | "premium">("free");
+  const [planDraft, setPlanDraft] = React.useState<"starter" | "professional" | "premium">("starter");
 
   const editCardRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -170,7 +171,11 @@ export default function PlatformOrgDetailPage() {
   const planLabel = (planRaw: unknown) => {
     const value = String(planRaw || "").trim().toLowerCase();
     if (!value) return "—";
-    if (value === "pro") return "Professional";
+    if (value === "free" || value === "free_plan") return "Free";
+    if (value === "starter") return "Starter";
+    if (value === "professional" || value === "pro") return "Professional";
+    if (value === "premium") return "Premium";
+    if (value === "trial" || value === "trialing") return "Trial";
     return value[0].toUpperCase() + value.slice(1);
   };
 
@@ -181,9 +186,9 @@ export default function PlatformOrgDetailPage() {
 
   React.useEffect(() => {
     const current = String(data?.company?.plan || "free").trim().toLowerCase();
-    if (current === "professional" || current === "pro") setPlanDraft("professional");
-    else if (current === "premium") setPlanDraft("premium");
-    else setPlanDraft("free");
+    if (current === "premium") setPlanDraft("premium");
+    else if (current === "professional" || current === "pro") setPlanDraft("professional");
+    else setPlanDraft("starter");
   }, [data?.company?.plan]);
 
   React.useEffect(() => {
@@ -199,6 +204,11 @@ export default function PlatformOrgDetailPage() {
     }, 0);
     return () => window.clearTimeout(t);
   }, [editMode]);
+
+  React.useEffect(() => {
+    if (!planMode) return;
+    setPlanOpen(true);
+  }, [planMode]);
 
   const { data: usage } = useQuery<TenantUsageResponse>({
     queryKey: ["platform", "company-usage", tenantId],
@@ -322,7 +332,7 @@ export default function PlatformOrgDetailPage() {
   });
 
   const changeStripePlanMutation = useMutation({
-    mutationFn: async (payload: { subscriptionId: string; plan: "free" | "professional" | "premium" }) => {
+    mutationFn: async (payload: { subscriptionId: string; plan: "starter" | "professional" | "premium" }) => {
       const res = await apiFetch(`/api/platform/billing/subscriptions/${payload.subscriptionId}/plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -343,7 +353,7 @@ export default function PlatformOrgDetailPage() {
   });
 
   const updateCompanyPlanMutation = useMutation({
-    mutationFn: async (payload: { tenantId: string; plan: "free" | "professional" | "premium" }) => {
+    mutationFn: async (payload: { tenantId: string; plan: "starter" | "professional" | "premium" }) => {
       const res = await apiFetch(`/api/platform/companies/${payload.tenantId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -370,7 +380,7 @@ export default function PlatformOrgDetailPage() {
           <p className="text-muted-foreground">Tenant: {tenantId}</p>
         </div>
         <Button asChild>
-          <Link to="/platform-admin/organizations">Back to Organizations</Link>
+          <Link to="/platform-admin/tenants">Back to Organizations</Link>
         </Button>
       </div>
 
@@ -614,9 +624,11 @@ export default function PlatformOrgDetailPage() {
                     <SelectValue placeholder="Select plan" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="free">Free</SelectItem>
+                    <SelectItem value="starter">Starter</SelectItem>
                     <SelectItem value="professional">Professional</SelectItem>
-                    <SelectItem value="premium">Premium</SelectItem>
+                    <SelectItem value="premium" disabled>
+                      Premium (Coming soon)
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>

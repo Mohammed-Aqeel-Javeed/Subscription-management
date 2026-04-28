@@ -9,6 +9,17 @@ export default function AuthPage() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [resetStep, setResetStep] = useState<"request" | "confirm">("request");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetOtp, setResetOtp] = useState("");
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [resetInfo, setResetInfo] = useState("");
+
   const navigate = useNavigate();
 
   const nextParamRaw = new URLSearchParams(window.location.search).get("next");
@@ -37,7 +48,19 @@ export default function AuthPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setLoginError(data.message || "Login failed");
+        const message = data.message || "Login failed";
+        setLoginError(message);
+
+        if (data?.code === "PASSWORD_RESET_REQUIRED") {
+          setForgotOpen(true);
+          setResetStep("request");
+          setResetEmail(String(loginEmail || "").trim().toLowerCase());
+          setResetOtp("");
+          setResetNewPassword("");
+          setResetConfirmPassword("");
+          setResetError("");
+          setResetInfo(message);
+        }
         return;
       }
 
@@ -59,6 +82,80 @@ export default function AuthPage() {
       window.location.href = target;
     } catch (err) {
       setLoginError("Network error");
+    }
+  };
+
+  const requestResetCode = async () => {
+    const email = String(resetEmail || "").trim().toLowerCase();
+    setResetError("");
+    setResetInfo("");
+    if (!email) {
+      setResetError("Please enter your email.");
+      return;
+    }
+
+    setResetBusy(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/password-reset/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setResetError(data.message || "Failed to request reset code");
+        return;
+      }
+      setResetInfo(data.message || "Reset code sent.");
+      setResetStep("confirm");
+      if (data?.devOtp) {
+        setResetOtp(String(data.devOtp));
+      }
+    } catch {
+      setResetError("Network error");
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
+  const confirmReset = async () => {
+    const email = String(resetEmail || "").trim().toLowerCase();
+    const otp = String(resetOtp || "").trim();
+    setResetError("");
+    setResetInfo("");
+
+    if (!email || !otp || !resetNewPassword) {
+      setResetError("Please fill in email, code, and new password.");
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      setResetError("Passwords do not match.");
+      return;
+    }
+
+    setResetBusy(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/password-reset/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp, newPassword: resetNewPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setResetError(data.message || "Failed to reset password");
+        return;
+      }
+
+      setForgotOpen(false);
+      setResetStep("request");
+      setResetOtp("");
+      setResetNewPassword("");
+      setResetConfirmPassword("");
+      setLoginError("Password reset successful. Please login.");
+    } catch {
+      setResetError("Network error");
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -392,7 +489,14 @@ export default function AuthPage() {
                         textDecoration: "none",
                       }}
                       onClick={() => {
-                        // TODO: Implement forgot password functionality
+                          setForgotOpen(true);
+                          setResetStep("request");
+                          setResetEmail(String(loginEmail || "").trim().toLowerCase());
+                          setResetOtp("");
+                          setResetNewPassword("");
+                          setResetConfirmPassword("");
+                          setResetError("");
+                          setResetInfo("");
 }}
                     >
                       Forgot Password?
@@ -432,6 +536,245 @@ export default function AuthPage() {
                   </div>
                 )}
               </form>
+
+              {forgotOpen && (
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    background: "rgba(15, 23, 42, 0.55)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 16,
+                    zIndex: 50,
+                  }}
+                  onClick={() => {
+                    if (!resetBusy) setForgotOpen(false);
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "100%",
+                      maxWidth: 420,
+                      background: "#ffffff",
+                      borderRadius: 16,
+                      padding: 20,
+                      boxShadow: "0 24px 80px rgba(15, 23, 42, 0.45)",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                      <div style={{ fontWeight: 700, fontSize: 16, color: "#111827" }}>Reset password</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!resetBusy) setForgotOpen(false);
+                        }}
+                        style={{
+                          background: "transparent",
+                          border: 0,
+                          cursor: "pointer",
+                          color: "#6b7280",
+                          fontSize: 18,
+                          lineHeight: 1,
+                        }}
+                        aria-label="Close"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div style={{ marginTop: 14 }}>
+                      <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>Email</label>
+                      <input
+                        type="email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        placeholder="you@company.com"
+                        disabled={resetBusy}
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          marginTop: 6,
+                          borderRadius: 12,
+                          border: "1px solid #e5e7eb",
+                          fontSize: 14,
+                          background: "#f9fafb",
+                          outline: "none",
+                        }}
+                      />
+                    </div>
+
+                    {resetStep === "confirm" && (
+                      <>
+                        <div style={{ marginTop: 12 }}>
+                          <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>Reset code</label>
+                          <input
+                            value={resetOtp}
+                            onChange={(e) => setResetOtp(e.target.value)}
+                            placeholder="6-digit code"
+                            disabled={resetBusy}
+                            style={{
+                              width: "100%",
+                              padding: "10px 12px",
+                              marginTop: 6,
+                              borderRadius: 12,
+                              border: "1px solid #e5e7eb",
+                              fontSize: 14,
+                              background: "#f9fafb",
+                              outline: "none",
+                              letterSpacing: 2,
+                              fontFamily: "'Courier New', monospace",
+                            }}
+                          />
+                        </div>
+                        <div style={{ marginTop: 12 }}>
+                          <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>New password</label>
+                          <input
+                            type="password"
+                            value={resetNewPassword}
+                            onChange={(e) => setResetNewPassword(e.target.value)}
+                            disabled={resetBusy}
+                            style={{
+                              width: "100%",
+                              padding: "10px 12px",
+                              marginTop: 6,
+                              borderRadius: 12,
+                              border: "1px solid #e5e7eb",
+                              fontSize: 14,
+                              background: "#f9fafb",
+                              outline: "none",
+                            }}
+                          />
+                        </div>
+                        <div style={{ marginTop: 12 }}>
+                          <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>Confirm password</label>
+                          <input
+                            type="password"
+                            value={resetConfirmPassword}
+                            onChange={(e) => setResetConfirmPassword(e.target.value)}
+                            disabled={resetBusy}
+                            style={{
+                              width: "100%",
+                              padding: "10px 12px",
+                              marginTop: 6,
+                              borderRadius: 12,
+                              border: "1px solid #e5e7eb",
+                              fontSize: 14,
+                              background: "#f9fafb",
+                              outline: "none",
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {(resetError || resetInfo) && (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          fontSize: 13,
+                          color: resetError ? "#dc2626" : "#0f766e",
+                          background: resetError ? "#fef2f2" : "#ecfdf5",
+                          border: `1px solid ${resetError ? "#fecaca" : "#bbf7d0"}`,
+                          borderRadius: 12,
+                          padding: "10px 12px",
+                        }}
+                      >
+                        {resetError || resetInfo}
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!resetBusy) setForgotOpen(false);
+                        }}
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: 12,
+                          border: "1px solid #e5e7eb",
+                          background: "#ffffff",
+                          cursor: resetBusy ? "not-allowed" : "pointer",
+                          color: "#111827",
+                          fontWeight: 600,
+                          fontSize: 13,
+                        }}
+                        disabled={resetBusy}
+                      >
+                        Cancel
+                      </button>
+                      {resetStep === "request" ? (
+                        <button
+                          type="button"
+                          onClick={requestResetCode}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: 12,
+                            border: 0,
+                            background: "linear-gradient(90deg, #4f46e5, #7c3aed)",
+                            cursor: resetBusy ? "not-allowed" : "pointer",
+                            color: "#ffffff",
+                            fontWeight: 700,
+                            fontSize: 13,
+                          }}
+                          disabled={resetBusy}
+                        >
+                          {resetBusy ? "Sending…" : "Send code"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={confirmReset}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: 12,
+                            border: 0,
+                            background: "linear-gradient(90deg, #4f46e5, #7c3aed)",
+                            cursor: resetBusy ? "not-allowed" : "pointer",
+                            color: "#ffffff",
+                            fontWeight: 700,
+                            fontSize: 13,
+                          }}
+                          disabled={resetBusy}
+                        >
+                          {resetBusy ? "Resetting…" : "Reset password"}
+                        </button>
+                      )}
+                    </div>
+
+                    {resetStep === "confirm" && (
+                      <div style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
+                        Didn’t get a code?{" "}
+                        <button
+                          type="button"
+                          disabled={resetBusy}
+                          onClick={() => {
+                            setResetStep("request");
+                            setResetOtp("");
+                            setResetError("");
+                            setResetInfo("");
+                          }}
+                          style={{
+                            background: "transparent",
+                            border: 0,
+                            padding: 0,
+                            cursor: resetBusy ? "not-allowed" : "pointer",
+                            color: "#4f46e5",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Request a new code
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Social Sign-in */}
               <div style={{ marginTop: 24, marginBottom: 20 }}>
