@@ -3459,7 +3459,7 @@ router.post("/api/config/compliance-fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields"); // Changed to Fields collection
-    const { name } = req.body;
+    const { name, dataType, required } = req.body;
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
@@ -3481,6 +3481,11 @@ router.post("/api/config/compliance-fields", async (req, res) => {
       return res.status(409).json({ message: "Field already exists" });
     }
 
+    const normalizedDataType = (() => {
+      const v = String(dataType ?? '').trim();
+      return v === 'Text' || v === 'Number' || v === 'Date' ? v : 'Text';
+    })();
+
     // Insert new field
     const newField = {
       name: name.trim(),
@@ -3490,7 +3495,8 @@ router.post("/api/config/compliance-fields", async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date(),
       displayOrder: 0, // Added display order for UI sorting
-      required: false, // Added required flag
+      dataType: normalizedDataType,
+      required: typeof required === 'boolean' ? required : false, // Added required flag
       description: "", // Added description field
       validation: {} // Added validation rules object
     };
@@ -3521,6 +3527,7 @@ router.get("/api/config/compliance-fields", async (req, res) => {
       name: field.name,
       enabled: field.enabled,
       displayOrder: field.displayOrder,
+      dataType: (field as any).dataType,
       required: field.required,
       description: field.description,
       validation: field.validation
@@ -3600,7 +3607,7 @@ router.post("/api/config/renewal-fields", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields");
-    const { name } = req.body;
+    const { name, dataType, required } = req.body;
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
@@ -3620,6 +3627,11 @@ router.post("/api/config/renewal-fields", async (req, res) => {
       return res.status(409).json({ message: "Field already exists" });
     }
 
+    const normalizedDataType = (() => {
+      const v = String(dataType ?? '').trim();
+      return v === 'Text' || v === 'Number' || v === 'Date' ? v : 'Text';
+    })();
+
     const newField = {
       name: name.trim(),
       enabled: true,
@@ -3628,7 +3640,8 @@ router.post("/api/config/renewal-fields", async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date(),
       displayOrder: 0,
-      required: false,
+      dataType: normalizedDataType,
+      required: typeof required === 'boolean' ? required : false,
       description: "",
       validation: {},
     };
@@ -3661,6 +3674,7 @@ router.get("/api/config/renewal-fields", async (req, res) => {
         name: field.name,
         enabled: field.enabled,
         displayOrder: field.displayOrder,
+        dataType: (field as any).dataType,
         required: field.required,
         description: field.description,
         validation: field.validation,

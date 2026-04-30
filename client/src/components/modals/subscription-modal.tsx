@@ -40,6 +40,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 // Removed unused insertSubscriptionSchema import
 import type { InsertSubscription, Subscription } from "@shared/schema";
+import ReactCountryFlag from "react-country-flag";
+import { currencyList, getCountryCodeForCurrency } from "@/lib/currency-data";
 // Extend Subscription for modal usage to include extra fields
 type SubscriptionModalData = Partial<Subscription> & {
   currency?: string | null;
@@ -1322,6 +1324,28 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   }, [departmentModal.show]);
   const [categoryModal, setCategoryModal] = useState<{show: boolean}>({show: false});
   const [newCategoryName, setNewCategoryName] = useState<string>('');
+  const [currencyModal, setCurrencyModal] = useState<{show: boolean}>({show: false});
+  const [isCreatingCurrency, setIsCreatingCurrency] = useState<boolean>(false);
+  const [currencyDraft, setCurrencyDraft] = useState<{
+    code: string;
+    name: string;
+    symbol: string;
+    isoNumber: string;
+    exchangeRate: string;
+  }>({
+    code: '',
+    name: '',
+    symbol: '',
+    isoNumber: '',
+    exchangeRate: '',
+  });
+  const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
+  const [currencyDropdownOptions, setCurrencyDropdownOptions] = useState<Array<{
+    code: string;
+    description: string;
+    symbol: string;
+    countryCode?: string;
+  }>>([]);
   const [paymentMethodModal, setPaymentMethodModal] = useState<{show: boolean}>({show: false});
   const [newPaymentMethodName, setNewPaymentMethodName] = useState<string>('');
   const [newPaymentMethodType, setNewPaymentMethodType] = useState<string>('');
@@ -2964,6 +2988,153 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     }
   };
 
+  const handleCurrencyCodeChange = (value: string) => {
+    const upperValue = value.toUpperCase();
+    setCurrencyDraft((prev) => ({ ...prev, code: upperValue }));
+
+    if (upperValue.length > 0) {
+      const search = upperValue.trim();
+
+      const rank = (curr: { code: string; description: string }, q: string) => {
+        const code = curr.code.toUpperCase();
+        const name = curr.description.toUpperCase();
+        const codeIdx = code.indexOf(q);
+        const nameIdx = name.indexOf(q);
+        if (code === q) return 0;
+        if (nameIdx === 0) return 10;
+        if (codeIdx === 0) return 20;
+        if (codeIdx > 0) return 20 + codeIdx;
+        if (nameIdx > 0) return 100 + nameIdx;
+        return 1000;
+      };
+
+      const filtered = currencyList
+        .filter((curr) => {
+          const code = curr.code.toUpperCase();
+          const name = curr.description.toUpperCase();
+          return code.includes(search) || name.includes(search);
+        })
+        .sort((a, b) => {
+          const ra = rank(a, search);
+          const rb = rank(b, search);
+          if (ra !== rb) return ra - rb;
+          return a.description.localeCompare(b.description);
+        })
+        .map((curr) => ({
+          ...curr,
+          countryCode: getCountryCodeForCurrency(curr.code),
+        }));
+
+      setCurrencyDropdownOptions(filtered);
+      setCurrencyDropdownOpen(filtered.length > 0);
+    } else {
+      setCurrencyDropdownOpen(false);
+      setCurrencyDropdownOptions([]);
+    }
+  };
+
+  const handleCurrencySelect = (currency: { code: string; description: string; symbol: string }) => {
+    setCurrencyDraft((prev) => ({
+      ...prev,
+      code: currency.code,
+      name: currency.description,
+      symbol: currency.symbol,
+    }));
+    setCurrencyDropdownOpen(false);
+    setCurrencyDropdownOptions([]);
+  };
+
+  const sanitizeDecimalInput = (raw: string) => {
+    // Allow digits and a single '.' only.
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const dotIndex = cleaned.indexOf(".");
+    if (dotIndex === -1) return cleaned;
+    return cleaned.slice(0, dotIndex + 1) + cleaned.slice(dotIndex + 1).replace(/\./g, "");
+  };
+
+  const handleAddCurrency = async () => {
+    if (isCreatingCurrency) return;
+
+    const code = currencyDraft.code.trim().toUpperCase();
+    const name = currencyDraft.name.trim();
+    const symbol = currencyDraft.symbol.trim();
+    const exchangeRate = currencyDraft.exchangeRate.trim();
+
+    if (!code || !name || !symbol) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a currency from the dropdown.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!exchangeRate) {
+      toast({
+        title: "Validation Error",
+        description: "Exchange rate is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const rateNum = Number(exchangeRate);
+    if (!Number.isFinite(rateNum) || rateNum <= 0) {
+      toast({
+        title: "Validation Error",
+        description: "Exchange rate must be a positive number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const duplicate = (Array.isArray(currencies) ? currencies : []).some(
+      (c: any) => String(c?.code || '').trim().toUpperCase() === code
+    );
+    if (duplicate) {
+      toast({
+        title: "Error",
+        description: "Currency code already exists",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingCurrency(true);
+    try {
+      await apiRequest("POST", "/api/currencies", {
+        code,
+        name,
+        symbol,
+        isoNumber: currencyDraft.isoNumber || "",
+        exchangeRate,
+      });
+
+      await queryClient.refetchQueries({ queryKey: ["/api/currencies"] });
+      form.setValue('currency', code);
+
+      setCurrencyModal({ show: false });
+      setCurrencyDraft({ code: '', name: '', symbol: '', isoNumber: '', exchangeRate: '' });
+      setCurrencyDropdownOpen(false);
+      setCurrencyDropdownOptions([]);
+
+      toast({
+        title: "Success",
+        description: "Currency added successfully",
+        variant: "success",
+      });
+    } catch (error: any) {
+      console.error('Error adding currency:', error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to add currency",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingCurrency(false);
+    }
+  };
+
   // Handle adding new payment method
   const handleAddPaymentMethod = async () => {
     if (!newPaymentMethodName.trim()) return;
@@ -3613,7 +3784,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           onChange={field.onChange}
                           options={allCurrencies}
                           placeholder="Select currency"
-                          onAddNew={() => window.location.href = '/configuration?tab=currency'}
+                          onAddNew={() => {
+                            setCurrencyDraft({ code: '', name: '', symbol: '', isoNumber: '', exchangeRate: '' });
+                            setCurrencyDropdownOpen(false);
+                            setCurrencyDropdownOptions([]);
+                            setCurrencyModal({ show: true });
+                          }}
                           className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer"
                         />
                         <FormMessage />
@@ -4261,13 +4437,24 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         name={field.name as keyof FormData}
                         render={({ field: formField }) => (
                           <FormItem className={getStableColSpan(`dynamic:${field.name}`, formField.value, 22)}>
-                            <FormLabel className="block text-sm font-medium text-slate-700">{field.name}</FormLabel>
+                            <FormLabel className="block text-sm font-medium text-slate-700">
+                              {field.name}
+                              {(field as any).required ? <span className="text-red-500 ml-1">*</span> : null}
+                            </FormLabel>
                             <FormControl>
-                              {field.type === 'number' ? (
+                              {(() => {
+                                const rawType = String((field as any)?.type || (field as any)?.dataType || 'Text');
+                                const normalizedType = rawType.toLowerCase();
+                                const inputType =
+                                  normalizedType === 'number' ? 'number' : normalizedType === 'date' ? 'date' : 'text';
+
+                                if (inputType === 'number') {
+                                  return (
                                 <Input
                                   type="number"
                                   className="w-full border-slate-300 rounded-lg p-2 text-base"
                                   {...formField}
+                                  required={!!(field as any).required}
                                   value={
                                     typeof formField.value === "boolean"
                                       ? ""
@@ -4277,21 +4464,25 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                   }
                                   
                                 />
-                              ) : (
-                                <Input
-                                  type="text"
-                                  className="w-full border-slate-300 rounded-lg p-2 text-base"
-                                  {...formField}
-                                  value={
-                                    typeof formField.value === "boolean" || Array.isArray(formField.value)
-                                      ? ""
-                                      : formField.value === undefined
-                                      ? ""
-                                      : formField.value
-                                  }
-                                  
-                                />
-                              )}
+                                  );
+                                }
+
+                                return (
+                                  <Input
+                                    type={inputType}
+                                    className="w-full border-slate-300 rounded-lg p-2 text-base"
+                                    {...formField}
+                                    required={!!(field as any).required}
+                                    value={
+                                      typeof formField.value === "boolean" || Array.isArray(formField.value)
+                                        ? ""
+                                        : formField.value === undefined
+                                        ? ""
+                                        : formField.value
+                                    }
+                                  />
+                                );
+                              })()}
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -4317,7 +4508,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </div>
                 <div className="h-px bg-gradient-to-r from-indigo-500 to-blue-500 mt-4"></div>
               </div>
-              <div className="grid gap-4 mb-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 items-end">
+              <div className="grid gap-4 mb-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 items-end">
                 {/* Auto Renewal - First */}
                 <div className="w-full flex flex-col">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Auto Renewal</label>
@@ -4352,7 +4543,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   </label>
                   <Input 
                     type="date" 
-                    className="w-full border-slate-300 rounded-lg p-1 text-base"
+                    className="w-full border-slate-300 rounded-lg p-1 pr-10 text-base"
                     value={initialDate}
                     onChange={e => { 
                       const newInitialDate = e.target.value;
@@ -5306,6 +5497,148 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Currency Creation Modal (matches Configuration → Currency) */}
+      <Dialog
+        open={currencyModal.show}
+        onOpenChange={(open) => {
+          setCurrencyModal({ show: open });
+          if (!open) {
+            setCurrencyDraft({ code: '', name: '', symbol: '', isoNumber: '', exchangeRate: '' });
+            setCurrencyDropdownOpen(false);
+            setCurrencyDropdownOptions([]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5">
+            <DialogHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/20 p-2 rounded-lg">
+                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <DialogTitle className="text-xl font-bold tracking-tight text-white">Add New Currency</DialogTitle>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+
+          <div className="p-6 bg-white">
+            <form
+              className="space-y-6"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleAddCurrency();
+              }}
+            >
+              <div className="space-y-2 relative">
+                <label className="text-sm font-semibold text-gray-700 tracking-wide">
+                  Currency <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  value={currencyDraft.code}
+                  onChange={(e) => handleCurrencyCodeChange(e.target.value)}
+                  onFocus={() => {
+                    if (currencyDraft.code && currencyDropdownOptions.length > 0) {
+                      setCurrencyDropdownOpen(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => setCurrencyDropdownOpen(false), 200);
+                  }}
+                  placeholder="Type currency code to search..."
+                  className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                  autoComplete="off"
+                />
+
+                {currencyDropdownOpen && currencyDropdownOptions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {currencyDropdownOptions.map((curr) => (
+                      <button
+                        key={curr.code}
+                        type="button"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          handleCurrencySelect(curr);
+                        }}
+                        onClick={() => handleCurrencySelect(curr)}
+                        className="w-full px-4 py-2 text-left hover:bg-blue-50 transition-colors duration-150 flex items-center justify-between border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="flex items-center gap-2">
+                          {curr.countryCode && (
+                            <ReactCountryFlag
+                              svg
+                              countryCode={curr.countryCode}
+                              style={{ width: "1.25rem", height: "1.25rem", borderRadius: "999px" }}
+                            />
+                          )}
+                          <span className="font-semibold text-gray-900">
+                            {curr.description} ({curr.code})
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700 tracking-wide">
+                  Exch.Rate against 1 LCY <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={currencyDraft.exchangeRate || ''}
+                  inputMode="decimal"
+                  pattern="\\d*\\.?\\d*"
+                  onKeyDown={(e) => {
+                    // Prevent scientific notation and sign characters in number input.
+                    if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') {
+                      e.preventDefault();
+                    }
+                  }}
+                  onChange={(e) =>
+                    setCurrencyDraft((prev) => ({
+                      ...prev,
+                      exchangeRate: sanitizeDecimalInput(e.target.value),
+                    }))
+                  }
+                  className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCurrencyModal({ show: false })}
+                  className="h-9 px-6 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-lg transition-all duration-200"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    isCreatingCurrency ||
+                    !currencyDraft.code.trim() ||
+                    !currencyDraft.exchangeRate.trim() ||
+                    !currencyDraft.name.trim() ||
+                    !currencyDraft.symbol.trim()
+                  }
+                  className="h-9 px-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200 tracking-wide"
+                >
+                  Add Currency
+                </Button>
+              </div>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Payment Method Creation Modal */}
       <AlertDialog open={paymentMethodModal.show} onOpenChange={(open) => !open && setPaymentMethodModal({ show: false })}>

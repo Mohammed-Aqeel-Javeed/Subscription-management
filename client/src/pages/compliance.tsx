@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Upload, Download, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Check, MoreVertical } from "lucide-react";
 import { RiFileExcel2Fill, RiFileImageFill, RiFilePdf2Fill, RiFileTextFill, RiFileWord2Fill } from "react-icons/ri";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useSidebarSlot } from "@/context/SidebarSlotContext";
@@ -2862,7 +2864,7 @@ export default function Compliance() {
   }
   
   return (
-    <div className="h-full bg-white flex flex-col overflow-hidden">
+    <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
       <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
         <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
           <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
@@ -2897,58 +2899,61 @@ export default function Compliance() {
 
         {filtersOpen && sidebarSlotEl ? createPortal(<FiltersSidebarPanel />, sidebarSlotEl) : null}
 
-        {/* Modern Professional Header */}
-        <div className="mb-6 shrink-0">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-4">
-              <div className="h-12 w-12 bg-white/30 backdrop-blur-md rounded-xl flex items-center justify-center shadow-lg border border-white/20">
-                <ShieldCheck className="h-6 w-6 text-green-600 drop-shadow-glass" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Compliance Management</h1>
-              </div>
+        {/* ── Header Row ── */}
+        <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-200 shrink-0">
+            <div className="flex items-center gap-4">
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg"
+              >
+                <ShieldCheck className="h-5 w-5 text-white" />
+              </motion.div>
+              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Compliance Management</h1>
             </div>
             
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3">
               {/* New Compliance button - first */}
               <Can I="create" a="Compliance">
-                <Button
-                  onClick={() => {
-                    setEditIndex(null);
-                    setShowSubmissionDetails(false);
-                    setSelectedDepartments([]);
-                    setForm({
-                      filingName: "",
-                      filingFrequency: "Monthly",
-                      filingComplianceCategory: "",
-                      filingGoverningAuthority: "",
-                      filingStartDate: "",
-                      filingEndDate: "",
-                      filingSubmissionDeadline: "",
-                      filingSubmissionStatus: "Pending",
-                      filingRecurringFrequency: "",
-                      filingRemarks: "",
-                      submissionNotes: "",
-                      filingSubmissionDate: "",
-                      reminderDays: "7",
-                      reminderPolicy: "One time",
-                      submittedBy: "",
-                      owner: "",
-                      owner2: "",
-                      amount: "",
-                      paymentDate: "",
-                      submissionAmount: "",
-                      paymentMethod: "",
-                      department: "",
-                      departments: [],
-                    });
-                    setModalOpen(true);
-                  }}
-                  className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Compliance
-                </Button>
+                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                  <Button
+                    onClick={() => {
+                      setEditIndex(null);
+                      setShowSubmissionDetails(false);
+                      setSelectedDepartments([]);
+                      setForm({
+                        filingName: "",
+                        filingFrequency: "Monthly",
+                        filingComplianceCategory: "",
+                        filingGoverningAuthority: "",
+                        filingStartDate: "",
+                        filingEndDate: "",
+                        filingSubmissionDeadline: "",
+                        filingSubmissionStatus: "Pending",
+                        filingRecurringFrequency: "",
+                        filingRemarks: "",
+                        submissionNotes: "",
+                        filingSubmissionDate: "",
+                        reminderDays: "7",
+                        reminderPolicy: "One time",
+                        submittedBy: "",
+                        owner: "",
+                        owner2: "",
+                        amount: "",
+                        paymentDate: "",
+                        submissionAmount: "",
+                        paymentMethod: "",
+                        department: "",
+                        departments: [],
+                      });
+                      setModalOpen(true);
+                    }}
+                    className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Compliance
+                  </Button>
+                </motion.div>
               </Can>
 
               {/* Audit Log button - second */}
@@ -2957,7 +2962,7 @@ export default function Compliance() {
                 onClick={() => {
                   navigate('/compliance-ledger');
                 }}
-                className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200"
+                className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200 h-10 rounded-lg"
               >
                 <Calendar className="h-4 w-4 mr-2" />
                 History
@@ -2997,8 +3002,8 @@ export default function Compliance() {
             </div>
           </div>
 
-          {/* Search and Filters Row */}
-          <div className="mb-6 bg-white border border-gray-200  shadow-sm p-4 shrink-0">
+        {/* ── Search + Filter Bar ── */}
+        <div className="mb-4 shrink-0">
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -3006,76 +3011,76 @@ export default function Compliance() {
                   placeholder="Search compliance filings..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm rounded-lg"
+                  className="pl-10 w-72 border-gray-200 bg-white text-gray-900 placeholder-gray-400 h-10 text-sm rounded-lg shadow-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
                 />
               </div>
               <Button
                 type="button"
                 variant="outline"
-                className="h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white text-sm font-semibold shadow-lg border border-white/20 ring-1 ring-black/5 hover:from-indigo-600 hover:to-blue-700 hover:shadow-xl transition-all"
+                className="h-10 px-5 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white text-sm font-semibold shadow-md border-0 hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg transition-all"
                 onClick={() => setFiltersOpen((v) => !v)}
               >
                 Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
               </Button>
             </div>
-          </div>
         </div>
 
+        {/* Main Content */}
         <div className="min-w-0 flex-1 min-h-0">
-          {/* Professional Data Table */}
-          <div className="bg-white border border-gray-200  shadow-md overflow-hidden h-full flex flex-col min-h-0">
+          <Card className="bg-white border border-gray-200 shadow-md overflow-hidden h-full flex flex-col min-h-0">
+            <CardContent className="p-0 flex flex-col min-h-0">
             <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
-              <TableHeader>
-                <TableRow className="border-b-2 border-gray-400 bg-gray-200">
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[200px]">
+              <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">
                     <button
                       onClick={() => handleSort("policy")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                     >
                       FILING NAME
                       {getSortIcon("policy")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[160px]">
                     <button
                       onClick={() => handleSort("category")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer justify-start"
+                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer justify-start"
                     >
                       CATEGORY
                       {getSortIcon("category")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[140px]">
                     <button
                       onClick={() => handleSort("status")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                     >
                       STATUS
                       {getSortIcon("status")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[160px]">
                     <button
                       onClick={() => handleSort("endDate")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                     >
                       DUE DATE
                       {getSortIcon("endDate")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[160px]">
                     <button
                       onClick={() => handleSort("filingSubmissionDate")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                     >
                       SUBMITTED DATE
                       {getSortIcon("filingSubmissionDate")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[160px]">
                     SUBMISSION
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 pr-6 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 pr-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[120px]">
                     ACTIONS
                   </TableHead>
                 </TableRow>
@@ -3100,17 +3105,20 @@ export default function Compliance() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredItems.map((item: ComplianceItem, index: number) => {
+                  <AnimatePresence>
+                  {filteredItems.map((item: ComplianceItem, index: number) => {
                     const rowKey = item._id || item.id;
                     const isDraft = item.isDraft || item.status === "Draft";
                     const statusInfo = getComplianceStatus(item.endDate || "", item.submissionDeadline || "");
 
                     return (
-                    <TableRow
+                    <motion.tr
                       key={rowKey}
-                      className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                        index % 2 === 0 ? "bg-white" : "bg-gray-50/30"
-                      }`}
+                      className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ delay: 0.04 * index }}
                     >
                       <TableCell className="px-3 py-3 font-medium text-gray-800 w-[200px] min-w-0 overflow-hidden text-left">
                         <button
@@ -3151,9 +3159,13 @@ export default function Compliance() {
                             });
                           }}
                           title={item.policy}
-                          className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap text-left"
+                          className="group inline-flex items-center gap-1 max-w-full text-left"
                         >
-                          {item.policy}
+                          <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
+                            {item.policy}
+                            <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                          </span>
+                          <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
                         </button>
                       </TableCell>
                       <TableCell className="px-4 py-3 w-[160px] text-left">
@@ -3232,7 +3244,7 @@ export default function Compliance() {
                                 departments: depts,
                               });
                             }}
-                            className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
+                            className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800 font-semibold text-xs px-4 py-1.5 rounded-lg transition-all shadow-sm"
                           >
                             Submit now
                           </Button>
@@ -3341,13 +3353,15 @@ export default function Compliance() {
                           );
                         })()}
                       </TableCell>
-                    </TableRow>
+                    </motion.tr>
                     );
-                  })
+                  })}
+                  </AnimatePresence>
                 )}
               </TableBody>
             </Table>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
       
@@ -4292,6 +4306,7 @@ export default function Compliance() {
                   </p>
                 )}
               </div>
+
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Submission Deadline</label>
                 <Input 
@@ -4307,6 +4322,34 @@ export default function Compliance() {
                   </p>
                 )}
               </div>
+
+              {/* Dynamic Compliance Fields - show immediately after Submission Deadline */}
+              {isLoadingComplianceFields ? (
+                <div className="col-span-full text-center text-slate-500">Loading compliance fields...</div>
+              ) : (
+                complianceFields.filter(f => f.enabled).map(field => (
+                  <div className="space-y-2" key={field._id || field.name}>
+                    <label className="block text-sm font-medium text-slate-700">
+                      {field.name}
+                      {field.required ? <span className="text-red-500 ml-1">*</span> : null}
+                      {field.description && <span className="block text-xs text-slate-500">{field.description}</span>}
+                    </label>
+                    <Input
+                      type={(() => {
+                        const rawType = String(field.dataType || field.type || 'Text');
+                        const normalizedType = rawType.toLowerCase();
+                        return normalizedType === 'number' ? 'number' : normalizedType === 'date' ? 'date' : 'text';
+                      })()}
+                      className="w-full border-slate-300 rounded-lg p-2 text-base"
+                      value={dynamicFieldValues[field.name] || ''}
+                      onChange={e => handleDynamicFieldChange(field.name, e.target.value)}
+                      
+                      required={!!field.required}
+                    />
+                  </div>
+                ))
+              )}
+
               {/* Moved Reminder Days and Reminder Policy into Compliance Details */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">Reminder Days</label>
@@ -4411,27 +4454,6 @@ export default function Compliance() {
               </div>
               )}
               
-              {/* Dynamic Compliance Fields - Now placed after default fields */}
-              {isLoadingComplianceFields ? (
-                <div className="col-span-full text-center text-slate-500">Loading compliance fields...</div>
-              ) : (
-                complianceFields.filter(f => f.enabled).map(field => (
-                  <div className="space-y-2" key={field._id || field.name}>
-                    <label className="block text-sm font-medium text-slate-700">
-                      {field.name}
-                      {field.required ? <span className="text-red-500 ml-1">*</span> : null}
-                      {field.description && <span className="block text-xs text-slate-500">{field.description}</span>}
-                    </label>
-                    <Input
-                      className="w-full border-slate-300 rounded-lg p-2 text-base"
-                      value={dynamicFieldValues[field.name] || ''}
-                      onChange={e => handleDynamicFieldChange(field.name, e.target.value)}
-                      
-                      required={!!field.required}
-                    />
-                  </div>
-                ))
-              )}
             </div>
             </>
             )}

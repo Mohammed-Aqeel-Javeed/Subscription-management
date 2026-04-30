@@ -170,7 +170,7 @@ function AppWithSidebar() {
           // In impersonation mode, allow the global admin to use the normal app shell
           // while still having platform access.
           if (!me?.actingTenantId) {
-            if (!isGlobalAdminPlatformPath(location.pathname)) {
+            if (!isGlobalAdminPlatformPath(location.pathname) && location.pathname !== "/profile") {
               navigate("/platform-admin", { replace: true });
             }
             return;

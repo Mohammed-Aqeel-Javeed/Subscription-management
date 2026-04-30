@@ -1,0 +1,211 @@
+﻿                              Subscription
+                              <span className="ml-2.5 inline-flex items-center justify-center rounded-md bg-gray-100 border border-gray-200 px-2 py-0.5 text-xs font-bold text-gray-600">
+                                {fields.length}/{MAX_CUSTOM_FIELDS}
+                              </span>
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="compliance" 
+                                className="rounded-lg px-6 py-2 text-sm font-semibold transition-all data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-gray-200/50"
+                            >
+                              Compliance
+                              <span className="ml-2.5 inline-flex items-center justify-center rounded-md bg-gray-100 border border-gray-200 px-2 py-0.5 text-xs font-bold text-gray-600">
+                                {complianceFields.length}/{MAX_CUSTOM_FIELDS}
+                              </span>
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="renewal" 
+                                className="rounded-lg px-6 py-2 text-sm font-semibold transition-all data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-gray-200/50"
+                            >
+                              Renewal
+                              <span className="ml-2.5 inline-flex items-center justify-center rounded-md bg-gray-100 border border-gray-200 px-2 py-0.5 text-xs font-bold text-gray-600">
+                                {renewalFields.length}/{MAX_CUSTOM_FIELDS}
+                              </span>
+                            </TabsTrigger>
+                          </TabsList>
+
+                          <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                            <div className="bg-gray-50 border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+                              <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Available Fields</h4>
+                              <p className="text-xs font-medium text-gray-500">Toggle "Active" status to enable/disable fields</p>
+                            </div>
+                            <div className="bg-white">
+                              <TabsContent value="subscription" className="m-0 border-0 p-0">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow className="bg-white hover:bg-white border-b border-gray-100">
+                                      <TableHead className="text-gray-500 font-semibold h-11 px-6">Field Name</TableHead>
+                                      <TableHead className="text-gray-500 font-semibold h-11 w-[160px]">Active Status</TableHead>
+                                      <TableHead className="text-gray-500 font-semibold h-11 w-[120px] text-right px-6">Actions</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {isLoading ? (
+                                      <TableRow>
+                                        <TableCell colSpan={3} className="h-48 text-center text-gray-400">Loading fields...</TableCell>
+                                      </TableRow>
+                                    ) : fields.length === 0 ? (
+                                      <TableRow>
+                                        <TableCell colSpan={3} className="h-48">
+                                            <div className="flex flex-col items-center justify-center text-center text-gray-500">
+                                                <LayoutGrid className="h-10 w-10 text-gray-300 mb-3" />
+                                                <p className="font-medium text-gray-900">No fields created yet</p>
+                                                <p className="text-sm mt-1">Click "Add Custom Field" to create one</p>
+                                            </div>
+                                        </TableCell>
+                                      </TableRow>
+                                    ) : (
+                                      fields.map((field) => (
+                                        <TableRow key={field.name} className="hover:bg-gray-50/50 transition-colors border-b border-gray-50">
+                                          <TableCell className="px-6 py-4 font-semibold text-gray-900 flex items-center gap-3">
+                                            <GripVertical className="h-4 w-4 text-gray-300 cursor-move" />
+                                            {field.name}
+                                          </TableCell>
+                                          <TableCell className="py-4">
+                                            <div className="flex items-center gap-2">
+                                              <Switch
+                                                checked={!!field.enabled}
+                                                className="data-[state=checked]:bg-indigo-500"
+                                                onCheckedChange={(checked) => {
+                                                  void updateFieldEnablement(field.name, checked);
+                                                }}
+                                              />
+                                              <span className={`text-xs font-bold px-2 py-1 rounded-md ${field.enabled ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>{field.enabled ? 'Active' : 'Inactive'}</span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-right px-6 py-4">
+                                            <div className="flex justify-end gap-2">
+                                                <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md"
+                                                onClick={() => {
+                                                    setIsCreateFieldModalOpen(true);
+                                                }}
+                                                title="Edit"
+                                                >
+                                                <Pencil className="h-4 w-4" />
+                                                <span className="sr-only">Edit</span>
+                                                </Button>
+                                                <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md"
+                                                onClick={() => requestDeleteCustomField({ kind: 'subscription', name: field.name })}
+                                                title="Delete"
+                                                >
+                                                <Trash2 className="h-4 w-4" />
+                                                <span className="sr-only">Delete</span>
+                                                </Button>
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))
+                                    )}
+                                  </TableBody>
+                                </Table>
+                              </TabsContent>
+
+                              <TabsContent value="compliance" className="m-0 border-0 p-0">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow className="bg-white hover:bg-white border-b border-gray-100">
+                                      <TableHead className="text-gray-500 font-semibold h-11 px-6">Field Name</TableHead>
+                                      <TableHead className="text-gray-500 font-semibold h-11 w-[160px]">Active Status</TableHead>
+                                      <TableHead className="text-gray-500 font-semibold h-11 w-[120px] text-right px-6">Actions</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {isLoadingCompliance ? (
+                                      <TableRow>
+                                        <TableCell colSpan={3} className="h-48 text-center text-gray-400">Loading compliance fields...</TableCell>
+                                      </TableRow>
+                                    ) : complianceFields.length === 0 ? (
+                                      <TableRow>
+                                        <TableCell colSpan={3} className="h-48">
+                                            <div className="flex flex-col items-center justify-center text-center text-gray-500">
+                                                <LayoutGrid className="h-10 w-10 text-gray-300 mb-3" />
+                                                <p className="font-medium text-gray-900">No compliance fields yet</p>
+                                                <p className="text-sm mt-1">Click "Add Custom Field" to create one</p>
+                                            </div>
+                                        </TableCell>
+                                      </TableRow>
+                                    ) : (
+                                      complianceFields.map((field) => (
+                                        <TableRow key={field._id || field.name} className="hover:bg-gray-50/50 transition-colors border-b border-gray-50">
+                                          <TableCell className="px-6 py-4 font-semibold text-gray-900 flex items-center gap-3">
+                                            <GripVertical className="h-4 w-4 text-gray-300 cursor-move" />
+                                            {field.name}
+                                          </TableCell>
+                                          <TableCell className="py-4">
+                                            <div className="flex items-center gap-2">
+                                              <Switch
+                                                checked={!!field.enabled}
+                                                className="data-[state=checked]:bg-indigo-500"
+                                                onCheckedChange={(checked) => {
+                                                  void updateComplianceFieldEnablement(field.name, checked);
+                                                }}
+                                                disabled={!field._id}
+                                              />
+                                              <span className={`text-xs font-bold px-2 py-1 rounded-md ${field.enabled ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>{field.enabled ? 'Active' : 'Inactive'}</span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-right px-6 py-4">
+                                            <div className="flex justify-end gap-2">
+                                                <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md"
+                                                disabled={!field._id}
+                                                onClick={() => {
+                                                    setIsCreateFieldModalOpen(true);
+                                                }}
+                                                title="Edit"
+                                                >
+                                                <Pencil className="h-4 w-4" />
+                                                <span className="sr-only">Edit</span>
+                                                </Button>
+                                                <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md"
+                                                disabled={!field._id}
+                                                onClick={() => {
+                                                  if (!field._id) {
+                                                    showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
+                                                    return;
+                                                  }
+                                                  requestDeleteCustomField({ kind: 'compliance', id: field._id, name: field.name });
+                                                }}
+                                                title="Delete"
+                                                >
+                                                <Trash2 className="h-4 w-4" />
+                                                <span className="sr-only">Delete</span>
+                                                </Button>
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))
+                                    )}
+                                  </TableBody>
+                                </Table>
+                              </TabsContent>
+
+                              <TabsContent value="renewal" className="m-0 border-0 p-0">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow className="bg-white hover:bg-white border-b border-gray-100">
+                                      <TableHead className="text-gray-500 font-semibold h-11 px-6">Field Name</TableHead>
+                                      <TableHead className="text-gray-500 font-semibold h-11 w-[160px]">Active Status</TableHead>
+                                      <TableHead className="text-gray-500 font-semibold h-11 w-[120px] text-right px-6">Actions</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {isLoadingRenewal ? (
+                                      <TableRow>
+                                        <TableCell colSpan={3} className="h-48 text-center text-gray-400">Loading renewal fields...</TableCell>
+                                      </TableRow>
+                                    ) : renewalFields.length === 0 ? (

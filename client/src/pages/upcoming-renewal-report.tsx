@@ -1,9 +1,9 @@
-import * as React from "react";
+﻿import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import Papa from "papaparse";
 import { useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -223,7 +223,7 @@ export default function UpcomingRenewalReport() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-8 h-[calc(100vh-64px)] overflow-hidden flex flex-col min-h-0">
       <div className="mb-6 flex items-center justify-between gap-4">
         <h2 className="text-4xl font-bold text-gray-900">Upcoming Renewal</h2>
 
@@ -237,73 +237,70 @@ export default function UpcomingRenewalReport() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-              <Select value={rangePreset} onValueChange={(v) => setRangePreset(v as RangePreset)}>
-                <SelectTrigger className="w-full lg:w-[280px]">
-                  <SelectValue placeholder="Select range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="next7">Next 7 days</SelectItem>
-                  <SelectItem value="next30">Next 30 days</SelectItem>
-                  <SelectItem value="next90">Next 90 days</SelectItem>
-                </SelectContent>
-              </Select>
+      <div className="mb-6 shrink-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <Select value={rangePreset} onValueChange={(v) => setRangePreset(v as RangePreset)}>
+              <SelectTrigger className="w-full lg:w-[280px]">
+                <SelectValue placeholder="Select range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="next7">Next 7 days</SelectItem>
+                <SelectItem value="next30">Next 30 days</SelectItem>
+                <SelectItem value="next90">Next 90 days</SelectItem>
+              </SelectContent>
+            </Select>
 
-              <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                <SelectTrigger className="w-full lg:w-[280px]">
-                  <SelectValue placeholder="All Departments" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  {departments.map((d) => (
-                    <SelectItem key={d} value={d}>
-                      <span className="block max-w-full truncate">{d}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+              <SelectTrigger className="w-full lg:w-[280px]">
+                <SelectValue placeholder="All Departments" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    <span className="block max-w-full truncate">{d}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-full lg:w-[280px]">
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      <span className="block max-w-full truncate">{c}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-            </div>
-
-            <Button
-              onClick={handleExportCsv}
-              className="w-full lg:w-auto bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
-              type="button"
-            >
-              <Download />
-              Export to CSV
-            </Button>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-full lg:w-[280px]">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    <span className="block max-w-full truncate">{c}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </CardHeader>
 
-        <CardContent>
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b-2 border-gray-400 bg-gray-200">
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">SERVICE</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">VENDOR</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">DEPARTMENT</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">RENEWAL DATE</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide">QUANTITY</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">AMOUNT</TableHead>
+          <Button
+            onClick={handleExportCsv}
+            className="w-full lg:w-auto bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
+            type="button"
+          >
+            <Download />
+            Export to CSV
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-white border border-gray-200 shadow-md overflow-hidden flex-1 min-h-0 flex flex-col">
+      <Table containerClassName="flex-1 min-h-0 overflow-auto" className="table-fixed">
+              <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">SERVICE</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">VENDOR</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">DEPARTMENT</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">RENEWAL DATE</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide">QUANTITY</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-right text-xs font-bold text-white uppercase tracking-wide">AMOUNT</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -321,20 +318,36 @@ export default function UpcomingRenewalReport() {
                   </TableRow>
                 ) : (
                   <>
-                    {filtered.map((sub) => {
+                    <AnimatePresence>
+                      {filtered.map((sub, index) => {
                       const deps = getNormalizedDepartments(sub);
                       const renewalDate = (sub as any)?.nextRenewal ? new Date((sub as any).nextRenewal) : null;
                       const monthly = getMonthlyAmount(sub);
 
                       return (
-                        <TableRow 
+                        <motion.tr
                           key={String((sub as any)?.id ?? (sub as any)?._id ?? (sub as any)?.serviceName)}
-                          className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ delay: 0.04 * index }}
+                          className={`border-b border-gray-100 transition-colors ${
+                            index % 2 === 0 ? "bg-white" : "bg-gray-50/50"
+                          } hover:bg-indigo-50/40`}
                         >
                           <TableCell className="px-3 py-3 font-medium text-gray-800">
-                            <span className="block truncate max-w-[250px]" title={(sub as any)?.serviceName ?? ""}>
-                              {(sub as any)?.serviceName ?? ""}
-                            </span>
+                            <div
+                              title={String((sub as any)?.serviceName ?? "")}
+                              className="group inline-flex items-center gap-1 max-w-full text-left"
+                            >
+                              <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate max-w-[250px]">
+                                {(sub as any)?.serviceName ?? ""}
+                                <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                              </span>
+                              <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">
+                                →
+                              </span>
+                            </div>
                           </TableCell>
                           <TableCell className="px-3 py-3 text-sm text-gray-600">{(sub as any)?.vendor ?? ""}</TableCell>
                           <TableCell className="px-3 py-3 text-sm text-gray-600">
@@ -374,17 +387,21 @@ export default function UpcomingRenewalReport() {
                           <TableCell className="px-3 py-3 text-right text-sm font-medium text-gray-900">
                             ${monthly.toFixed(2)}
                           </TableCell>
-                        </TableRow>
+                        </motion.tr>
                       );
-                    })}
-                    <TableRow className="bg-gray-100 border-t-2 border-gray-300">
-                      <TableCell colSpan={4} className="text-lg font-bold text-gray-900 py-4">
+                      })}
+                    </AnimatePresence>
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="sticky bottom-0 z-20 bg-gray-200 text-lg font-bold text-gray-900 py-4 border-t border-gray-200"
+                      >
                         Grand Total
                       </TableCell>
-                      <TableCell className="text-center text-lg font-bold text-indigo-600 py-4">
+                      <TableCell className="sticky bottom-0 z-20 bg-gray-200 text-center text-lg font-bold text-indigo-600 py-4 border-t border-gray-200">
                         {filtered.length}
                       </TableCell>
-                      <TableCell className="text-right text-lg font-bold text-indigo-600 py-4">
+                      <TableCell className="sticky bottom-0 z-20 bg-gray-200 text-right text-lg font-bold text-indigo-600 py-4 border-t border-gray-200">
                         ${filtered.reduce((sum, sub) => sum + getMonthlyAmount(sub), 0).toFixed(2)}
                       </TableCell>
                     </TableRow>
@@ -392,9 +409,7 @@ export default function UpcomingRenewalReport() {
                 )}
               </TableBody>
             </Table>
-          </div>
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

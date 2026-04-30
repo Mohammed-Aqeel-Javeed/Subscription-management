@@ -1,9 +1,9 @@
-import * as React from "react";
+﻿import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import Papa from "papaparse";
 import { useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -186,11 +186,7 @@ function formatMoney(amount: number) {
   }).format(value);
 }
 
-function formatNextRenewalLabel(sub: Subscription) {
-  const cycle = String((sub as any).billingCycle ?? "").toLowerCase();
-  if (cycle === "monthly") return "Monthly";
-  if (cycle === "weekly") return "Weekly";
-
+function formatNextRenewalDate(sub: Subscription): string {
   const nr = (sub as any)?.nextRenewal;
   const date = nr ? new Date(nr) : null;
   if (!date || Number.isNaN(date.getTime())) return "";
@@ -645,7 +641,7 @@ export default function CardWiseSpendReport() {
         Category: String((sub as any)?.category ?? "").trim(),
         PeriodSpend: periodSpend.toFixed(2),
         MonthlyAvg: monthlyAvg.toFixed(2),
-        NextRenewal: formatNextRenewalLabel(sub),
+        NextRenewal: formatNextRenewalDate(sub),
       };
     });
 
@@ -660,7 +656,7 @@ export default function CardWiseSpendReport() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-8 h-[calc(100vh-64px)] overflow-hidden flex flex-col min-h-0">
       <div className="mb-6 flex items-center justify-between gap-4">
         <h2 className="text-4xl font-bold text-gray-900">Card Wise Spend Report</h2>
 
@@ -674,68 +670,66 @@ export default function CardWiseSpendReport() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-              <Select value={rangePreset} onValueChange={(v) => setRangePreset(v as RangePreset)}>
-                <SelectTrigger className="w-full lg:w-[280px]">
-                  <SelectValue placeholder="Select range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="last12">Last 12 months</SelectItem>
-                  <SelectItem value="last6">Last 6 months</SelectItem>
-                  <SelectItem value="last3">Last 3 months</SelectItem>
-                </SelectContent>
-              </Select>
+      <div className="mb-6 shrink-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <Select value={rangePreset} onValueChange={(v) => setRangePreset(v as RangePreset)}>
+              <SelectTrigger className="w-full lg:w-[280px]">
+                <SelectValue placeholder="Select range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="last12">Last 12 months</SelectItem>
+                <SelectItem value="last6">Last 6 months</SelectItem>
+                <SelectItem value="last3">Last 3 months</SelectItem>
+              </SelectContent>
+            </Select>
 
-              <Select value={selectedCard} onValueChange={setSelectedCard}>
-                <SelectTrigger className="w-full lg:w-[280px]">
-                  <SelectValue placeholder="All Cards" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Cards</SelectItem>
-                  {cards.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      <span className="block max-w-full truncate">{c}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button
-              onClick={handleExportCsv}
-              className="w-full lg:w-auto bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
-              type="button"
-            >
-              <Download />
-              Export to CSV
-            </Button>
+            <Select value={selectedCard} onValueChange={setSelectedCard}>
+              <SelectTrigger className="w-full lg:w-[280px]">
+                <SelectValue placeholder="All Cards" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Cards</SelectItem>
+                {cards.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    <span className="block max-w-full truncate">{c}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </CardHeader>
 
-        <CardContent>
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden">
-            <Table containerClassName="max-h-[70vh] overflow-auto" className="table-fixed">
-              <TableHeader>
-                <TableRow className="border-b-2 border-gray-400 bg-gray-200">
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">
+          <Button
+            onClick={handleExportCsv}
+            className="w-full lg:w-auto bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
+            type="button"
+          >
+            <Download />
+            Export to CSV
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-white border border-gray-200 shadow-md overflow-hidden flex-1 min-h-0 flex flex-col">
+        <Table containerClassName="flex-1 min-h-0 overflow-auto" className="table-fixed">
+              <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[220px]">
                     SUBSCRIPTION
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[200px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">
                     CARD
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[160px]">
                     CATEGORY
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-right text-xs font-bold text-white uppercase tracking-wide w-[140px]">
                     PERIOD SPEND
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-right text-xs font-bold text-white uppercase tracking-wide w-[140px]">
                     MONTHLY AVG
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[170px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[170px]">
                     NEXT RENEWAL
                   </TableHead>
                 </TableRow>
@@ -756,22 +750,33 @@ export default function CardWiseSpendReport() {
                   </TableRow>
                 ) : (
                   <>
-                    {filtered.map(({ sub, card, periodSpend, monthlyAvg }, index) => {
+                    <AnimatePresence>
+                      {filtered.map(({ sub, card, periodSpend, monthlyAvg }, index) => {
                       const serviceName = String((sub as any)?.serviceName ?? "");
                       const category = String((sub as any)?.category ?? "").trim();
                       const subscriptionId = normalizeId((sub as any)?.id ?? (sub as any)?._id ?? serviceName);
 
                       return (
-                        <TableRow
+                        <motion.tr
                           key={`${subscriptionId}::${String(card || "").trim()}`}
-                          className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                            index % 2 === 0 ? "bg-white" : "bg-gray-50/30"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ delay: 0.04 * index }}
+                          className={`border-b border-gray-100 hover:bg-indigo-50/40 transition-colors ${
+                            index % 2 === 0 ? "bg-white" : "bg-gray-50/50"
                           }`}
                         >
                           <TableCell className="px-3 py-3 font-medium text-gray-800 w-[220px] max-w-[220px] overflow-hidden text-left">
-                            <span title={serviceName} className="block w-full truncate whitespace-nowrap">
-                              {serviceName}
-                            </span>
+                            <div title={serviceName} className="group inline-flex items-center gap-1 max-w-full text-left">
+                              <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate whitespace-nowrap max-w-[220px]">
+                                {serviceName}
+                                <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                              </span>
+                              <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">
+                                →
+                              </span>
+                            </div>
                           </TableCell>
                           <TableCell className="px-3 py-3 text-sm text-gray-700 w-[200px] max-w-[200px] overflow-hidden text-left">
                             <span title={card} className="block w-full truncate whitespace-nowrap">
@@ -806,31 +811,36 @@ export default function CardWiseSpendReport() {
                             {formatMoney(monthlyAvg)}
                           </TableCell>
                           <TableCell className="px-3 py-3 text-sm text-gray-800 w-[170px] max-w-[170px] overflow-hidden text-left">
-                            {formatNextRenewalLabel(sub)}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {formatNextRenewalDate(sub) ? (
+                                <span className="font-medium text-gray-900">{formatNextRenewalDate(sub)}</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </div>
                           </TableCell>
-                        </TableRow>
+                        </motion.tr>
                       );
-                    })}
+                      })}
+                    </AnimatePresence>
 
-                    <TableRow className="bg-gray-100">
-                      <TableCell className="px-3 py-3 text-base font-bold text-gray-900">Grand Total</TableCell>
-                      <TableCell className="px-3 py-3" />
-                      <TableCell className="px-3 py-3" />
-                      <TableCell className="px-3 py-3 text-base font-bold text-gray-900 text-right">
+                    <TableRow>
+                      <TableCell className="sticky bottom-0 z-20 bg-gray-200 px-3 py-3 text-base font-bold text-gray-900">Grand Total</TableCell>
+                      <TableCell className="sticky bottom-0 z-20 bg-gray-200 px-3 py-3" />
+                      <TableCell className="sticky bottom-0 z-20 bg-gray-200 px-3 py-3" />
+                      <TableCell className="sticky bottom-0 z-20 bg-gray-200 px-3 py-3 text-base font-bold text-gray-900 text-right">
                         {formatMoney(totals.totalPeriodSpend)}
                       </TableCell>
-                      <TableCell className="px-3 py-3 text-base font-bold text-gray-900 text-right">
+                      <TableCell className="sticky bottom-0 z-20 bg-gray-200 px-3 py-3 text-base font-bold text-gray-900 text-right">
                         {formatMoney(totals.totalMonthlyAvg)}
                       </TableCell>
-                      <TableCell className="px-3 py-3" />
+                      <TableCell className="sticky bottom-0 z-20 bg-gray-200 px-3 py-3" />
                     </TableRow>
                   </>
                 )}
               </TableBody>
             </Table>
-          </div>
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

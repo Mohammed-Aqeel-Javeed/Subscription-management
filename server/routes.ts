@@ -3809,7 +3809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const baseFilter = { tenantId, role: { $ne: "global_admin" } };
       const filter =
         nextStatus === "active"
-          ? { ...baseFilter, status: "suspended" }
+          ? { ...baseFilter, status: { $in: ["suspended", "inactive"] } }
           : {
               ...baseFilter,
               $or: [

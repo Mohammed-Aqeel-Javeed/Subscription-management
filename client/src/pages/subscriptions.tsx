@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +24,9 @@ import {
 import { Plus, Edit, Trash2, Search, Layers, AlertCircle, Calendar, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, MoreVertical } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import SubscriptionModal from "@/components/modals/subscription-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +34,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Subscription } from "@shared/schema";
 import { Can } from "@/components/Can";
 import { useSidebarSlot } from "@/context/SidebarSlotContext";
+import { currencyList } from "@/lib/currency-data";
+import {
+  DEFAULT_CATEGORY_LIST,
+  DEFAULT_DEPARTMENT_LIST,
+  DEFAULT_EMPLOYEES,
+  DEFAULT_PAYMENT_METHOD_LIST,
+  VENDOR_LIST,
+} from "@/lib/subscription-template-lists";
 
 // Extend Subscription type locally to include department and _id for frontend use
 type SubscriptionWithExtras = Subscription & { 
@@ -457,40 +469,423 @@ export default function Subscriptions() {
     toast({ title: 'Exported', description: 'Subscriptions exported to CSV' });
   };
 
-  const downloadSubscriptionsImportTemplate = () => {
-    const template = [
-      {
-        ServiceName: '',
-        Vendor: '',
-        Amount: '',
-        BillingCycle: 'monthly',
-        StartDate: 'YYYY-MM-DD',
-        NextRenewal: 'YYYY-MM-DD',
-        Status: 'Draft',
-        Category: '',
-        Departments: 'IT|Finance',
-        ReminderPolicy: 'One time',
-        ReminderDays: '7',
-        Notes: '',
-      },
-    ];
-    const csv = Papa.unparse(template);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'subscriptions_import_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast({ title: 'Template Downloaded', description: 'Use this template to import subscriptions' });
+  const downloadSubscriptionsImportTemplate = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const sheetName = 'Subscriptions';
+      const subsSheet = workbook.addWorksheet(sheetName);
+
+      subsSheet.views = [{ state: 'frozen', ySplit: 1 }];
+      subsSheet.columns = [
+        { header: 'Service Name', key: 'serviceName', width: 20 },
+        { header: 'Website', key: 'website', width: 30 },
+        { header: 'Vendor', key: 'vendor', width: 20 },
+        { header: 'Currency', key: 'currency', width: 12 },
+        { header: 'Qty', key: 'qty', width: 10 },
+        { header: 'Amount per unit', key: 'amount', width: 15 },
+        { header: 'Total Amount', key: 'totalAmount', width: 15 },
+        { header: 'Commitment cycle', key: 'billingCycle', width: 18 },
+        { header: 'Payment Frequency', key: 'paymentFrequency', width: 18 },
+        { header: 'Payment Method', key: 'paymentMethod', width: 20 },
+        { header: 'Start Date', key: 'startDate', width: 15 },
+        { header: 'Next Renewal', key: 'nextRenewal', width: 15 },
+        { header: 'Auto Renewal', key: 'autoRenewal', width: 13 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Category', key: 'category', width: 20 },
+        { header: 'Departments', key: 'departments', width: 20 },
+        { header: 'Owner', key: 'owner', width: 20 },
+        { header: 'Owner Email', key: 'ownerEmail', width: 25 },
+        { header: 'Reminder Policy', key: 'reminderPolicy', width: 18 },
+        { header: 'Reminder Days', key: 'reminderDays', width: 15 },
+        { header: 'Notes', key: 'notes', width: 35 },
+      ];
+
+      // Header styles (match bulk template)
+      const headerRow = subsSheet.getRow(1);
+      headerRow.height = 20;
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+
+      for (let col = 1; col <= 21; col++) {
+        const cell = headerRow.getCell(col);
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF000000' } },
+          left: { style: 'thin', color: { argb: 'FF000000' } },
+          bottom: { style: 'thin', color: { argb: 'FF000000' } },
+          right: { style: 'thin', color: { argb: 'FF000000' } },
+        };
+      }
+
+      // Lookup lists stored in hidden columns within the SAME sheet (single-sheet file)
+      // AA..AG
+      const vendorCol = 27; // AA
+      const currencyCol = 28; // AB
+      const paymentMethodCol = 29; // AC
+      const categoryCol = 30; // AD
+      const departmentCol = 31; // AE
+      const ownerCol = 32; // AF
+      const ownerEmailCol = 33; // AG
+
+      [vendorCol, currencyCol, paymentMethodCol, categoryCol, departmentCol, ownerCol, ownerEmailCol].forEach((col) => {
+        const column = subsSheet.getColumn(col);
+        column.hidden = true;
+        column.width = 2;
+      });
+
+      VENDOR_LIST.forEach((vendor, idx) => {
+        subsSheet.getCell(idx + 2, vendorCol).value = vendor;
+      });
+      currencyList.map((c) => c.code).forEach((code, idx) => {
+        subsSheet.getCell(idx + 2, currencyCol).value = code;
+      });
+      DEFAULT_PAYMENT_METHOD_LIST.forEach((method, idx) => {
+        subsSheet.getCell(idx + 2, paymentMethodCol).value = method;
+      });
+      DEFAULT_CATEGORY_LIST.forEach((category, idx) => {
+        subsSheet.getCell(idx + 2, categoryCol).value = category;
+      });
+      DEFAULT_DEPARTMENT_LIST.forEach((dept, idx) => {
+        subsSheet.getCell(idx + 2, departmentCol).value = dept;
+      });
+      DEFAULT_EMPLOYEES.forEach((emp, idx) => {
+        subsSheet.getCell(idx + 2, ownerCol).value = emp.name;
+        subsSheet.getCell(idx + 2, ownerEmailCol).value = emp.email;
+      });
+
+      const rangeFor = (colLetter: string, count: number) => {
+        const safeCount = Math.max(1, count);
+        const lastRow = 1 + safeCount;
+        return `'${sheetName}'!$${colLetter}$2:$${colLetter}$${lastRow}`;
+      };
+
+      const vendorRange = rangeFor('AA', VENDOR_LIST.length);
+      const currencyRange = rangeFor('AB', currencyList.length);
+      const paymentMethodRange = rangeFor('AC', DEFAULT_PAYMENT_METHOD_LIST.length);
+      const categoryRange = rangeFor('AD', DEFAULT_CATEGORY_LIST.length);
+      const departmentRange = rangeFor('AE', DEFAULT_DEPARTMENT_LIST.length);
+      const ownerRange = rangeFor('AF', DEFAULT_EMPLOYEES.length);
+
+      // Sample row (row 2) with formulas like the bulk template
+      const sampleRow = subsSheet.getRow(2);
+      sampleRow.getCell(1).value = 'Netflix';
+      sampleRow.getCell(2).value = 'https://www.netflix.com';
+      sampleRow.getCell(3).value = 'Netflix, Inc.';
+      sampleRow.getCell(4).value = 'SGD';
+      sampleRow.getCell(5).value = 1;
+      sampleRow.getCell(6).value = 15.99;
+      sampleRow.getCell(7).value = { formula: 'E2*F2', result: 15.99 };
+      sampleRow.getCell(8).value = 'Monthly';
+      sampleRow.getCell(9).value = 'Monthly';
+      sampleRow.getCell(10).value = 'Corporate Visa';
+      sampleRow.getCell(11).value = '01/01/2025';
+      sampleRow.getCell(11).numFmt = '@';
+      sampleRow.getCell(12).value = {
+        formula:
+          `IF(AND(K2<>"",H2<>""),TEXT(IF(H2="Monthly",DATE(YEAR(K2),MONTH(K2)+1,DAY(K2))-1,IF(H2="Quarterly",DATE(YEAR(K2),MONTH(K2)+3,DAY(K2))-1,IF(H2="Yearly",DATE(YEAR(K2)+1,MONTH(K2),DAY(K2))-1,IF(H2="Weekly",K2+6,IF(H2="Trial",K2+30,""))))),"dd/mm/yyyy"),"")`,
+        result: '31/01/2025',
+      };
+      sampleRow.getCell(12).numFmt = '@';
+      sampleRow.getCell(13).value = 'Yes';
+      sampleRow.getCell(14).value = 'Active';
+      sampleRow.getCell(15).value = 'Entertainment';
+      sampleRow.getCell(16).value = 'Marketing';
+      sampleRow.getCell(17).value = 'John Doe';
+      sampleRow.getCell(18).value = {
+        formula: `IFERROR(VLOOKUP(Q2,$AF$2:$AG$500,2,0),"")`,
+        result: 'john@company.com',
+      };
+      sampleRow.getCell(19).value = 'One time';
+      sampleRow.getCell(20).value = 7;
+      sampleRow.getCell(21).value = 'Team streaming subscription';
+      sampleRow.commit();
+
+      const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trial', 'Pay-as-you-go'];
+      const subscriptionStatuses = ['Active', 'Inactive', 'Cancelled'];
+      const reminderPolicies = ['One time', 'Two times', 'Until Renewal'];
+
+      for (let i = 2; i <= 500; i++) {
+        const totalAmountCell = subsSheet.getCell(`G${i}`);
+        totalAmountCell.value = { formula: `IF(AND(E${i}<>"",F${i}<>""),E${i}*F${i},"")` };
+        totalAmountCell.numFmt = '0.00';
+        totalAmountCell.protection = { locked: true };
+
+        const serviceNameCell = subsSheet.getCell(`A${i}`);
+        serviceNameCell.dataValidation = {
+          type: 'custom',
+          allowBlank: false,
+          formulae: [`COUNTIF($A$2:$A$500,A${i})=1`],
+          showInputMessage: true,
+          promptTitle: 'Service Name Required',
+          prompt: 'Enter a unique service name. Duplicates are not allowed.',
+          showErrorMessage: true,
+          errorStyle: 'error',
+          errorTitle: 'Duplicate Service Name',
+          error: 'This service name already exists! Please use a unique name.',
+        };
+
+        const vendorCell = subsSheet.getCell(`C${i}`);
+        vendorCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [vendorRange],
+          showInputMessage: true,
+          promptTitle: 'Select Vendor',
+          prompt: 'Choose a vendor from the dropdown or type your own.',
+          showErrorMessage: true,
+          errorStyle: 'warning',
+          errorTitle: 'Invalid Vendor',
+          error: 'Please select a valid vendor from the dropdown list.',
+        };
+
+        const currencyCell = subsSheet.getCell(`D${i}`);
+        currencyCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [currencyRange],
+          showInputMessage: true,
+          promptTitle: 'Select Currency',
+          prompt: 'Choose a currency code from the dropdown list.',
+          showErrorMessage: true,
+          errorStyle: 'warning',
+          errorTitle: 'Invalid Currency',
+          error: 'Please select a valid currency from the dropdown list.',
+        };
+
+        const qtyCell = subsSheet.getCell(`E${i}`);
+        qtyCell.dataValidation = {
+          type: 'whole',
+          operator: 'greaterThanOrEqual',
+          allowBlank: false,
+          formulae: [1],
+          showInputMessage: true,
+          promptTitle: 'Quantity',
+          prompt: 'Enter the quantity (must be at least 1).',
+          showErrorMessage: true,
+          errorStyle: 'error',
+          errorTitle: 'Invalid Quantity',
+          error: 'Please enter a whole number >= 1.',
+        };
+
+        const amountCell = subsSheet.getCell(`F${i}`);
+        amountCell.numFmt = '0.00';
+        amountCell.dataValidation = {
+          type: 'decimal',
+          operator: 'greaterThanOrEqual',
+          allowBlank: false,
+          formulae: [0],
+          showInputMessage: true,
+          promptTitle: 'Amount Required',
+          prompt: 'Enter the subscription amount as a number (e.g., 15.99, 100.00). Must be 0 or greater.',
+          showErrorMessage: true,
+          errorStyle: 'error',
+          errorTitle: 'Invalid Amount',
+          error: 'Please enter a valid number. Decimal values are allowed (e.g., 15.99).',
+        };
+
+        const cycleCell = subsSheet.getCell(`H${i}`);
+        cycleCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [`"${commitmentCycles.join(',')}"`],
+          showInputMessage: true,
+          promptTitle: 'Select Commitment Cycle',
+          prompt: 'Choose a commitment cycle.',
+          showErrorMessage: true,
+          errorStyle: 'warning',
+          errorTitle: 'Invalid Cycle',
+          error: 'Please select a valid commitment cycle.',
+        };
+
+        const paymentFreqCell = subsSheet.getCell(`I${i}`);
+        paymentFreqCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [`"${commitmentCycles.join(',')}"`],
+          showInputMessage: true,
+          promptTitle: 'Select Payment Frequency',
+          prompt: 'Choose how often payments are made.',
+          showErrorMessage: true,
+          errorStyle: 'warning',
+          errorTitle: 'Invalid Frequency',
+          error: 'Please select a valid payment frequency.',
+        };
+
+        const paymentMethodCell = subsSheet.getCell(`J${i}`);
+        paymentMethodCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [paymentMethodRange],
+          showInputMessage: true,
+          promptTitle: 'Select Payment Method',
+          prompt: 'Choose a payment method from the dropdown or type your own.',
+          showErrorMessage: true,
+          errorStyle: 'warning',
+          errorTitle: 'Invalid Payment Method',
+          error: 'Please select a valid payment method.',
+        };
+
+        const startDateCell = subsSheet.getCell(`K${i}`);
+        startDateCell.numFmt = '@';
+
+        if (i > 2) {
+          const renewalCell = subsSheet.getCell(`L${i}`);
+          renewalCell.value = {
+            formula: `IF(AND(K${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(K${i}),MONTH(K${i})+3,DAY(K${i}))-1,IF(H${i}="Yearly",DATE(YEAR(K${i})+1,MONTH(K${i}),DAY(K${i}))-1,IF(H${i}="Weekly",K${i}+6,IF(H${i}="Trial",K${i}+30,""))))),"dd/mm/yyyy"),"")`,
+            result: '',
+          };
+          renewalCell.numFmt = '@';
+          renewalCell.protection = { locked: true };
+        }
+
+        const autoRenewalCell = subsSheet.getCell(`M${i}`);
+        autoRenewalCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: ['"Yes,No"'],
+          showInputMessage: true,
+          promptTitle: 'Auto Renewal',
+          prompt: 'Select Yes to enable automatic renewal, No to disable.',
+          showErrorMessage: true,
+          errorStyle: 'warning',
+          errorTitle: 'Invalid Value',
+          error: 'Please select Yes or No.',
+        };
+
+        const statusCell = subsSheet.getCell(`N${i}`);
+        statusCell.dataValidation = {
+          type: 'list',
+          allowBlank: false,
+          formulae: [`"${subscriptionStatuses.join(',')}"`],
+          showInputMessage: true,
+          promptTitle: 'Select Status',
+          prompt: 'Choose subscription status from the dropdown.',
+          showErrorMessage: true,
+          errorStyle: 'error',
+          errorTitle: 'Invalid Status',
+          error: 'Please select a valid status.',
+        };
+
+        const categoryCell = subsSheet.getCell(`O${i}`);
+        categoryCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [categoryRange],
+          showInputMessage: true,
+          promptTitle: 'Select Category',
+          prompt: 'Choose a category from the dropdown or type your own.',
+          showErrorMessage: true,
+          errorStyle: 'warning',
+          errorTitle: 'Invalid Category',
+          error: 'Please select a valid category from the dropdown list.',
+        };
+
+        const deptCell = subsSheet.getCell(`P${i}`);
+        deptCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [departmentRange],
+          showInputMessage: true,
+          promptTitle: 'Select Department',
+          prompt: 'Choose a department from the dropdown. Use | to separate multiple departments.',
+          showErrorMessage: true,
+          errorStyle: 'warning',
+          errorTitle: 'Invalid Department',
+          error: 'Please select a valid department.',
+        };
+
+        const ownerCell = subsSheet.getCell(`Q${i}`);
+        ownerCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [ownerRange],
+          showInputMessage: true,
+          promptTitle: 'Select Owner',
+          prompt: 'Choose an owner from the dropdown or type your own.',
+          showErrorMessage: true,
+          errorStyle: 'warning',
+          errorTitle: 'Invalid Owner',
+          error: 'Please select a valid owner.',
+        };
+
+        if (i > 2) {
+          const ownerEmailCell = subsSheet.getCell(`R${i}`);
+          ownerEmailCell.value = {
+            formula: `IFERROR(VLOOKUP(Q${i},$AF$2:$AG$500,2,0),"")`,
+            result: '',
+          };
+          ownerEmailCell.protection = { locked: true };
+        }
+
+        const reminderPolicyCell = subsSheet.getCell(`S${i}`);
+        reminderPolicyCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [`"${reminderPolicies.join(',')}"`],
+          showInputMessage: true,
+          promptTitle: 'Select Reminder Policy',
+          prompt: 'Choose reminder policy: One time, Two times, or Until Renewal.',
+          showErrorMessage: true,
+          errorStyle: 'warning',
+          errorTitle: 'Invalid Reminder Policy',
+          error: 'Please select a valid reminder policy from the dropdown.',
+        };
+
+        const reminderDaysCell = subsSheet.getCell(`T${i}`);
+        reminderDaysCell.dataValidation = {
+          type: 'whole',
+          operator: 'between',
+          allowBlank: true,
+          formulae: [1, 365],
+          showInputMessage: true,
+          promptTitle: 'Reminder Days',
+          prompt: 'Enter the number of days before renewal to send a reminder (1-365).',
+          showErrorMessage: true,
+          errorStyle: 'error',
+          errorTitle: 'Invalid Reminder Days',
+          error: 'Please enter a whole number between 1 and 365.',
+        };
+      }
+
+      // Unlock editable cells (same as bulk template: lock computed columns G, L, R)
+      for (let i = 2; i <= 500; i++) {
+        const editableColumns = ['A', 'B', 'C', 'D', 'E', 'F', 'H', 'I', 'J', 'K', 'M', 'N', 'O', 'P', 'Q', 'S', 'T', 'U'];
+        editableColumns.forEach((col) => {
+          subsSheet.getCell(`${col}${i}`).protection = { locked: false };
+        });
+      }
+
+      await subsSheet.protect('', {
+        selectLockedCells: true,
+        selectUnlockedCells: true,
+        formatCells: false,
+        formatColumns: false,
+        formatRows: false,
+        insertRows: false,
+        insertColumns: false,
+        deleteRows: false,
+        deleteColumns: false,
+        sort: false,
+        autoFilter: false,
+        insertHyperlinks: false,
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      saveAs(new Blob([buffer]), 'Subscriptions_Import_Template.xlsx');
+      toast({ title: 'Template Downloaded', description: 'Subscriptions template downloaded (single sheet)' });
+    } catch {
+      toast({
+        title: 'Template error',
+        description: 'Failed to generate template. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const triggerImport = () => fileInputRef.current?.click();
 
-  // IMPORT from CSV -> create subscriptions
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // IMPORT from CSV/XLSX -> create subscriptions
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -502,85 +897,182 @@ export default function Subscriptions() {
         .map((s) => s.toLowerCase())
     );
 
+    const getValue = (row: Record<string, any>, keys: string[]) => {
+      for (const key of keys) {
+        const val = row?.[key];
+        if (val !== undefined && val !== null && String(val).trim() !== '') return val;
+      }
+      return '';
+    };
+
+    const parseNumber = (val: unknown): number => {
+      if (val === null || val === undefined) return 0;
+      const n = typeof val === 'number' ? val : parseFloat(String(val).replace(/,/g, ''));
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const toIsoDate = (val: unknown): string => {
+      if (!val) return '';
+      if (val instanceof Date && !isNaN(val.getTime())) return val.toISOString().split('T')[0];
+      const s = String(val).trim();
+      if (!s) return '';
+
+      // yyyy-mm-dd
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+      // dd/mm/yyyy or dd-mm-yyyy
+      const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+      if (m) {
+        const dd = m[1].padStart(2, '0');
+        const mm = m[2].padStart(2, '0');
+        const yyyy = m[3];
+        return `${yyyy}-${mm}-${dd}`;
+      }
+
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+    };
+
+    const parseDepartments = (val: unknown): string[] => {
+      const raw = String(val ?? '').trim();
+      if (!raw) return [];
+      return raw
+        .split('|')
+        .map((d) => d.trim())
+        .filter(Boolean);
+    };
+
+    const normalizeYesNoToBool = (val: unknown): boolean | undefined => {
+      const s = String(val ?? '').trim().toLowerCase();
+      if (!s) return undefined;
+      if (s === 'yes' || s === 'true' || s === '1') return true;
+      if (s === 'no' || s === 'false' || s === '0') return false;
+      return undefined;
+    };
+
+    const processRows = async (rows: any[]) => {
+      if (!rows.length) {
+        toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive' });
+        return;
+      }
+
+      let success = 0;
+      let failed = 0;
+      const seenInFile = new Set<string>();
+      const errorSamples: string[] = [];
+
+      for (const row of rows) {
+        try {
+          const normalizedName = normalizeServiceName(
+            getValue(row, ['Service Name', 'ServiceName', 'serviceName'])
+          );
+          const key = normalizedName.toLowerCase();
+          if (!normalizedName) {
+            failed++;
+            if (errorSamples.length < 5) errorSamples.push('Missing Service Name');
+            continue;
+          }
+
+          if (existingServiceNames.has(key)) {
+            failed++;
+            if (errorSamples.length < 5) errorSamples.push(`Duplicate service name already exists: ${normalizedName}`);
+            continue;
+          }
+
+          if (seenInFile.has(key)) {
+            failed++;
+            if (errorSamples.length < 5) errorSamples.push(`Duplicate service name in file: ${normalizedName}`);
+            continue;
+          }
+
+          const qty = Math.max(1, Math.floor(parseNumber(getValue(row, ['Qty', 'QTY', 'qty'])) || 1));
+          const amountPerUnit = parseNumber(getValue(row, ['Amount per unit', 'Amount Per Unit', 'Amount', 'amount']));
+          const totalAmount = parseNumber(getValue(row, ['Total Amount', 'TotalAmount', 'totalAmount'])) || qty * amountPerUnit;
+
+          const payload: any = {
+            serviceName: normalizedName,
+            website: getValue(row, ['Website', 'website']),
+            vendor: getValue(row, ['Vendor', 'vendor']),
+            currency: getValue(row, ['Currency', 'currency']),
+            qty,
+            amount: amountPerUnit,
+            totalAmount,
+            billingCycle: getValue(row, ['Commitment cycle', 'BillingCycle', 'billingCycle', 'Commitment Cycle']),
+            paymentFrequency: getValue(row, ['Payment Frequency', 'paymentFrequency', 'PaymentFrequency']),
+            paymentMethod: getValue(row, ['Payment Method', 'paymentMethod', 'PaymentMethod']),
+            startDate: toIsoDate(getValue(row, ['Start Date', 'StartDate', 'startDate'])),
+            nextRenewal: toIsoDate(getValue(row, ['Next Renewal', 'NextRenewal', 'nextRenewal'])),
+            autoRenewal: normalizeYesNoToBool(getValue(row, ['Auto Renewal', 'AutoRenewal', 'autoRenewal'])),
+            status: getValue(row, ['Status', 'status']) || 'Draft',
+            category: getValue(row, ['Category', 'category']),
+            department: '',
+            departments: parseDepartments(getValue(row, ['Departments', 'departments'])),
+            owner: getValue(row, ['Owner', 'owner']),
+            ownerEmail: getValue(row, ['Owner Email', 'OwnerEmail', 'ownerEmail']),
+            reminderPolicy: getValue(row, ['Reminder Policy', 'ReminderPolicy', 'reminderPolicy']) || 'One time',
+            reminderDays: Math.max(1, Math.floor(parseNumber(getValue(row, ['Reminder Days', 'ReminderDays', 'reminderDays'])) || 7)),
+            notes: getValue(row, ['Notes', 'notes']),
+          };
+
+          if (!payload.paymentMethod || String(payload.paymentMethod).trim() === '') {
+            failed++;
+            if (errorSamples.length < 5) errorSamples.push(`Missing Payment Method for: ${normalizedName}`);
+            continue;
+          }
+
+          if (!payload.startDate) payload.startDate = new Date().toISOString().split('T')[0];
+          if (!payload.nextRenewal) payload.nextRenewal = payload.startDate;
+
+          await apiRequest('POST', '/api/subscriptions', payload);
+          seenInFile.add(key);
+          existingServiceNames.add(key);
+          success++;
+        } catch {
+          failed++;
+          if (errorSamples.length < 5) errorSamples.push('Failed to import a row');
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['/api/subscriptions'] });
+      if (failed > 0 && errorSamples.length) {
+        toast({
+          title: 'Import finished with errors',
+          description: `Imported ${success} row(s). Failed: ${failed}. ${errorSamples.join(' | ')}`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({ title: 'Import finished', description: `Imported ${success} row(s). Failed: ${failed}` });
+      }
+    };
+
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (ext === 'xlsx' || ext === 'xls') {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+        const sheetName = wb.SheetNames.includes('Subscriptions') ? 'Subscriptions' : wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '', raw: false });
+        await processRows(rows as any[]);
+      } catch {
+        toast({ title: 'Import error', description: 'Failed to read XLSX file', variant: 'destructive' });
+      } finally {
+        e.target.value = '';
+      }
+      return;
+    }
+
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
         const rows: any[] = results.data as any[];
-        if (!rows.length) {
-          toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive'});
-          return;
-        }
-        let success = 0; let failed = 0;
-        const seenInFile = new Set<string>();
-        const errorSamples: string[] = [];
-        for (const row of rows) {
-          try {
-            const normalizedName = normalizeServiceName(row.ServiceName || row.serviceName || '');
-            const key = normalizedName.toLowerCase();
-            if (!normalizedName) {
-              failed++;
-              if (errorSamples.length < 5) errorSamples.push('Missing ServiceName');
-              continue;
-            }
-
-            if (existingServiceNames.has(key)) {
-              failed++;
-              if (errorSamples.length < 5) errorSamples.push(`Duplicate service name already exists: ${normalizedName}`);
-              continue;
-            }
-
-            if (seenInFile.has(key)) {
-              failed++;
-              if (errorSamples.length < 5) errorSamples.push(`Duplicate service name in file: ${normalizedName}`);
-              continue;
-            }
-
-            const payload: any = {
-              serviceName: normalizedName,
-              vendor: row.Vendor || row.vendor || '',
-              amount: parseFloat(row.Amount) || 0,
-              billingCycle: (row.BillingCycle || row.billingCycle || 'monthly').toLowerCase(),
-              startDate: row.StartDate || row.startDate || new Date().toISOString().split('T')[0],
-              nextRenewal: row.NextRenewal || row.nextRenewal || new Date().toISOString().split('T')[0],
-              status: row.Status || row.status || 'Draft',
-              category: row.Category || row.category || '',
-              department: '',
-              departments: (row.Departments || '').split('|').filter((d: string) => d),
-              reminderPolicy: row.ReminderPolicy || 'One time',
-              reminderDays: parseInt(row.ReminderDays) || 7,
-              notes: row.Notes || ''
-            };
-            // Basic validation
-            if (!payload.serviceName) {
-              failed++;
-              if (errorSamples.length < 5) errorSamples.push('Missing ServiceName');
-              continue;
-            }
-            await apiRequest('POST', '/api/subscriptions', payload);
-            seenInFile.add(key);
-            existingServiceNames.add(key);
-            success++;
-          } catch (err) {
-            failed++;
-            if (errorSamples.length < 5) errorSamples.push('Failed to import a row');
-          }
-        }
-        queryClient.invalidateQueries({ queryKey: ['/api/subscriptions'] });
-        if (failed > 0 && errorSamples.length) {
-          toast({
-            title: 'Import finished with errors',
-            description: `Imported ${success} row(s). Failed: ${failed}. ${errorSamples.join(' | ')}`,
-            variant: 'destructive',
-          });
-        } else {
-          toast({ title: 'Import finished', description: `Imported ${success} row(s). Failed: ${failed}` });
-        }
+        await processRows(rows);
         e.target.value = '';
       },
       error: () => {
-        toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
-      }
+        toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive' });
+      },
     });
   };
   
@@ -1221,27 +1713,31 @@ export default function Subscriptions() {
           </AlertDialogContent>
         </AlertDialog>
         {filtersOpen && sidebarSlotEl ? createPortal(<FiltersSidebarPanel />, sidebarSlotEl) : null}
-        {/* Header Section */}
-        <div className="flex items-center justify-between mb-6 shrink-0">
-          <div className="flex items-center space-x-4">
-            <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center shadow-md border border-gray-200">
-              <Layers className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
+        {/* ── Header Row ── */}
+        <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-200 shrink-0">
+            <div className="flex items-center gap-4">
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg"
+              >
+                <Layers className="h-5 w-5 text-white" />
+              </motion.div>
               <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Subscription Management</h1>
             </div>
-          </div>
           
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             {/* Add Subscription button - first */}
             <Can I="create" a="Subscription">
-              <Button
-                onClick={handleAddNew}
-                className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New Subscription
-              </Button>
+              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                <Button
+                  onClick={handleAddNew}
+                  className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Subscription
+                </Button>
+              </motion.div>
             </Can>
             
             {/* History button - second */}
@@ -1280,7 +1776,7 @@ export default function Subscriptions() {
                 });
               }}
               onClick={() => navigate('/subscription-history')}
-              className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200"
+              className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200 h-10 rounded-lg"
             >
               <Calendar className="h-4 w-4 mr-2" />
               History
@@ -1326,7 +1822,7 @@ export default function Subscriptions() {
         {!modalOpen && (
           <>
         {/* Search + Filter By */}
-        <div className="mb-6 bg-white border border-gray-200  shadow-sm p-4 shrink-0">
+        <div className="mb-4 shrink-0">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -1334,13 +1830,13 @@ export default function Subscriptions() {
                 placeholder="Search subscriptions..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm rounded-lg"
+                className="pl-10 w-72 border-gray-200 bg-white text-gray-900 placeholder-gray-400 h-10 text-sm rounded-lg shadow-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
               />
             </div>
             <Button
               type="button"
               variant="outline"
-              className="h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white text-sm font-semibold shadow-lg border border-white/20 ring-1 ring-black/5 hover:from-indigo-600 hover:to-blue-700 hover:shadow-xl transition-all"
+              className="h-10 px-5 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white text-sm font-semibold shadow-md border-0 hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg transition-all"
               onClick={() => setFiltersOpen((v) => !v)}
             >
               Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
@@ -1348,85 +1844,93 @@ export default function Subscriptions() {
           </div>
         </div>
 
-        {/* Professional Data Table */}
+        {/* Main Content */}
         <div className="min-w-0 flex-1 min-h-0">
-          <div className="bg-white border border-gray-200  shadow-md overflow-hidden h-full flex flex-col min-h-0">
+          <Card className="bg-white border border-gray-200 shadow-md overflow-hidden h-full flex flex-col min-h-0">
+            <CardContent className="p-0 flex flex-col min-h-0">
             <Table containerClassName="flex-1 min-h-0 overflow-auto" className="table-fixed">
-              <TableHeader>
-                <TableRow className="border-b-2 border-gray-400 bg-gray-200">
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">
+              <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[220px]">
                     <button 
                       onClick={() => handleSort("serviceName")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                     >
                       SERVICE
                       {getSortIcon("serviceName")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[220px]">
                     CATEGORY
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[140px]">
                     <button 
                       onClick={() => handleSort("billingCycle")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                     >
                       BILLING
                       {getSortIcon("billingCycle")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[90px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[90px]">
                     QTY
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-right text-xs font-bold text-white uppercase tracking-wide w-[140px]">
                     <button 
                       onClick={() => handleSort("amount")}
-                      className="flex items-center justify-end w-full font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center justify-end w-full font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                     >
                       AMOUNT(LCY)
                       {getSortIcon("amount")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[170px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[170px]">
                     <button 
                       onClick={() => handleSort("nextRenewal")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                     >
                       NEXT RENEWAL
                       {getSortIcon("nextRenewal")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[140px]">
                     <button 
                       onClick={() => handleSort("status")}
-                      className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                     >
                       STATUS
                       {getSortIcon("status")}
                     </button>
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-right text-xs font-bold text-white uppercase tracking-wide">
                     ACTIONS
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredSubscriptions && filteredSubscriptions.length > 0 ? (
-                  filteredSubscriptions.map((subscription, index) => (
-                    <TableRow
+                  <AnimatePresence>
+                  {filteredSubscriptions.map((subscription, index) => (
+                    <motion.tr
                       key={subscription._id || subscription.id}
-                      className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                        index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
-                      }`}
+                      className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ delay: 0.04 * index }}
                     >
                       <TableCell className="px-3 py-3 font-medium text-gray-800 w-[220px] max-w-[220px] overflow-hidden text-left">
                         <div>
                           <button
                             onClick={() => handleEdit(subscription)}
                             title={subscription.serviceName}
-                            className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap text-left"
+                            className="group inline-flex items-center gap-1 max-w-full text-left"
                           >
-                            {subscription.serviceName}
+                            <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
+                              {subscription.serviceName}
+                              <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                            </span>
+                            <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
                           </button>
                           {subscription.notes && (() => {
                             try {
@@ -1618,8 +2122,9 @@ export default function Subscriptions() {
                           );
                         })()}
                       </TableCell>
-                    </TableRow>
-                  ))
+                    </motion.tr>
+                  ))}
+                  </AnimatePresence>
                 ) : (
                   <TableRow>
                     <TableCell colSpan={7} className="h-32 text-center">
@@ -1633,7 +2138,8 @@ export default function Subscriptions() {
                 )}
               </TableBody>
             </Table>
-          </div>
+            </CardContent>
+          </Card>
         </div>
           </>
         )}
@@ -1722,7 +2228,7 @@ export default function Subscriptions() {
       
       <input
         type="file"
-        accept=".csv,text/csv"
+        accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
         ref={fileInputRef}
         onChange={handleImport}
         className="hidden"

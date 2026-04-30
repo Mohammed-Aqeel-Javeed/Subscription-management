@@ -581,6 +581,13 @@ export default function PlatformSectionPage() {
   const [paymentSortField, setPaymentSortField] = useState<PaymentSortField | null>(null);
   const [paymentSortDirection, setPaymentSortDirection] = useState<"asc" | "desc">("asc");
 
+  const ACTIVITY_PAGE_SIZE = 10;
+  const [activityPage, setActivityPage] = useState(1);
+
+  useEffect(() => {
+    setActivityPage(1);
+  }, [item?.id]);
+
   const [subscriptionActionTarget, setSubscriptionActionTarget] = useState<null | {
     subscriptionId: string;
     action: "cancel" | "pause" | "resume";
@@ -682,6 +689,13 @@ export default function PlatformSectionPage() {
     retry: false,
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    setActivityPage((prev) => {
+      const totalPages = Math.max(1, Math.ceil((activity?.length ?? 0) / ACTIVITY_PAGE_SIZE));
+      return Math.min(Math.max(prev, 1), totalPages);
+    });
+  }, [activity?.length]);
 
   const { data: monitoring } = useQuery<PlatformMonitoring>({
     queryKey: ["/api/platform/monitoring"],
@@ -2074,10 +2088,13 @@ export default function PlatformSectionPage() {
                       </TableHeader>
                       <TableBody>
                         {sortedCompanies.map((company) => {
-                          const status = String(company.status || "active").trim().toLowerCase();
+                          const rawStatus = String(company.status || "active").trim().toLowerCase();
+                          const status: "active" | "suspended" | "disabled" =
+                            rawStatus === "active" ? "active" : rawStatus === "disabled" ? "disabled" : "suspended";
+
                           const isDisabled = status === "disabled";
-                          const canSuspend = !isDisabled && status === "active";
-                          const canReactivate = !isDisabled && status === "suspended";
+                          const canSuspend = status === "active";
+                          const canReactivate = status === "suspended";
                           const actionBusy = updateTenantStatusMutation.isPending || offboardTenantMutation.isPending;
 
                           return (
@@ -2121,36 +2138,39 @@ export default function PlatformSectionPage() {
                                         <Link to={`/platform/organizations/${company.tenantId}?plan=1`}>Change plan</Link>
                                       </DropdownMenuItem>
                                       <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        disabled={!canSuspend || actionBusy}
-                                        className="text-rose-700"
-                                        onClick={() =>
-                                          setOrgStatusTarget({
-                                            tenantId: company.tenantId,
-                                            companyName: formatCompanyName(company.companyName),
-                                            nextStatus: "suspended",
-                                            actionLabel: "Suspend",
-                                            description: "This will suspend tenant users and revoke active sessions.",
-                                          })
-                                        }
-                                      >
-                                        Suspend
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        disabled={!canReactivate || actionBusy}
-                                        className="text-emerald-700"
-                                        onClick={() =>
-                                          setOrgStatusTarget({
-                                            tenantId: company.tenantId,
-                                            companyName: formatCompanyName(company.companyName),
-                                            nextStatus: "active",
-                                            actionLabel: "Reactivate",
-                                            description: "This will reactivate the tenant.",
-                                          })
-                                        }
-                                      >
-                                        Reactivate
-                                      </DropdownMenuItem>
+                                      {status === "active" ? (
+                                        <DropdownMenuItem
+                                          disabled={!canSuspend || actionBusy}
+                                          className="text-rose-700"
+                                          onClick={() =>
+                                            setOrgStatusTarget({
+                                              tenantId: company.tenantId,
+                                              companyName: formatCompanyName(company.companyName),
+                                              nextStatus: "suspended",
+                                              actionLabel: "Suspend",
+                                              description: "This will temporarily disable access for this organization and revoke active sessions.",
+                                            })
+                                          }
+                                        >
+                                          Suspend
+                                        </DropdownMenuItem>
+                                      ) : status === "suspended" ? (
+                                        <DropdownMenuItem
+                                          disabled={!canReactivate || actionBusy}
+                                          className="text-emerald-700"
+                                          onClick={() =>
+                                            setOrgStatusTarget({
+                                              tenantId: company.tenantId,
+                                              companyName: formatCompanyName(company.companyName),
+                                              nextStatus: "active",
+                                              actionLabel: "Reactivate",
+                                              description: "This will restore access for this organization.",
+                                            })
+                                          }
+                                        >
+                                          Reactivate
+                                        </DropdownMenuItem>
+                                      ) : null}
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         disabled={isDisabled || actionBusy}
@@ -3195,21 +3215,81 @@ export default function PlatformSectionPage() {
           item.id === "notification-logs"
             ? "Recent activity events that help support reminder and notification reviews."
             : "Latest platform-wide audit history entries.",
-          activity.length ? (
-            <div className="space-y-3">
-              {activity.map((entry, index) => (
-                <div key={entry._id || `${entry.tenantId}-${index}`} className="rounded-lg border border-indigo-200/50 bg-white/70 px-4 py-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-indigo-900 truncate">{activityLabel(entry)}</div>
-                      <div className="text-xs text-indigo-700/70 mt-1">{entry.companyName || "Platform"}</div>
+          activity.length ? (() => {
+            const total = activity.length;
+            const totalPages = Math.max(1, Math.ceil(total / ACTIVITY_PAGE_SIZE));
+            const safePage = Math.min(Math.max(activityPage, 1), totalPages);
+            const startIndex = (safePage - 1) * ACTIVITY_PAGE_SIZE;
+            const endIndexExclusive = Math.min(total, startIndex + ACTIVITY_PAGE_SIZE);
+            const pageItems = activity.slice(startIndex, endIndexExclusive);
+            const PAGE_WINDOW = 4;
+            const windowStart = Math.floor((safePage - 1) / PAGE_WINDOW) * PAGE_WINDOW + 1;
+            const windowEnd = Math.min(totalPages, windowStart + PAGE_WINDOW - 1);
+            const windowPages = Array.from({ length: windowEnd - windowStart + 1 }, (_, idx) => windowStart + idx);
+
+            return (
+              <div className="space-y-3">
+                <div className="space-y-3">
+                  {pageItems.map((entry, index) => (
+                    <div key={entry._id || `${entry.tenantId}-${startIndex + index}`} className="rounded-lg border border-indigo-200/50 bg-white/70 px-4 py-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-indigo-900 truncate">{activityLabel(entry)}</div>
+                          <div className="text-xs text-indigo-700/70 mt-1">{entry.companyName || "Platform"}</div>
+                        </div>
+                        <div className="text-xs text-indigo-700/70 flex-shrink-0">{formatDateTime(entry.timestamp || entry.createdAt)}</div>
+                      </div>
                     </div>
-                    <div className="text-xs text-indigo-700/70 flex-shrink-0">{formatDateTime(entry.timestamp || entry.createdAt)}</div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between gap-3 pt-2">
+                  <div className="text-xs text-indigo-700/70">
+                    Showing {startIndex + 1}–{endIndexExclusive} of {total} entries
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="h-9 px-3 rounded-lg border border-indigo-200/60 bg-white text-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+                      disabled={safePage <= 1}
+                    >
+                      Prev
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {windowPages.map((pageNum) => {
+                        const isActive = pageNum === safePage;
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setActivityPage(pageNum)}
+                            className={
+                              isActive
+                                ? "h-9 w-9 rounded-lg bg-indigo-600 text-white text-sm font-semibold"
+                                : "h-9 w-9 rounded-lg border border-indigo-200/60 bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50"
+                            }
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="h-9 px-3 rounded-lg border border-indigo-200/60 bg-white text-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => setActivityPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safePage >= totalPages}
+                    >
+                      Next
+                    </button>
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
+              </div>
+            );
+          })() : (
             <EmptyState title="No recent activity" description="Platform audit and notification logs will appear here when history records are available." />
           )
         );

@@ -3803,32 +3803,36 @@ export default function GovernmentLicense() {
         </AlertDialog>
         {filtersOpen && sidebarSlotEl ? createPortal(<FiltersSidebarPanel />, sidebarSlotEl) : null}
 
-        {/* Header Section */}
-        <div className="flex items-center justify-between mb-6 shrink-0">
-          <div className="flex items-center space-x-4">
-            <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center shadow-md border border-gray-200">
-              <ShieldCheck className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Renewals Management</h1>
-            </div>
+        {/* ── Header Row ── */}
+        <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-200 shrink-0">
+          <div className="flex items-center gap-4">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg"
+            >
+              <ShieldCheck className="h-5 w-5 text-white" />
+            </motion.div>
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Renewals Management</h1>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <Can I="create" a="License">
-              <Button
-                onClick={handleAddNew}
-                className="w-44 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New Renewal
-              </Button>
+              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                <Button
+                  onClick={handleAddNew}
+                  className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Renewal
+                </Button>
+              </motion.div>
             </Can>
 
             <Button
               variant="outline"
               onClick={() => navigate('/renewal-log')}
-              className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200"
+              className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200 h-10 rounded-lg"
             >
               <Calendar className="h-4 w-4 mr-2" />
               History
@@ -3842,9 +3846,6 @@ export default function GovernmentLicense() {
                 } else if (value === 'import') {
                   setImportConfirmOpen(true);
                 }
-
-                // Radix Select won't re-fire onValueChange for the same value.
-                // Remounting clears internal selection so Export/Import always works.
                 setDataManagementSelectKey((k) => k + 1);
               }}
             >
@@ -3869,8 +3870,8 @@ export default function GovernmentLicense() {
           </div>
         </div>
 
-        {/* Search + Filter */}
-        <div className="mb-6 bg-white border border-gray-200  shadow-sm p-4 shrink-0">
+        {/* ── Search + Filter Bar ── */}
+        <div className="mb-4 shrink-0">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -3878,14 +3879,14 @@ export default function GovernmentLicense() {
                 placeholder="Search renewals..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80 border-gray-200 bg-white text-gray-900 placeholder-gray-500 h-10 text-sm rounded-lg"
+                className="pl-10 w-72 border-gray-200 bg-white text-gray-900 placeholder-gray-400 h-10 text-sm rounded-lg shadow-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
               />
             </div>
 
             <Button
               type="button"
               variant="outline"
-              className="h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white text-sm font-semibold shadow-lg border border-white/20 ring-1 ring-black/5 hover:from-indigo-600 hover:to-blue-700 hover:shadow-xl transition-all"
+              className="h-10 px-5 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white text-sm font-semibold shadow-md border-0 hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg transition-all"
               onClick={() => setFiltersOpen((v) => !v)}
             >
               Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
@@ -3933,84 +3934,88 @@ export default function GovernmentLicense() {
                 </div>
               ) : (
                 <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
-                  <TableHeader>
-                    <TableRow className="border-b-2 border-gray-400 bg-gray-200">
-                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[160px]">
+                <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                    <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[160px]">
                         <button
                           onClick={() => handleSort('licenseName')}
-                          className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                          className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                         >
                           TITLE/NAME/NO.
                           {getSortIcon('licenseName')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[120px]">
                         <button
                           onClick={() => handleSort('startDate')}
-                          className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                          className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                         >
                           ISSUE DATE
                           {getSortIcon('startDate')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[120px]">
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[120px]">
                         <button
                           onClick={() => handleSort('endDate')}
-                          className="flex items-center font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                          className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                         >
                           EXPIRY DATE
                           {getSortIcon('endDate')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Renewal Submit</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[150px]">Renewal Submit</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-right text-xs font-bold text-white uppercase tracking-wide w-[110px]">
                         <button
                           onClick={() => handleSort('renewalFee')}
-                          className="flex items-center justify-end w-full font-bold hover:text-blue-600 transition-colors cursor-pointer"
+                          className="flex items-center justify-end w-full font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                         >
                           RENEWAL FEE
                           {getSortIcon('renewalFee')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">Status</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[150px]">Renewal Status</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-3 pr-6 text-right text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">ACTIONS</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[110px]">Status</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[150px]">Renewal Status</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 pr-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[110px]">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
                     <TableBody>
                       <AnimatePresence>
                         {sortedLicenses.map((license, index) => (
-                          <motion.tr 
+                        <motion.tr 
                             key={license.id}
-                            className="hover:bg-slate-50 transition-colors"
+                            className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0 }}
-                            transition={{ delay: 0.05 * index }}
+                            transition={{ delay: 0.04 * index }}
                           >
-                            <TableCell className="px-3 py-3 font-medium text-gray-800 w-[160px] min-w-0 text-left">
+                            <TableCell className="px-4 py-3 w-[160px] min-w-0 text-left">
                               <button
                                 type="button"
                                 onClick={() => handleEdit(license)}
                                 title={license.licenseName}
-                                className="text-indigo-700 hover:text-indigo-900 underline underline-offset-2 block w-full truncate whitespace-nowrap text-left"
+                                className="group inline-flex items-center gap-1 max-w-full text-left"
                               >
-                                {truncateText(license.licenseName, 18)}
+                                <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
+                                  {truncateText(license.licenseName, 16)}
+                                  <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                                </span>
+                                <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
                               </button>
                             </TableCell>
-                            <TableCell className="px-3 py-3 text-sm text-gray-600 w-[120px]">
+                                <TableCell className="px-4 py-3.5 text-sm text-gray-600 w-[120px]">
                               <div className="flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
                                 {license.startDate ? new Date(license.startDate).toLocaleDateString('en-GB') : ''}
                               </div>
                             </TableCell>
-                            <TableCell className="px-3 py-3 text-sm text-gray-600 w-[120px]">
+                                <TableCell className="px-4 py-3.5 text-sm text-gray-600 w-[120px]">
                               <div className="flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
                                 {license.endDate ? new Date(license.endDate).toLocaleDateString('en-GB') : ''}
                               </div>
                             </TableCell>
-                            <TableCell className="px-3 py-3 text-center w-[150px]">
+                                <TableCell className="px-4 py-3.5 text-center w-[150px]">
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -4020,15 +4025,15 @@ export default function GovernmentLicense() {
                                   setSubmissionOpenedFromTable(true);
                                   setShowSubmissionDetails(true);
                                 }}
-                                className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100 hover:border-green-300 hover:text-green-800 font-medium text-sm px-3 py-1 transition-colors"
+                                className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800 font-semibold text-xs px-4 py-1.5 rounded-lg transition-all shadow-sm"
                               >
                                 Renewal Submit
                               </Button>
                             </TableCell>
-                            <TableCell className="px-3 py-3 text-right text-sm text-gray-700 font-semibold w-[110px]">
+                                <TableCell className="px-4 py-3.5 text-right text-sm text-gray-700 font-semibold w-[110px]">
                               {typeof license.renewalFee === 'number' ? `$${license.renewalFee.toFixed(2).toLocaleString()}` : '-'}
                             </TableCell>
-                            <TableCell className="px-3 py-3 w-[110px] text-left">
+                                <TableCell className="px-4 py-3.5 w-[110px] text-left">
                               {(() => {
                                 const derived = getDerivedStatus({ endDate: license.endDate, status: license.status });
                                 return (
@@ -4038,7 +4043,7 @@ export default function GovernmentLicense() {
                                 );
                               })()}
                             </TableCell>
-                            <TableCell className="px-3 py-3 w-[150px] text-left">
+                                <TableCell className="px-4 py-3.5 w-[150px] text-left">
                               {license.renewalStatus ? (
                                 <span className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none min-w-[140px] ${getRenewalStatusClassName(license.renewalStatus)}`}>
                                   {getRenewalStatusLabel(license.renewalStatus)}
@@ -4047,7 +4052,7 @@ export default function GovernmentLicense() {
                                 <span className="text-gray-400 text-xs">-</span>
                               )}
                             </TableCell>
-                            <TableCell className="px-3 pr-6 py-3 text-right w-[110px]">
+                                <TableCell className="px-4 pr-6 py-3.5 text-right w-[110px]">
                               {(() => {
                                 const rowId = String(license.id || "");
                                 const isOpen = !!rowId && openActionsMenuForId === rowId;
@@ -5019,12 +5024,15 @@ export default function GovernmentLicense() {
                         const name = String(field.name || '').trim() || 'Custom Field';
                         const path = `customFields.${fieldId}`;
                         const value = String(form.watch(path as any) || '');
+                        const rawType = String(field.dataType || field.type || 'Text');
+                        const normalizedType = rawType.toLowerCase();
+                        const inputType = normalizedType === 'number' ? 'number' : normalizedType === 'date' ? 'date' : 'text';
 
                         return (
                           <div key={fieldId} className="space-y-2">
                             <label className="block text-sm font-medium text-slate-700">{name}</label>
                             <Input
-                              type="text"
+                              type={inputType}
                               className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
                               value={value}
                               onChange={(e) => {

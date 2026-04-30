@@ -1,6 +1,6 @@
 // import { insertUserSchema } from "@shared/schema";
 import React, { useState, useEffect, useRef } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -1017,20 +1017,21 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
       >
         <div className="rounded-2xl overflow-hidden shadow-md bg-white flex flex-col" style={{ height: 'calc(100vh - 220px)' }}>
           <div className="flex-1 overflow-y-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="sticky top-0 z-20">
-                <tr className="bg-blue-600">
-                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Employee</th>
-                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Role</th>
-                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Department</th>
-                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Email</th>
-                  <th className="py-4 px-5 text-center text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Subscriptions</th>
-                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Status</th>
-                  <th className="py-4 px-5 text-right text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {[...filteredEmployees].reverse().map((employee, index) => {
+            <Table containerClassName="overflow-visible" className="w-full table-fixed">
+              <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">Employee</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[140px]">Role</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[160px]">Department</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Email</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[150px]">Subscriptions</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[130px]">Status</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 pr-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[110px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <AnimatePresence>
+                  {[...filteredEmployees].reverse().map((employee, index) => {
                   // Count subscriptions owned by this employee
                   const subscriptionCount = subscriptions.filter((sub: any) =>
                     sub.owner?.toLowerCase() === employee.name?.toLowerCase() ||
@@ -1040,29 +1041,34 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
                   return (
                     <motion.tr
                       key={employee._id}
+                      className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: index * 0.05 }}
-                      className="hover:bg-gray-50 transition-colors"
+                      exit={{ opacity: 0 }}
+                      transition={{ delay: 0.04 * index }}
                     >
-                      <td className="py-3 px-4">
+                      <TableCell className="px-4 py-3 w-[200px] min-w-0 text-left">
                         <button
                           type="button"
                           onClick={() => handleEdit(employee)}
-                          className="text-sm font-medium text-indigo-700 hover:text-indigo-900 underline hover:no-underline transition-all duration-200 cursor-pointer text-left max-w-[200px] truncate block"
                           title={employee.name}
+                          className="group inline-flex items-center gap-1 max-w-full text-left"
                         >
-                          {employee.name}
+                          <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate max-w-[180px]">
+                            {employee.name}
+                            <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                          </span>
+                          <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
                         </button>
-                      </td>
-                      <td className="py-3 px-4 text-gray-900 text-sm">{employee.role}</td>
-                      <td className="py-3 px-4">
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-sm text-gray-600 w-[140px]">{employee.role}</TableCell>
+                      <TableCell className="px-4 py-3 w-[160px]">
                         <Badge className="bg-indigo-100 text-indigo-800 rounded-full px-3 py-1 text-xs">
                           {employee.department}
                         </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-gray-900 text-sm">{employee.email}</td>
-                      <td className="py-3 px-4 text-center">
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-sm text-gray-600">{employee.email}</TableCell>
+                      <TableCell className="px-4 py-3 text-center w-[150px]">
                         <button
                           onClick={() => {
                             const employeeSubs = subscriptions.filter((sub: any) =>
@@ -1079,9 +1085,9 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
                         >
                           {subscriptionCount}
                         </button>
-                      </td>
-                      <td className="py-3 px-4">{getStatusBadge(employee.status)}</td>
-                      <td className="py-3 px-4">
+                      </TableCell>
+                      <TableCell className="px-4 py-3 w-[130px]">{getStatusBadge(employee.status)}</TableCell>
+                      <TableCell className="px-4 pr-6 py-3 text-right w-[110px]">
                         <div className="flex justify-end">
                           {(() => {
                             const rowId = String(employee._id);
@@ -1129,23 +1135,24 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
                             );
                           })()}
                         </div>
-                      </td>
+                      </TableCell>
                     </motion.tr>
                   );
                 })}
+                </AnimatePresence>
 
                 {filteredEmployees.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="text-center py-6">
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-6">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <Users className="w-8 h-8 text-gray-400" />
                         <p className="text-sm text-gray-500">No employees found</p>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       </motion.div>
@@ -1223,11 +1230,13 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
                       className="hover:bg-gray-50 transition-colors"
                     >
                       <TableCell className="px-6 py-4">
-                        <div
-                          className="font-semibold text-gray-900 text-sm whitespace-normal break-words"
-                          title={String(sub.serviceName || '')}
-                        >
-                          {sub.serviceName}
+                        <div className="max-w-[320px]">
+                          <div
+                            className="font-semibold text-gray-900 text-sm truncate"
+                            title={String(sub.serviceName || '')}
+                          >
+                            {sub.serviceName}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className="px-6 py-4">
@@ -2118,110 +2127,113 @@ function UserManagementTab() {
       >
         <div className="rounded-2xl overflow-hidden shadow-md bg-white flex flex-col" style={{ height: 'calc(100vh - 220px)' }}>
           <div className="flex-1 overflow-y-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="sticky top-0 z-20">
-                <tr className="bg-blue-600">
-                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">User</th>
-                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Email</th>
-                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Role</th>
-                  <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Status</th>
-                  <th className="py-4 px-5 text-right text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+            <Table containerClassName="overflow-visible" className="w-full table-fixed">
+              <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[240px]">User</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Email</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[220px]">Role</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[160px]">Status</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 pr-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[110px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {filteredUsers.length > 0 ? (
-                  [...filteredUsers].reverse().map((user, index) => (
-                    <motion.tr
-                      key={user.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: index * 0.05 }}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="py-3 px-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center shadow-sm">
-                            <User className="text-indigo-600" size={18} />
-                          </div>
-                          <div className="max-w-[200px]">
+                  <AnimatePresence>
+                    {[...filteredUsers].reverse().map((user, index) => (
+                      <motion.tr
+                        key={user.id}
+                        className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ delay: 0.04 * index }}
+                      >
+                        <TableCell className="px-4 py-3 w-[240px] min-w-0 text-left">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center shadow-sm flex-shrink-0">
+                              <User className="text-indigo-600" size={18} />
+                            </div>
                             <button
                               type="button"
                               onClick={() => handleEdit(user)}
-                              className="text-sm font-medium text-indigo-700 hover:text-indigo-900 underline hover:no-underline transition-all duration-200 cursor-pointer text-left truncate block w-full"
                               title={user.name}
+                              className="group inline-flex items-center gap-1 max-w-full text-left min-w-0"
                             >
-                              {user.name}
+                              <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate max-w-[170px]">
+                                {user.name}
+                                <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                              </span>
+                              <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
                             </button>
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-gray-900 text-sm">{user.email}</td>
-                      <td className="py-3 px-4">{getRoleBadge(user.role)}</td>
-                      <td className="py-3 px-4">{getStatusBadge(user.status)}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex justify-end">
-                          {(() => {
-                            const rowId = String(user.id);
-                            const isOpen = !!rowId && openActionsMenuForId === rowId;
-                            const isAnotherRowOpen = !!openActionsMenuForId && openActionsMenuForId !== rowId;
-                            return (
-                              <DropdownMenu
-                                open={isOpen}
-                                onOpenChange={(open) => {
-                                  if (!rowId) return;
-                                  setOpenActionsMenuForId(open ? rowId : null);
-                                }}
-                              >
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${isAnotherRowOpen ? "invisible" : ""
-                                      }`}
-                                  >
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                  align="end"
-                                  className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-sm text-gray-600">{user.email}</TableCell>
+                        <TableCell className="px-4 py-3 w-[220px]">{getRoleBadge(user.role)}</TableCell>
+                        <TableCell className="px-4 py-3 w-[160px]">{getStatusBadge(user.status)}</TableCell>
+                        <TableCell className="px-4 pr-6 py-3 text-right w-[110px]">
+                          <div className="flex justify-end">
+                            {(() => {
+                              const rowId = String(user.id);
+                              const isOpen = !!rowId && openActionsMenuForId === rowId;
+                              const isAnotherRowOpen = !!openActionsMenuForId && openActionsMenuForId !== rowId;
+                              return (
+                                <DropdownMenu
+                                  open={isOpen}
+                                  onOpenChange={(open) => {
+                                    if (!rowId) return;
+                                    setOpenActionsMenuForId(open ? rowId : null);
+                                  }}
                                 >
-                                  <DropdownMenuItem
-                                    onClick={() => handleEdit(user)}
-                                    className="cursor-pointer"
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+                                        isAnotherRowOpen ? 'invisible' : ''
+                                      }`}
+                                    >
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    align="end"
+                                    className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
                                   >
-                                    <Edit className="h-4 w-4 mr-2" />
-                                    Edit
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleDelete(user.id)}
-                                    className="cursor-pointer text-red-600 focus:text-red-600"
-                                    disabled={deleteMutation.isPending}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            );
-                          })()}
-                        </div>
-                      </td>
-                    </motion.tr>
-                  ))
+                                    <DropdownMenuItem onClick={() => handleEdit(user)} className="cursor-pointer">
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => handleDelete(user.id)}
+                                      className="cursor-pointer text-red-600 focus:text-red-600"
+                                      disabled={deleteMutation.isPending}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              );
+                            })()}
+                          </div>
+                        </TableCell>
+                      </motion.tr>
+                    ))}
+                  </AnimatePresence>
                 ) : (
-                  <tr>
-                    <td colSpan={5} className="text-center py-8">
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
                       <div className="flex flex-col items-center justify-center">
                         <UsersIcon className="w-12 h-12 text-gray-400 mb-3" />
                         <p className="text-base font-medium text-gray-900">No users found</p>
                         <p className="text-gray-500 mt-1 text-sm">Try adjusting your search or add a new user</p>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       </motion.div>
@@ -2292,13 +2304,17 @@ function CompanyDetailsLanding() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
+  const tabParam = searchParams.get("tab");
+  if (!tabParam) {
+    return <Navigate to="/company-details/company" replace />;
+  }
+
   useEffect(() => {
-    const tabParam = searchParams.get("tab");
     const section = normalizeCompanyTabFromQuery(tabParam);
     if (section) {
       navigate(`/company-details/${section}`, { replace: true });
     }
-  }, [navigate, searchParams]);
+  }, [navigate, tabParam]);
 
   return (
     <div className="min-h-screen bg-gray-50 relative overflow-hidden">
@@ -3521,27 +3537,23 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                     <form onSubmit={handleSubmit} className="h-full flex flex-col gap-4">
 
                       {/* ── Header Banner ── */}
-                      <div className="flex-shrink-0 bg-gradient-to-r from-indigo-600 via-blue-600 to-blue-500 rounded-2xl px-8 py-5 flex items-center justify-between shadow-lg">
+                      <div className="flex-shrink-0 bg-gradient-to-r from-indigo-600 via-blue-600 to-blue-500 rounded-2xl px-8 py-6 flex items-center justify-between shadow-lg">
                         <div className="flex items-center gap-4">
                           <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-inner backdrop-blur-sm">
-                            <Building2 className="text-white" size={24} />
+                            <Building2 className="text-white" size={26} />
                           </div>
                           <div>
-                            <h2 className="text-xl font-bold text-white tracking-tight">Company Information</h2>
+                            <h2 className="text-2xl font-bold text-white tracking-tight">Company Information</h2>
                           </div>
-                        </div>
-                        <div className="hidden md:flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-2">
-                          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                          <span className="text-white text-sm font-medium">Profile Active</span>
                         </div>
                       </div>
 
                       {/* ── All Fields ── */}
-                      <div className="flex-1 min-h-0 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 grid grid-cols-1 md:grid-cols-2 gap-4 content-start">
+                      <div className="flex-1 min-h-0 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 grid grid-cols-1 md:grid-cols-2 gap-4 content-start">
 
                         {/* Company Name */}
-                        <div className="space-y-1">
-                          <Label htmlFor="companyName" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Company Name</Label>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="companyName" className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Company Name</Label>
                           {companyLoading ? <Skeleton className="h-10 w-full" /> : (
                             <Input
                               id="companyName"
@@ -3549,14 +3561,14 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                               value={companyInfo.companyName}
                               onChange={handleInputChange}
                               placeholder="e.g. Acme Corporation"
-                              className="h-10 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200"
+                              className="h-11 text-base border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200"
                             />
                           )}
                         </div>
 
                         {/* Address */}
-                        <div className="space-y-1">
-                          <Label htmlFor="address" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Address</Label>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="address" className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Address</Label>
                           {companyLoading ? <Skeleton className="h-10 w-full" /> : (
                             <Input
                               id="address"
@@ -3564,14 +3576,14 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                               value={companyInfo.address}
                               onChange={handleInputChange}
                               placeholder="e.g. 123 Main Street, Suite 400"
-                              className="h-10 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200"
+                              className="h-11 text-base border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200"
                             />
                           )}
                         </div>
 
                         {/* Country */}
-                        <div className="space-y-1">
-                          <Label htmlFor="country" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Country</Label>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="country" className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Country</Label>
                           {companyLoading ? <Skeleton className="h-10 w-full" /> : (
                             <Input
                               id="country"
@@ -3579,14 +3591,14 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                               value={companyInfo.country}
                               onChange={handleInputChange}
                               placeholder="e.g. India"
-                              className="h-10 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200"
+                              className="h-11 text-base border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200"
                             />
                           )}
                         </div>
 
                         {/* Financial Year End */}
-                        <div className="space-y-1">
-                          <Label htmlFor="financialYearEnd" className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Financial Year End</Label>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="financialYearEnd" className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Financial Year End</Label>
                           {companyLoading ? <Skeleton className="h-10 w-full" /> : (
                             <Input
                               id="financialYearEnd"
@@ -3594,20 +3606,20 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                               type="date"
                               value={companyInfo.financialYearEnd}
                               onChange={handleInputChange}
-                              className="h-10 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200"
+                              className="h-11 text-base border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200"
                             />
                           )}
                         </div>
 
                         {/* Logo Upload */}
-                        <div className="space-y-1">
-                          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Company Logo</Label>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Company Logo</Label>
                           {companyLoading ? (
-                            <Skeleton className="h-20 w-full rounded-xl" />
+                            <Skeleton className="h-24 w-full rounded-xl" />
                           ) : (
                             <div
                               onClick={() => document.getElementById('logo-upload')?.click()}
-                              className="relative h-20 border-2 border-dashed border-indigo-200 rounded-xl bg-indigo-50/40 hover:bg-indigo-50 hover:border-indigo-400 transition-all duration-200 cursor-pointer flex items-center justify-center gap-3 group"
+                              className="relative h-24 border-2 border-dashed border-indigo-200 rounded-xl bg-indigo-50/40 hover:bg-indigo-50 hover:border-indigo-400 transition-all duration-200 cursor-pointer flex items-center justify-center gap-3 group"
                             >
                               {companyInfo.companyLogo ? (
                                 <>
@@ -3634,8 +3646,8 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                         </div>
 
                         {/* Local Currency */}
-                        <div className="space-y-1">
-                          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Local Currency</Label>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Local Currency</Label>
                           {companyLoading ? <Skeleton className="h-10 w-full" /> : (
                             (() => {
                               const selectedCurrency = companyInfo.defaultCurrency || userData?.defaultCurrency || '';
@@ -3645,7 +3657,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                                     value={selectedCurrency}
                                     onValueChange={(val) => setCompanyInfo(prev => ({ ...prev, defaultCurrency: val }))}
                                   >
-                                    <SelectTrigger className="h-10 border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200">
+                                    <SelectTrigger className="h-12 text-base border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200">
                                       <SelectValue placeholder={currenciesLoading ? 'Loading…' : 'Select currency'} />
                                     </SelectTrigger>
                                     <SelectContent className="dropdown-content">
@@ -3680,20 +3692,20 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                           )}
                         </div>
 
-                      </div>
+                        {/* Save Button — inside the section */}
+                        <div className="md:col-span-2 flex justify-end pt-2 border-t border-gray-100">
+                          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                            <Button
+                              type="submit"
+                              disabled={saveCompanyMutation.isPending || companyLoading}
+                              className="bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-700 hover:to-blue-600 text-white font-semibold shadow-lg hover:shadow-indigo-200 py-3 px-10 rounded-xl text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
+                            >
+                              <Save className="w-4 h-4" />
+                              {saveCompanyMutation.isPending ? "Saving..." : "Save Company Information"}
+                            </Button>
+                          </motion.div>
+                        </div>
 
-                      {/* ── Save Button ── */}
-                      <div className="flex-shrink-0 flex justify-end pb-1">
-                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                          <Button
-                            type="submit"
-                            disabled={saveCompanyMutation.isPending || companyLoading}
-                            className="bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-700 hover:to-blue-600 text-white font-semibold shadow-lg hover:shadow-indigo-200 py-3 px-10 rounded-xl text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
-                          >
-                            <Save className="w-4 h-4" />
-                            {saveCompanyMutation.isPending ? "Saving..." : "Save Company Information"}
-                          </Button>
-                        </motion.div>
                       </div>
 
                     </form>
@@ -3708,7 +3720,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                     className="h-full flex flex-col gap-6 pt-4"
                   >
                     {/* Inline Header Row */}
-                    <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-200">
+                    <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4">
                       <div className="flex items-center gap-4">
                         <motion.div
                           whileHover={{ scale: 1.05 }}
@@ -4001,13 +4013,13 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                               <div className="flex-1 min-h-0 overflow-auto">
                                 <table className="min-w-full table-fixed">
                                   <thead>
-                                    <tr className="border-b-2 border-gray-400 bg-gray-200">
-                                      <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">DEPARTMENT</th>
-                                      <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[220px]">HEAD</th>
-                                      <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide w-[240px]">EMAIL</th>
-                                      <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[110px]">EMPLOYEES</th>
-                                      <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-center text-xs font-bold text-gray-800 uppercase tracking-wide w-[140px]">SUBSCRIPTIONS</th>
-                                      <th className="sticky top-0 z-20 bg-gray-200 h-12 px-4 text-right text-xs font-bold text-gray-800 uppercase tracking-wide">ACTIONS</th>
+                                    <tr className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[220px]">DEPARTMENT</th>
+                                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[220px]">HEAD</th>
+                                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[240px]">EMAIL</th>
+                                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[110px]">EMPLOYEES</th>
+                                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[140px]">SUBSCRIPTIONS</th>
+                                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-right text-xs font-bold text-white uppercase tracking-wide">ACTIONS</th>
                                     </tr>
                                   </thead>
                                   <tbody className="bg-white">
@@ -4027,8 +4039,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                                         return (
                                           <tr
                                             key={displayName + idx}
-                                            className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
-                                              }`}
+                                          className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
                                           >
                                             <td className="px-3 py-3 font-medium text-gray-800 text-sm w-[220px] max-w-[220px] overflow-hidden text-left">
                                               <span className="block truncate whitespace-nowrap" title={String(displayName)}>
@@ -4400,7 +4411,14 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                                         className="hover:bg-gray-50 transition-colors"
                                       >
                                         <TableCell className="px-6 py-4">
-                                          <div className="font-semibold text-gray-900 text-sm">{sub.serviceName}</div>
+                                            <div className="max-w-[320px]">
+                                              <div
+                                                className="font-semibold text-gray-900 text-sm truncate"
+                                                title={String(sub.serviceName || '')}
+                                              >
+                                                {sub.serviceName}
+                                              </div>
+                                            </div>
                                         </TableCell>
                                         <TableCell className="px-6 py-4">
                                           <div className="text-sm text-gray-600">{sub.billingCycle || '-'}</div>

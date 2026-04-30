@@ -1,20 +1,20 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ChevronDown, Check } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Settings, Eye, EyeOff, CreditCard, Shield, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X, MoreVertical, BadgeDollarSign, WalletCards, Layers, ShieldCheck } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Settings, CreditCard, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X, MoreVertical, BadgeDollarSign, WalletCards, Layers, LayoutGrid, Pencil } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -42,10 +42,12 @@ function ConfigurationLanding() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  useEffect(() => {
-    const tabParam = searchParams.get("tab");
-    if (!tabParam) return;
+  const tabParam = searchParams.get("tab");
+  if (!tabParam) {
+    return <Navigate to="/configuration/currency" replace />;
+  }
 
+  useEffect(() => {
     // Legacy tabs (merged into Custom field)
     if (tabParam === 'subscription' || tabParam === 'compliance' || tabParam === 'reminder') {
       navigate('/configuration/custom-field', { replace: true });
@@ -55,7 +57,7 @@ function ConfigurationLanding() {
     if (isConfigSection(tabParam)) {
       navigate(`/configuration/${tabParam}`, { replace: true });
     }
-  }, [navigate, searchParams]);
+  }, [navigate, tabParam]);
 
   return (
     <div className="h-full bg-gray-50 relative overflow-hidden flex flex-col min-h-0">
@@ -1444,9 +1446,37 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
   };
   
   // Note: visibility toggles removed from UI; endpoints kept server-side if needed.
+
+  const sanitizeDecimalInput = (raw: string) => {
+    // Allow digits and a single '.' only.
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const dotIndex = cleaned.indexOf(".");
+    if (dotIndex === -1) return cleaned;
+    return cleaned.slice(0, dotIndex + 1) + cleaned.slice(dotIndex + 1).replace(/\./g, "");
+  };
   
   // Add/Update currency handler
-  const addNewCurrency = async () => {
+  const addNewCurrency = async (): Promise<boolean> => {
+    const exchangeRate = newCurrency.exchangeRate.trim();
+    if (!exchangeRate) {
+      toast({
+        title: "Validation Error",
+        description: "Exchange rate is required",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    const rateNum = Number(exchangeRate);
+    if (!Number.isFinite(rateNum) || rateNum <= 0) {
+      toast({
+        title: "Validation Error",
+        description: "Exchange rate must be a positive number",
+        variant: "destructive",
+      });
+      return false;
+    }
+
     if (
       newCurrency.name.trim() &&
       newCurrency.code.trim() &&
@@ -1468,7 +1498,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
             code: newCurrency.code.trim().toUpperCase(),
             symbol: newCurrency.symbol.trim(),
             isoNumber: newCurrency.isoNumber.trim(),
-            exchangeRate: newCurrency.exchangeRate.trim(),
+            exchangeRate,
           }),
         });
         
@@ -1492,6 +1522,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
             description: `${newCurrency.name} currency has been ${isEditMode ? 'updated' : 'added'} successfully`,
             variant: "success",
           });
+          return true;
         } else {
           const error = await res.json();
           toast({
@@ -1499,6 +1530,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
             description: error.message || `Failed to ${isEditMode ? 'update' : 'add'} currency`,
             variant: "destructive",
           });
+          return false;
         }
       } catch (error) {
         toast({
@@ -1506,6 +1538,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
           description: `Failed to ${isEditMode ? 'update' : 'add'} currency`,
           variant: "destructive",
         });
+        return false;
       }
     } else {
       toast({
@@ -1513,6 +1546,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
         description: "Please fill all required fields and ensure currency code is unique",
         variant: "destructive",
       });
+      return false;
     }
   };
   
@@ -1712,6 +1746,67 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
 
   const MAX_CUSTOM_FIELDS = 4;
 
+  const [customFieldKind, setCustomFieldKind] = useState<'subscription' | 'compliance' | 'renewal'>('subscription');
+  const [newCustomFieldEnabled, setNewCustomFieldEnabled] = useState(true);
+  const [newFieldType, setNewFieldType] = useState('Text');
+  const [newFieldRequired, setNewFieldRequired] = useState(false);
+  const [isCreateFieldModalOpen, setIsCreateFieldModalOpen] = useState(false);
+
+  type EditingCustomField =
+    | { kind: 'subscription'; name: string }
+    | { kind: 'compliance'; id: string; name: string }
+    | { kind: 'renewal'; id: string; name: string };
+
+  const [editingCustomField, setEditingCustomField] = useState<EditingCustomField | null>(null);
+  const isEditingCustomField = !!editingCustomField;
+
+  const [customFieldCloseConfirmOpen, setCustomFieldCloseConfirmOpen] = useState(false);
+  const [customFieldModalInitial, setCustomFieldModalInitial] = useState<{ name: string; type: string; required: boolean } | null>(null);
+
+  const isCustomFieldModalDirty = () => {
+    if (!isCreateFieldModalOpen) return false;
+    const initial = customFieldModalInitial;
+    if (!initial) {
+      const name =
+        customFieldKind === 'subscription'
+          ? newFieldName
+          : customFieldKind === 'compliance'
+            ? newComplianceFieldName
+            : newRenewalFieldName;
+      return !!(name?.trim() || newFieldType !== 'Text' || newFieldRequired);
+    }
+
+    const currentName =
+      customFieldKind === 'subscription'
+        ? newFieldName
+        : customFieldKind === 'compliance'
+          ? newComplianceFieldName
+          : newRenewalFieldName;
+
+    return (
+      String(currentName || '').trim() !== String(initial.name || '').trim() ||
+      String(newFieldType || 'Text') !== String(initial.type || 'Text') ||
+      !!newFieldRequired !== !!initial.required
+    );
+  };
+
+  const forceCloseCustomFieldModal = () => {
+    setIsCreateFieldModalOpen(false);
+    setEditingCustomField(null);
+    setCustomFieldModalInitial(null);
+    setNewFieldType('Text');
+    setNewFieldRequired(false);
+    setNewCustomFieldEnabled(true);
+  };
+
+  const requestCloseCustomFieldModal = () => {
+    if (isCustomFieldModalDirty()) {
+      setCustomFieldCloseConfirmOpen(true);
+      return;
+    }
+    forceCloseCustomFieldModal();
+  };
+
   const [customFieldErrorOpen, setCustomFieldErrorOpen] = useState(false);
   const [customFieldErrorMessage, setCustomFieldErrorMessage] = useState('');
 
@@ -1844,9 +1939,12 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
     }
 
     const previousFields = fields;
-    const updatedFields = [...previousFields, { name, enabled: true }];
+    const updatedFields = [...previousFields, { name, enabled: newCustomFieldEnabled, type: newFieldType, required: newFieldRequired }];
     setFields(updatedFields);
     setNewFieldName('');
+    setNewCustomFieldEnabled(true);
+    setNewFieldType('Text');
+    setNewFieldRequired(false);
     try {
       const response = await fetch(`${API_BASE_URL}/api/config/fields`, {
         method: 'POST',
@@ -1898,12 +1996,17 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
         credentials: 'include',
         body: JSON.stringify({
           name,
-          enabled: true,
+          enabled: newCustomFieldEnabled,
           fieldType: 'compliance',
+          dataType: newFieldType,
+          required: newFieldRequired,
         }),
       });
       if (!response.ok) throw new Error('Failed to save compliance field');
       setNewComplianceFieldName('');
+      setNewCustomFieldEnabled(true);
+      setNewFieldType('Text');
+      setNewFieldRequired(false);
 
       const fetchRes = await fetch(`${API_BASE_URL}/api/config/compliance-fields`, { credentials: 'include' });
       const data = await fetchRes.json();
@@ -1942,12 +2045,17 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
         credentials: 'include',
         body: JSON.stringify({
           name,
-          enabled: true,
+          enabled: newCustomFieldEnabled,
           fieldType: 'renewal',
+          dataType: newFieldType,
+          required: newFieldRequired,
         }),
       });
       if (!response.ok) throw new Error('Failed to save renewal field');
       setNewRenewalFieldName('');
+      setNewCustomFieldEnabled(true);
+      setNewFieldType('Text');
+      setNewFieldRequired(false);
       const fetchRes = await fetch(`${API_BASE_URL}/api/config/renewal-fields`, { credentials: 'include' });
       const data = await fetchRes.json();
       setRenewalFields(Array.isArray(data) ? data : []);
@@ -1963,12 +2071,30 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
     }
   };
 
-  const updateFieldEnablement = (fieldName: string, enabled: boolean) => {
-    setFields(prev => prev.map(f => (f.name === fieldName ? { ...f, enabled } : f)));
+  const updateFieldEnablement = async (fieldName: string, enabled: boolean) => {
+    const previousFields = fields;
+    const updatedFields = previousFields.map(f => (f.name === fieldName ? { ...f, enabled } : f));
+    setFields(updatedFields);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/config/fields`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ fields: updatedFields }),
+      });
+      if (!response.ok) throw new Error('Failed to save fields');
+
+      const fetchRes = await fetch(`${API_BASE_URL}/api/config/fields`, { credentials: 'include' });
+      const data = await fetchRes.json();
+      setFields(Array.isArray(data) ? data : updatedFields);
+    } catch {
+      showCustomFieldError('Failed to update the field. Please try again.');
+      setFields(previousFields);
+    }
   };
 
-  const updateComplianceFieldEnablement = async (fieldName: string, enabled: boolean) => {
-    const field = complianceFields.find(f => f.name === fieldName);
+  const updateComplianceFieldEnablement = async (fieldId: string, enabled: boolean) => {
+    const field = complianceFields.find(f => String(f?._id || '') === String(fieldId || ''));
     if (!field || !field._id) return;
     setIsLoadingCompliance(true);
     try {
@@ -2010,6 +2136,164 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
     } finally {
       setIsLoadingRenewal(false);
     }
+  };
+
+  const updateCustomFieldDefinition = async (target: EditingCustomField) => {
+    const nextNameRaw =
+      target.kind === 'subscription'
+        ? newFieldName
+        : target.kind === 'compliance'
+          ? newComplianceFieldName
+          : newRenewalFieldName;
+    const nextName = String(nextNameRaw ?? '').trim();
+    if (!nextName) {
+      showCustomFieldError('Field name is required.');
+      return;
+    }
+
+    if (target.kind === 'subscription') {
+      const duplicate = fields.some(
+        (f) =>
+          String(f?.name ?? '').trim().toLowerCase() === nextName.toLowerCase() &&
+          String(f?.name ?? '') !== String(target.name ?? '')
+      );
+      if (duplicate) {
+        showCustomFieldError(`"${nextName}" already exists. Please use a different name.`);
+        return;
+      }
+
+      const previousFields = fields;
+      const updatedFields = previousFields.map((f) =>
+        f.name === target.name ? { ...f, name: nextName, type: newFieldType, required: newFieldRequired } : f
+      );
+      setFields(updatedFields);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/config/fields`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ fields: updatedFields }),
+        });
+        if (!response.ok) throw new Error('Failed to save fields');
+
+        const fetchRes = await fetch(`${API_BASE_URL}/api/config/fields`, { credentials: 'include' });
+        const data = await fetchRes.json();
+        setFields(Array.isArray(data) ? data : updatedFields);
+        toast({
+          title: 'Field Updated',
+          description: `${nextName} has been updated successfully`,
+          variant: 'success',
+        });
+      } catch {
+        showCustomFieldError('Failed to update the field. Please try again.');
+        setFields(previousFields);
+      }
+      return;
+    }
+
+    if (target.kind === 'compliance') {
+      const duplicate = complianceFields.some(
+        (f) =>
+          String(f?.name ?? '').trim().toLowerCase() === nextName.toLowerCase() &&
+          String(f?._id ?? '') !== String(target.id ?? '')
+      );
+      if (duplicate) {
+        showCustomFieldError(`"${nextName}" already exists. Please use a different name.`);
+        return;
+      }
+
+      setIsLoadingCompliance(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/config/compliance-fields/${target.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name: nextName, dataType: newFieldType, required: newFieldRequired }),
+        });
+        if (!response.ok) throw new Error('Failed to update compliance field');
+
+        const fetchRes = await fetch(`${API_BASE_URL}/api/config/compliance-fields`, { credentials: 'include' });
+        const data = await fetchRes.json();
+        setComplianceFields(Array.isArray(data) ? data : complianceFields);
+        toast({
+          title: 'Field Updated',
+          description: `${nextName} has been updated successfully`,
+          variant: 'success',
+        });
+      } catch {
+        showCustomFieldError('Failed to update the field. Please try again.');
+      } finally {
+        setIsLoadingCompliance(false);
+      }
+      return;
+    }
+
+    setIsLoadingRenewal(true);
+    try {
+      const duplicate = renewalFields.some(
+        (f) =>
+          String(f?.name ?? '').trim().toLowerCase() === nextName.toLowerCase() &&
+          String(f?._id ?? '') !== String(target.id ?? '')
+      );
+      if (duplicate) {
+        showCustomFieldError(`"${nextName}" already exists. Please use a different name.`);
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/config/renewal-fields/${target.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name: nextName, dataType: newFieldType, required: newFieldRequired }),
+      });
+      if (!response.ok) throw new Error('Failed to update renewal field');
+
+      const fetchRes = await fetch(`${API_BASE_URL}/api/config/renewal-fields`, { credentials: 'include' });
+      const data = await fetchRes.json();
+      setRenewalFields(Array.isArray(data) ? data : renewalFields);
+      toast({
+        title: 'Field Updated',
+        description: `${nextName} has been updated successfully`,
+        variant: 'success',
+      });
+    } catch {
+      showCustomFieldError('Failed to update the field. Please try again.');
+    } finally {
+      setIsLoadingRenewal(false);
+    }
+  };
+
+  const openCreateFieldModal = () => {
+    setEditingCustomField(null);
+    setNewFieldType('Text');
+    setNewFieldRequired(false);
+    if (customFieldKind === 'subscription') setNewFieldName('');
+    if (customFieldKind === 'compliance') setNewComplianceFieldName('');
+    if (customFieldKind === 'renewal') setNewRenewalFieldName('');
+    setCustomFieldModalInitial({
+      name: '',
+      type: 'Text',
+      required: false,
+    });
+    setIsCreateFieldModalOpen(true);
+  };
+
+  const openEditFieldModal = (target: EditingCustomField, details?: { type?: string; required?: boolean }) => {
+    setEditingCustomField(target);
+    const t = String(details?.type || 'Text');
+    const r = !!details?.required;
+    setNewFieldType(t);
+    setNewFieldRequired(r);
+    if (target.kind === 'subscription') setNewFieldName(target.name);
+    if (target.kind === 'compliance') setNewComplianceFieldName(target.name);
+    if (target.kind === 'renewal') setNewRenewalFieldName(target.name);
+    setCustomFieldKind(target.kind);
+    setCustomFieldModalInitial({
+      name: target.name,
+      type: t,
+      required: r,
+    });
+    setIsCreateFieldModalOpen(true);
   };
   
   // Note: unused bulk-save helpers removed.
@@ -2565,7 +2849,13 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
 
                             {/* Form Content */}
                             <div className="px-8 py-6">
-                              <form className="grid grid-cols-1 gap-6">
+                              <form
+                                className="grid grid-cols-1 gap-6"
+                                onSubmit={(e) => {
+                                  // Prevent browser form submission (e.g., pressing Enter) from reloading the page.
+                                  e.preventDefault();
+                                }}
+                              >
                                 {/* Currency Selection Field with Autocomplete */}
                                 <div className="space-y-2 relative">
                                   <Label className="text-sm font-semibold text-gray-700 tracking-wide">
@@ -2630,7 +2920,20 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                     step="0.01"
                                     min="0"
                                     value={newCurrency.exchangeRate || ''}
-                                    onChange={(e) => setNewCurrency({ ...newCurrency, exchangeRate: e.target.value })}
+                                    inputMode="decimal"
+                                    pattern="\\d*\\.?\\d*"
+                                    onKeyDown={(e) => {
+                                      // Prevent scientific notation and sign characters in number input.
+                                      if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') {
+                                        e.preventDefault();
+                                      }
+                                    }}
+                                    onChange={(e) =>
+                                      setNewCurrency({
+                                        ...newCurrency,
+                                        exchangeRate: sanitizeDecimalInput(e.target.value),
+                                      })
+                                    }
                                     className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                                   />
                                 </div>
@@ -2649,10 +2952,13 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                     Cancel
                                   </Button>
                                   <Button 
-                                    onClick={() => {
-                                      addNewCurrency();
-                                      restoreModalUrlIfNeeded();
-                                      setAddCurrencyOpen(false);
+                                    type="button"
+                                    onClick={async () => {
+                                      const ok = await addNewCurrency();
+                                      if (ok) {
+                                        restoreModalUrlIfNeeded();
+                                        setAddCurrencyOpen(false);
+                                      }
                                     }}
                                     className="h-9 px-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200 tracking-wide"
                                   >
@@ -2808,7 +3114,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                                 if (code) void setSecureUrlForConfigEditModal('currency', 'currency', code);
                                               }}
                                               title={`${currency.symbol || ''} ${currency.name || ''} (${currency.code || ''})`.trim()}
-                                              className="flex items-center gap-3 text-left w-full group/btn"
+                                              className="group inline-flex items-center gap-3 text-left w-full"
                                             >
                                               <div className="flex-shrink-0 w-8 h-8 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
                                                 {flagCode ? (
@@ -2818,9 +3124,13 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                                 )}
                                               </div>
                                               <div className="min-w-0">
-                                                <p className="text-sm font-semibold text-gray-800 truncate group-hover/btn:text-indigo-700 transition-colors">
-                                                  {currency.name || currency.code}
-                                                </p>
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                  <span className="relative font-semibold text-sm text-gray-800 group-hover:text-indigo-700 transition-colors duration-200 truncate">
+                                                    {currency.name || currency.code}
+                                                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                                                  </span>
+                                                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                                                </div>
                                                 <p className="text-xs text-gray-400">{currency.symbol} · {currency.code}</p>
                                               </div>
                                             </button>
@@ -3364,14 +3674,14 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                             <div className="overflow-x-auto">
                               <Table>
                                 <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Service Name</TableHead>
-                                    <TableHead>Owner</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Amount</TableHead>
-                                    <TableHead>Status</TableHead>
-                                  </TableRow>
-                                </TableHeader>
+                                    <TableRow className="bg-[#4f46e5] hover:bg-[#4f46e5] border-none">
+                                      <TableHead className="text-white font-bold h-12 px-6 uppercase text-xs">Field Name</TableHead>
+                                      <TableHead className="text-white font-bold h-12 uppercase text-xs">Field Type</TableHead>
+                                      <TableHead className="text-white font-bold h-12 uppercase text-xs">Required</TableHead>
+                                      <TableHead className="text-white font-bold h-12 uppercase text-xs">Status</TableHead>
+                                      <TableHead className="text-white font-bold h-12 text-right px-6 uppercase text-xs">Actions</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
                                 <TableBody>
                                   {selectedPaymentSubs.subscriptions.map((sub: any, idx) => (
                                     <TableRow key={idx}>
@@ -4538,340 +4848,608 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                         </div>
                       </DialogContent>
                     </Dialog>
-                    <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
+                    <AlertDialog open={customFieldCloseConfirmOpen} onOpenChange={setCustomFieldCloseConfirmOpen}>
+                      <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            You have unsaved changes. Closing will discard them.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel className="bg-white border border-gray-200">
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white"
+                            onClick={() => {
+                              setCustomFieldCloseConfirmOpen(false);
+                              forceCloseCustomFieldModal();
+                            }}
+                          >
+                            Discard
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+
+                    <Dialog
+                      open={isCreateFieldModalOpen}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          setIsCreateFieldModalOpen(true);
+                          return;
+                        }
+                        requestCloseCustomFieldModal();
+                      }}
+                    >
+                      <DialogContent showClose={false} className="max-w-md border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 overflow-hidden font-inter">
+                        <div className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                          <DialogHeader>
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <DialogTitle className="text-xl font-bold tracking-tight border-none text-white">
+                                  {isEditingCustomField ? 'Edit Field' : 'Create Field'}
+                                </DialogTitle>
+                                <p className="text-indigo-100 mt-0.5 text-sm font-medium">
+                                  {customFieldKind === 'subscription' ? 'Subscriptions' : customFieldKind === 'compliance' ? 'Compliance' : 'Renewals'} module
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={requestCloseCustomFieldModal}
+                                title="Close"
+                                className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-indigo-200 shadow-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                              >
+                                <X className="h-4 w-4" />
+                                <span className="sr-only">Close</span>
+                              </Button>
+                            </div>
+                          </DialogHeader>
+                        </div>
+
+                        <div className="px-6 py-6 space-y-6">
+                          <div className="space-y-1.5">
+                            <Label className="text-sm font-semibold text-gray-700">
+                              Field Name <span className="text-red-500">*</span>
+                            </Label>
+                            {customFieldKind === 'subscription' ? (
+                              <Input
+                                value={newFieldName}
+                                onChange={(e) => setNewFieldName(e.target.value)}
+                                placeholder="e.g. Contract End Date"
+                                className="h-10 border-gray-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm bg-white disabled:opacity-80 disabled:cursor-not-allowed"
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter' && !isEditingCustomField) addNewField();
+                                }}
+                              />
+                            ) : customFieldKind === 'compliance' ? (
+                              <Input
+                                value={newComplianceFieldName}
+                                onChange={(e) => setNewComplianceFieldName(e.target.value)}
+                                placeholder="e.g. Contract End Date"
+                                className="h-10 border-gray-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm bg-white disabled:opacity-80 disabled:cursor-not-allowed"
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter' && !isEditingCustomField) addNewComplianceField();
+                                }}
+                              />
+                            ) : (
+                              <Input
+                                value={newRenewalFieldName}
+                                onChange={(e) => setNewRenewalFieldName(e.target.value)}
+                                placeholder="e.g. Contract End Date"
+                                className="h-10 border-gray-200 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm bg-white disabled:opacity-80 disabled:cursor-not-allowed"
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter' && !isEditingCustomField) addNewRenewalField();
+                                }}
+                              />
+                            )}
+                          </div>
+                      
+                          <div className="space-y-1.5">
+                            <Label className="text-sm font-semibold text-gray-700">Field Type</Label>
+                            <Select value={newFieldType} onValueChange={setNewFieldType}>
+                              <SelectTrigger className="h-10 border-gray-200 bg-white">
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-white">
+                                  <SelectItem value="Text">Text</SelectItem>
+                                  <SelectItem value="Number">Number</SelectItem>
+                                  <SelectItem value="Date">Date</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="flex items-center justify-between rounded-xl border border-gray-100 p-4 bg-gray-50/50">
+                            <div className="space-y-0.5">
+                              <div className="text-sm font-semibold text-gray-800">Mark as required</div>
+                              <div className="text-xs text-gray-500">Users must fill this field</div>
+                            </div>
+                            <Switch 
+                              checked={newFieldRequired} 
+                              onCheckedChange={setNewFieldRequired}
+                              className="data-[state=checked]:bg-indigo-500" 
+                            />
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-white/50 border-t border-gray-100 flex justify-center gap-3">
+                          <Button
+                            type="button"
+                            onClick={requestCloseCustomFieldModal}
+                            variant="outline"
+                            className="flex-1 h-10 rounded-lg font-medium text-gray-700 bg-white hover:bg-gray-50 border-gray-200"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            className="flex-1 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-lg transition-all"
+                            onClick={() => {
+                              if (editingCustomField) {
+                                void updateCustomFieldDefinition(editingCustomField);
+                                forceCloseCustomFieldModal();
+                                return;
+                              }
+
+                              if (customFieldKind === 'subscription') void addNewField();
+                              else if (customFieldKind === 'compliance') void addNewComplianceField();
+                              else void addNewRenewalField();
+                              forceCloseCustomFieldModal();
+                            }}
+                            disabled={
+                              (customFieldKind === 'subscription' && !newFieldName.trim()) ||
+                              (customFieldKind === 'compliance' && !newComplianceFieldName.trim()) ||
+                              (customFieldKind === 'renewal' && !newRenewalFieldName.trim())
+                            }
+                          >
+                            {isEditingCustomField ? 'Save Changes' : 'Save Field'}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+
+                    <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-200 shrink-0">
                       <div className="flex items-center gap-4">
                         <motion.div
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
+                          className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg"
                         >
-                          <Layers className="text-white" size={20} />
+                          <LayoutGrid className="h-5 w-5 text-white" />
                         </motion.div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900">Custom field</h3>
-                        </div>
+                        <h3 className="text-2xl font-semibold text-gray-900 tracking-tight">Custom Fields</h3>
                       </div>
-                    </Card>
-
-                    <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
-                      <div className="flex items-center gap-4 mb-6">
-                        <motion.div
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
+                      <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                        <Button
+                          onClick={openCreateFieldModal}
+                          className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
                         >
-                          <Settings className="text-white" size={20} />
-                        </motion.div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 font-inter">Subscription Fields</h3>
-                        </div>
-                      </div>
-                      <div className="space-y-6">
-                        <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
-                          <Input
-                            value={newFieldName}
-                            onChange={(e) => setNewFieldName(e.target.value)}
-                            className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
-                            onKeyPress={(e) => e.key === 'Enter' && addNewField()}
-                            placeholder="Enter field name"
-                          />
-                          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                            <Button
-                              onClick={addNewField}
-                              disabled={!newFieldName.trim()}
-                              className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
-                            >
-                              <Plus className="w-4 h-4 mr-2" />
-                              New Field
-                            </Button>
-                          </motion.div>
-                        </div>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Create Field
+                        </Button>
+                      </motion.div>
+                    </div>
 
-                        <div className="space-y-4">
-                          <h3 className="text-base font-semibold text-gray-900">Available Fields</h3>
+                    <div className="space-y-6">
+                      <Tabs
+                        value={customFieldKind}
+                        onValueChange={(v) => setCustomFieldKind(v as 'subscription' | 'compliance' | 'renewal')}
+                      >
+                        <TabsList className="bg-transparent space-x-2 mb-6 p-0 h-auto">
+                          <TabsTrigger 
+                              value="subscription" 
+                              className="rounded-full px-5 py-2.5 text-sm font-semibold transition-all data-[state=active]:bg-[#6366f1] data-[state=active]:text-white data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-gray-100"
+                          >
+                            Subscriptions
+                            <span className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${customFieldKind === 'subscription' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                              {fields.length}
+                            </span>
+                          </TabsTrigger>
+                          <TabsTrigger 
+                              value="compliance" 
+                              className="rounded-full px-5 py-2.5 text-sm font-semibold transition-all data-[state=active]:bg-[#6366f1] data-[state=active]:text-white data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-gray-100"
+                          >
+                            Compliance
+                            <span className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${customFieldKind === 'compliance' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                              {complianceFields.length}
+                            </span>
+                          </TabsTrigger>
+                          <TabsTrigger 
+                              value="renewal" 
+                              className="rounded-full px-5 py-2.5 text-sm font-semibold transition-all data-[state=active]:bg-[#6366f1] data-[state=active]:text-white data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-gray-100"
+                          >
+                            Renewals
+                            <span className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${customFieldKind === 'renewal' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                              {renewalFields.length}
+                            </span>
+                          </TabsTrigger>
+                        </TabsList>
 
-                          <div className="bg-white border border-gray-200 rounded-xl p-4 h-64 md:h-72 lg:h-80 overflow-y-auto custom-scrollbar">
-                            {isLoading ? (
-                              <div className="flex items-center justify-center h-full">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-                              </div>
-                            ) : fields.length === 0 ? (
-                              <div className="h-full flex items-center justify-center text-gray-500">
-                                No fields configured. Add your first field above.
-                              </div>
-                            ) : (
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {fields.map((field) => (
-                                <motion.div
-                                  key={field.name}
-                                  whileHover={{ y: -5 }}
-                                  className={`p-4 border rounded-xl transition-all duration-300 ${
-                                    field.enabled
-                                      ? 'border-indigo-200 bg-indigo-50 shadow-sm'
-                                      : 'border-gray-200 bg-gray-50'
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-3">
-                                      <Checkbox
-                                        checked={field.enabled}
-                                        onCheckedChange={(checked: boolean) => updateFieldEnablement(field.name, checked)}
-                                        className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 rounded"
-                                      />
-                                      <Label className="text-sm font-medium cursor-pointer text-gray-900">
-                                        {field.name}
-                                      </Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                      {field.enabled ? (
-                                        <Badge className="bg-indigo-100 text-indigo-800 text-xs font-semibold py-1 px-3 rounded-full">
-                                          <Eye className="w-3 h-3 mr-1" />
-                                          Enabled
-                                        </Badge>
-                                      ) : (
-                                        <Badge className="bg-gray-100 text-gray-600 text-xs font-semibold py-1 px-3 rounded-full">
-                                          <EyeOff className="w-3 h-3 mr-1" />
-                                          Disabled
-                                        </Badge>
-                                      )}
+                        <TabsContent value="subscription" className="m-0 border-0 p-0">
+                          <Card className="bg-white border border-gray-200 shadow-md overflow-hidden rounded-2xl hover:shadow-lg transition-shadow">
+                            <div className="p-0">
+                              <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
+                                <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                  <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-left text-xs font-bold text-white uppercase tracking-wide w-[52%]">Field Name</TableHead>
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[18%]">Field Type</TableHead>
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[15%]">Enabled</TableHead>
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[15%]">Actions</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {isLoading ? (
+                                    <TableRow>
+                                      <TableCell colSpan={4} className="h-48 text-center text-gray-400">Loading fields...</TableCell>
+                                    </TableRow>
+                                  ) : fields.length === 0 ? (
+                                    <TableRow>
+                                      <TableCell colSpan={4} className="h-48">
+                                        <div className="flex flex-col items-center justify-center text-center text-gray-500">
+                                          <LayoutGrid className="h-10 w-10 text-gray-300 mb-3" />
+                                          <p className="font-medium text-gray-900">No fields created yet</p>
+                                          <p className="text-sm mt-1">Click "Create Field" to create one</p>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ) : (
+                                    <AnimatePresence>
+                                      {fields.map((field, index) => (
+                                        <motion.tr
+                                          key={field.name}
+                                          className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40 ${field.enabled ? '' : 'opacity-60'}`}
+                                          initial={{ opacity: 0, y: 10 }}
+                                          animate={{ opacity: 1, y: 0 }}
+                                          exit={{ opacity: 0 }}
+                                          transition={{ delay: 0.04 * index }}
+                                        >
+                                          <TableCell className="px-6 py-4">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                openEditFieldModal(
+                                                  { kind: 'subscription', name: field.name },
+                                                  { type: (field.type || 'Text'), required: !!field.required }
+                                                )
+                                              }
+                                              title={field.name}
+                                              className="group inline-flex items-center gap-2 max-w-full text-left"
+                                            >
+                                              <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
+                                                {field.name}
+                                                <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                                              </span>
+                                              <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                                            </button>
+                                          </TableCell>
+                                          <TableCell className="px-4 py-4">
+                                            <span
+                                              className={`inline-flex flex-shrink-0 items-center justify-center rounded-full px-3 py-0.5 text-xs font-bold ${
+                                                (field.type || 'Text') === 'Text'
+                                                  ? 'bg-indigo-100 text-indigo-700'
+                                                  : (field.type || 'Text') === 'Date'
+                                                    ? 'bg-teal-100 text-teal-700'
+                                                    : 'bg-blue-100 text-blue-700'
+                                              }`}
+                                            >
+                                              {field.type || 'Text'}
+                                            </span>
+                                          </TableCell>
+                                          <TableCell className="px-4 py-4 text-center">
+                                            <Switch
+                                              checked={!!field.enabled}
+                                              className="data-[state=checked]:bg-[#6366f1]"
+                                              onCheckedChange={(checked) => void updateFieldEnablement(field.name, checked)}
+                                            />
+                                          </TableCell>
+                                          <TableCell className="text-right px-6 py-4">
+                                            <div className="flex justify-end gap-3">
+                                              <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-8 w-8 text-indigo-600 border-indigo-100 hover:bg-indigo-50 rounded-md shadow-sm"
+                                                onClick={() => {
+                                                  openEditFieldModal(
+                                                    { kind: 'subscription', name: field.name },
+                                                    { type: (field.type || 'Text'), required: !!field.required }
+                                                  );
+                                                }}
+                                                title="Edit"
+                                              >
+                                                <Pencil className="h-4 w-4" />
+                                                <span className="sr-only">Edit</span>
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-8 w-8 text-red-500 border-red-100 hover:bg-red-50 rounded-md shadow-sm"
+                                                onClick={() => requestDeleteCustomField({ kind: 'subscription', name: field.name })}
+                                                title="Delete"
+                                              >
+                                                <Trash2 className="h-4 w-4" />
+                                                <span className="sr-only">Delete</span>
+                                              </Button>
+                                            </div>
+                                          </TableCell>
+                                        </motion.tr>
+                                      ))}
+                                    </AnimatePresence>
+                                  )}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </Card>
+                        </TabsContent>
+
+                        <TabsContent value="compliance" className="m-0 border-0 p-0">
+                          <Card className="bg-white border border-gray-200 shadow-md overflow-hidden rounded-2xl hover:shadow-lg transition-shadow">
+                            <div className="p-0">
+                              <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
+                                <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                  <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-left text-xs font-bold text-white uppercase tracking-wide w-[52%]">Field Name</TableHead>
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[18%]">Field Type</TableHead>
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[15%]">Enabled</TableHead>
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[15%]">Actions</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                              {isLoadingCompliance ? (
+                                <TableRow>
+                                  <TableCell colSpan={4} className="h-48 text-center text-gray-400">Loading compliance fields...</TableCell>
+                                </TableRow>
+                              ) : complianceFields.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={4} className="h-48">
+                                      <div className="flex flex-col items-center justify-center text-center text-gray-500">
+                                          <LayoutGrid className="h-10 w-10 text-gray-300 mb-3" />
+                                          <p className="font-medium text-gray-900">No compliance fields yet</p>
+                                          <p className="text-sm mt-1">Click "Add Custom Field" to create one</p>
+                                      </div>
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                <AnimatePresence>
+                                {complianceFields.map((field, index) => {
+                                  const fieldType = String(field.dataType || field.type || 'Text');
+                                  return (
+                                  <motion.tr
+                                    key={field._id || field.name}
+                                    className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40 ${field.enabled ? '' : 'opacity-60'}`}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ delay: 0.04 * index }}
+                                  >
+                                    <TableCell className="px-6 py-4">
                                       <button
-                                        className="text-red-500 hover:text-red-700 p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-red-300"
-                                        title="Delete field"
-                                        onClick={() => requestDeleteCustomField({ kind: 'subscription', name: field.name })}
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                      </button>
-                                    </div>
-                                  </div>
-                                </motion.div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                    </Card>
-
-                    <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
-                      <div className="flex items-center gap-4 mb-6">
-                        <motion.div
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
-                        >
-                          <Shield className="text-white" size={20} />
-                        </motion.div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 font-inter">Compliance Fields</h3>
-                        </div>
-                      </div>
-                      <div className="space-y-6">
-                        <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
-                          <Input
-                            value={newComplianceFieldName}
-                            onChange={(e) => setNewComplianceFieldName(e.target.value)}
-                            className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
-                            onKeyPress={(e) => e.key === 'Enter' && addNewComplianceField()}
-                          />
-                          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                            <Button
-                              onClick={addNewComplianceField}
-                              disabled={!newComplianceFieldName.trim()}
-                              className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
-                            >
-                              <Plus className="w-4 h-4 mr-2" />
-                              New Field
-                            </Button>
-                          </motion.div>
-                        </div>
-
-                        <div className="space-y-4">
-                          <h3 className="text-base font-semibold text-gray-900">Available Compliance Fields</h3>
-
-                          <div className="bg-white border border-gray-200 rounded-xl p-4 h-64 md:h-72 lg:h-80 overflow-y-auto custom-scrollbar">
-                            {isLoadingCompliance ? (
-                              <div className="flex items-center justify-center h-full">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-                              </div>
-                            ) : complianceFields.length === 0 ? (
-                              <div className="h-full flex items-center justify-center text-gray-500">
-                                No compliance fields configured. Add your first field above.
-                              </div>
-                            ) : (
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {complianceFields.map((field) => (
-                                <motion.div
-                                  key={field._id || field.name}
-                                  whileHover={{ y: -5 }}
-                                  className={`p-4 border rounded-xl transition-all duration-300 ${
-                                    field.enabled
-                                      ? 'border-indigo-200 bg-indigo-50 shadow-sm'
-                                      : 'border-gray-200 bg-gray-50'
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-3">
-                                      <Checkbox
-                                        checked={field.enabled}
-                                        onCheckedChange={(checked: boolean) => updateComplianceFieldEnablement(field.name, checked)}
-                                        className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 rounded"
-                                      />
-                                      <Label className="text-sm font-medium cursor-pointer text-gray-900">
-                                        {field.name}
-                                      </Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                      {field.enabled ? (
-                                        <Badge className="bg-indigo-100 text-indigo-800 text-xs font-semibold py-1 px-3 rounded-full">
-                                          <Eye className="w-3 h-3 mr-1" />
-                                          Enabled
-                                        </Badge>
-                                      ) : (
-                                        <Badge className="bg-gray-100 text-gray-600 text-xs font-semibold py-1 px-3 rounded-full">
-                                          <EyeOff className="w-3 h-3 mr-1" />
-                                          Disabled
-                                        </Badge>
-                                      )}
-                                      <button
-                                        className={`text-red-500 hover:text-red-700 p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-red-300 ${!field._id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title={field._id ? "Delete field" : "Cannot delete: missing id. Please refresh or re-add this field."}
+                                        type="button"
+                                        disabled={!field._id}
                                         onClick={() => {
-                                          if (!field._id) {
-                                            showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
-                                            return;
-                                          }
-                                          requestDeleteCustomField({ kind: 'compliance', id: field._id, name: field.name });
+                                          if (!field._id) return;
+                                          openEditFieldModal(
+                                            { kind: 'compliance', id: String(field._id), name: field.name },
+                                            { type: fieldType, required: !!field.required }
+                                          );
                                         }}
+                                        title={field.name}
+                                        className="group inline-flex items-center gap-2 max-w-full text-left disabled:opacity-60 disabled:cursor-not-allowed"
                                       >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
+                                        <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
+                                          {field.name}
+                                          <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                                        </span>
+                                        <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
                                       </button>
-                                    </div>
-                                  </div>
-                                </motion.div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                                    </TableCell>
+                                    <TableCell className="px-4 py-4">
+                                      <span className={`inline-flex flex-shrink-0 items-center justify-center rounded-full px-3 py-0.5 text-xs font-bold ${
+                                        fieldType === 'Text' ? 'bg-indigo-100 text-indigo-700' :
+                                        fieldType === 'Date' ? 'bg-teal-100 text-teal-700' :
+                                        'bg-blue-100 text-blue-700'
+                                      }`}>
+                                        {fieldType}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="px-4 py-4 text-center">
+                                      <Switch
+                                        checked={!!field.enabled}
+                                        className="data-[state=checked]:bg-[#6366f1]"
+                                        onCheckedChange={(checked) => {
+                                          if (!field._id) return;
+                                          void updateComplianceFieldEnablement(String(field._id), checked);
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell className="text-right px-6 py-4">
+                                      <div className="flex justify-end gap-3">
+                                          <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-8 w-8 text-indigo-600 border-indigo-100 hover:bg-indigo-50 rounded-md shadow-sm"
+                                          disabled={!field._id}
+                                          onClick={() => {
+                                              if (!field._id) return;
+                                              openEditFieldModal(
+                                                { kind: 'compliance', id: String(field._id), name: field.name },
+                                                { type: fieldType, required: !!field.required }
+                                              );
+                                          }}
+                                          title="Edit"
+                                          >
+                                          <Pencil className="h-4 w-4" />
+                                          <span className="sr-only">Edit</span>
+                                          </Button>
+                                          <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-8 w-8 text-red-500 border-red-100 hover:bg-red-50 rounded-md shadow-sm"
+                                          disabled={!field._id}
+                                          onClick={() => {
+                                            if (!field._id) {
+                                              showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
+                                              return;
+                                            }
+                                            requestDeleteCustomField({ kind: 'compliance', id: field._id, name: field.name });
+                                          }}
+                                          title="Delete"
+                                          >
+                                          <Trash2 className="h-4 w-4" />
+                                          <span className="sr-only">Delete</span>
+                                          </Button>
+                                      </div>
+                                    </TableCell>
+                                  </motion.tr>
+                                );
+                                })}
+                                </AnimatePresence>
+                              )}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </Card>
+                        </TabsContent>
 
-                    </Card>
-
-                    <Card className="bg-white border border-gray-200 shadow-sm p-6 rounded-xl">
-                      <div className="flex items-center gap-4 mb-6">
-                        <motion.div
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md"
-                        >
-                          <ShieldCheck className="text-white" size={20} />
-                        </motion.div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 font-inter">Renewal Fields</h3>
-                          <p className="text-gray-500 text-sm">Configure renewal custom fields</p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-6">
-                        <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
-                          <Input
-                            value={newRenewalFieldName}
-                            onChange={(e) => setNewRenewalFieldName(e.target.value)}
-                            className="w-80 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 font-inter"
-                            onKeyPress={(e) => e.key === 'Enter' && addNewRenewalField()}
-                            placeholder="Enter field name"
-                          />
-                          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                            <Button
-                              onClick={addNewRenewalField}
-                              disabled={!newRenewalFieldName.trim()}
-                              className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md py-2 px-4 rounded-lg font-inter"
-                            >
-                              <Plus className="w-4 h-4 mr-2" />
-                              New Field
-                            </Button>
-                          </motion.div>
-                        </div>
-
-                        <div className="space-y-4">
-                          <h3 className="text-base font-semibold text-gray-900">Available Renewal Fields</h3>
-
-                          <div className="bg-white border border-gray-200 rounded-xl p-4 h-64 md:h-72 lg:h-80 overflow-y-auto custom-scrollbar">
-                            {isLoadingRenewal ? (
-                              <div className="flex items-center justify-center h-full">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-                              </div>
-                            ) : renewalFields.length === 0 ? (
-                              <div className="h-full flex items-center justify-center text-gray-500">
-                                No renewal fields configured. Add your first field above.
-                              </div>
-                            ) : (
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {renewalFields.map((field) => (
-                                <motion.div
-                                  key={field._id || field.name}
-                                  whileHover={{ y: -5 }}
-                                  className={`p-4 border rounded-xl transition-all duration-300 ${
-                                    field.enabled
-                                      ? 'border-indigo-200 bg-indigo-50 shadow-sm'
-                                      : 'border-gray-200 bg-gray-50'
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-3">
-                                      <Checkbox
-                                        checked={field.enabled}
-                                        onCheckedChange={(checked: boolean) => field._id && updateRenewalFieldEnablement(field._id, checked)}
-                                        className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 rounded"
+                        <TabsContent value="renewal" className="m-0 border-0 p-0">
+                          <Card className="bg-white border border-gray-200 shadow-md overflow-hidden rounded-2xl hover:shadow-lg transition-shadow">
+                            <div className="p-0">
+                              <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
+                                <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                  <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-left text-xs font-bold text-white uppercase tracking-wide w-[52%]">Field Name</TableHead>
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[18%]">Field Type</TableHead>
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[15%]">Enabled</TableHead>
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[15%]">Actions</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                              {isLoadingRenewal ? (
+                                <TableRow>
+                                  <TableCell colSpan={4} className="h-48 text-center text-gray-400">Loading renewal fields...</TableCell>
+                                </TableRow>
+                              ) : renewalFields.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={4} className="h-48">
+                                      <div className="flex flex-col items-center justify-center text-center text-gray-500">
+                                          <LayoutGrid className="h-10 w-10 text-gray-300 mb-3" />
+                                          <p className="font-medium text-gray-900">No renewal fields yet</p>
+                                          <p className="text-sm mt-1">Click "Add Custom Field" to create one</p>
+                                      </div>
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                <AnimatePresence>
+                                {renewalFields.map((field, index) => {
+                                  const fieldType = String(field.dataType || field.type || 'Text');
+                                  return (
+                                  <motion.tr
+                                    key={field._id || field.name}
+                                    className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40 ${field.enabled ? '' : 'opacity-60'}`}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ delay: 0.04 * index }}
+                                  >
+                                    <TableCell className="px-6 py-4">
+                                      <button
+                                        type="button"
+                                        disabled={!field._id}
+                                        onClick={() => {
+                                          if (!field._id) return;
+                                          openEditFieldModal(
+                                            { kind: 'renewal', id: String(field._id), name: field.name },
+                                            { type: fieldType, required: !!field.required }
+                                          );
+                                        }}
+                                        title={field.name}
+                                        className="group inline-flex items-center gap-2 max-w-full text-left disabled:opacity-60 disabled:cursor-not-allowed"
+                                      >
+                                        <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
+                                          {field.name}
+                                          <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                                        </span>
+                                        <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                                      </button>
+                                    </TableCell>
+                                    <TableCell className="px-4 py-4">
+                                      <span className={`inline-flex flex-shrink-0 items-center justify-center rounded-full px-3 py-0.5 text-xs font-bold ${
+                                        fieldType === 'Text' ? 'bg-indigo-100 text-indigo-700' :
+                                        fieldType === 'Date' ? 'bg-teal-100 text-teal-700' :
+                                        'bg-blue-100 text-blue-700'
+                                      }`}>
+                                        {fieldType}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="px-4 py-4 text-center">
+                                      <Switch
+                                        checked={!!field.enabled}
+                                        className="data-[state=checked]:bg-indigo-500"
+                                        onCheckedChange={(checked) => {
+                                          if (!field._id) return;
+                                          void updateRenewalFieldEnablement(field._id, checked);
+                                        }}
                                         disabled={!field._id}
                                       />
-                                      <Label className="text-sm font-medium cursor-pointer text-gray-900">
-                                        {field.name}
-                                      </Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                      {field.enabled ? (
-                                        <Badge className="bg-indigo-100 text-indigo-800 text-xs font-semibold py-1 px-3 rounded-full">
-                                          <Eye className="w-3 h-3 mr-1" />
-                                          Enabled
-                                        </Badge>
-                                      ) : (
-                                        <Badge className="bg-gray-100 text-gray-600 text-xs font-semibold py-1 px-3 rounded-full">
-                                          <EyeOff className="w-3 h-3 mr-1" />
-                                          Disabled
-                                        </Badge>
-                                      )}
-                                      <button
-                                        className={`text-red-500 hover:text-red-700 p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-red-300 ${!field._id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title={field._id ? "Delete field" : "Cannot delete: missing id. Please refresh or re-add this field."}
-                                        onClick={() => {
-                                          if (!field._id) {
-                                            showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
-                                            return;
-                                          }
-                                          requestDeleteCustomField({ kind: 'renewal', id: field._id, name: field.name });
-                                        }}
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                      </button>
-                                    </div>
-                                  </div>
-                                </motion.div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                    </Card>
+                                    </TableCell>
+                                    <TableCell className="text-right px-6 py-4">
+                                      <div className="flex justify-end gap-3">
+                                          <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-8 w-8 text-indigo-600 border-indigo-100 hover:bg-indigo-50 rounded-md shadow-sm"
+                                          disabled={!field._id}
+                                          onClick={() => {
+                                              if (!field._id) return;
+                                              openEditFieldModal(
+                                                { kind: 'renewal', id: String(field._id), name: field.name },
+                                                { type: fieldType, required: !!field.required }
+                                              );
+                                          }}
+                                          title="Edit"
+                                          >
+                                          <Pencil className="h-4 w-4" />
+                                          <span className="sr-only">Edit</span>
+                                          </Button>
+                                          <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-8 w-8 text-red-500 border-red-100 hover:bg-red-50 rounded-md shadow-sm"
+                                          disabled={!field._id}
+                                          onClick={() => {
+                                            if (!field._id) {
+                                              showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
+                                              return;
+                                            }
+                                            requestDeleteCustomField({ kind: 'renewal', id: field._id, name: field.name });
+                                          }}
+                                          title="Delete"
+                                          >
+                                          <Trash2 className="h-4 w-4" />
+                                          <span className="sr-only">Delete</span>
+                                          </Button>
+                                      </div>
+                                    </TableCell>
+                                  </motion.tr>
+                                );
+                                })}
+                                </AnimatePresence>
+                              )}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </Card>
+                        </TabsContent>
+                      </Tabs>
+                    </div>
                   </div>
                 </motion.div>
               </TabsContent>

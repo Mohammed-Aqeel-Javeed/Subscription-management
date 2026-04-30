@@ -486,6 +486,7 @@ export default function Header() {
               {/* Menu */}
               <div className="border-b border-gray-200">
                 <button
+                  type="button"
                   onClick={() => {
                     navigate("/profile");
                     setShowProfileMenu(false);
@@ -496,6 +497,7 @@ export default function Header() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => {
                     navigate("/configuration");
                     setShowProfileMenu(false);
@@ -509,6 +511,7 @@ export default function Header() {
               {/* Additional Options */}
               <div className="border-b border-gray-200">
                 <button
+                  type="button"
                   onClick={() => {
                     window.dispatchEvent(new Event("open-chatbot"));
                     setShowProfileMenu(false);
@@ -522,6 +525,7 @@ export default function Header() {
               {/* Logout */}
               <div className="p-2">
                 <button
+                  type="button"
                   onClick={handleLogout}
                   className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded transition-colors"
                 >
