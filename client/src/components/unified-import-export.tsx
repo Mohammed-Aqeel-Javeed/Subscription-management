@@ -1007,44 +1007,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       };
     }
     
-    // Add sample row with formula for Next Renewal
-    const sampleRow = subsSheet.getRow(2);
-    sampleRow.getCell(1).value = 'Netflix';
-    sampleRow.getCell(2).value = 'https://www.netflix.com';
-    sampleRow.getCell(3).value = 'Netflix Inc';
-    sampleRow.getCell(4).value = 'SGD';
-    sampleRow.getCell(5).value = 1;
-    sampleRow.getCell(6).value = 15.99;
-    // Total Amount formula (column 7/G) = Qty * Amount per unit
-    sampleRow.getCell(7).value = {
-      formula: 'E2*F2',
-      result: 15.99
-    };
-    sampleRow.getCell(8).value = 'Monthly'; // Commitment cycle
-    sampleRow.getCell(9).value = 'Monthly'; // Payment Frequency
-    sampleRow.getCell(10).value = 'Corporate Visa'; // Payment Method
-    sampleRow.getCell(11).value = '01/01/2025'; // Start Date
-    sampleRow.getCell(11).numFmt = '@'; // Text format to preserve slashes
-    // Next Renewal formula (column 12/L) - updated for new column positions
-    sampleRow.getCell(12).value = {
-      formula: `IF(AND(K2<>"",H2<>""),TEXT(IF(H2="Monthly",DATE(YEAR(K2),MONTH(K2)+1,DAY(K2))-1,IF(H2="Quarterly",DATE(YEAR(K2),MONTH(K2)+3,DAY(K2))-1,IF(H2="Yearly",DATE(YEAR(K2)+1,MONTH(K2),DAY(K2))-1,IF(H2="Weekly",K2+6,IF(H2="Trial",K2+30,""))))),"dd/mm/yyyy"),"")`,
-      result: '31/01/2025'
-    };
-    sampleRow.getCell(12).numFmt = '@'; // Text format to preserve slashes
-    sampleRow.getCell(13).value = 'Yes'; // Auto Renewal
-    sampleRow.getCell(14).value = 'Active'; // Status
-    sampleRow.getCell(15).value = 'Entertainment'; // Category
-    sampleRow.getCell(16).value = 'Marketing'; // Departments
-    sampleRow.getCell(17).value = 'John Doe'; // Owner
-    // Owner Email formula (column 18/R) - VLOOKUP to get email from Employees sheet
-    sampleRow.getCell(18).value = {
-      formula: `IFERROR(VLOOKUP(Q2,Employees!$A$2:$B$500,2,0),"")`,
-      result: 'john@company.com'
-    };
-    sampleRow.getCell(19).value = 'One time'; // Reminder Policy
-    sampleRow.getCell(20).value = 7; // Reminder Days
-    sampleRow.getCell(21).value = 'Team streaming subscription'; // Notes
-    sampleRow.commit();
+    // No example row: keep Subscriptions sheet empty by default.
     
     // Add Commitment cycle dropdown and other validations for Subscriptions
     const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trial', 'Pay-as-you-go'];
@@ -1188,14 +1151,13 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       startDateCell.numFmt = '@';
       
       // Add Next Renewal formula for all rows (L column)
-      if (i > 2) { // Skip row 2 as we already added it
-        const renewalCell = subsSheet.getCell(`L${i}`);
-        renewalCell.value = {
-          formula: `IF(AND(K${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(K${i}),MONTH(K${i})+3,DAY(K${i}))-1,IF(H${i}="Yearly",DATE(YEAR(K${i})+1,MONTH(K${i}),DAY(K${i}))-1,IF(H${i}="Weekly",K${i}+6,IF(H${i}="Trial",K${i}+30,""))))),"dd/mm/yyyy"),"")`,
-          result: ''
-        };
-        renewalCell.numFmt = '@'; // Text format to preserve slashes
-      }
+      const renewalCell = subsSheet.getCell(`L${i}`);
+      renewalCell.value = {
+        formula: `IF(AND(K${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(K${i}),MONTH(K${i})+3,DAY(K${i}))-1,IF(H${i}="Yearly",DATE(YEAR(K${i})+1,MONTH(K${i}),DAY(K${i}))-1,IF(H${i}="Weekly",K${i}+6,IF(H${i}="Trial",K${i}+30,""))))) ,"dd/mm/yyyy"),"")`,
+        result: ''
+      };
+      renewalCell.numFmt = '@'; // Text format to preserve slashes
+      renewalCell.protection = { locked: true };
       
       // Auto Renewal dropdown (M column) - Yes/No
       const autoRenewalCell = subsSheet.getCell(`M${i}`);
@@ -1273,13 +1235,12 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       };
       
       // Add Owner Email auto-fill formula for all rows (R column) - VLOOKUP from Employees
-      if (i > 2) {
-        const ownerEmailCell = subsSheet.getCell(`R${i}`);
-        ownerEmailCell.value = {
-          formula: `IFERROR(VLOOKUP(Q${i},Employees!$A$2:$B$500,2,0),"")`,
-          result: ''
-        };
-      }
+      const ownerEmailCell = subsSheet.getCell(`R${i}`);
+      ownerEmailCell.value = {
+        formula: `IFERROR(VLOOKUP(Q${i},Employees!$A$2:$B$500,2,0),"")`,
+        result: ''
+      };
+      ownerEmailCell.protection = { locked: true };
       
       // Reminder Policy dropdown (S column)
       const reminderPolicyCell = subsSheet.getCell(`S${i}`);

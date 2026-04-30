@@ -37,9 +37,6 @@ import { useSidebarSlot } from "@/context/SidebarSlotContext";
 import { currencyList } from "@/lib/currency-data";
 import {
   DEFAULT_CATEGORY_LIST,
-  DEFAULT_DEPARTMENT_LIST,
-  DEFAULT_EMPLOYEES,
-  DEFAULT_PAYMENT_METHOD_LIST,
   VENDOR_LIST,
 } from "@/lib/subscription-template-lists";
 
@@ -518,16 +515,14 @@ export default function Subscriptions() {
       }
 
       // Lookup lists stored in hidden columns within the SAME sheet (single-sheet file)
-      // AA..AG
+      // AA..AG (hidden)
+      // NOTE: Per requirement, Payment Method / Departments / Owner are manual (no dropdown),
+      // so we only store lookup lists needed for Vendor, Currency, Category.
       const vendorCol = 27; // AA
       const currencyCol = 28; // AB
-      const paymentMethodCol = 29; // AC
       const categoryCol = 30; // AD
-      const departmentCol = 31; // AE
-      const ownerCol = 32; // AF
-      const ownerEmailCol = 33; // AG
 
-      [vendorCol, currencyCol, paymentMethodCol, categoryCol, departmentCol, ownerCol, ownerEmailCol].forEach((col) => {
+      [vendorCol, currencyCol, categoryCol].forEach((col) => {
         const column = subsSheet.getColumn(col);
         column.hidden = true;
         column.width = 2;
@@ -539,18 +534,8 @@ export default function Subscriptions() {
       currencyList.map((c) => c.code).forEach((code, idx) => {
         subsSheet.getCell(idx + 2, currencyCol).value = code;
       });
-      DEFAULT_PAYMENT_METHOD_LIST.forEach((method, idx) => {
-        subsSheet.getCell(idx + 2, paymentMethodCol).value = method;
-      });
       DEFAULT_CATEGORY_LIST.forEach((category, idx) => {
         subsSheet.getCell(idx + 2, categoryCol).value = category;
-      });
-      DEFAULT_DEPARTMENT_LIST.forEach((dept, idx) => {
-        subsSheet.getCell(idx + 2, departmentCol).value = dept;
-      });
-      DEFAULT_EMPLOYEES.forEach((emp, idx) => {
-        subsSheet.getCell(idx + 2, ownerCol).value = emp.name;
-        subsSheet.getCell(idx + 2, ownerEmailCol).value = emp.email;
       });
 
       const rangeFor = (colLetter: string, count: number) => {
@@ -561,44 +546,7 @@ export default function Subscriptions() {
 
       const vendorRange = rangeFor('AA', VENDOR_LIST.length);
       const currencyRange = rangeFor('AB', currencyList.length);
-      const paymentMethodRange = rangeFor('AC', DEFAULT_PAYMENT_METHOD_LIST.length);
       const categoryRange = rangeFor('AD', DEFAULT_CATEGORY_LIST.length);
-      const departmentRange = rangeFor('AE', DEFAULT_DEPARTMENT_LIST.length);
-      const ownerRange = rangeFor('AF', DEFAULT_EMPLOYEES.length);
-
-      // Sample row (row 2) with formulas like the bulk template
-      const sampleRow = subsSheet.getRow(2);
-      sampleRow.getCell(1).value = 'Netflix';
-      sampleRow.getCell(2).value = 'https://www.netflix.com';
-      sampleRow.getCell(3).value = 'Netflix, Inc.';
-      sampleRow.getCell(4).value = 'SGD';
-      sampleRow.getCell(5).value = 1;
-      sampleRow.getCell(6).value = 15.99;
-      sampleRow.getCell(7).value = { formula: 'E2*F2', result: 15.99 };
-      sampleRow.getCell(8).value = 'Monthly';
-      sampleRow.getCell(9).value = 'Monthly';
-      sampleRow.getCell(10).value = 'Corporate Visa';
-      sampleRow.getCell(11).value = '01/01/2025';
-      sampleRow.getCell(11).numFmt = '@';
-      sampleRow.getCell(12).value = {
-        formula:
-          `IF(AND(K2<>"",H2<>""),TEXT(IF(H2="Monthly",DATE(YEAR(K2),MONTH(K2)+1,DAY(K2))-1,IF(H2="Quarterly",DATE(YEAR(K2),MONTH(K2)+3,DAY(K2))-1,IF(H2="Yearly",DATE(YEAR(K2)+1,MONTH(K2),DAY(K2))-1,IF(H2="Weekly",K2+6,IF(H2="Trial",K2+30,""))))),"dd/mm/yyyy"),"")`,
-        result: '31/01/2025',
-      };
-      sampleRow.getCell(12).numFmt = '@';
-      sampleRow.getCell(13).value = 'Yes';
-      sampleRow.getCell(14).value = 'Active';
-      sampleRow.getCell(15).value = 'Entertainment';
-      sampleRow.getCell(16).value = 'Marketing';
-      sampleRow.getCell(17).value = 'John Doe';
-      sampleRow.getCell(18).value = {
-        formula: `IFERROR(VLOOKUP(Q2,$AF$2:$AG$500,2,0),"")`,
-        result: 'john@company.com',
-      };
-      sampleRow.getCell(19).value = 'One time';
-      sampleRow.getCell(20).value = 7;
-      sampleRow.getCell(21).value = 'Team streaming subscription';
-      sampleRow.commit();
 
       const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trial', 'Pay-as-you-go'];
       const subscriptionStatuses = ['Active', 'Inactive', 'Cancelled'];
@@ -712,31 +660,19 @@ export default function Subscriptions() {
         };
 
         const paymentMethodCell = subsSheet.getCell(`J${i}`);
-        paymentMethodCell.dataValidation = {
-          type: 'list',
-          allowBlank: true,
-          formulae: [paymentMethodRange],
-          showInputMessage: true,
-          promptTitle: 'Select Payment Method',
-          prompt: 'Choose a payment method from the dropdown or type your own.',
-          showErrorMessage: true,
-          errorStyle: 'warning',
-          errorTitle: 'Invalid Payment Method',
-          error: 'Please select a valid payment method.',
-        };
+        // Payment Method is manual entry (no dropdown)
+        paymentMethodCell.dataValidation = undefined as any;
 
         const startDateCell = subsSheet.getCell(`K${i}`);
         startDateCell.numFmt = '@';
 
-        if (i > 2) {
-          const renewalCell = subsSheet.getCell(`L${i}`);
-          renewalCell.value = {
-            formula: `IF(AND(K${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(K${i}),MONTH(K${i})+3,DAY(K${i}))-1,IF(H${i}="Yearly",DATE(YEAR(K${i})+1,MONTH(K${i}),DAY(K${i}))-1,IF(H${i}="Weekly",K${i}+6,IF(H${i}="Trial",K${i}+30,""))))),"dd/mm/yyyy"),"")`,
-            result: '',
-          };
-          renewalCell.numFmt = '@';
-          renewalCell.protection = { locked: true };
-        }
+        const renewalCell = subsSheet.getCell(`L${i}`);
+        renewalCell.value = {
+          formula: `IF(AND(K${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(K${i}),MONTH(K${i})+3,DAY(K${i}))-1,IF(H${i}="Yearly",DATE(YEAR(K${i})+1,MONTH(K${i}),DAY(K${i}))-1,IF(H${i}="Weekly",K${i}+6,IF(H${i}="Trial",K${i}+30,""))))),"dd/mm/yyyy"),"")`,
+          result: '',
+        };
+        renewalCell.numFmt = '@';
+        renewalCell.protection = { locked: true };
 
         const autoRenewalCell = subsSheet.getCell(`M${i}`);
         autoRenewalCell.dataValidation = {
@@ -781,41 +717,17 @@ export default function Subscriptions() {
         };
 
         const deptCell = subsSheet.getCell(`P${i}`);
-        deptCell.dataValidation = {
-          type: 'list',
-          allowBlank: true,
-          formulae: [departmentRange],
-          showInputMessage: true,
-          promptTitle: 'Select Department',
-          prompt: 'Choose a department from the dropdown. Use | to separate multiple departments.',
-          showErrorMessage: true,
-          errorStyle: 'warning',
-          errorTitle: 'Invalid Department',
-          error: 'Please select a valid department.',
-        };
+        // Departments are manual entry (no dropdown)
+        deptCell.dataValidation = undefined as any;
 
         const ownerCell = subsSheet.getCell(`Q${i}`);
-        ownerCell.dataValidation = {
-          type: 'list',
-          allowBlank: true,
-          formulae: [ownerRange],
-          showInputMessage: true,
-          promptTitle: 'Select Owner',
-          prompt: 'Choose an owner from the dropdown or type your own.',
-          showErrorMessage: true,
-          errorStyle: 'warning',
-          errorTitle: 'Invalid Owner',
-          error: 'Please select a valid owner.',
-        };
+        // Owner is manual entry (no dropdown)
+        ownerCell.dataValidation = undefined as any;
 
-        if (i > 2) {
-          const ownerEmailCell = subsSheet.getCell(`R${i}`);
-          ownerEmailCell.value = {
-            formula: `IFERROR(VLOOKUP(Q${i},$AF$2:$AG$500,2,0),"")`,
-            result: '',
-          };
-          ownerEmailCell.protection = { locked: true };
-        }
+        // Owner Email is manual entry in this template
+        const ownerEmailCell = subsSheet.getCell(`R${i}`);
+        ownerEmailCell.value = '';
+        ownerEmailCell.protection = { locked: false };
 
         const reminderPolicyCell = subsSheet.getCell(`S${i}`);
         reminderPolicyCell.dataValidation = {
@@ -849,7 +761,8 @@ export default function Subscriptions() {
 
       // Unlock editable cells (same as bulk template: lock computed columns G, L, R)
       for (let i = 2; i <= 500; i++) {
-        const editableColumns = ['A', 'B', 'C', 'D', 'E', 'F', 'H', 'I', 'J', 'K', 'M', 'N', 'O', 'P', 'Q', 'S', 'T', 'U'];
+        // For this template, Owner Email (R) is also editable.
+        const editableColumns = ['A', 'B', 'C', 'D', 'E', 'F', 'H', 'I', 'J', 'K', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'];
         editableColumns.forEach((col) => {
           subsSheet.getCell(`${col}${i}`).protection = { locked: false };
         });
@@ -956,6 +869,33 @@ export default function Subscriptions() {
         return;
       }
 
+      const isEffectivelyEmptyRow = (row: Record<string, any>): boolean => {
+        const candidates: unknown[] = [
+          getValue(row, ['Service Name', 'ServiceName', 'serviceName']),
+          getValue(row, ['Website', 'website']),
+          getValue(row, ['Vendor', 'vendor']),
+          getValue(row, ['Currency', 'currency']),
+          getValue(row, ['Qty', 'QTY', 'qty']),
+          getValue(row, ['Amount per unit', 'Amount Per Unit', 'Amount', 'amount']),
+          getValue(row, ['Total Amount', 'TotalAmount', 'totalAmount']),
+          getValue(row, ['Commitment cycle', 'Commitment Cycle', 'BillingCycle', 'billingCycle']),
+          getValue(row, ['Payment Frequency', 'paymentFrequency', 'PaymentFrequency']),
+          getValue(row, ['Payment Method', 'paymentMethod', 'PaymentMethod']),
+          getValue(row, ['Start Date', 'StartDate', 'startDate']),
+          getValue(row, ['Next Renewal', 'NextRenewal', 'nextRenewal']),
+          getValue(row, ['Status', 'status']),
+          getValue(row, ['Category', 'category']),
+          getValue(row, ['Departments', 'departments']),
+          getValue(row, ['Owner', 'owner']),
+          getValue(row, ['Owner Email', 'OwnerEmail', 'ownerEmail']),
+          getValue(row, ['Reminder Policy', 'ReminderPolicy', 'reminderPolicy']),
+          getValue(row, ['Reminder Days', 'ReminderDays', 'reminderDays']),
+          getValue(row, ['Notes', 'notes']),
+        ];
+
+        return candidates.every((v) => String(v ?? '').trim() === '');
+      };
+
       let success = 0;
       let failed = 0;
       const seenInFile = new Set<string>();
@@ -963,6 +903,10 @@ export default function Subscriptions() {
 
       for (const row of rows) {
         try {
+          // The template contains hundreds of pre-formatted/validated blank rows.
+          // Ignore rows where the user hasn't entered any values.
+          if (isEffectivelyEmptyRow(row)) continue;
+
           const normalizedName = normalizeServiceName(
             getValue(row, ['Service Name', 'ServiceName', 'serviceName'])
           );
