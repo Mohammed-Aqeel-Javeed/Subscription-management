@@ -102,7 +102,7 @@ export default function LandingPage() {
               <img 
                 src="/assets/logo.png" 
                 alt="Trackla Logo" 
-                className="h-10 w-10 object-contain drop-shadow-sm"
+                className="h-[120px] w-[120px] object-contain drop-shadow-sm"
               />
               <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                 Trackla

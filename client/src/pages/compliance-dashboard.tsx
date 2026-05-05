@@ -363,12 +363,12 @@ export default function ComplianceDashboard() {
                 </h1>
               </div>
 
-              <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 relative z-10 w-full sm:w-auto">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-nowrap sm:items-center sm:justify-end sm:gap-3 relative z-10 w-full sm:w-auto">
                 <Button
                   variant="outline"
                   className={`${location.pathname === "/dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} whitespace-nowrap w-full sm:w-32 lg:w-36 px-4 md:px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/dashboard")}
                 >
                   Subscription
@@ -377,7 +377,7 @@ export default function ComplianceDashboard() {
                   variant="outline"
                   className={`${location.pathname === "/compliance-dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} whitespace-nowrap w-full sm:w-32 lg:w-36 px-4 md:px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/compliance-dashboard")}
                 >
                   Compliance
@@ -386,7 +386,7 @@ export default function ComplianceDashboard() {
                   variant="outline"
                   className={`${location.pathname === "/renewal-dashboard"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} whitespace-nowrap w-full sm:w-32 lg:w-36 px-4 md:px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/renewal-dashboard")}
                 >
                   Renewal
@@ -395,7 +395,7 @@ export default function ComplianceDashboard() {
                   variant="outline"
                   className={`${location.pathname === "/calendar"
                     ? "bg-purple-600 text-white border-purple-600 shadow-sm hover:bg-purple-700 hover:text-white"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} w-full sm:w-36 px-6 py-2.5 rounded-lg font-medium`}
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"} whitespace-nowrap w-full sm:w-32 lg:w-36 px-4 md:px-6 py-2.5 rounded-lg font-medium`}
                   onClick={() => navigate("/calendar")}
                 >
                   Calendar

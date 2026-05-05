@@ -774,7 +774,7 @@ export default function SubscriptionUserPage() {
                     </div>
                   ) : availableEmployees.length > 0 ? (
                     <div className="w-full overflow-x-auto">
-                      <table className="w-full">
+                      <table className="w-full table-fixed">
                         <thead className="bg-gray-50 border-b-2 border-gray-200 sticky top-0 z-10">
                           <tr>
                             <th className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">Team Member</th>

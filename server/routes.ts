@@ -1325,6 +1325,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.collection("signup").insertOne(doc);
       await db.collection("login").insertOne(doc);
 
+      // LCY handling: ensure signup default currency exists in the tenant Currency table.
+      // Must be best-effort and must not disturb signup flow.
+      if (!platformOwner) {
+        const tenantKey = String(tenantId || '').trim();
+        const currencyCode = String(doc.defaultCurrency || '').trim().toUpperCase();
+        if (tenantKey && currencyCode) {
+          try {
+            const resolveCurrencySymbol = (code: string): string => {
+              try {
+                const parts = new Intl.NumberFormat('en', {
+                  style: 'currency',
+                  currency: code,
+                  currencyDisplay: 'symbol',
+                }).formatToParts(1);
+                const sym = parts.find((p) => p.type === 'currency')?.value;
+                return String(sym || '').trim() || code;
+              } catch {
+                return code;
+              }
+            };
+
+            const resolveCurrencyName = (code: string): string => {
+              try {
+                const AnyIntl: any = Intl as any;
+                if (typeof AnyIntl.DisplayNames !== 'function') return code;
+                const dn = new AnyIntl.DisplayNames(['en'], { type: 'currency' });
+                const name = dn.of(code);
+                return String(name || '').trim() || code;
+              } catch {
+                return code;
+              }
+            };
+
+            const currencies = db.collection('currencies');
+            await currencies.updateOne(
+              { tenantId: tenantKey, code: currencyCode },
+              {
+                $setOnInsert: {
+                  tenantId: tenantKey,
+                  code: currencyCode,
+                  name: resolveCurrencyName(currencyCode),
+                  symbol: resolveCurrencySymbol(currencyCode),
+                  isoNumber: '',
+                  exchangeRate: 1,
+                  visible: true,
+                  created: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+                  createdAt: new Date(),
+                },
+              },
+              { upsert: true }
+            );
+          } catch (e) {
+            console.warn('[Signup] Failed to upsert default currency:', e);
+          }
+        }
+      }
+
       // If a pending purchase was used, mark it as linked
       const effectiveSessionId = req.body.sessionId || sessionId;
       if (effectiveSessionId && stripeCustomerId) {

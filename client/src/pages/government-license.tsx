@@ -23,6 +23,7 @@ import { z } from "zod";
 import { API_BASE_URL } from "@/lib/config";
 import { Badge } from "../components/ui/badge";
 import { Checkbox } from "../components/ui/checkbox";
+import { useUser } from "@/context/UserContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -753,6 +754,7 @@ function SearchableStringDropdown(props: {
   const { value, onChange, options, placeholder, className, onAddNew } = props;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -760,15 +762,23 @@ function SearchableStringDropdown(props: {
 
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        if (search.trim() !== value) {
+          onChange(search.trim());
+        }
         setOpen(false);
         setSearch('');
+        setShowAll(false);
       }
     }
 
     const dialogEl = dropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
     function handleDialogScroll() {
+      if (search.trim() !== value) {
+        onChange(search.trim());
+      }
       setOpen(false);
       setSearch('');
+      setShowAll(false);
     }
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -781,9 +791,9 @@ function SearchableStringDropdown(props: {
   }, [open, search, onChange, value]);
 
   const normalizedSearch = search.trim().toLowerCase();
-  const filtered = normalizedSearch
-    ? options.filter((opt) => opt.toLowerCase().includes(normalizedSearch))
-    : options;
+  const filtered = (showAll || !normalizedSearch)
+    ? options
+    : options.filter((opt) => opt.toLowerCase().includes(normalizedSearch));
 
   // Sort to show selected item first
   const sortedFiltered = filtered.sort((a, b) => {
@@ -800,15 +810,22 @@ function SearchableStringDropdown(props: {
         className={className || "w-full border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer"}
         onChange={(e) => {
           setSearch(e.target.value);
-          setOpen(true);
+          setShowAll(false);
+          if (!open) setOpen(true);
         }}
         onFocus={() => {
-          setSearch('');
-          setOpen(true);
+          if (!open) {
+            setSearch(value || '');
+            setShowAll(true);
+            setOpen(true);
+          }
         }}
         onClick={() => {
-          setSearch('');
-          setOpen(true);
+          if (!open) {
+            setSearch(value || '');
+            setShowAll(true);
+            setOpen(true);
+          }
         }}
         autoComplete="off"
       />
@@ -816,10 +833,15 @@ function SearchableStringDropdown(props: {
         className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
         onClick={(e) => {
           e.stopPropagation();
-          if (!open) {
+          if (open) {
+            setOpen(false);
             setSearch('');
+            setShowAll(false);
+          } else {
+            setSearch(value || '');
+            setShowAll(true);
+            setOpen(true);
           }
-          setOpen(!open);
         }}
       />
       {open && (
@@ -846,6 +868,7 @@ function SearchableStringDropdown(props: {
                     }
                     setOpen(false);
                     setSearch('');
+                    setShowAll(false);
                   }}
                 >
                   <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
@@ -1017,6 +1040,7 @@ export default function GovernmentLicense() {
   const navigate = useNavigate();
   const location = useLocation();
   const modalUrlRestoreRef = useRef<string | null>(null);
+  const { user } = useUser();
 
   const setSecureUrlForLicenseEdit = async (licenseId: string) => {
     const id = String(licenseId ?? '').trim();
@@ -1093,6 +1117,64 @@ export default function GovernmentLicense() {
   const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+
+  // Renewal categories (managed in Company Details -> Categories -> Renewals)
+  const { data: renewalCategoriesData = [] } = useQuery<any[]>({
+    queryKey: ['/api/company/categories', 'renewal'],
+    queryFn: async () => {
+      const res = await fetch('/api/company/categories?kind=renewal', { credentials: 'include' });
+      if (!res.ok) return [];
+      const data = await res.json().catch(() => []);
+      return Array.isArray(data) ? data : [];
+    },
+    placeholderData: [],
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  const licenseCategoryOptions = (Array.isArray(renewalCategoriesData) ? renewalCategoriesData : [])
+    .map((c: any) => {
+      if (typeof c === 'string') return c;
+      return String(c?.name || '').trim();
+    })
+    .filter(Boolean);
+
+  // Add Renewal Category from dropdown (+ New)
+  const [addRenewalCategoryOpen, setAddRenewalCategoryOpen] = useState(false);
+  const [newRenewalCategoryName, setNewRenewalCategoryName] = useState('');
+  const addRenewalCategoryMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const trimmed = String(name || '').trim();
+      if (!trimmed) throw new Error('Category name is required');
+      return await apiRequest('POST', '/api/company/categories', {
+        name: trimmed,
+        visible: true,
+        kind: 'renewal',
+      });
+    },
+    onSuccess: async (_data, name) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/company/categories', 'renewal'] });
+      setAddRenewalCategoryOpen(false);
+      setNewRenewalCategoryName('');
+      form.setValue('category', String(name || '').trim(), { shouldDirty: true });
+      toast({
+        title: 'Category Added',
+        description: 'Renewal category has been added successfully',
+        duration: 1200,
+        variant: 'success',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to add category',
+        variant: 'destructive',
+        duration: 1500,
+      });
+    },
+  });
+
   const [renewalFeeMin, setRenewalFeeMin] = useState<string>("");
   const [renewalFeeMax, setRenewalFeeMax] = useState<string>("");
   const [issueDateFrom, setIssueDateFrom] = useState<string>("");
@@ -2162,7 +2244,7 @@ export default function GovernmentLicense() {
 
   // Fetch company info for local currency and exchange rate calculations
   const { data: companyInfo = {} } = useQuery({
-    queryKey: ["/api/company-info"],
+    queryKey: ["/api/company-info", user?.tenantId ?? user?.actingTenantId ?? null],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/api/company-info`, { credentials: "include" });
       if (res.ok) {
@@ -2171,6 +2253,34 @@ export default function GovernmentLicense() {
       return {};
     }
   });
+
+  const resolvedCompanyName = (() => {
+    const fromCompanyInfo = (companyInfo as any)?.companyName;
+    if (typeof fromCompanyInfo === 'string' && fromCompanyInfo.trim()) return fromCompanyInfo.trim();
+    const fromUser = user?.companyName;
+    if (typeof fromUser === 'string' && fromUser.trim()) return fromUser.trim();
+    return '';
+  })();
+
+  const lastAutofilledBeneficiaryCompanyNameRef = useRef<string>('');
+
+  // If user selects Beneficiary Type = Company, auto-fill Beneficiary Name/No with company name.
+  // (UI-only behavior; still allows manual edits.)
+  useEffect(() => {
+    const type = String(form.getValues('beneficiaryType') || '').trim();
+    if (type !== 'Company') return;
+
+    const companyName = resolvedCompanyName;
+    if (!companyName) return;
+
+    const current = String(form.getValues('beneficiaryNameNo') || '').trim();
+    const lastAutofilled = String(lastAutofilledBeneficiaryCompanyNameRef.current || '').trim();
+    const shouldReplace = !current || (!!lastAutofilled && current === lastAutofilled && current !== companyName);
+    if (shouldReplace) {
+      form.setValue('beneficiaryNameNo', companyName, { shouldDirty: true });
+      lastAutofilledBeneficiaryCompanyNameRef.current = companyName;
+    }
+  }, [resolvedCompanyName]);
 
   // Fetch renewal custom field definitions (configured in Configuration → Custom field)
   const { data: renewalFieldDefs = [] } = useQuery<any[]>({
@@ -2905,7 +3015,11 @@ export default function GovernmentLicense() {
 
     queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
     queryClient.invalidateQueries({ queryKey: ["/api/notifications/license"] });
-    toast({ title: 'Import finished', description: `Imported ${success} license(s). Failed: ${failed}` });
+    toast({
+      title: 'Import finished',
+      description: `Imported ${success} license(s). Failed: ${failed}`,
+      variant: 'success',
+    });
     clearFile();
   };
 
@@ -3933,10 +4047,10 @@ export default function GovernmentLicense() {
                   {/* Add First License button removed as requested */}
                 </div>
               ) : (
-                <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
+                <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" className="w-full table-fixed">
                 <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                     <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
-                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[160px]">
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[240px]">
                         <button
                           onClick={() => handleSort('licenseName')}
                           className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
@@ -3973,9 +4087,9 @@ export default function GovernmentLicense() {
                           {getSortIcon('renewalFee')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[110px]">Status</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[150px]">Renewal Status</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 pr-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[110px]">ACTIONS</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[100px]">Status</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[130px]">Renewal Status</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 pr-4 text-right text-xs font-bold text-white uppercase tracking-wide w-[80px]">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
                     <TableBody>
@@ -3989,7 +4103,7 @@ export default function GovernmentLicense() {
                             exit={{ opacity: 0 }}
                             transition={{ delay: 0.04 * index }}
                           >
-                            <TableCell className="px-4 py-3 w-[160px] min-w-0 text-left">
+                            <TableCell className="px-4 py-3 w-[240px] min-w-0 text-left">
                               <button
                                 type="button"
                                 onClick={() => handleEdit(license)}
@@ -3997,7 +4111,7 @@ export default function GovernmentLicense() {
                                 className="group inline-flex items-center gap-1 max-w-full text-left"
                               >
                                 <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
-                                  {truncateText(license.licenseName, 16)}
+                                  {truncateText(license.licenseName, 25)}
                                   <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
                                 </span>
                                 <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
@@ -4033,26 +4147,26 @@ export default function GovernmentLicense() {
                                 <TableCell className="px-4 py-3.5 text-right text-sm text-gray-700 font-semibold w-[110px]">
                               {typeof license.renewalFee === 'number' ? `$${license.renewalFee.toFixed(2).toLocaleString()}` : '-'}
                             </TableCell>
-                                <TableCell className="px-4 py-3.5 w-[110px] text-left">
+                                <TableCell className="px-3 py-3.5 w-[100px] text-left">
                               {(() => {
                                 const derived = getDerivedStatus({ endDate: license.endDate, status: license.status });
                                 return (
-                                  <span className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getStatusClassName(derived)}`}>
+                                  <span className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border ${getStatusClassName(derived)}`}>
                                     {derived}
                                   </span>
                                 );
                               })()}
                             </TableCell>
-                                <TableCell className="px-4 py-3.5 w-[150px] text-left">
+                                <TableCell className="px-3 py-3.5 w-[130px] text-left">
                               {license.renewalStatus ? (
-                                <span className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none min-w-[140px] ${getRenewalStatusClassName(license.renewalStatus)}`}>
+                                <span className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none ${getRenewalStatusClassName(license.renewalStatus)}`}>
                                   {getRenewalStatusLabel(license.renewalStatus)}
                                 </span>
                               ) : (
                                 <span className="text-gray-400 text-xs">-</span>
                               )}
                             </TableCell>
-                                <TableCell className="px-4 pr-6 py-3.5 text-right w-[110px]">
+                                <TableCell className="px-3 pr-4 py-3.5 text-right w-[80px]">
                               {(() => {
                                 const rowId = String(license.id || "");
                                 const isOpen = !!rowId && openActionsMenuForId === rowId;
@@ -4699,10 +4813,70 @@ export default function GovernmentLicense() {
                           onChange={(value) => {
                             form.setValue('category', value);
                           }}
-                          options={['Visa', 'E-Pass', 'Govt. License', 'Insurance', 'Contract', 'Agreement', 'Maintenance', 'Others']}
+                          onAddNew={() => {
+                            setNewRenewalCategoryName('');
+                            setAddRenewalCategoryOpen(true);
+                          }}
+                          options={(() => {
+                            const fallback = ['Visa', 'E-Pass', 'Govt. License', 'Insurance', 'Contract', 'Agreement', 'Maintenance', 'Others'];
+                            const dynamic = (Array.isArray(licenseCategoryOptions) ? licenseCategoryOptions : []);
+                            const base = [...fallback, ...dynamic]
+                              .map((v) => String(v || '').trim())
+                              .filter(Boolean);
+                            const unique = Array.from(new Set(base));
+                            const hasOthers = unique.some((v) => v.toLowerCase() === 'others' || v.toLowerCase() === 'other');
+                            if (!hasOthers) unique.push('Others');
+
+                            const current = String(form.watch('category') || '').trim();
+                            if (current && !unique.some((v) => v.toLowerCase() === current.toLowerCase())) {
+                              unique.unshift(current);
+                            }
+                            return unique;
+                          })()}
                           placeholder="Select category"
                           className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
                         />
+
+                        <Dialog open={addRenewalCategoryOpen} onOpenChange={setAddRenewalCategoryOpen}>
+                          <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden">
+                            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-5">
+                              <DialogHeader>
+                                <DialogTitle className="text-lg font-bold text-white">New Renewal Category</DialogTitle>
+                              </DialogHeader>
+                            </div>
+                            <div className="p-6 space-y-4">
+                              <Input
+                                value={newRenewalCategoryName}
+                                onChange={(e) => setNewRenewalCategoryName(e.target.value)}
+                                placeholder="Enter category name"
+                                className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    addRenewalCategoryMutation.mutate(newRenewalCategoryName);
+                                  }
+                                }}
+                              />
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  onClick={() => setAddRenewalCategoryOpen(false)}
+                                  className="rounded-lg"
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  onClick={() => addRenewalCategoryMutation.mutate(newRenewalCategoryName)}
+                                  disabled={!newRenewalCategoryName.trim() || addRenewalCategoryMutation.isPending}
+                                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+                                >
+                                  {addRenewalCategoryMutation.isPending ? 'Adding...' : 'Add'}
+                                </Button>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                       </div>
 
                       {/* Beneficiary Type */}
@@ -4713,9 +4887,18 @@ export default function GovernmentLicense() {
                         <SearchableStringDropdown
                           value={form.watch('beneficiaryType') || ''}
                           onChange={(value) => {
-                            form.setValue('beneficiaryType', value);
-                            // Clear Beneficiary Name/No when type changes
-                            form.setValue('beneficiaryNameNo', '');
+                              form.setValue('beneficiaryType', value);
+
+                              const nextType = String(value || '').trim();
+                              if (nextType === 'Company') {
+                              const companyName = resolvedCompanyName;
+                              form.setValue('beneficiaryNameNo', companyName || '', { shouldDirty: true });
+                              lastAutofilledBeneficiaryCompanyNameRef.current = companyName || '';
+                              } else {
+                                // Clear Beneficiary Name/No when type changes
+                                form.setValue('beneficiaryNameNo', '', { shouldDirty: true });
+                              lastAutofilledBeneficiaryCompanyNameRef.current = '';
+                              }
                           }}
                           options={['Employee', 'Company', 'Vehicle', 'Customer', 'Department', 'Others']}
                           placeholder="Select type"
@@ -4889,21 +5072,7 @@ export default function GovernmentLicense() {
                         )}
                       </div>
 
-                      {/* Currency */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-slate-700">Currency</label>
-                        <SearchableStringDropdown
-                          value={currency || ''}
-                          onChange={(value) => {
-                            setCurrency(value);
-                            form.setValue('currency', value);
-                          }}
-                          options={currencies.map((curr: any) => curr.code)}
-                          placeholder="Select currency"
-                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
-                          onAddNew={() => navigate('/configuration?tab=currency')}
-                        />
-                      </div>
+                      
 
                       {/* Renewal Cost */}
                       <div className="space-y-2">
@@ -4966,6 +5135,22 @@ export default function GovernmentLicense() {
                             form.setValue('renewalFee', n);
                             setRenewalFeeText(n.toFixed(2));
                           }}
+                        />
+                      </div>
+
+                      {/* Currency */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Currency</label>
+                        <SearchableStringDropdown
+                          value={currency || ''}
+                          onChange={(value) => {
+                            setCurrency(value);
+                            form.setValue('currency', value);
+                          }}
+                          options={currencies.map((curr: any) => curr.code)}
+                          placeholder="Select currency"
+                          className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                          onAddNew={() => navigate('/configuration?tab=currency')}
                         />
                       </div>
 

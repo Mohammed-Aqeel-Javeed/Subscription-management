@@ -38,6 +38,164 @@ import { parse, isValid as isValidDateFns } from "date-fns";
 const AMOUNT_MAX_10CR = 100000000;
 const REMINDER_DAYS_MAX = 1000;
 
+// Generic searchable dropdown for string options (match Government License renewal category behavior)
+function SearchableStringDropdown(props: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+  className?: string;
+  onAddNew?: () => void;
+}) {
+  const { value, onChange, options, placeholder, className, onAddNew } = props;
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function closeAndCommit() {
+      if (search.trim() !== value) {
+        onChange(search.trim());
+      }
+      setOpen(false);
+      setSearch('');
+      setShowAll(false);
+    }
+
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        closeAndCommit();
+      }
+    }
+
+    // Close dropdown when modal/dialog scrolls OR page scrolls
+    const dialogEl = dropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
+    function handleScroll() {
+      closeAndCommit();
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    dialogEl?.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      dialogEl?.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [open, search, onChange, value]);
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = (showAll || !normalizedSearch)
+    ? options
+    : options.filter((opt) => opt.toLowerCase().includes(normalizedSearch));
+
+  // Sort to show selected item first
+  const sortedFiltered = filtered.sort((a, b) => {
+    if (a === value) return -1;
+    if (b === value) return 1;
+    return 0;
+  });
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <Input
+        value={open ? search : (value || '')}
+        placeholder={placeholder}
+        className={className || "w-full border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer"}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setShowAll(false);
+          if (!open) setOpen(true);
+        }}
+        onFocus={() => {
+          if (!open) {
+            setSearch(value || '');
+            setShowAll(true);
+            setOpen(true);
+          }
+        }}
+        onClick={() => {
+          if (!open) {
+            setSearch(value || '');
+            setShowAll(true);
+            setOpen(true);
+          }
+        }}
+        autoComplete="off"
+      />
+      <ChevronDown
+        className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (open) {
+            setOpen(false);
+            setSearch('');
+            setShowAll(false);
+          } else {
+            setSearch(value || '');
+            setShowAll(true);
+            setOpen(true);
+          }
+        }}
+      />
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+          <div
+            className="max-h-44 overflow-auto overscroll-contain custom-scrollbar"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
+            {sortedFiltered.length > 0 ? (
+              sortedFiltered.map((opt) => (
+                <div
+                  key={opt}
+                  className={`px-3 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center text-sm text-slate-700 transition-colors ${
+                    value === opt ? 'bg-blue-50 text-blue-700' : ''
+                  }`}
+                  onClick={() => {
+                    if (value === opt) {
+                      onChange('');
+                    } else {
+                      onChange(opt);
+                    }
+                    setOpen(false);
+                    setSearch('');
+                    setShowAll(false);
+                  }}
+                >
+                  <Check className={`mr-2 h-4 w-4 text-blue-600 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
+                  <span className="font-normal">{opt}</span>
+                </div>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-sm text-slate-500">No options found</div>
+            )}
+          </div>
+
+          {onAddNew && (
+            <div
+              className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
+              style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
+              onClick={() => {
+                setOpen(false);
+                setSearch('');
+                setShowAll(false);
+                onAddNew();
+              }}
+            >
+              + New
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Predefined Governing Authorities
 const GOVERNING_AUTHORITIES = [
   "IRAS",
@@ -391,9 +549,29 @@ export default function Compliance() {
   const [isLoadingComplianceFields, setIsLoadingComplianceFields] = useState(true);
   
   // State for categories and governing authorities
-  const [, setCategories] = useState<string[]>([]);
   const [governingAuthorities, setGoverningAuthorities] = useState<string[]>([]);
   const [, setIsLoadingDropdowns] = useState(true);
+
+  const { data: complianceCategoriesData = [] } = useQuery<any[]>({
+    queryKey: ['/api/company/categories', 'compliance'],
+    queryFn: async () => {
+      const res = await fetch('/api/company/categories?kind=compliance', { credentials: 'include' });
+      if (!res.ok) return [];
+      const data = await res.json().catch(() => []);
+      return Array.isArray(data) ? data : [];
+    },
+    placeholderData: [],
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  const complianceCategoryOptions = (Array.isArray(complianceCategoriesData) ? complianceCategoriesData : [])
+    .map((c: any) => {
+      if (typeof c === 'string') return c;
+      return String(c?.name || '').trim();
+    })
+    .filter(Boolean);
   
   // Fullscreen toggle state
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -428,11 +606,9 @@ export default function Compliance() {
     const fetchDropdownData = () => {
       setIsLoadingDropdowns(true);
       Promise.all([
-        fetch('/api/compliance/categories').then(res => res.json()),
         fetch('/api/compliance/authorities').then(res => res.json())
       ])
-      .then(([categoriesData, authoritiesData]) => {
-        if (Array.isArray(categoriesData)) setCategories(categoriesData);
+      .then(([authoritiesData]) => {
         if (Array.isArray(authoritiesData)) {
           const list = authoritiesData
             .map((v: any) => String(v || '').trim())
@@ -442,7 +618,6 @@ export default function Compliance() {
         }
       })
       .catch(() => {
-        setCategories([]);
         setGoverningAuthorities([]);
       })
       .finally(() => setIsLoadingDropdowns(false));
@@ -500,6 +675,13 @@ export default function Compliance() {
     department?: string;
     departments?: string[];
   };
+
+  const truncateText = (value: unknown, maxChars: number) => {
+    const s = String(value ?? "").trim();
+    if (!s) return "";
+    if (s.length <= maxChars) return s;
+    return `${s.slice(0, Math.max(0, maxChars - 1))}…`;
+  };
   
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -549,6 +731,50 @@ export default function Compliance() {
   const [showSubmissionDocumentDialog, setShowSubmissionDocumentDialog] = useState(false);
   const persistSubmissionDocumentsInFlightRef = useRef(false);
   const [isPersistingSubmissionDocuments, setIsPersistingSubmissionDocuments] = useState(false);
+
+  const initialComplianceSnapshotRef = useRef<string | null>(null);
+  function buildComplianceSnapshot(input: {
+    form: any;
+    selectedDepartments: any;
+    dynamicFieldValues: any;
+    notes: any;
+    submissionDocuments: any;
+  }) {
+    const normalize = (v: any) => {
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'string') return v.trim();
+      return v;
+    };
+
+    const formNormalized: any = { ...(input.form || {}) };
+    for (const key of Object.keys(formNormalized)) {
+      formNormalized[key] = normalize(formNormalized[key]);
+    }
+
+    const selectedNormalized = Array.isArray(input.selectedDepartments)
+      ? input.selectedDepartments.map((d: any) => String(d ?? '').trim()).filter(Boolean)
+      : [];
+
+    const docsNormalized = Array.isArray(input.submissionDocuments) ? input.submissionDocuments : [];
+    const notesNormalized = Array.isArray(input.notes) ? input.notes : [];
+
+    const dyn = input.dynamicFieldValues && typeof input.dynamicFieldValues === 'object'
+      ? input.dynamicFieldValues
+      : {};
+
+    const dynNormalized: any = {};
+    for (const [k, v] of Object.entries(dyn)) {
+      dynNormalized[k] = normalize(v);
+    }
+
+    return JSON.stringify({
+      form: formNormalized,
+      selectedDepartments: selectedNormalized,
+      dynamicFieldValues: dynNormalized,
+      notes: notesNormalized,
+      submissionDocuments: docsNormalized,
+    });
+  }
 
   const { data: complianceItems = [], isLoading } = useQuery({
     queryKey: ["compliance"],
@@ -1159,6 +1385,41 @@ export default function Compliance() {
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Add Compliance Category from dropdown (+ New)
+  const [addComplianceCategoryOpen, setAddComplianceCategoryOpen] = useState(false);
+  const [newComplianceCategoryName, setNewComplianceCategoryName] = useState('');
+  const addComplianceCategoryMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const trimmed = String(name || '').trim();
+      if (!trimmed) throw new Error('Category name is required');
+      return await apiRequest('POST', '/api/company/categories', {
+        name: trimmed,
+        visible: true,
+        kind: 'compliance',
+      });
+    },
+    onSuccess: async (_data, name) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/company/categories', 'compliance'] });
+      setAddComplianceCategoryOpen(false);
+      setNewComplianceCategoryName('');
+      handleFormChange('filingComplianceCategory', String(name || '').trim());
+      toast({
+        title: 'Category Added',
+        description: 'Compliance category has been added successfully',
+        duration: 1200,
+        variant: 'success',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to add category',
+        variant: 'destructive',
+        duration: 1500,
+      });
+    },
+  });
 
   // Keep naming aligned with subscription modal logic
   const employeesData = employees;
@@ -1870,7 +2131,7 @@ export default function Compliance() {
       setEditIndex(null);
       setShowSubmissionDetails(false);
       setSelectedDepartments([]);
-      setForm({
+      const nextForm = {
         filingName: "",
         filingFrequency: "Monthly",
         filingComplianceCategory: "",
@@ -1894,6 +2155,18 @@ export default function Compliance() {
         paymentMethod: "",
         department: "",
         departments: [],
+      };
+      formRef.current = nextForm;
+      setForm(nextForm);
+      setDynamicFieldValues({});
+      setNotes([]);
+      setSubmissionDocuments([]);
+      initialComplianceSnapshotRef.current = buildComplianceSnapshot({
+        form: nextForm,
+        selectedDepartments: [],
+        dynamicFieldValues: {},
+        notes: [],
+        submissionDocuments: [],
       });
       setModalOpen(true);
       setIsDeepLinkOpening(false);
@@ -1947,8 +2220,9 @@ export default function Compliance() {
 
       const currentItem = complianceItems[index] as ComplianceItem;
       const depts = parseDepartments(currentItem.department);
+      const nextDocs = normalizeSubmissionDocumentsInput((currentItem as any)?.documents ?? (currentItem as any)?.submissionDocuments);
       setSelectedDepartments(depts);
-      setForm({
+      const nextForm = {
         filingName: currentItem.policy,
         filingFrequency: currentItem.frequency || "Monthly",
         filingComplianceCategory: currentItem.category,
@@ -1972,6 +2246,18 @@ export default function Compliance() {
         paymentMethod: "",
         department: "",
         departments: depts,
+      };
+      formRef.current = nextForm;
+      setForm(nextForm);
+      setDynamicFieldValues({});
+      setNotes([]);
+      setSubmissionDocuments(nextDocs);
+      initialComplianceSnapshotRef.current = buildComplianceSnapshot({
+        form: nextForm,
+        selectedDepartments: depts,
+        dynamicFieldValues: {},
+        notes: [],
+        submissionDocuments: nextDocs,
       });
 
       navigate(location.pathname, { replace: true, state: location.state });
@@ -2018,8 +2304,9 @@ export default function Compliance() {
         
         const currentItem = complianceItems[index] as ComplianceItem;
         const depts = parseDepartments(currentItem.department);
+        const nextDocs = normalizeSubmissionDocumentsInput((currentItem as any)?.documents ?? (currentItem as any)?.submissionDocuments);
         setSelectedDepartments(depts);
-        setForm({
+        const nextForm = {
           filingName: currentItem.policy,
           filingFrequency: currentItem.frequency || "Monthly",
           filingComplianceCategory: currentItem.category,
@@ -2043,6 +2330,18 @@ export default function Compliance() {
           paymentMethod: "",
           department: "",
           departments: depts,
+        };
+        formRef.current = nextForm;
+        setForm(nextForm);
+        setDynamicFieldValues({});
+        setNotes([]);
+        setSubmissionDocuments(nextDocs);
+        initialComplianceSnapshotRef.current = buildComplianceSnapshot({
+          form: nextForm,
+          selectedDepartments: depts,
+          dynamicFieldValues: {},
+          notes: [],
+          submissionDocuments: nextDocs,
         });
         
         // Clear the stored ID
@@ -2200,40 +2499,15 @@ export default function Compliance() {
   };
   
   const hasMeaningfulFormData = () => {
-    const hasText = (value: unknown) => String(value ?? '').trim().length > 0;
-
-    const hasNonDefault =
-      form.filingFrequency !== 'Monthly' ||
-      form.filingSubmissionStatus !== 'Pending' ||
-      String(form.reminderDays ?? '') !== '7' ||
-      form.reminderPolicy !== 'One time';
-
-    const hasAny =
-      hasText(form.filingName) ||
-      hasText(form.filingComplianceCategory) ||
-      hasText(form.filingGoverningAuthority) ||
-      hasText(form.filingStartDate) ||
-      hasText(form.filingEndDate) ||
-      hasText(form.filingSubmissionDeadline) ||
-      hasText(form.filingRecurringFrequency) ||
-      hasText(form.filingRemarks) ||
-      hasText(form.submissionNotes) ||
-      hasText(form.filingSubmissionDate) ||
-      hasText(form.submittedBy) ||
-      hasText(form.owner) ||
-      hasText((form as any).owner2) ||
-      hasText(form.amount) ||
-      hasText(form.paymentDate) ||
-      hasText(form.submissionAmount) ||
-      hasText(form.paymentMethod) ||
-      hasText(form.department) ||
-      (Array.isArray(selectedDepartments) && selectedDepartments.length > 0) ||
-      (Array.isArray(form.departments) && form.departments.length > 0) ||
-      (Array.isArray(notes) && notes.length > 0) ||
-      (Array.isArray(submissionDocuments) && submissionDocuments.length > 0) ||
-      Object.values(dynamicFieldValues || {}).some(v => String(v ?? '').trim().length > 0);
-
-    return hasNonDefault || hasAny;
+    const baseline = initialComplianceSnapshotRef.current;
+    if (!baseline) return false;
+    return buildComplianceSnapshot({
+      form,
+      selectedDepartments,
+      dynamicFieldValues,
+      notes,
+      submissionDocuments,
+    }) !== baseline;
   };
 
   const handleExitConfirm = () => {
@@ -2258,6 +2532,7 @@ export default function Compliance() {
 
     setModalOpen(false);
     setExitConfirmOpen(false);
+    initialComplianceSnapshotRef.current = null;
 
     setTimeout(() => {
       setFilingNameError("");
@@ -2615,7 +2890,11 @@ export default function Compliance() {
       }
     }
     queryClient.invalidateQueries({ queryKey: ['compliance'] });
-    toast({ title: 'Import finished', description: `Imported ${success} row(s). Failed: ${failed}` });
+    toast({
+      title: 'Import finished',
+      description: `Imported ${success} row(s). Failed: ${failed}`,
+      variant: 'success',
+    });
     clearFile();
   };
 
@@ -2921,7 +3200,7 @@ export default function Compliance() {
                       setEditIndex(null);
                       setShowSubmissionDetails(false);
                       setSelectedDepartments([]);
-                      setForm({
+                        const nextForm = {
                         filingName: "",
                         filingFrequency: "Monthly",
                         filingComplianceCategory: "",
@@ -2945,7 +3224,19 @@ export default function Compliance() {
                         paymentMethod: "",
                         department: "",
                         departments: [],
-                      });
+                        };
+                        formRef.current = nextForm;
+                        setForm(nextForm);
+                        setDynamicFieldValues({});
+                        setNotes([]);
+                        setSubmissionDocuments([]);
+                        initialComplianceSnapshotRef.current = buildComplianceSnapshot({
+                          form: nextForm,
+                          selectedDepartments: [],
+                          dynamicFieldValues: {},
+                          notes: [],
+                          submissionDocuments: [],
+                        });
                       setModalOpen(true);
                     }}
                     className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
@@ -3029,10 +3320,10 @@ export default function Compliance() {
         <div className="min-w-0 flex-1 min-h-0">
           <Card className="bg-white border border-gray-200 shadow-md overflow-hidden h-full flex flex-col min-h-0">
             <CardContent className="p-0 flex flex-col min-h-0">
-            <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
+            <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" className="w-full table-fixed">
               <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                 <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[260px]">
                     <button
                       onClick={() => handleSort("policy")}
                       className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
@@ -3080,7 +3371,7 @@ export default function Compliance() {
                   <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[160px]">
                     SUBMISSION
                   </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 pr-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[120px]">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 pr-4 text-right text-xs font-bold text-white uppercase tracking-wide w-[80px]">
                     ACTIONS
                   </TableHead>
                 </TableRow>
@@ -3120,7 +3411,7 @@ export default function Compliance() {
                       exit={{ opacity: 0 }}
                       transition={{ delay: 0.04 * index }}
                     >
-                      <TableCell className="px-3 py-3 font-medium text-gray-800 w-[200px] min-w-0 overflow-hidden text-left">
+                      <TableCell className="px-3 py-3 font-medium text-gray-800 w-[260px] min-w-0 overflow-hidden text-left">
                         <button
                           onClick={() => {
                             const index = (complianceItems as ComplianceItem[]).findIndex(
@@ -3131,8 +3422,9 @@ export default function Compliance() {
                             setModalOpen(true);
                             const currentItem = complianceItems[index] as ComplianceItem;
                             const depts = parseDepartments(currentItem.department);
+                            const nextDocs = normalizeSubmissionDocumentsInput((currentItem as any)?.documents ?? (currentItem as any)?.submissionDocuments);
                             setSelectedDepartments(depts);
-                            setForm({
+                            const nextForm = {
                               filingName: currentItem.policy,
                               filingFrequency: currentItem.frequency || "Monthly",
                               filingComplianceCategory: currentItem.category,
@@ -3156,13 +3448,25 @@ export default function Compliance() {
                               paymentMethod: currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null ? String(currentItem.paymentMethod) : "",
                               department: currentItem.department || "",
                               departments: depts,
+                            };
+                            formRef.current = nextForm;
+                            setForm(nextForm);
+                            setDynamicFieldValues({});
+                            setNotes([]);
+                            setSubmissionDocuments(nextDocs);
+                            initialComplianceSnapshotRef.current = buildComplianceSnapshot({
+                              form: nextForm,
+                              selectedDepartments: depts,
+                              dynamicFieldValues: {},
+                              notes: [],
+                              submissionDocuments: nextDocs,
                             });
                           }}
                           title={item.policy}
                           className="group inline-flex items-center gap-1 max-w-full text-left"
                         >
                           <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
-                            {item.policy}
+                            {truncateText(item.policy, 25)}
                             <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
                           </span>
                           <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
@@ -3217,8 +3521,9 @@ export default function Compliance() {
                               setFilingNameError(""); // Clear any previous errors
                               const currentItem = complianceItems[index] as ComplianceItem;
                               const depts = parseDepartments(currentItem.department);
+                              const nextDocs = normalizeSubmissionDocumentsInput((currentItem as any)?.documents ?? (currentItem as any)?.submissionDocuments);
                               setSelectedDepartments(depts);
-                              setForm({
+                              const nextForm = {
                                 filingName: currentItem.policy,
                                 filingFrequency: currentItem.frequency || "Monthly",
                                 filingComplianceCategory: currentItem.category,
@@ -3242,6 +3547,18 @@ export default function Compliance() {
                                 paymentMethod: currentItem.paymentMethod !== undefined && currentItem.paymentMethod !== null ? String(currentItem.paymentMethod) : "",
                                 department: currentItem.department || "",
                                 departments: depts,
+                              };
+                              formRef.current = nextForm;
+                              setForm(nextForm);
+                              setDynamicFieldValues({});
+                              setNotes([]);
+                              setSubmissionDocuments(nextDocs);
+                              initialComplianceSnapshotRef.current = buildComplianceSnapshot({
+                                form: nextForm,
+                                selectedDepartments: depts,
+                                dynamicFieldValues: {},
+                                notes: [],
+                                submissionDocuments: nextDocs,
                               });
                             }}
                             className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800 font-semibold text-xs px-4 py-1.5 rounded-lg transition-all shadow-sm"
@@ -3250,7 +3567,7 @@ export default function Compliance() {
                           </Button>
                         </div>
                       </TableCell>
-                      <TableCell className="px-4 pr-6 py-3 w-[120px] text-right">
+                      <TableCell className="px-3 pr-4 py-3 w-[80px] text-right">
                         {(() => {
                           const rowId = String(item._id || item.id || "");
                           const isOpen = !!rowId && openActionsMenuForId === rowId;
@@ -3291,8 +3608,9 @@ export default function Compliance() {
                                       setModalOpen(true);
                                       const currentItem = complianceItems[index] as ComplianceItem;
                                       const depts = parseDepartments(currentItem.department);
+                                      const nextDocs = normalizeSubmissionDocumentsInput((currentItem as any)?.documents ?? (currentItem as any)?.submissionDocuments);
                                       setSelectedDepartments(depts);
-                                      setForm({
+                                      const nextForm = {
                                         filingName: currentItem.policy,
                                         filingFrequency: currentItem.frequency || "Monthly",
                                         filingComplianceCategory: currentItem.category,
@@ -3328,6 +3646,18 @@ export default function Compliance() {
                                             : "",
                                         department: currentItem.department || "",
                                         departments: depts,
+                                      };
+                                      formRef.current = nextForm;
+                                      setForm(nextForm);
+                                      setDynamicFieldValues({});
+                                      setNotes([]);
+                                      setSubmissionDocuments(nextDocs);
+                                      initialComplianceSnapshotRef.current = buildComplianceSnapshot({
+                                        form: nextForm,
+                                        selectedDepartments: depts,
+                                        dynamicFieldValues: {},
+                                        notes: [],
+                                        submissionDocuments: nextDocs,
                                       });
                                     }}
                                     className="cursor-pointer"
@@ -3848,19 +4178,81 @@ export default function Compliance() {
                 <label className="block text-sm font-medium text-slate-700">
                   Compliance Category <span className="text-red-500">*</span>
                 </label>
-                <Select value={form.filingComplianceCategory} onValueChange={(val: string) => handleFormChange("filingComplianceCategory", val)}>
-                  <SelectTrigger className="w-full border-slate-300 rounded-lg p-2 text-base">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200 rounded-lg shadow-md">
-                    <SelectItem value="Tax" className="text-slate-900 hover:bg-indigo-50">Tax</SelectItem>
-                    <SelectItem value="Payroll" className="text-slate-900 hover:bg-indigo-50">Payroll</SelectItem>
-                    <SelectItem value="Regulatory" className="text-slate-900 hover:bg-indigo-50">Regulatory</SelectItem>
-                    <SelectItem value="Legal" className="text-slate-900 hover:bg-indigo-50">Legal</SelectItem>
-                    
-                    <SelectItem value="Other" className="text-slate-900 hover:bg-indigo-50">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+                <SearchableStringDropdown
+                  value={form.filingComplianceCategory}
+                  onChange={(val) => handleFormChange('filingComplianceCategory', val)}
+                  onAddNew={() => {
+                    setNewComplianceCategoryName('');
+                    setAddComplianceCategoryOpen(true);
+                  }}
+                  options={(() => {
+                    const fallback = ['Tax', 'Payroll', 'Regulatory', 'Legal', 'Other'];
+                    const dynamic = (Array.isArray(complianceCategoryOptions) ? complianceCategoryOptions : []);
+
+                    const base = [...fallback, ...dynamic]
+                      .map((v) => String(v || '').trim())
+                      .filter(Boolean);
+
+                    const unique = Array.from(new Set(base));
+                    const hasOther = unique.some((v) => v.toLowerCase() === 'other');
+                    if (!hasOther) unique.push('Other');
+
+                    const current = String(form.filingComplianceCategory || '').trim();
+                    if (current && !unique.some((v) => v.toLowerCase() === current.toLowerCase())) {
+                      unique.unshift(current);
+                    }
+                    return unique;
+                  })()}
+                  placeholder="Select category"
+                  className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                />
+
+                <Dialog
+                  open={addComplianceCategoryOpen}
+                  onOpenChange={(open) => {
+                    setAddComplianceCategoryOpen(open);
+                    if (!open) setNewComplianceCategoryName('');
+                  }}
+                >
+                  <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-5">
+                      <DialogHeader>
+                        <DialogTitle className="text-lg font-bold text-white">New Compliance Category</DialogTitle>
+                      </DialogHeader>
+                    </div>
+                    <div className="p-6 space-y-4">
+                      <Input
+                        value={newComplianceCategoryName}
+                        onChange={(e) => setNewComplianceCategoryName(e.target.value)}
+                        placeholder="Enter category name"
+                        className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            addComplianceCategoryMutation.mutate(newComplianceCategoryName);
+                          }
+                        }}
+                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setAddComplianceCategoryOpen(false)}
+                          className="rounded-lg"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => addComplianceCategoryMutation.mutate(newComplianceCategoryName)}
+                          disabled={!newComplianceCategoryName.trim() || addComplianceCategoryMutation.isPending}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+                        >
+                          {addComplianceCategoryMutation.isPending ? 'Adding...' : 'Add'}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">

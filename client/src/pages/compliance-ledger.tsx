@@ -279,18 +279,18 @@ export default function ComplianceLedger() {
         <Card className="shadow-lg border-0 overflow-hidden bg-white/80 backdrop-blur-sm flex-1 min-h-0">
           <CardContent className="p-0 h-full">
             <Table containerClassName="flex-1 min-h-0 h-full overflow-auto" className="w-full table-fixed">
-              <TableHeader>
-                <TableRow className="border-b border-gray-300 bg-gray-200">
+              <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
                   {!isFilteredById && (
-                    <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800">
+                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">
                       Filing Name
                     </TableHead>
                   )}
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800 text-left">Category</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800 text-left">Start Date</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800 text-left">End Date</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800 text-left">Submission Date</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-gray-200 h-12 px-4 font-semibold text-gray-800 text-left">Status</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Category</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Start Date</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">End Date</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Submission Date</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -314,7 +314,7 @@ export default function ComplianceLedger() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    displayedLedgerItems.map((item: any) => {
+                    displayedLedgerItems.map((item: any, index: number) => {
                       // Calculate dynamic status based on submission date and deadline
                       let displayStatus = item.filingSubmissionStatus;
                       
@@ -328,7 +328,12 @@ export default function ComplianceLedger() {
                       
                       const statusInfo = getStatusInfo(displayStatus);
                       return (
-                        <TableRow key={item._id} className="hover:bg-gray-50 transition-colors">
+                        <TableRow
+                          key={item._id}
+                          className={`border-b border-gray-100 transition-colors ${
+                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                          } hover:bg-indigo-50/40`}
+                        >
                           {!isFilteredById && (
                             <TableCell
                               className="font-medium text-gray-900 max-w-[280px] truncate"

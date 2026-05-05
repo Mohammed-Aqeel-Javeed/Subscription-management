@@ -1439,9 +1439,35 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
       if (res.ok) {
         const data = await res.json();
         setCompanyInfo(data);
+        return;
+      }
+
+      // Fallback: company-info may not exist yet right after signup.
+      // Use the user's profile defaultCurrency so the header chip still shows LCY.
+      const meRes = await fetch(`${API_BASE_URL}/api/me`, { credentials: "include" });
+      if (meRes.ok) {
+        const me = await meRes.json().catch(() => null);
+        const lcy = String((me as any)?.defaultCurrency || '').trim();
+        if (lcy) {
+          setCompanyInfo({ defaultCurrency: lcy.toUpperCase() });
+        }
       }
     } catch (error) {
       console.error("Error fetching company info:", error);
+
+      // Same fallback behavior on network errors.
+      try {
+        const meRes = await fetch(`${API_BASE_URL}/api/me`, { credentials: "include" });
+        if (meRes.ok) {
+          const me = await meRes.json().catch(() => null);
+          const lcy = String((me as any)?.defaultCurrency || '').trim();
+          if (lcy) {
+            setCompanyInfo({ defaultCurrency: lcy.toUpperCase() });
+          }
+        }
+      } catch {
+        // ignore
+      }
     }
   };
   
@@ -5068,386 +5094,232 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                           </TabsTrigger>
                         </TabsList>
 
-                        <TabsContent value="subscription" className="m-0 border-0 p-0">
-                          <Card className="bg-white border border-gray-200 shadow-md overflow-hidden rounded-2xl hover:shadow-lg transition-shadow">
-                            <div className="p-0">
-                              <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
-                                <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
-                                  <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-left text-xs font-bold text-white uppercase tracking-wide w-[52%]">Field Name</TableHead>
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[18%]">Field Type</TableHead>
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[15%]">Enabled</TableHead>
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[15%]">Actions</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {isLoading ? (
-                                    <TableRow>
-                                      <TableCell colSpan={4} className="h-48 text-center text-gray-400">Loading fields...</TableCell>
-                                    </TableRow>
-                                  ) : fields.length === 0 ? (
-                                    <TableRow>
-                                      <TableCell colSpan={4} className="h-48">
-                                        <div className="flex flex-col items-center justify-center text-center text-gray-500">
-                                          <LayoutGrid className="h-10 w-10 text-gray-300 mb-3" />
-                                          <p className="font-medium text-gray-900">No fields created yet</p>
-                                          <p className="text-sm mt-1">Click "Create Field" to create one</p>
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
-                                  ) : (
-                                    <AnimatePresence>
-                                      {fields.map((field, index) => (
-                                        <motion.tr
-                                          key={field.name}
-                                          className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40 ${field.enabled ? '' : 'opacity-60'}`}
-                                          initial={{ opacity: 0, y: 10 }}
-                                          animate={{ opacity: 1, y: 0 }}
-                                          exit={{ opacity: 0 }}
-                                          transition={{ delay: 0.04 * index }}
-                                        >
-                                          <TableCell className="px-6 py-4">
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                openEditFieldModal(
-                                                  { kind: 'subscription', name: field.name },
-                                                  { type: (field.type || 'Text'), required: !!field.required }
-                                                )
-                                              }
-                                              title={field.name}
-                                              className="group inline-flex items-center gap-2 max-w-full text-left"
-                                            >
-                                              <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
-                                                {field.name}
-                                                <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
-                                              </span>
-                                              <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
-                                            </button>
-                                          </TableCell>
-                                          <TableCell className="px-4 py-4">
-                                            <span
-                                              className={`inline-flex flex-shrink-0 items-center justify-center rounded-full px-3 py-0.5 text-xs font-bold ${
-                                                (field.type || 'Text') === 'Text'
-                                                  ? 'bg-indigo-100 text-indigo-700'
-                                                  : (field.type || 'Text') === 'Date'
-                                                    ? 'bg-teal-100 text-teal-700'
-                                                    : 'bg-blue-100 text-blue-700'
-                                              }`}
-                                            >
-                                              {field.type || 'Text'}
-                                            </span>
-                                          </TableCell>
-                                          <TableCell className="px-4 py-4 text-center">
-                                            <Switch
-                                              checked={!!field.enabled}
-                                              className="data-[state=checked]:bg-[#6366f1]"
-                                              onCheckedChange={(checked) => void updateFieldEnablement(field.name, checked)}
-                                            />
-                                          </TableCell>
-                                          <TableCell className="text-right px-6 py-4">
-                                            <div className="flex justify-end gap-3">
-                                              <Button
+                        <Card className="bg-white border border-gray-200 shadow-md overflow-hidden rounded-2xl hover:shadow-lg transition-shadow">
+                          <div className="p-0">
+                            <Table key={customFieldKind} containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
+                              <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-left text-xs font-bold text-white uppercase tracking-wide w-[52%]">Field Name</TableHead>
+                                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[18%]">Field Type</TableHead>
+                                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[15%]">Enabled</TableHead>
+                                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[15%]">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {(() => {
+                                  const activeFields =
+                                    customFieldKind === 'subscription'
+                                      ? fields
+                                      : customFieldKind === 'compliance'
+                                        ? complianceFields
+                                        : renewalFields;
+
+                                  const activeLoading =
+                                    customFieldKind === 'subscription'
+                                      ? isLoading
+                                      : customFieldKind === 'compliance'
+                                        ? isLoadingCompliance
+                                        : isLoadingRenewal;
+
+                                  const loadingLabel =
+                                    customFieldKind === 'subscription'
+                                      ? 'Loading fields...'
+                                      : customFieldKind === 'compliance'
+                                        ? 'Loading compliance fields...'
+                                        : 'Loading renewal fields...';
+
+                                  const emptyTitle =
+                                    customFieldKind === 'subscription'
+                                      ? 'No fields created yet'
+                                      : customFieldKind === 'compliance'
+                                        ? 'No compliance fields yet'
+                                        : 'No renewal fields yet';
+
+                                  const emptySubtitle =
+                                    customFieldKind === 'subscription'
+                                      ? 'Click "Create Field" to create one'
+                                      : 'Click "Add Custom Field" to create one';
+
+                                  if (activeLoading) {
+                                    return (
+                                      <TableRow>
+                                        <TableCell colSpan={4} className="h-48 text-center text-gray-400">
+                                          {loadingLabel}
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  }
+
+                                  if (!Array.isArray(activeFields) || activeFields.length === 0) {
+                                    return (
+                                      <TableRow>
+                                        <TableCell colSpan={4} className="h-48">
+                                          <div className="flex flex-col items-center justify-center text-center text-gray-500">
+                                            <LayoutGrid className="h-10 w-10 text-gray-300 mb-3" />
+                                            <p className="font-medium text-gray-900">{emptyTitle}</p>
+                                            <p className="text-sm mt-1">{emptySubtitle}</p>
+                                          </div>
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  }
+
+                                  return (
+                                    <AnimatePresence initial={false}>
+                                      {activeFields.map((field: any, index: number) => {
+                                        const hasId = !!field?._id;
+                                        const rowKey =
+                                          customFieldKind === 'subscription'
+                                            ? `${customFieldKind}:${String(field?.name || '').toLowerCase()}`
+                                            : `${customFieldKind}:${String(field?._id || field?.name || '').toLowerCase()}`;
+
+                                        const fieldName = String(field?.name || '');
+                                        const fieldType =
+                                          customFieldKind === 'subscription'
+                                            ? String(field?.type || 'Text')
+                                            : String(field?.dataType || field?.type || 'Text');
+
+                                        const canEdit = customFieldKind === 'subscription' ? !!fieldName : hasId;
+
+                                        return (
+                                          <motion.tr
+                                            key={rowKey}
+                                            className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40 ${field?.enabled ? '' : 'opacity-60'}`}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -6 }}
+                                            transition={{ duration: 0.15 }}
+                                          >
+                                            <TableCell className="px-6 py-4">
+                                              <button
                                                 type="button"
-                                                variant="outline"
-                                                size="icon"
-                                                className="h-8 w-8 text-indigo-600 border-indigo-100 hover:bg-indigo-50 rounded-md shadow-sm"
+                                                disabled={!canEdit}
                                                 onClick={() => {
+                                                  if (!canEdit) return;
+                                                  if (customFieldKind === 'subscription') {
+                                                    openEditFieldModal(
+                                                      { kind: 'subscription', name: fieldName },
+                                                      { type: fieldType, required: !!field?.required }
+                                                    );
+                                                    return;
+                                                  }
+
+                                                  const id = String(field?._id || '');
+                                                  if (!id) return;
                                                   openEditFieldModal(
-                                                    { kind: 'subscription', name: field.name },
-                                                    { type: (field.type || 'Text'), required: !!field.required }
+                                                    { kind: customFieldKind, id, name: fieldName } as any,
+                                                    { type: fieldType, required: !!field?.required }
                                                   );
                                                 }}
-                                                title="Edit"
+                                                title={fieldName}
+                                                className="group inline-flex items-center gap-2 max-w-full text-left disabled:opacity-60 disabled:cursor-not-allowed"
                                               >
-                                                <Pencil className="h-4 w-4" />
-                                                <span className="sr-only">Edit</span>
-                                              </Button>
-                                              <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="icon"
-                                                className="h-8 w-8 text-red-500 border-red-100 hover:bg-red-50 rounded-md shadow-sm"
-                                                onClick={() => requestDeleteCustomField({ kind: 'subscription', name: field.name })}
-                                                title="Delete"
+                                                <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
+                                                  {fieldName}
+                                                  <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                                                </span>
+                                                <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                                              </button>
+                                            </TableCell>
+
+                                            <TableCell className="px-4 py-4">
+                                              <span
+                                                className={`inline-flex flex-shrink-0 items-center justify-center rounded-full px-3 py-0.5 text-xs font-bold ${
+                                                  fieldType === 'Text'
+                                                    ? 'bg-indigo-100 text-indigo-700'
+                                                    : fieldType === 'Date'
+                                                      ? 'bg-teal-100 text-teal-700'
+                                                      : 'bg-blue-100 text-blue-700'
+                                                }`}
                                               >
-                                                <Trash2 className="h-4 w-4" />
-                                                <span className="sr-only">Delete</span>
-                                              </Button>
-                                            </div>
-                                          </TableCell>
-                                        </motion.tr>
-                                      ))}
+                                                {fieldType}
+                                              </span>
+                                            </TableCell>
+
+                                            <TableCell className="px-4 py-4 text-center">
+                                              <Switch
+                                                checked={!!field?.enabled}
+                                                className="data-[state=checked]:bg-[#6366f1]"
+                                                disabled={customFieldKind !== 'subscription' && !hasId}
+                                                onCheckedChange={(checked) => {
+                                                  if (customFieldKind === 'subscription') {
+                                                    void updateFieldEnablement(fieldName, checked);
+                                                    return;
+                                                  }
+                                                  if (!field?._id) return;
+                                                  if (customFieldKind === 'compliance') {
+                                                    void updateComplianceFieldEnablement(String(field._id), checked);
+                                                  } else {
+                                                    void updateRenewalFieldEnablement(field._id, checked);
+                                                  }
+                                                }}
+                                              />
+                                            </TableCell>
+
+                                            <TableCell className="text-right px-6 py-4">
+                                              <div className="flex justify-end gap-3">
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="icon"
+                                                  className="h-8 w-8 text-indigo-600 border-indigo-100 hover:bg-indigo-50 rounded-md shadow-sm"
+                                                  disabled={!canEdit}
+                                                  onClick={() => {
+                                                    if (!canEdit) return;
+                                                    if (customFieldKind === 'subscription') {
+                                                      openEditFieldModal(
+                                                        { kind: 'subscription', name: fieldName },
+                                                        { type: fieldType, required: !!field?.required }
+                                                      );
+                                                      return;
+                                                    }
+                                                    const id = String(field?._id || '');
+                                                    if (!id) return;
+                                                    openEditFieldModal(
+                                                      { kind: customFieldKind, id, name: fieldName } as any,
+                                                      { type: fieldType, required: !!field?.required }
+                                                    );
+                                                  }}
+                                                  title="Edit"
+                                                >
+                                                  <Pencil className="h-4 w-4" />
+                                                  <span className="sr-only">Edit</span>
+                                                </Button>
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="icon"
+                                                  className="h-8 w-8 text-red-500 border-red-100 hover:bg-red-50 rounded-md shadow-sm"
+                                                  disabled={!canEdit}
+                                                  onClick={() => {
+                                                    if (!canEdit) return;
+                                                    if (customFieldKind === 'subscription') {
+                                                      requestDeleteCustomField({ kind: 'subscription', name: fieldName });
+                                                      return;
+                                                    }
+                                                    if (!field?._id) {
+                                                      showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
+                                                      return;
+                                                    }
+                                                    requestDeleteCustomField({ kind: customFieldKind, id: field._id, name: fieldName } as any);
+                                                  }}
+                                                  title="Delete"
+                                                >
+                                                  <Trash2 className="h-4 w-4" />
+                                                  <span className="sr-only">Delete</span>
+                                                </Button>
+                                              </div>
+                                            </TableCell>
+                                          </motion.tr>
+                                        );
+                                      })}
                                     </AnimatePresence>
-                                  )}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          </Card>
-                        </TabsContent>
-
-                        <TabsContent value="compliance" className="m-0 border-0 p-0">
-                          <Card className="bg-white border border-gray-200 shadow-md overflow-hidden rounded-2xl hover:shadow-lg transition-shadow">
-                            <div className="p-0">
-                              <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
-                                <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
-                                  <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-left text-xs font-bold text-white uppercase tracking-wide w-[52%]">Field Name</TableHead>
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[18%]">Field Type</TableHead>
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[15%]">Enabled</TableHead>
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[15%]">Actions</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                              {isLoadingCompliance ? (
-                                <TableRow>
-                                  <TableCell colSpan={4} className="h-48 text-center text-gray-400">Loading compliance fields...</TableCell>
-                                </TableRow>
-                              ) : complianceFields.length === 0 ? (
-                                <TableRow>
-                                  <TableCell colSpan={4} className="h-48">
-                                      <div className="flex flex-col items-center justify-center text-center text-gray-500">
-                                          <LayoutGrid className="h-10 w-10 text-gray-300 mb-3" />
-                                          <p className="font-medium text-gray-900">No compliance fields yet</p>
-                                          <p className="text-sm mt-1">Click "Add Custom Field" to create one</p>
-                                      </div>
-                                  </TableCell>
-                                </TableRow>
-                              ) : (
-                                <AnimatePresence>
-                                {complianceFields.map((field, index) => {
-                                  const fieldType = String(field.dataType || field.type || 'Text');
-                                  return (
-                                  <motion.tr
-                                    key={field._id || field.name}
-                                    className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40 ${field.enabled ? '' : 'opacity-60'}`}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{ delay: 0.04 * index }}
-                                  >
-                                    <TableCell className="px-6 py-4">
-                                      <button
-                                        type="button"
-                                        disabled={!field._id}
-                                        onClick={() => {
-                                          if (!field._id) return;
-                                          openEditFieldModal(
-                                            { kind: 'compliance', id: String(field._id), name: field.name },
-                                            { type: fieldType, required: !!field.required }
-                                          );
-                                        }}
-                                        title={field.name}
-                                        className="group inline-flex items-center gap-2 max-w-full text-left disabled:opacity-60 disabled:cursor-not-allowed"
-                                      >
-                                        <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
-                                          {field.name}
-                                          <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
-                                        </span>
-                                        <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
-                                      </button>
-                                    </TableCell>
-                                    <TableCell className="px-4 py-4">
-                                      <span className={`inline-flex flex-shrink-0 items-center justify-center rounded-full px-3 py-0.5 text-xs font-bold ${
-                                        fieldType === 'Text' ? 'bg-indigo-100 text-indigo-700' :
-                                        fieldType === 'Date' ? 'bg-teal-100 text-teal-700' :
-                                        'bg-blue-100 text-blue-700'
-                                      }`}>
-                                        {fieldType}
-                                      </span>
-                                    </TableCell>
-                                    <TableCell className="px-4 py-4 text-center">
-                                      <Switch
-                                        checked={!!field.enabled}
-                                        className="data-[state=checked]:bg-[#6366f1]"
-                                        onCheckedChange={(checked) => {
-                                          if (!field._id) return;
-                                          void updateComplianceFieldEnablement(String(field._id), checked);
-                                        }}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="text-right px-6 py-4">
-                                      <div className="flex justify-end gap-3">
-                                          <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="icon"
-                                          className="h-8 w-8 text-indigo-600 border-indigo-100 hover:bg-indigo-50 rounded-md shadow-sm"
-                                          disabled={!field._id}
-                                          onClick={() => {
-                                              if (!field._id) return;
-                                              openEditFieldModal(
-                                                { kind: 'compliance', id: String(field._id), name: field.name },
-                                                { type: fieldType, required: !!field.required }
-                                              );
-                                          }}
-                                          title="Edit"
-                                          >
-                                          <Pencil className="h-4 w-4" />
-                                          <span className="sr-only">Edit</span>
-                                          </Button>
-                                          <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="icon"
-                                          className="h-8 w-8 text-red-500 border-red-100 hover:bg-red-50 rounded-md shadow-sm"
-                                          disabled={!field._id}
-                                          onClick={() => {
-                                            if (!field._id) {
-                                              showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
-                                              return;
-                                            }
-                                            requestDeleteCustomField({ kind: 'compliance', id: field._id, name: field.name });
-                                          }}
-                                          title="Delete"
-                                          >
-                                          <Trash2 className="h-4 w-4" />
-                                          <span className="sr-only">Delete</span>
-                                          </Button>
-                                      </div>
-                                    </TableCell>
-                                  </motion.tr>
-                                );
-                                })}
-                                </AnimatePresence>
-                              )}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          </Card>
-                        </TabsContent>
-
-                        <TabsContent value="renewal" className="m-0 border-0 p-0">
-                          <Card className="bg-white border border-gray-200 shadow-md overflow-hidden rounded-2xl hover:shadow-lg transition-shadow">
-                            <div className="p-0">
-                              <Table containerClassName="flex-1 min-h-0 overflow-auto" className="w-full table-fixed">
-                                <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
-                                  <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-left text-xs font-bold text-white uppercase tracking-wide w-[52%]">Field Name</TableHead>
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[18%]">Field Type</TableHead>
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[15%]">Enabled</TableHead>
-                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[15%]">Actions</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                              {isLoadingRenewal ? (
-                                <TableRow>
-                                  <TableCell colSpan={4} className="h-48 text-center text-gray-400">Loading renewal fields...</TableCell>
-                                </TableRow>
-                              ) : renewalFields.length === 0 ? (
-                                <TableRow>
-                                  <TableCell colSpan={4} className="h-48">
-                                      <div className="flex flex-col items-center justify-center text-center text-gray-500">
-                                          <LayoutGrid className="h-10 w-10 text-gray-300 mb-3" />
-                                          <p className="font-medium text-gray-900">No renewal fields yet</p>
-                                          <p className="text-sm mt-1">Click "Add Custom Field" to create one</p>
-                                      </div>
-                                  </TableCell>
-                                </TableRow>
-                              ) : (
-                                <AnimatePresence>
-                                {renewalFields.map((field, index) => {
-                                  const fieldType = String(field.dataType || field.type || 'Text');
-                                  return (
-                                  <motion.tr
-                                    key={field._id || field.name}
-                                    className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40 ${field.enabled ? '' : 'opacity-60'}`}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{ delay: 0.04 * index }}
-                                  >
-                                    <TableCell className="px-6 py-4">
-                                      <button
-                                        type="button"
-                                        disabled={!field._id}
-                                        onClick={() => {
-                                          if (!field._id) return;
-                                          openEditFieldModal(
-                                            { kind: 'renewal', id: String(field._id), name: field.name },
-                                            { type: fieldType, required: !!field.required }
-                                          );
-                                        }}
-                                        title={field.name}
-                                        className="group inline-flex items-center gap-2 max-w-full text-left disabled:opacity-60 disabled:cursor-not-allowed"
-                                      >
-                                        <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
-                                          {field.name}
-                                          <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
-                                        </span>
-                                        <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
-                                      </button>
-                                    </TableCell>
-                                    <TableCell className="px-4 py-4">
-                                      <span className={`inline-flex flex-shrink-0 items-center justify-center rounded-full px-3 py-0.5 text-xs font-bold ${
-                                        fieldType === 'Text' ? 'bg-indigo-100 text-indigo-700' :
-                                        fieldType === 'Date' ? 'bg-teal-100 text-teal-700' :
-                                        'bg-blue-100 text-blue-700'
-                                      }`}>
-                                        {fieldType}
-                                      </span>
-                                    </TableCell>
-                                    <TableCell className="px-4 py-4 text-center">
-                                      <Switch
-                                        checked={!!field.enabled}
-                                        className="data-[state=checked]:bg-indigo-500"
-                                        onCheckedChange={(checked) => {
-                                          if (!field._id) return;
-                                          void updateRenewalFieldEnablement(field._id, checked);
-                                        }}
-                                        disabled={!field._id}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="text-right px-6 py-4">
-                                      <div className="flex justify-end gap-3">
-                                          <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="icon"
-                                          className="h-8 w-8 text-indigo-600 border-indigo-100 hover:bg-indigo-50 rounded-md shadow-sm"
-                                          disabled={!field._id}
-                                          onClick={() => {
-                                              if (!field._id) return;
-                                              openEditFieldModal(
-                                                { kind: 'renewal', id: String(field._id), name: field.name },
-                                                { type: fieldType, required: !!field.required }
-                                              );
-                                          }}
-                                          title="Edit"
-                                          >
-                                          <Pencil className="h-4 w-4" />
-                                          <span className="sr-only">Edit</span>
-                                          </Button>
-                                          <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="icon"
-                                          className="h-8 w-8 text-red-500 border-red-100 hover:bg-red-50 rounded-md shadow-sm"
-                                          disabled={!field._id}
-                                          onClick={() => {
-                                            if (!field._id) {
-                                              showCustomFieldError('Cannot delete this field right now. Please refresh the page and try again.');
-                                              return;
-                                            }
-                                            requestDeleteCustomField({ kind: 'renewal', id: field._id, name: field.name });
-                                          }}
-                                          title="Delete"
-                                          >
-                                          <Trash2 className="h-4 w-4" />
-                                          <span className="sr-only">Delete</span>
-                                          </Button>
-                                      </div>
-                                    </TableCell>
-                                  </motion.tr>
-                                );
-                                })}
-                                </AnimatePresence>
-                              )}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          </Card>
-                        </TabsContent>
+                                  );
+                                })()}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </Card>
                       </Tabs>
                     </div>
                   </div>

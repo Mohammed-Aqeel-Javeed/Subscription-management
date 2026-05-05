@@ -356,7 +356,7 @@ const validateURL = (url: string): { valid: boolean; error?: string } => {
 const formSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   nextRenewal: z.string().min(1, "End date is required"),
-  paymentMethod: z.string().min(1, "Payment method is required"),
+  paymentMethod: z.string().optional(),
   // All other fields are optional
   serviceName: z.string().optional(),
   website: z.string().optional(),
@@ -776,6 +776,14 @@ function calculateEndDate(startDate: string, billingCycle: string): string {
       break;
     case "yearly":
       endDate.setFullYear(endDate.getFullYear() + 1);
+      endDate.setDate(endDate.getDate() - 1);
+      break;
+    case "2 years":
+      endDate.setFullYear(endDate.getFullYear() + 2);
+      endDate.setDate(endDate.getDate() - 1);
+      break;
+    case "3 years":
+      endDate.setFullYear(endDate.getFullYear() + 3);
       endDate.setDate(endDate.getDate() - 1);
       break;
     case "weekly":
@@ -3426,7 +3434,20 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   return (
     <>
       <style>{animationStyles}</style>
-      <Dialog open={open} onOpenChange={(v) => { if (!v) setIsFullscreen(false); onOpenChange(v); }}>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          if (!v) {
+            // Only confirm exit when there are unsaved changes.
+            if (form.formState.isDirty) {
+              setExitConfirmDialog({ show: true });
+              return;
+            }
+            setIsFullscreen(false);
+          }
+          onOpenChange(v);
+        }}
+      >
         <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'}  border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter flex flex-col overflow-hidden`}> 
                 {/* Document Upload Modal */}
                 <Dialog open={showDocumentDialog} onOpenChange={(open) => {
@@ -3669,15 +3690,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 title="Close"
                 className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-indigo-200 shadow-sm"
                 onClick={() => {
-                  const formValues = form.getValues();
-                  const hasData = formValues.serviceName || formValues.vendor || formValues.amount ||
-                                 formValues.category || formValues.owner || formValues.notes;
-
-                  if (hasData && !subscriptionCreated) {
+                  if (form.formState.isDirty) {
                     setExitConfirmDialog({ show: true });
-                  } else {
-                    onOpenChange(false);
+                    return;
                   }
+                  onOpenChange(false);
                 }}
               >
                 <X className="h-4 w-4" />
@@ -4001,6 +4018,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       { value: 'yearly', label: 'Yearly' },
                       { value: 'quarterly', label: 'Quarterly' },
                       { value: 'weekly', label: 'Weekly' },
+                      { value: '2 years', label: '2 Years' },
+                      { value: '3 years', label: '3 Years' },
                       { value: 'trial', label: 'Trial' },
                       { value: 'pay-as-you-go', label: 'Pay-as-you-go' },
                     ];
@@ -4087,8 +4106,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   control={form.control}
                   name="paymentFrequency"
                   render={({ field }) => {
-                    // Define cycle hierarchy (lower index = shorter period)
-                    const cycleHierarchy = ['weekly', 'monthly', 'quarterly', 'yearly'];
+                    // Define base hierarchy (lower index = shorter period)
+                    // NOTE: keep values lowercase to match existing stored values.
+                    const baseHierarchy = ['weekly', '28 days', 'monthly', 'quarterly', 'yearly'];
                     const commitmentCycle = (billingCycle || '').toLowerCase();
                     
                     // For Trial and Pay-as-you-go, don't show any payment frequency options
@@ -4096,14 +4116,24 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     
                     // Disable if no commitment cycle selected
                     const isDisabled = !billingCycle || isTrialOrPayAsYouGo;
-                    
-                    // Get the index of the commitment cycle
-                    const commitmentIndex = cycleHierarchy.indexOf(commitmentCycle);
-                    
-                    // Filter frequencies: only show options <= commitment cycle (keep lowercase)
-                    const availableFrequencies = commitmentIndex >= 0 
-                      ? cycleHierarchy.slice(0, commitmentIndex + 1)
-                      : []; // Empty for trial and pay-as-you-go
+
+                    // Dynamic frequency mapping
+                    // - Monthly: Weekly, Monthly, 28 Days
+                    // - Multi-year: Weekly, Monthly, 28 Days, Quarterly, Yearly, {N Years}
+                    // - Others: keep existing behavior (<= commitment cycle)
+                    const availableFrequencies = (() => {
+                      if (isDisabled) return [];
+
+                      if (commitmentCycle === '2 years') {
+                        return [...baseHierarchy, '2 years'];
+                      }
+                      if (commitmentCycle === '3 years') {
+                        return [...baseHierarchy, '3 years'];
+                      }
+
+                      const commitmentIndex = baseHierarchy.indexOf(commitmentCycle);
+                      return commitmentIndex >= 0 ? baseHierarchy.slice(0, commitmentIndex + 1) : [];
+                    })();
                     
                     return (
                       <FormItem className={getStableColSpan("paymentFrequency", field.value, 14)}>
@@ -4269,7 +4299,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     );
                   }}
                 />
-                {/* Payment Method field - now dynamic and mandatory */}
+                {/* Payment Method field - dynamic dropdown */}
                 <FormField
                   control={form.control}
                   name="paymentMethod"
@@ -4281,7 +4311,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     return (
                       <FormItem className={getStableColSpan("paymentMethod", field.value, 18)}>
                         <FormLabel className="block text-sm font-medium text-slate-700">
-                          Payment Method <span className="text-red-500">*</span>
+                          Payment Method
                         </FormLabel>
                         <SearchableStringDropdown
                           value={field.value || ""}
@@ -4799,16 +4829,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   variant="outline" 
                   className="border-gray-300 text-gray-700 hover:bg-gray-100 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
                   onClick={() => {
-                    // Check if form has any data filled
-                    const formValues = form.getValues();
-                    const hasData = formValues.serviceName || formValues.vendor || formValues.amount || 
-                                   formValues.category || formValues.owner || formValues.notes;
-                    
-                    if (hasData && !subscriptionCreated) {
+                    if (form.formState.isDirty) {
                       setExitConfirmDialog({ show: true });
-                    } else {
-                      onOpenChange(false);
+                      return;
                     }
+                    onOpenChange(false);
                   }}
                 >
                   Exit

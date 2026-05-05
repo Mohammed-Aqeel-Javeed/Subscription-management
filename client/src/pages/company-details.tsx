@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -2504,39 +2504,158 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
 
   // Category configuration with visibility settings (dynamic, from backend)
   type Category = { name: string; visible: boolean; tenantId?: string };
+  type CategoryKind = 'subscription' | 'compliance' | 'renewal';
   const queryClient = useQueryClient();
-  const { data: categories = [], isLoading: categoriesLoading, refetch: refetchCategories } = useQuery<Category[]>({
-    queryKey: ["/api/company/categories"],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE_URL}/api/company/categories`, { credentials: 'include' });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({} as any));
-        const msg = (json as any)?.message || 'Failed to fetch categories';
-        throw new Error(msg);
-      }
-      const data = await res.json().catch(() => []);
-      return Array.isArray(data) ? data : [];
-    },
+
+  const fetchCategoriesByKind = async (kind: CategoryKind) => {
+    // Same-origin API ensures session cookies always apply.
+    const res = await fetch(`/api/company/categories?kind=${encodeURIComponent(kind)}`, { credentials: 'include' });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({} as any));
+      const msg = (json as any)?.message || 'Failed to fetch categories';
+      throw new Error(msg);
+    }
+    const data = await res.json().catch(() => []);
+    return Array.isArray(data) ? (data as Category[]) : [];
+  };
+
+  const DEFAULT_CATEGORIES_BY_KIND: Record<CategoryKind, string[]> = {
+    subscription: [],
+    compliance: ['Tax', 'Payroll', 'Regulatory', 'Legal', 'Other'],
+    renewal: ['Visa', 'E-Pass', 'Govt. License', 'Insurance', 'Contract', 'Agreement', 'Maintenance', 'Others'],
+  };
+
+  const normalizeCategoryName = (value: unknown) => String(value ?? '').trim();
+  const toCategoryRows = (kind: CategoryKind, fetched: Category[]): Category[] => {
+    // IMPORTANT: Company Details -> Categories table should only show categories stored in DB.
+    // Defaults are shown in dropdowns elsewhere (Compliance/Govt. License) and should not appear here.
+    const defaultNameSet = new Set((DEFAULT_CATEGORIES_BY_KIND[kind] || []).map((n) => n.toLowerCase()));
+
+    const rows = (Array.isArray(fetched) ? fetched : [])
+      .map((c) => ({
+        name: normalizeCategoryName((c as any)?.name),
+        visible: typeof (c as any)?.visible === 'boolean' ? (c as any).visible : true,
+      }))
+      .filter((c) => c.name)
+      .filter((c) => !defaultNameSet.has(c.name.toLowerCase()));
+
+    // De-dupe by name (case-insensitive) while keeping stable order.
+    const seen = new Set<string>();
+    const unique: Category[] = [];
+    for (const c of rows) {
+      const key = c.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(c);
+    }
+    return unique;
+  };
+
+  const {
+    data: subscriptionCategories = [],
+    isLoading: subscriptionCategoriesLoading,
+    refetch: refetchSubscriptionCategories,
+  } = useQuery<Category[]>({
+    queryKey: ["/api/company/categories", "subscription"],
+    queryFn: () => fetchCategoriesByKind('subscription'),
     placeholderData: [],
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
+
+  const {
+    data: complianceCategories = [],
+    isLoading: complianceCategoriesLoading,
+    refetch: refetchComplianceCategories,
+  } = useQuery<Category[]>({
+    queryKey: ["/api/company/categories", "compliance"],
+    queryFn: () => fetchCategoriesByKind('compliance'),
+    placeholderData: [],
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  const {
+    data: renewalCategories = [],
+    isLoading: renewalCategoriesLoading,
+    refetch: refetchRenewalCategories,
+  } = useQuery<Category[]>({
+    queryKey: ["/api/company/categories", "renewal"],
+    queryFn: () => fetchCategoriesByKind('renewal'),
+    placeholderData: [],
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  const [categoryKind, setCategoryKind] = useState<CategoryKind>('subscription');
+  const [categorySearchTerm, setCategorySearchTerm] = useState('');
+  const [categoryAddOpen, setCategoryAddOpen] = useState(false);
+  const [categoryEditOpen, setCategoryEditOpen] = useState(false);
+  const [categoryEditingKind, setCategoryEditingKind] = useState<CategoryKind>('subscription');
+  const [categoryEditingOldName, setCategoryEditingOldName] = useState('');
+  const [categoryEditingNewName, setCategoryEditingNewName] = useState('');
+  const [newCategoryNames, setNewCategoryNames] = useState<Record<CategoryKind, string>>({
+    subscription: '',
+    compliance: '',
+    renewal: '',
+  });
+  const activeNewCategoryName = newCategoryNames[categoryKind];
+  const setActiveNewCategoryName = (value: string) =>
+    setNewCategoryNames((prev) => ({ ...prev, [categoryKind]: value }));
+
+  const subscriptionCategoryRows = toCategoryRows('subscription', subscriptionCategories);
+  const complianceCategoryRows = toCategoryRows('compliance', complianceCategories);
+  const renewalCategoryRows = toCategoryRows('renewal', renewalCategories);
+
+  const activeCategoryRows =
+    categoryKind === 'subscription'
+      ? subscriptionCategoryRows
+      : categoryKind === 'compliance'
+        ? complianceCategoryRows
+        : renewalCategoryRows;
+
+  const filteredActiveCategoryRows = (Array.isArray(activeCategoryRows) ? activeCategoryRows : []).filter((row) => {
+    const term = categorySearchTerm.trim().toLowerCase();
+    if (!term) return true;
+    return String(row?.name || '').toLowerCase().includes(term);
+  });
+
+  const categoriesLoading =
+    categoryKind === 'subscription'
+      ? subscriptionCategoriesLoading
+      : categoryKind === 'compliance'
+        ? complianceCategoriesLoading
+        : renewalCategoriesLoading;
+
+  const refetchActiveCategories = () => {
+    if (categoryKind === 'subscription') return refetchSubscriptionCategories();
+    if (categoryKind === 'compliance') return refetchComplianceCategories();
+    return refetchRenewalCategories();
+  };
+
   const addCategoryMutation = useMutation({
-    mutationFn: async (newCategory: { name: string }) => {
+    mutationFn: async (newCategory: { name: string; kind: CategoryKind }) => {
       return await apiRequest("POST", "/api/company/categories", {
-        ...newCategory,
-        visible: true
+        name: newCategory.name,
+        visible: true,
+        kind: newCategory.kind,
       });
     },
-    onSuccess: () => {
+    onSuccess: async (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/company/categories"] });
-      refetchCategories();
-      setNewCategoryName("");
+      await refetchActiveCategories();
+      setNewCategoryNames((prev) => ({ ...prev, [variables.kind]: '' }));
+      setCategoryAddOpen(false);
       toast({
         title: "Category Added",
-        description: `${newCategoryName} category has been added successfully`,
+        description: `${variables.name} category has been added successfully`,
+        variant: "success",
         duration: 1000,
       });
     },
@@ -2544,6 +2663,38 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
       toast({
         title: "Error",
         description: error.message || "Failed to add category",
+        variant: "destructive",
+        duration: 1000,
+      });
+    },
+  });
+
+  const renameCategoryMutation = useMutation({
+    mutationFn: async (payload: { oldName: string; newName: string; kind: CategoryKind }) => {
+      const qs = new URLSearchParams({ kind: payload.kind }).toString();
+      return await apiRequest(
+        "PUT",
+        `/api/company/categories/${encodeURIComponent(payload.oldName)}?${qs}`,
+        { name: payload.newName }
+      );
+    },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/categories"] });
+      await refetchActiveCategories();
+      setCategoryEditOpen(false);
+      setCategoryEditingOldName('');
+      setCategoryEditingNewName('');
+      toast({
+        title: "Category Updated",
+        description: "Category name updated successfully",
+        variant: "success",
+        duration: 1000,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update category",
         variant: "destructive",
         duration: 1000,
       });
@@ -2675,7 +2826,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
     },
   });
 
-  const [newCategoryName, setNewCategoryName] = useState('');
+  // NOTE: category name state is managed per kind via `newCategoryNames`
   const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | undefined>();
   const [deptHeadOpen, setDeptHeadOpen] = useState(false);
@@ -2925,7 +3076,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
         queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
         queryClient.invalidateQueries({ queryKey: ["/api/company/categories"] });
         refetchDepartments();
-        refetchCategories();
+        refetchSubscriptionCategories();
 
         toast({
           title: "Import Complete",
@@ -3156,9 +3307,16 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
     toast({ title: 'Template Downloaded', description: 'Use this template to import categories.' });
   };
 
-  const exportCategories = () => {
+  const exportCategories = (kind: CategoryKind = categoryKind) => {
     try {
-      const exportData = categories.length > 0 ? categories.map(cat => ({
+      const list =
+        kind === 'subscription'
+          ? subscriptionCategoryRows
+          : kind === 'compliance'
+            ? complianceCategoryRows
+            : renewalCategoryRows;
+
+      const exportData = list.length > 0 ? list.map(cat => ({
         'Category Name': cat.name
       })) : [{
         'Category Name': ""
@@ -3177,7 +3335,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
 
       toast({
         title: "Success",
-        description: `Exported ${categories.length} categories successfully`,
+        description: `Exported ${list.length} categories successfully`,
         duration: 2000,
       });
     } catch (error: any) {
@@ -3190,7 +3348,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
     }
   };
 
-  const importCategories = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const importCategories = async (event: React.ChangeEvent<HTMLInputElement>, kind: CategoryKind = categoryKind) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -3220,7 +3378,8 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
 
           await apiRequest("POST", "/api/company/categories", {
             name: cat['Category Name'].trim(),
-            visible: true
+            visible: true,
+            kind,
           });
           successCount++;
         } catch (error) {
@@ -3229,7 +3388,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/company/categories"] });
-      refetchCategories();
+      refetchActiveCategories();
 
       toast({
         title: successCount > 0 ? "Success" : "Error",
@@ -3252,14 +3411,26 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
   };
 
   const addNewCategory = () => {
-    if (
-      newCategoryName.trim() &&
-      !categories.find(
-        c => typeof c.name === "string" && c.name.toLowerCase() === newCategoryName.toLowerCase()
-      )
-    ) {
-      addCategoryMutation.mutate({ name: newCategoryName.trim() });
-    }
+    const name = activeNewCategoryName.trim();
+    if (!name) return;
+    const normalizedNewName = name.toLowerCase();
+    const defaultsForKind = (DEFAULT_CATEGORIES_BY_KIND[categoryKind] || []).map((n) => n.toLowerCase());
+    const existsInDefaults = defaultsForKind.includes(normalizedNewName);
+    const existsInCustom = (Array.isArray(activeCategoryRows) ? activeCategoryRows : []).some(
+      (c) => typeof c?.name === 'string' && c.name.trim().toLowerCase() === normalizedNewName
+    );
+    const exists = existsInDefaults || existsInCustom;
+    if (exists) return;
+    addCategoryMutation.mutate({ name, kind: categoryKind });
+  };
+
+  const openEditCategory = (name: string) => {
+    const nextOld = String(name || '').trim();
+    if (!nextOld) return;
+    setCategoryEditingKind(categoryKind);
+    setCategoryEditingOldName(nextOld);
+    setCategoryEditingNewName(nextOld);
+    setCategoryEditOpen(true);
   };
 
   const onSubmitDepartment = (data: DepartmentFormValues) => {
@@ -3329,10 +3500,14 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
   );
 
   const deleteCategoryMutation = useMutation({
-    mutationFn: async (name: string) => {
-      return await apiRequest("DELETE", `/api/company/categories/${encodeURIComponent(name)}`);
+    mutationFn: async (payload: { name: string; kind: CategoryKind }) => {
+      const qs = new URLSearchParams({ kind: payload.kind }).toString();
+      return await apiRequest(
+        "DELETE",
+        `/api/company/categories/${encodeURIComponent(payload.name)}?${qs}`
+      );
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company/categories"] });
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/company/categories"] });
@@ -3340,8 +3515,10 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
       toast({
         title: "Category Deleted",
         description: "Category has been removed.",
+        variant: "destructive",
         duration: 1000,
       });
+      await refetchActiveCategories();
     },
     onError: (error: any) => {
       toast({
@@ -3360,23 +3537,6 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setCompanyInfo(prev => ({ ...prev, [name]: value }));
-  };
-
-  // Handle logo upload
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // For now, we'll store the base64 string of the image
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        setCompanyInfo(prev => ({
-          ...prev,
-          companyLogo: result
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   // Handle form submission
@@ -3608,40 +3768,6 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                               onChange={handleInputChange}
                               className="h-11 text-base border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-gray-900 font-medium transition-all duration-200"
                             />
-                          )}
-                        </div>
-
-                        {/* Logo Upload */}
-                        <div className="space-y-1.5">
-                          <Label className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Company Logo</Label>
-                          {companyLoading ? (
-                            <Skeleton className="h-24 w-full rounded-xl" />
-                          ) : (
-                            <div
-                              onClick={() => document.getElementById('logo-upload')?.click()}
-                              className="relative h-24 border-2 border-dashed border-indigo-200 rounded-xl bg-indigo-50/40 hover:bg-indigo-50 hover:border-indigo-400 transition-all duration-200 cursor-pointer flex items-center justify-center gap-3 group"
-                            >
-                              {companyInfo.companyLogo ? (
-                                <>
-                                  <img src={companyInfo.companyLogo} alt="Logo" className="h-12 w-12 object-contain rounded-lg shadow-sm" />
-                                  <div>
-                                    <p className="text-sm font-semibold text-indigo-700">Logo Uploaded</p>
-                                    <p className="text-xs text-gray-400">Click to change</p>
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 bg-indigo-100 group-hover:bg-indigo-200 rounded-xl flex items-center justify-center transition-colors">
-                                    <Upload className="text-indigo-500" size={18} />
-                                  </div>
-                                  <div>
-                                    <p className="text-sm font-semibold text-indigo-700">Click to upload logo</p>
-                                    <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
-                                  </div>
-                                </div>
-                              )}
-                              <input id="logo-upload" type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                            </div>
                           )}
                         </div>
 
@@ -4504,130 +4630,351 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <Card className="bg-white border border-gray-200 shadow-sm p-0 rounded-xl overflow-hidden">
-                      {/* Professional Header with Gradient */}
-                      <div className="bg-gradient-to-r from-indigo-500 to-blue-500 px-8 py-4">
+                    <div className="space-y-6 pb-6">
+                      {/* Clean Header - matching Custom Fields design */}
+                      <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-200 shrink-0">
                         <div className="flex items-center gap-4">
                           <motion.div
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
-                            className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shadow-md"
+                            className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg"
                           >
-                            <Settings className="text-white" size={24} />
+                            <Settings className="h-5 w-5 text-white" />
                           </motion.div>
-                          <div>
-                            <h3 className="text-2xl font-bold text-white tracking-tight">Subscription Categories</h3>
-                          </div>
+                          <h3 className="text-2xl font-semibold text-gray-900 tracking-tight">Categories</h3>
                         </div>
                       </div>
 
-                      {/* Content */}
-                      <div className="p-8 bg-gradient-to-br from-gray-50 to-white">
-                        {/* Add New Category and Data Management */}
-                        <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                          <Input
-                            placeholder=""
-                            value={newCategoryName}
-                            onChange={(e) => setNewCategoryName(e.target.value)}
-                            className="flex-1 border-gray-300 rounded-lg h-12 px-3 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
-                            onKeyPress={(e) => e.key === 'Enter' && addNewCategory()}
-                          />
-                          <input
-                            type="file"
-                            ref={categoryFileInputRef}
-                            className="hidden"
-                            accept=".csv,.xlsx,.xls"
-                            onChange={importCategories}
-                          />
-                          <Select
-                            key={categoryDataManagementSelectKey}
-                            onValueChange={(value) => {
-                              if (value === 'export') {
-                                exportCategories();
-                              } else if (value === 'import') {
-                                setCategoryImportConfirmOpen(true);
-                              }
-                              setCategoryDataManagementSelectKey((k) => k + 1);
-                            }}
-                          >
-                            <SelectTrigger className="w-52 h-12 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-semibold transition-all duration-200 shadow-sm">
-                              <SelectValue placeholder="Import/Export" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="export" className="cursor-pointer">
-                                <div className="flex items-center">
-                                  <Download className="h-4 w-4 mr-2" />
-                                  Export
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="import" className="cursor-pointer">
-                                <div className="flex items-center">
-                                  <Upload className="h-4 w-4 mr-2" />
-                                  Import
-                                </div>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                            <Button
-                              onClick={addNewCategory}
-                              disabled={!newCategoryName.trim() || addCategoryMutation.isPending}
-                              className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-semibold shadow-md h-12 px-6 rounded-lg whitespace-nowrap"
+                      {/* Tabs - matching Custom Fields design */}
+                      <div className="space-y-6">
+                        <Tabs value={categoryKind} onValueChange={(v) => setCategoryKind(v as CategoryKind)}>
+                          <TabsList className="bg-transparent space-x-2 mb-6 p-0 h-auto">
+                            <TabsTrigger 
+                              value="subscription" 
+                              className="rounded-full px-5 py-2.5 text-sm font-semibold transition-all data-[state=active]:bg-[#6366f1] data-[state=active]:text-white data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-gray-100"
                             >
-                              <Plus className="w-4 h-4 mr-2" />
-                              {addCategoryMutation.isPending ? "Adding..." : "New Category"}
-                            </Button>
-                          </motion.div>
-                        </div>
+                              Subscriptions
+                              <span className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${categoryKind === 'subscription' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                                {subscriptionCategoryRows.length}
+                              </span>
+                            </TabsTrigger>
+                            <TabsTrigger 
+                              value="compliance" 
+                              className="rounded-full px-5 py-2.5 text-sm font-semibold transition-all data-[state=active]:bg-[#6366f1] data-[state=active]:text-white data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-gray-100"
+                            >
+                              Compliance
+                              <span className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${categoryKind === 'compliance' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                                {complianceCategoryRows.length}
+                              </span>
+                            </TabsTrigger>
+                            <TabsTrigger 
+                              value="renewal" 
+                              className="rounded-full px-5 py-2.5 text-sm font-semibold transition-all data-[state=active]:bg-[#6366f1] data-[state=active]:text-white data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-gray-100"
+                            >
+                              Renewals
+                              <span className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${categoryKind === 'renewal' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                                {renewalCategoryRows.length}
+                              </span>
+                            </TabsTrigger>
+                          </TabsList>
 
-                        {/* Category List */}
-                        <div className="space-y-4">
-                          <h3 className="text-base font-semibold text-gray-900">Available Categories</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {categoriesLoading ? (
-                              <div className="text-gray-500">Loading categories...</div>
-                            ) : (
-                              categories.map((category, idx) => {
-                                const displayName = typeof category.name === "string" && category.name.trim() ? category.name : `Unnamed Category ${idx + 1}`;
-                                const subCount = category.name ? getCategorySubscriptions(category.name).length : 0;
-                                return (
-                                  <motion.div
-                                    key={displayName + idx}
-                                    whileHover={{ y: -5 }}
-                                    className="p-4 border border-indigo-200 bg-indigo-50 shadow-sm rounded-xl transition-all duration-300"
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center space-x-3 w-full">
-                                        <span className="text-sm font-medium text-gray-900 truncate w-full">{String(displayName)}</span>
-                                      </div>
-                                      <div className="flex items-center space-x-2">
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => {
-                                            if (!category.name) return;
-                                            setCategoryToDelete({
-                                              category,
-                                              displayName,
-                                              subCount,
-                                            });
-                                            setCategoryDeleteOpen(true);
-                                          }}
-                                          disabled={deleteCategoryMutation.isPending || !category.name}
-                                          className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-full p-1 h-8 w-8"
-                                          title="Delete Category"
-                                        >
-                                          <Trash2 size={16} />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </motion.div>
-                                );
-                              })
-                            )}
+                          {/* Add New Category Input and Data Management */}
+                          <div className="flex flex-wrap items-center gap-4 mb-6">
+                            <Input
+                              placeholder="Search categories..."
+                              value={categorySearchTerm}
+                              onChange={(e) => setCategorySearchTerm(e.target.value)}
+                              className="w-[420px] max-w-full h-10 text-sm"
+                            />
+                            <input
+                              type="file"
+                              ref={categoryFileInputRef}
+                              className="hidden"
+                              accept=".csv,.xlsx,.xls"
+                              onChange={importCategories}
+                            />
+                            <Select
+                              key={categoryDataManagementSelectKey}
+                              onValueChange={(value) => {
+                                if (value === 'export') {
+                                  exportCategories(categoryKind);
+                                } else if (value === 'import') {
+                                  setCategoryImportConfirmOpen(true);
+                                }
+                                setCategoryDataManagementSelectKey((k) => k + 1);
+                              }}
+                            >
+                              <SelectTrigger className="w-44 h-10 text-sm">
+                                <SelectValue placeholder="Import/Export" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="export" className="cursor-pointer">
+                                  <div className="flex items-center">
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Export
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="import" className="cursor-pointer">
+                                  <div className="flex items-center">
+                                    <Upload className="h-4 w-4 mr-2" />
+                                    Import
+                                  </div>
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+
+                            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                              <Button
+                                onClick={() => {
+                                  setActiveNewCategoryName('');
+                                  setCategoryAddOpen(true);
+                                }}
+                                className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
+                              >
+                                <Plus className="w-4 h-4 mr-2" />
+                                New Category
+                              </Button>
+                            </motion.div>
                           </div>
-                        </div>
+
+                          {/* Category List - matching Custom Fields table design */}
+                          <Card className="bg-white border border-gray-200 shadow-md overflow-hidden rounded-2xl hover:shadow-lg transition-shadow">
+                            <div className="p-0">
+                              <Table
+                                key={categoryKind}
+                                containerClassName="max-h-[360px] overflow-y-auto custom-scrollbar"
+                                className="w-full"
+                              >
+                                <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                  <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-left text-xs font-bold text-white uppercase tracking-wide">Category Name</TableHead>
+                                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-6 text-right text-xs font-bold text-white uppercase tracking-wide w-[140px]">Actions</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {categoriesLoading ? (
+                                    <TableRow>
+                                      <TableCell colSpan={2} className="h-48 text-center text-gray-400">Loading categories...</TableCell>
+                                    </TableRow>
+                                  ) : filteredActiveCategoryRows.length === 0 ? (
+                                    <TableRow>
+                                      <TableCell colSpan={2} className="h-48">
+                                        <div className="flex flex-col items-center justify-center text-center text-gray-500">
+                                          <Settings className="h-10 w-10 text-gray-300 mb-3" />
+                                          <p className="font-medium text-gray-900">No categories found</p>
+                                          <p className="text-sm mt-1">Try a different search or add a new category</p>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ) : (
+                                    <AnimatePresence initial={false}>
+                                      {filteredActiveCategoryRows.map((category, idx) => {
+                                        const displayName =
+                                          typeof category.name === 'string' && category.name.trim()
+                                            ? category.name
+                                            : `Unnamed Category ${idx + 1}`;
+                                        const subCount =
+                                          categoryKind === 'subscription' && category.name
+                                            ? getCategorySubscriptions(category.name).length
+                                            : 0;
+
+                                        return (
+                                          <motion.tr
+                                            key={`${categoryKind}:${String(displayName).toLowerCase()}:${idx}`}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -10 }}
+                                            transition={{ duration: 0.2 }}
+                                            className="group border-b border-gray-100 hover:bg-indigo-50/50 transition-colors"
+                                          >
+                                            <TableCell className="px-6 py-4 font-medium text-gray-900">
+                                              <div className="break-words pr-2">{String(displayName)}</div>
+                                            </TableCell>
+                                            <TableCell className="px-6 py-4 text-right w-[140px]">
+                                              <div className="inline-flex items-center justify-end gap-1">
+                                                <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                      if (!category.name) return;
+                                                      openEditCategory(category.name);
+                                                    }}
+                                                    disabled={!category.name}
+                                                    className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg p-2 h-8 w-8"
+                                                    title="Edit Category"
+                                                  >
+                                                    <Edit size={16} />
+                                                  </Button>
+                                                </motion.div>
+
+                                                <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                      if (!category.name) return;
+                                                      setCategoryToDelete({
+                                                        kind: categoryKind,
+                                                        category,
+                                                        displayName,
+                                                        subCount,
+                                                      });
+                                                      setCategoryDeleteOpen(true);
+                                                    }}
+                                                    disabled={deleteCategoryMutation.isPending || !category.name}
+                                                    className="text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg p-2 h-8 w-8"
+                                                    title="Delete Category"
+                                                  >
+                                                    <Trash2 size={16} />
+                                                  </Button>
+                                                </motion.div>
+                                              </div>
+                                            </TableCell>
+                                          </motion.tr>
+                                        );
+                                      })}
+                                    </AnimatePresence>
+                                  )}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </Card>
+                        </Tabs>
                       </div>
+
+                      {/* Category Add Dialog */}
+                      <Dialog open={categoryAddOpen} onOpenChange={(open) => {
+                        setCategoryAddOpen(open);
+                        if (!open) setActiveNewCategoryName('');
+                      }}>
+                        <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+                          <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-5">
+                            <DialogHeader>
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                  <Plus className="h-5 w-5 text-white" />
+                                </div>
+                                <div>
+                                  <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                                    New Category
+                                  </DialogTitle>
+                                  <p className="text-indigo-100 mt-0.5 text-sm font-medium">Adds to the {categoryKind} list</p>
+                                </div>
+                              </div>
+                            </DialogHeader>
+                          </div>
+                          <div className="px-6 py-5 space-y-4">
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700">Category name</Label>
+                              <Input
+                                value={activeNewCategoryName}
+                                onChange={(e) => setActiveNewCategoryName(e.target.value)}
+                                placeholder="Type a category name"
+                                className="h-10"
+                                onKeyDown={(e) => e.key === 'Enter' && addNewCategory()}
+                              />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setCategoryAddOpen(false)}
+                                className="h-10"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                onClick={addNewCategory}
+                                disabled={!activeNewCategoryName.trim() || addCategoryMutation.isPending}
+                                className="h-10 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white"
+                              >
+                                {addCategoryMutation.isPending ? "Adding..." : "Add"}
+                              </Button>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+
+                      {/* Category Edit Dialog */}
+                      <Dialog open={categoryEditOpen} onOpenChange={(open) => {
+                        setCategoryEditOpen(open);
+                        if (!open) {
+                          setCategoryEditingOldName('');
+                          setCategoryEditingNewName('');
+                        }
+                      }}>
+                        <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+                          <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-5">
+                            <DialogHeader>
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                  <Edit className="h-5 w-5 text-white" />
+                                </div>
+                                <div>
+                                  <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                                    Edit Category
+                                  </DialogTitle>
+                                  <p className="text-indigo-100 mt-0.5 text-sm font-medium">Renames linked {categoryEditingKind} records</p>
+                                </div>
+                              </div>
+                            </DialogHeader>
+                          </div>
+                          <div className="px-6 py-5 space-y-4">
+                            <div className="space-y-2">
+                              <Label className="text-sm font-semibold text-gray-700">New name</Label>
+                              <Input
+                                value={categoryEditingNewName}
+                                onChange={(e) => setCategoryEditingNewName(e.target.value)}
+                                placeholder="Type a new name"
+                                className="h-10"
+                                onKeyDown={(e) => {
+                                  if (e.key !== 'Enter') return;
+                                  const next = categoryEditingNewName.trim();
+                                  if (!next) return;
+                                  renameCategoryMutation.mutate({
+                                    oldName: categoryEditingOldName,
+                                    newName: next,
+                                    kind: categoryEditingKind,
+                                  });
+                                }}
+                              />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setCategoryEditOpen(false)}
+                                className="h-10"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  const next = categoryEditingNewName.trim();
+                                  if (!next) return;
+                                  renameCategoryMutation.mutate({
+                                    oldName: categoryEditingOldName,
+                                    newName: next,
+                                    kind: categoryEditingKind,
+                                  });
+                                }}
+                                disabled={
+                                  renameCategoryMutation.isPending ||
+                                  !categoryEditingOldName.trim() ||
+                                  !categoryEditingNewName.trim() ||
+                                  categoryEditingOldName.trim().toLowerCase() === categoryEditingNewName.trim().toLowerCase()
+                                }
+                                className="h-10 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white"
+                              >
+                                {renameCategoryMutation.isPending ? "Saving..." : "Save"}
+                              </Button>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
 
                       {/* Category Import Confirm Dialog */}
                       <AlertDialog open={categoryImportConfirmOpen} onOpenChange={setCategoryImportConfirmOpen}>
@@ -4660,7 +5007,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
-                    </Card>
+                    </div>
                   </motion.div>
                 </TabsContent>
 
@@ -4687,7 +5034,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                     </div>
 
                     <div className="px-6 py-5">
-                      {categoryToDelete?.subCount > 0 ? (
+                      {categoryToDelete?.kind === 'subscription' && categoryToDelete?.subCount > 0 ? (
                         <>
                           <p className="text-gray-700 text-sm leading-relaxed mb-4">
                             The category <span className="font-semibold text-gray-900">"{categoryToDelete?.displayName}"</span> is linked to <span className="font-semibold text-gray-900">{categoryToDelete?.subCount}</span> subscription(s).
@@ -4718,15 +5065,18 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                         }}
                         className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
                       >
-                        {categoryToDelete?.subCount > 0 ? 'OK' : 'Cancel'}
+                        {categoryToDelete?.kind === 'subscription' && categoryToDelete?.subCount > 0 ? 'OK' : 'Cancel'}
                       </Button>
-                      {categoryToDelete?.subCount > 0 ? null : (
+                      {categoryToDelete?.kind === 'subscription' && categoryToDelete?.subCount > 0 ? null : (
                         <Button
                           type="button"
                           onClick={() => {
                             const name = categoryToDelete?.category?.name;
                             if (name) {
-                              deleteCategoryMutation.mutate(name);
+                              deleteCategoryMutation.mutate({
+                                name,
+                                kind: (categoryToDelete?.kind as any) || categoryKind,
+                              });
                             }
                             setCategoryDeleteOpen(false);
                             setCategoryToDelete(null);

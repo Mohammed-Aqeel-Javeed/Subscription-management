@@ -701,15 +701,15 @@ export default function SubscriptionHistory() {
               </div>
             ) : history && history.length > 0 ? (
               <div className="h-full overflow-auto">
-                <table className="w-full border-collapse">
-                  <thead className="sticky top-0 z-10 bg-gray-200">
-                    <tr className="border-b-2 border-gray-400">
+                <table className="w-full table-fixed border-collapse">
+                  <thead className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                    <tr className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
                       {!effectiveSubscriptionId && (
-                        <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[200px]">Subscription Name</th>
+                        <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">Subscription Name</th>
                       )}
-                      <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[180px]">Changed By</th>
-                      <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[400px]">Changes</th>
-                      <th className="h-12 px-4 text-left text-xs font-bold text-gray-800 uppercase tracking-wide bg-gray-200 w-[140px]">Updated On</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[180px]">Changed By</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[400px]">Changes</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[140px]">Updated On</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
@@ -733,7 +733,12 @@ export default function SubscriptionHistory() {
                       const displayChanges = truncateMultiline(changesText, 90);
 
                       return (
-                        <tr key={item._id || index} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                        <tr
+                          key={item._id || index}
+                          className={`border-b border-gray-100 transition-colors ${
+                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                          } hover:bg-indigo-50/40`}
+                        >
                           {!effectiveSubscriptionId && (
                             <td className="px-4 py-3 font-medium text-gray-800 w-[200px] max-w-[200px]">
                               <div className="truncate" title={name}>{name}</div>

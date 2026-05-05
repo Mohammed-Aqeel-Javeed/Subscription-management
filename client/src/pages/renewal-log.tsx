@@ -225,15 +225,15 @@ export default function RenewalLog() {
               </div>
             ) : filteredLogs && filteredLogs.length > 0 ? (
               <div className="h-full overflow-auto">
-                <table className="w-full border-collapse">
-                  <thead className="sticky top-0 z-10 bg-gray-200">
-                    <tr className="border-b border-gray-300">
+                <table className="w-full table-fixed border-collapse">
+                  <thead className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                    <tr className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
                       {!licenseId && (
-                        <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[200px]">Renewal Name</th>
+                        <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">Renewal Name</th>
                       )}
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[180px]">Changed By</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[400px]">Changes</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[140px]">Updated On</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[180px]">Changed By</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[400px]">Changes</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[140px]">Updated On</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white">
@@ -257,7 +257,12 @@ export default function RenewalLog() {
                       changesText = lines.length > 0 ? lines.join('\n') : changesText;
                     }
                     return (
-                      <tr key={index} className="hover:bg-slate-50 border-b border-slate-100">
+                      <tr
+                        key={index}
+                        className={`border-b border-gray-100 transition-colors ${
+                          index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                        } hover:bg-indigo-50/40`}
+                      >
                         {!licenseId && (
                           <td className="font-medium text-sm text-slate-900 align-top py-3 px-4">
                             <span className="block max-w-[260px] truncate" title={String(log.licenseName || '')}>

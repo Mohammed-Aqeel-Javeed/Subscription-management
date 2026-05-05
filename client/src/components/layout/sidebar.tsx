@@ -154,7 +154,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   // ── COLLAPSED ──
   if (!isOpen) {
     return (
-      <div className="flex flex-col h-full w-16 border-r border-indigo-200/50" style={{background:sidebarBackground}}>
+      <div className="flex flex-col h-full w-16 shrink-0 border-r border-indigo-200/50" style={{background:sidebarBackground}}>
         <div className="flex flex-col items-center gap-1 px-2 pt-3 pb-2 border-b border-indigo-200/50">
           <button onClick={onToggle} className="group h-11 w-11 flex items-center justify-center rounded-xl bg-white/60 hover:bg-white/80 border border-indigo-200/60 shadow-sm transition-all duration-200 hover:scale-105 relative" aria-label="Open Sidebar">
             <img src="/assets/logo.png" alt="Logo" className="w-9 h-9 object-contain absolute opacity-100 group-hover:opacity-0 transition-opacity duration-150" style={{imageRendering:"crisp-edges"}}/>
@@ -187,7 +187,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
 
   // ── EXPANDED ──
   return (
-    <div className="flex flex-col h-full border-r border-indigo-200/50" style={{background:sidebarBackground}}>
+    <div className="flex flex-col h-full w-72 shrink-0 border-r border-indigo-200/50" style={{background:sidebarBackground}}>
 
       {/* Header */}
       <div className="flex flex-col gap-2 px-4 pt-3 pb-3 border-b border-indigo-200/50">

@@ -1443,6 +1443,54 @@ await generateRemindersForCompliance(updatedDoc, tenantId, db);
 
 // Example: Save a subscription to the Subtrackerr database
 
+type TenantCurrencyContext = {
+  localCurrency: string;
+  exchangeRateByCode: Map<string, number>;
+};
+
+const TENANT_CURRENCY_CACHE_TTL_MS = 60_000;
+const tenantCurrencyCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    value: TenantCurrencyContext;
+  }
+>();
+
+async function getTenantCurrencyContext(db: any, tenantId: string): Promise<TenantCurrencyContext> {
+  const now = Date.now();
+  const cached = tenantCurrencyCache.get(tenantId);
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  // Opportunistic prune (keeps cache bounded without extra timers)
+  if (tenantCurrencyCache.size > 200) {
+    for (const [key, entry] of tenantCurrencyCache.entries()) {
+      if (entry.expiresAt <= now) tenantCurrencyCache.delete(key);
+    }
+  }
+
+  const companyInfo = await db
+    .collection("companyInfo")
+    .findOne({ tenantId }, { projection: { defaultCurrency: 1 } });
+  const localCurrency = String((companyInfo as any)?.defaultCurrency || "").trim();
+
+  const currencyRows = await db
+    .collection("currencies")
+    .find({ tenantId }, { projection: { code: 1, exchangeRate: 1 } })
+    .toArray();
+
+  const exchangeRateByCode = new Map<string, number>();
+  for (const row of currencyRows) {
+    const code = String((row as any)?.code || "").trim().toUpperCase();
+    const rate = Number((row as any)?.exchangeRate);
+    if (code && Number.isFinite(rate) && rate > 0) exchangeRateByCode.set(code, rate);
+  }
+
+  const value: TenantCurrencyContext = { localCurrency, exchangeRateByCode };
+  tenantCurrencyCache.set(tenantId, { expiresAt: now + TENANT_CURRENCY_CACHE_TTL_MS, value });
+  return value;
+}
+
 // Get all subscriptions
 router.get("/api/subscriptions", async (req, res) => {
   try {
@@ -1515,19 +1563,8 @@ if (!tenantId) {
     // CRITICAL: Fetch all subscriptions but limit to essential fields
     const subscriptions = await collection.find(filter).toArray();
 
-    // Fetch tenant currency configuration once for LCY calculations
-    const companyInfo = await db.collection("companyInfo").findOne({ tenantId });
-    const localCurrency = String((companyInfo as any)?.defaultCurrency || "").trim();
-    const currencyRows = await db
-      .collection("currencies")
-      .find({ tenantId }, { projection: { code: 1, exchangeRate: 1 } })
-      .toArray();
-    const exchangeRateByCode = new Map<string, number>();
-    for (const row of currencyRows) {
-      const code = String((row as any)?.code || "").trim().toUpperCase();
-      const rate = Number((row as any)?.exchangeRate);
-      if (code && Number.isFinite(rate) && rate > 0) exchangeRateByCode.set(code, rate);
-    }
+    // Fetch tenant currency configuration once for LCY calculations (cached for a short TTL)
+    const { localCurrency, exchangeRateByCode } = await getTenantCurrencyContext(db, tenantId);
 
     const parseNumberLike = (value: any) => {
       if (value === null || value === undefined) return null;
@@ -1979,6 +2016,22 @@ router.delete("/api/currencies/:code", async (req, res) => {
 });
 
 // --- Category API ---
+type CategoryKind = 'subscription' | 'compliance' | 'renewal';
+
+function normalizeCategoryKind(raw: any): CategoryKind {
+  const v = String(raw || '').trim().toLowerCase();
+  if (v === 'compliance') return 'compliance';
+  if (v === 'renewal' || v === 'renewals') return 'renewal';
+  return 'subscription';
+}
+
+function categoryKindFilter(kind: CategoryKind) {
+  // Backward-compat: historic subscription categories have no `kind` field.
+  return kind === 'subscription'
+    ? { $or: [{ kind: 'subscription' }, { kind: { $exists: false } }] }
+    : { kind };
+}
+
 // List all categories
 router.get("/api/company/categories", async (req, res) => {
   try {
@@ -1989,7 +2042,8 @@ router.get("/api/company/categories", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    const items = await collection.find({ tenantId }).toArray();
+    const kind = normalizeCategoryKind((req.query as any)?.kind);
+    const items = await collection.find({ tenantId, ...categoryKindFilter(kind) }).toArray();
     // Only return categories with valid, non-empty names
     const categories = items
       .filter(item => typeof item.name === "string" && item.name.trim())
@@ -2012,20 +2066,115 @@ router.post("/api/company/categories", async (req, res) => {
       return res.status(400).json({ message: "Category name required" });
     }
     name = name.trim();
+    const kind = normalizeCategoryKind(req.body?.kind);
     // Multi-tenancy: get tenantId
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
     // Prevent duplicate category names WITHIN THIS TENANT
-    const exists = await collection.findOne({ name, tenantId });
+    const existsFilter: any = { name, tenantId, ...categoryKindFilter(kind) };
+    const exists = await collection.findOne(existsFilter);
     if (exists) {
       return res.status(409).json({ message: "Category already exists" });
     }
-    const result = await collection.insertOne({ name, visible: true, tenantId });
+    const result = await collection.insertOne({ name, visible: true, tenantId, kind });
     res.status(201).json({ insertedId: result.insertedId });
   } catch (error) {
     res.status(500).json({ message: "Failed to add category", error });
+  }
+});
+
+// Rename a category (and update linked documents)
+router.put("/api/company/categories/:name", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const categoriesCollection = db.collection("categories");
+    const subsCollection = db.collection("subscriptions");
+    const complianceCollection = db.collection("compliance");
+    const licensesCollection = db.collection("licenses");
+
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const oldNameRaw = req.params.name;
+    const newNameRaw = req.body?.name;
+
+    if (!oldNameRaw || typeof oldNameRaw !== "string" || !oldNameRaw.trim()) {
+      return res.status(400).json({ message: "Category name required" });
+    }
+    if (!newNameRaw || typeof newNameRaw !== "string" || !newNameRaw.trim()) {
+      return res.status(400).json({ message: "New category name required" });
+    }
+
+    const kind = normalizeCategoryKind((req.query as any)?.kind);
+    const oldName = oldNameRaw.trim();
+    const newName = newNameRaw.trim();
+
+    const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const oldNameRegex = `^${escapeRegex(oldName)}$`;
+    const newNameRegex = `^${escapeRegex(newName)}$`;
+
+    // No-op rename
+    if (oldName.toLowerCase() === newName.toLowerCase()) {
+      return res.status(200).json({ message: "Category renamed", updatedCategory: 0 });
+    }
+
+    // Prevent duplicates within tenant/kind (case-insensitive)
+    const duplicate = await categoriesCollection.findOne({
+      tenantId,
+      name: { $regex: newNameRegex, $options: "i" },
+      ...categoryKindFilter(kind),
+    } as any);
+    if (duplicate) {
+      return res.status(409).json({ message: "Category already exists" });
+    }
+
+    const updateFilter: any = {
+      tenantId,
+      name: { $regex: oldNameRegex, $options: "i" },
+      ...categoryKindFilter(kind),
+    };
+
+    const updateResult = await categoriesCollection.updateOne(updateFilter, {
+      $set: { name: newName },
+    });
+
+    if (updateResult.matchedCount === 0) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+
+    // Update linked docs so existing records stay consistent
+    if (kind === 'subscription') {
+      await subsCollection.updateMany(
+        { tenantId, category: { $regex: oldNameRegex, $options: 'i' } },
+        { $set: { category: newName } }
+      );
+    }
+
+    if (kind === 'compliance') {
+      await complianceCollection.updateMany(
+        { tenantId, complianceCategory: { $regex: oldNameRegex, $options: 'i' } },
+        { $set: { complianceCategory: newName } }
+      );
+      await complianceCollection.updateMany(
+        { tenantId, category: { $regex: oldNameRegex, $options: 'i' } },
+        { $set: { category: newName } }
+      );
+    }
+
+    if (kind === 'renewal') {
+      await licensesCollection.updateMany(
+        { tenantId, category: { $regex: oldNameRegex, $options: 'i' } },
+        { $set: { category: newName } }
+      );
+    }
+
+    return res.status(200).json({ message: "Category renamed", updatedCategory: updateResult.modifiedCount });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to rename category", error });
   }
 });
 // Delete a category by name
@@ -2034,6 +2183,7 @@ router.delete("/api/company/categories/:name", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("categories");
     const subsCollection = db.collection("subscriptions");
+    const complianceCollection = db.collection("compliance");
     const name = req.params.name;
     if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ message: "Category name required" });
@@ -2044,22 +2194,48 @@ router.delete("/api/company/categories/:name", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
 
+    const kind = normalizeCategoryKind((req.query as any)?.kind);
+
     const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const trimmed = name.trim();
     const nameRegex = `^${escapeRegex(trimmed)}$`;
-    const linkedCount = await subsCollection.countDocuments({
-      tenantId,
-      category: { $regex: nameRegex, $options: "i" }
-    });
-    if (linkedCount > 0) {
-      return res.status(409).json({
-        message: "Please reassign the category before deleting.",
-        linkedCount,
+
+    if (kind === 'subscription') {
+      const linkedCount = await subsCollection.countDocuments({
+        tenantId,
+        category: { $regex: nameRegex, $options: "i" }
       });
+      if (linkedCount > 0) {
+        return res.status(409).json({
+          message: "Please reassign the category before deleting.",
+          linkedCount,
+        });
+      }
+    }
+
+    if (kind === 'compliance') {
+      const linkedCount = await complianceCollection.countDocuments({
+        tenantId,
+        $or: [
+          { complianceCategory: { $regex: nameRegex, $options: 'i' } },
+          { category: { $regex: nameRegex, $options: 'i' } },
+        ],
+      });
+      if (linkedCount > 0) {
+        return res.status(409).json({
+          message: "Please reassign the compliance category before deleting.",
+          linkedCount,
+        });
+      }
     }
 
     // Case-insensitive and trimmed match (within tenant)
-    const result = await collection.deleteOne({ tenantId, name: { $regex: nameRegex, $options: "i" } });
+    const deleteFilter: any = {
+      tenantId,
+      name: { $regex: nameRegex, $options: "i" },
+      ...categoryKindFilter(kind),
+    };
+    const result = await collection.deleteOne(deleteFilter);
     if (result.deletedCount === 1) {
       res.status(200).json({ message: "Category deleted" });
     } else {
@@ -2291,11 +2467,6 @@ router.post("/api/subscriptions", async (req, res) => {
     const rawServiceName = String((req.body as any)?.serviceName || '').trim();
     if (!rawServiceName) {
       return res.status(400).json({ message: 'Service name is required' });
-    }
-
-    const rawPaymentMethod = String((req.body as any)?.paymentMethod || '').trim();
-    if (!rawPaymentMethod) {
-      return res.status(400).json({ message: 'Payment Method is required' });
     }
 
     // Used to detect duplicates despite serviceName being encrypted (encryption is randomized).
@@ -2630,11 +2801,6 @@ router.post("/api/subscriptions/draft/:id/activate", async (req, res) => {
       return res.status(404).json({ message: "Draft subscription not found" });
     }
 
-    const paymentMethodCandidate = String((req.body as any)?.paymentMethod ?? (draftSubscription as any)?.paymentMethod ?? '').trim();
-    if (!paymentMethodCandidate) {
-      return res.status(400).json({ message: 'Payment Method is required to activate a draft' });
-    }
-
     // Update draft to active subscription
     const updateData = {
       ...req.body,
@@ -2761,10 +2927,7 @@ router.put("/api/subscriptions/:id", async (req, res) => {
       delete req.body.ownerEmail;
     }
 
-    // Payment method is mandatory; never allow it to be set to blank via update.
-    if ('paymentMethod' in req.body && String((req.body as any).paymentMethod || '').trim() === '') {
-      return res.status(400).json({ message: 'Payment Method is required' });
-    }
+    // paymentMethod is optional.
 
     // Normalize common date fields (UI may send dd-mm-yyyy)
     if ('startDate' in req.body) req.body.startDate = normalizeDateString(req.body.startDate);

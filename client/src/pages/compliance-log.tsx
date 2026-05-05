@@ -218,24 +218,29 @@ export default function ComplianceLogPage() {
               </div>
             ) : logEntries && logEntries.length > 0 ? (
               <div className="h-full overflow-auto">
-                <table className="w-full border-collapse">
-                  <thead className="sticky top-0 z-10 bg-gray-200">
-                    <tr className="border-b border-gray-300">
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[220px]">Renewal Status</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[170px]">New Issue Date</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[170px]">New Expiry Date</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[190px]">Renewal Initiated date</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3 w-[190px]">Submitted by</th>
-                      <th className="font-semibold text-gray-800 bg-gray-200 text-left px-4 py-3">Notes</th>
+                <table className="w-full table-fixed border-collapse">
+                  <thead className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                    <tr className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[220px]">Renewal Status</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[170px]">New Issue Date</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[170px]">New Expiry Date</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[190px]">Renewal Initiated date</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[190px]">Submitted by</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Notes</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white">
-                    {logEntries.map((row: any) => {
+                    {logEntries.map((row: any, index: number) => {
                       const notesText = getRenewalNotesPreview(row?.renewalNotes);
                       const statusLabel = row?.renewalStatus ? getRenewalStatusLabel(String(row.renewalStatus)) : "-";
                       const key = String(row?.id || row?._id || row?.loggedAt || Math.random());
                       return (
-                        <tr key={key} className="hover:bg-slate-50 border-b border-slate-100">
+                        <tr
+                          key={key}
+                          className={`border-b border-gray-100 transition-colors ${
+                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                          } hover:bg-indigo-50/40`}
+                        >
                           <td className="text-sm text-slate-900 align-top py-3 px-4">{statusLabel || "-"}</td>
                           <td className="text-sm text-slate-700 align-top py-3 px-4">
                             {row?.startDate ? new Date(String(row.startDate)).toLocaleDateString("en-GB") : "-"}

@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 // @ts-ignore
@@ -268,6 +269,9 @@ app.use(
     credentials: true,
   })
 );
+
+// Compress responses (helps large JSON payloads on hosted environments)
+app.use(compression());
 
 // Needed for JWT cookie auth (req.cookies)
 app.use(cookieParser());

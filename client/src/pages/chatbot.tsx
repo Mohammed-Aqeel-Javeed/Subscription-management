@@ -13,6 +13,10 @@ interface Message {
 
 export default function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
+  const [buttonPos, setButtonPos] = useState<{ x: number; y: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const buttonPosRef = useRef<{ x: number; y: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -24,6 +28,88 @@ export default function Chatbot() {
   const [inputMessage, setInputMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+    moved: boolean;
+    startX: number;
+    startY: number;
+  } | null>(null);
+
+  const BUTTON_SIZE = 64; // h-16 w-16
+  const MARGIN = 24; // bottom-6/right-6
+  const CARD_WIDTH = 384; // w-96
+  const CARD_HEIGHT = 500; // h-[500px]
+  const POS_STORAGE_KEY = "trackla.chatbot.buttonPos.v1";
+
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+  const computeDefaultPos = () => {
+    const x = window.innerWidth - MARGIN - BUTTON_SIZE;
+    const y = window.innerHeight - MARGIN - BUTTON_SIZE;
+    return { x: Math.max(MARGIN, x), y: Math.max(MARGIN, y) };
+  };
+
+  const clampButtonPos = (pos: { x: number; y: number }) => {
+    const maxX = Math.max(MARGIN, window.innerWidth - BUTTON_SIZE - MARGIN);
+    const maxY = Math.max(MARGIN, window.innerHeight - BUTTON_SIZE - MARGIN);
+    return {
+      x: clamp(pos.x, MARGIN, maxX),
+      y: clamp(pos.y, MARGIN, maxY),
+    };
+  };
+
+  const applyButtonPosStyle = (pos: { x: number; y: number }) => {
+    const el = buttonRef.current;
+    if (!el) return;
+    el.style.left = `${pos.x}px`;
+    el.style.top = `${pos.y}px`;
+  };
+
+  const computeCardPos = (pos: { x: number; y: number }) => {
+    // Anchor card bottom-right to the button bottom-right.
+    const desiredLeft = pos.x + BUTTON_SIZE - CARD_WIDTH;
+    const desiredTop = pos.y + BUTTON_SIZE - CARD_HEIGHT;
+    const maxLeft = Math.max(8, window.innerWidth - CARD_WIDTH - 8);
+    const maxTop = Math.max(8, window.innerHeight - CARD_HEIGHT - 8);
+    return {
+      left: clamp(desiredLeft, 8, maxLeft),
+      top: clamp(desiredTop, 8, maxTop),
+    };
+  };
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(POS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const x = Number(parsed?.x);
+        const y = Number(parsed?.y);
+        if (Number.isFinite(x) && Number.isFinite(y)) {
+          const next = clampButtonPos({ x, y });
+          buttonPosRef.current = next;
+          setButtonPos(next);
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    const next = computeDefaultPos();
+    buttonPosRef.current = next;
+    setButtonPos(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!buttonPos) return;
+    buttonPosRef.current = buttonPos;
+    const onResize = () => setButtonPos((prev) => (prev ? clampButtonPos(prev) : prev));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buttonPos?.x, buttonPos?.y]);
 
   useEffect(() => {
     const handleOpen = () => {
@@ -351,12 +437,72 @@ export default function Chatbot() {
   return (
     <>
       {/* Floating Chat Button */}
-      {!isOpen && (
+      {!isOpen && buttonPos && (
         <button
-          onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 h-16 w-16 rounded-full bg-gradient-to-br from-blue-500/95 via-blue-600/95 to-indigo-600/95 backdrop-blur-md shadow-2xl hover:shadow-3xl transition-all duration-300 flex items-center justify-center group hover:scale-105 active:scale-95 border border-white/20 ring-2 ring-blue-400/30"
+          ref={buttonRef}
+          onPointerDown={(e) => {
+            if (!buttonPos) return;
+            e.preventDefault();
+            const target = e.currentTarget;
+            try {
+              target.setPointerCapture(e.pointerId);
+            } catch {
+              // ignore
+            }
+            dragStateRef.current = {
+              pointerId: e.pointerId,
+              offsetX: e.clientX - buttonPos.x,
+              offsetY: e.clientY - buttonPos.y,
+              moved: false,
+              startX: e.clientX,
+              startY: e.clientY,
+            };
+          }}
+          onPointerMove={(e) => {
+            const drag = dragStateRef.current;
+            if (!drag || e.pointerId !== drag.pointerId) return;
+
+            const next = clampButtonPos({ x: e.clientX - drag.offsetX, y: e.clientY - drag.offsetY });
+            const dx = e.clientX - drag.startX;
+            const dy = e.clientY - drag.startY;
+            if (Math.hypot(dx, dy) > 3) drag.moved = true;
+
+            buttonPosRef.current = next;
+            if (rafRef.current == null) {
+              rafRef.current = window.requestAnimationFrame(() => {
+                rafRef.current = null;
+                const pos = buttonPosRef.current;
+                if (pos) applyButtonPosStyle(pos);
+              });
+            }
+          }}
+          onPointerUp={(e) => {
+            const drag = dragStateRef.current;
+            if (!drag || e.pointerId !== drag.pointerId) return;
+            dragStateRef.current = null;
+
+            const currentPos = buttonPosRef.current;
+            if (currentPos) {
+              applyButtonPosStyle(currentPos);
+              setButtonPos(currentPos);
+              try {
+                localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(currentPos));
+              } catch {
+                // ignore
+              }
+            }
+
+            // Click behavior when there was no drag movement
+            if (!drag.moved) setIsOpen(true);
+          }}
+          className="fixed z-50 h-16 w-16 rounded-full bg-gradient-to-br from-blue-500/95 via-blue-600/95 to-indigo-600/95 backdrop-blur-md shadow-2xl hover:shadow-3xl transition-all duration-300 flex items-center justify-center group hover:scale-105 active:scale-95 border border-white/20 ring-2 ring-blue-400/30"
           aria-label="Open chatbot"
-          style={{ backdropFilter: 'blur(12px)' }}
+          style={{
+            left: buttonPos.x,
+            top: buttonPos.y,
+            backdropFilter: "blur(12px)",
+            touchAction: "none",
+          }}
         >
           <Bot className="h-8 w-8 text-white drop-shadow-lg" />
           <span className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white animate-pulse shadow-lg"></span>
@@ -365,7 +511,13 @@ export default function Chatbot() {
 
       {/* Chat Window */}
       {isOpen && (
-        <Card className="fixed bottom-6 right-6 z-50 w-96 h-[500px] shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl bg-white/90 border border-blue-200/30" style={{ backdropFilter: 'blur(20px)' }}>
+        <Card
+          className="fixed z-50 w-96 h-[500px] shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl bg-white/90 border border-blue-200/30"
+          style={{
+            ...(buttonPos ? computeCardPos(buttonPos) : {}),
+            backdropFilter: "blur(20px)",
+          }}
+        >
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-500/95 via-blue-600/95 to-indigo-600/95 backdrop-blur-md text-white p-4 flex items-center justify-between border-b border-white/20">
             <div className="flex items-center gap-3">
