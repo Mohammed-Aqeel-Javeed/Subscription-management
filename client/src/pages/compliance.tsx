@@ -707,6 +707,7 @@ export default function Compliance() {
   }, [filtersOpen, setSidebarSlotActive, setSidebarReplaceNav]);
 
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
   const [modalOpen, setModalOpen] = useState(() => {
     const sp = new URLSearchParams(location.search);
@@ -2460,7 +2461,11 @@ export default function Compliance() {
       queryClient.setQueryData(["compliance"], (oldData: ComplianceItem[]) =>
         oldData ? [...oldData, newItem] : [newItem]
       );
+      queryClient.setQueryData(["/api/compliance/list"], (oldData: ComplianceItem[]) =>
+        oldData ? [...oldData, newItem] : [newItem]
+      );
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/compliance/list"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/compliance"] });
     }
   });
@@ -2474,7 +2479,11 @@ export default function Compliance() {
       queryClient.setQueryData(["compliance"], (oldData: ComplianceItem[]) =>
         oldData ? oldData.filter(item => item._id !== deletedId) : []
       );
+      queryClient.setQueryData(["/api/compliance/list"], (oldData: ComplianceItem[]) =>
+        oldData ? oldData.filter(item => (item as any)?._id !== deletedId && (item as any)?.id !== deletedId) : []
+      );
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/compliance/list"] });
       toast({
         title: "Success",
         description: "Compliance item deleted successfully",
@@ -2564,7 +2573,13 @@ export default function Compliance() {
           item._id === _id ? { ...item, ...data } : item
         ) : []
       );
+      queryClient.setQueryData(["/api/compliance/list"], (oldData: ComplianceItem[]) =>
+        oldData ? oldData.map(item =>
+          ((item as any)?._id === _id || (item as any)?.id === _id) ? { ...(item as any), ...data } : item
+        ) : []
+      );
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/compliance/list"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/compliance"] });
     }
   });
@@ -2799,11 +2814,6 @@ export default function Compliance() {
 
   const importRows = async (rows: any[], clearFile: () => void) => {
     if (isLoading) {
-      toast({
-        title: 'Please wait',
-        description: 'Loading existing filings so we can detect duplicate Filing Names.',
-        variant: 'destructive',
-      });
       clearFile();
       return;
     }
@@ -2890,6 +2900,7 @@ export default function Compliance() {
       }
     }
     queryClient.invalidateQueries({ queryKey: ['compliance'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/compliance/list'] });
     toast({
       title: 'Import finished',
       description: `Imported ${success} row(s). Failed: ${failed}`,
@@ -2906,6 +2917,8 @@ export default function Compliance() {
       e.target.value = '';
     };
 
+    setIsImporting(true);
+
     try {
       if (file.name.toLowerCase().endsWith('.xlsx')) {
         const buffer = await file.arrayBuffer();
@@ -2915,6 +2928,7 @@ export default function Compliance() {
         if (!ws) {
           toast({ title: 'Import error', description: 'No worksheet found', variant: 'destructive'});
           clearFile();
+          setIsImporting(false);
           return;
         }
 
@@ -2935,6 +2949,7 @@ export default function Compliance() {
         });
 
         await importRows(parsedRows, clearFile);
+        setIsImporting(false);
         return;
       }
 
@@ -2942,17 +2957,23 @@ export default function Compliance() {
         header: true,
         skipEmptyLines: true,
         complete: async (results) => {
-          const rows: any[] = results.data as any[];
-          await importRows(rows, clearFile);
+          try {
+            const rows: any[] = results.data as any[];
+            await importRows(rows, clearFile);
+          } finally {
+            setIsImporting(false);
+          }
         },
         error: () => {
           toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
           clearFile();
+          setIsImporting(false);
         }
       });
     } catch {
       toast({ title: 'Import error', description: 'Failed to import file', variant: 'destructive'});
       clearFile();
+      setIsImporting(false);
     }
   };
 
@@ -2987,16 +3008,26 @@ export default function Compliance() {
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         <div className="text-base font-semibold text-gray-900">Filters</div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" className="h-9" onClick={clearAllFilters}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 hover:border-indigo-300"
+            onClick={clearAllFilters}
+          >
             Clear all
           </Button>
-          <Button type="button" variant="ghost" className="h-9" onClick={() => setFiltersOpen(false)}>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-9 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+            onClick={() => setFiltersOpen(false)}
+          >
             Close
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-6">
+      <div className="flex-1 overflow-auto overscroll-contain custom-scrollbar p-4 space-y-6">
         <div>
           <div className="text-sm font-semibold text-gray-900 mb-2">Category</div>
           <div className="space-y-2">
@@ -3144,6 +3175,15 @@ export default function Compliance() {
   
   return (
     <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
+      {isImporting && (
+        <div className="fixed inset-0 z-[12000] flex items-center justify-center bg-white/50 backdrop-blur-sm">
+          <div
+            className="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"
+            role="status"
+            aria-label="Importing"
+          />
+        </div>
+      )}
       <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
         <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
           <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
@@ -3253,7 +3293,7 @@ export default function Compliance() {
                 onClick={() => {
                   navigate('/compliance-ledger');
                 }}
-                className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200 h-10 rounded-lg"
+                className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200"
               >
                 <Calendar className="h-4 w-4 mr-2" />
                 History
@@ -3272,7 +3312,7 @@ export default function Compliance() {
                   setDataManagementSelectKey((k) => k + 1);
                 }}
               >
-                <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
                   <SelectValue placeholder="Import/Export" />
                 </SelectTrigger>
                 <SelectContent>
@@ -3474,7 +3514,7 @@ export default function Compliance() {
                       </TableCell>
                       <TableCell className="px-4 py-3 w-[160px] text-left">
                         <span
-                          className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getCategoryPillClasses(
+                          className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border min-w-[110px] ${getCategoryPillClasses(
                             item.category
                           )}`}
                         >

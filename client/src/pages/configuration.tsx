@@ -2746,7 +2746,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                   setCurrencyDataManagementSelectKey((k) => k + 1);
                                 }}
                               >
-                                <SelectTrigger className="w-44 bg-gray-100 border-0 text-gray-700 hover:bg-gray-200 font-medium transition-all duration-200 rounded-xl h-10 text-sm shadow-none">
+                                <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
                                   <SelectValue placeholder="Import/Export" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -3389,7 +3389,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                               setPaymentDataManagementSelectKey((k) => k + 1);
                             }}
                           >
-                            <SelectTrigger className="w-44 bg-gray-100 border-0 text-gray-700 hover:bg-gray-200 font-medium transition-all duration-200 rounded-xl h-10 text-sm shadow-none">
+                            <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
                               <SelectValue placeholder="Import/Export" />
                             </SelectTrigger>
                             <SelectContent>

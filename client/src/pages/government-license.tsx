@@ -750,8 +750,9 @@ function SearchableStringDropdown(props: {
   placeholder?: string;
   className?: string;
   onAddNew?: () => void;
+  onEnterMoveFocus?: () => void;
 }) {
-  const { value, onChange, options, placeholder, className, onAddNew } = props;
+  const { value, onChange, options, placeholder, className, onAddNew, onEnterMoveFocus } = props;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [showAll, setShowAll] = useState(false);
@@ -812,6 +813,21 @@ function SearchableStringDropdown(props: {
           setSearch(e.target.value);
           setShowAll(false);
           if (!open) setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter') return;
+          // Commit manual value and move focus to the next field (Authority -> Contact Number)
+          e.preventDefault();
+          const nextValue = search.trim();
+          if (nextValue !== value) {
+            onChange(nextValue);
+          }
+          setOpen(false);
+          setSearch('');
+          setShowAll(false);
+          requestAnimationFrame(() => {
+            onEnterMoveFocus?.();
+          });
         }}
         onFocus={() => {
           if (!open) {
@@ -876,7 +892,10 @@ function SearchableStringDropdown(props: {
                 </div>
               ))
             ) : (
-              <div className="px-3 py-2 text-sm text-slate-500">No options found</div>
+              // When user types a manual value that isn't in the list, don't show an empty-state message.
+              search.trim() ? null : (
+                <div className="px-3 py-2 text-sm text-slate-500">No options found</div>
+              )
             )}
           </div>
 
@@ -1117,6 +1136,9 @@ export default function GovernmentLicense() {
   const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const issuingAuthorityPhoneInputRef = useRef<HTMLInputElement>(null);
 
   // Renewal categories (managed in Company Details -> Categories -> Renewals)
   const { data: renewalCategoriesData = [] } = useQuery<any[]>({
@@ -2550,34 +2572,32 @@ export default function GovernmentLicense() {
           const changesList: string[] = [];
           
           // Helper function to format field changes
-          const formatChange = (fieldName: string, oldVal: any, newVal: any, alwaysShow = false) => {
-            // Check if old value is empty
+          const formatChange = (
+            fieldName: string,
+            oldVal: any,
+            newVal: any,
+            options?: {
+              logInitialFill?: boolean;
+            }
+          ) => {
             const oldIsEmpty = oldVal === undefined || oldVal === null || oldVal === '';
             const newIsEmpty = newVal === undefined || newVal === null || newVal === '';
-            
-            // For special fields like Status Reason, always show if there's a new value
-            if (alwaysShow && !newIsEmpty) {
-              const oldDisplay = oldIsEmpty ? 'Not Set' : oldVal;
-              return `${fieldName}: ${oldDisplay} → ${newVal}`;
+
+            if (oldIsEmpty && newIsEmpty) return null;
+
+            // By default we don't log initial fills, but for some fields (e.g., Renewal Status)
+            // we want the audit log to always show the selected value.
+            if (oldIsEmpty && !newIsEmpty && options?.logInitialFill) {
+              return `${fieldName}: Not Set → ${newVal}`;
             }
-            
-            // Skip if going from empty to a value (don't log initial fills)
-            if (oldIsEmpty && !newIsEmpty) {
-              return null;
-            }
-            
-            // Skip if both are empty
-            if (oldIsEmpty && newIsEmpty) {
-              return null;
-            }
-            
-            // Only log if both have values and they're different, or if clearing a value
+            if (oldIsEmpty && !newIsEmpty) return null;
+
             if (oldVal !== newVal) {
               const oldDisplay = oldIsEmpty ? 'Not Set' : oldVal;
               const newDisplay = newIsEmpty ? 'Not Set' : newVal;
               return `${fieldName}: ${oldDisplay} → ${newDisplay}`;
             }
-            
+
             return null;
           };
           
@@ -2636,13 +2656,15 @@ export default function GovernmentLicense() {
             } else if (data.renewalStatus === 'Amendments/ Appeal Submitted') {
               reasonLabel = 'Amendment/Appeal Reason';
             }
-            const change = formatChange(reasonLabel, editingLicense.renewalStatusReason, data.renewalStatusReason, true);
+            const change = formatChange(reasonLabel, editingLicense.renewalStatusReason, data.renewalStatusReason, { logInitialFill: true });
             if (change) changesList.push(change);
           }
           
           // Process all field checks
-          fieldChecks.forEach(field => {
-            const change = formatChange(field.name, field.old, field.new);
+          fieldChecks.forEach((field) => {
+            const change = formatChange(field.name, field.old, field.new, {
+              logInitialFill: field.name === 'Renewal Status',
+            });
             if (change) changesList.push(change);
           });
           
@@ -3006,7 +3028,27 @@ export default function GovernmentLicense() {
         };
 
         if (!String(payload.licenseName || '').trim()) { failed++; continue; }
-        await apiRequest('POST', '/api/licenses', payload);
+
+        const createRes = await apiRequest('POST', '/api/licenses', payload);
+        const createdJson = await createRes.json().catch(() => null);
+        const createdId = createdJson?.id ? String(createdJson.id) : undefined;
+
+        // Renewal History: ensure import creates a visible "License Created" entry.
+        try {
+          await fetch(`${API_BASE_URL}/api/logs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              licenseId: createdId,
+              licenseName: payload.licenseName || 'Unnamed License',
+              action: 'Created',
+              changes: 'License Created',
+            }),
+          });
+        } catch {
+          // Don't fail import if logging fails
+        }
         success++;
       } catch {
         failed++;
@@ -3015,6 +3057,7 @@ export default function GovernmentLicense() {
 
     queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
     queryClient.invalidateQueries({ queryKey: ["/api/notifications/license"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
     toast({
       title: 'Import finished',
       description: `Imported ${success} license(s). Failed: ${failed}`,
@@ -3029,7 +3072,10 @@ export default function GovernmentLicense() {
     if (!file) return;
     const clearFile = () => {
       e.target.value = '';
+      setIsImporting(false);
     };
+
+    setIsImporting(true);
 
     try {
       if (file.name.toLowerCase().endsWith('.xlsx')) {
@@ -3648,39 +3694,39 @@ export default function GovernmentLicense() {
     setDeleteConfirmOpen(true);
   };
 
-  // Status badge component - exactly matching Subscriptions page
+  // Status badge component - matching Subscriptions page pill style
   const getStatusClassName = (status: string) => {
     switch (status) {
       case "Active":
-        return "bg-emerald-100 text-emerald-800 border border-emerald-200";
+        return "bg-emerald-50 text-emerald-700 border-emerald-200";
       case "Expired":
-        return "bg-rose-100 text-rose-800 border border-rose-200";
+        return "bg-rose-50 text-rose-700 border-rose-200";
       case "Cancelled":
-        return "bg-rose-100 text-rose-800 border border-rose-200";
+        return "bg-rose-50 text-rose-700 border-rose-200";
       default:
-        return "bg-gray-100 text-gray-800 border border-gray-200";
+        return "bg-slate-50 text-slate-700 border-slate-200";
     }
   };
 
-  // Renewal Status badge colors
+  // Renewal Status badge colors - match Subscriptions pill style (pastel + border)
   const getRenewalStatusClassName = (renewalStatus: string) => {
     switch (renewalStatus) {
       case "Approved":
-        return "bg-green-600 text-white";
+        return "bg-emerald-50 text-emerald-700 border-emerald-200";
       case "Cancelled":
-        return "bg-red-600 text-white";
+        return "bg-rose-50 text-rose-700 border-rose-200";
       case "Rejected":
-        return "bg-red-600 text-white";
+        return "bg-rose-50 text-rose-700 border-rose-200";
       case "Renewal Initiated":
-        return "bg-blue-600 text-white";
+        return "bg-blue-50 text-blue-700 border-blue-200";
       case "Application Submitted":
-        return "bg-indigo-600 text-white";
+        return "bg-indigo-50 text-indigo-700 border-indigo-200";
       case "Amendments/ Appeal Submitted":
-        return "bg-orange-600 text-white";
+        return "bg-orange-50 text-orange-700 border-orange-200";
       case "Resubmitted":
-        return "bg-purple-600 text-white";
+        return "bg-purple-50 text-purple-700 border-purple-200";
       default:
-        return "bg-blue-600 text-white";
+        return "bg-slate-50 text-slate-700 border-slate-200";
     }
   };
 
@@ -3696,6 +3742,26 @@ export default function GovernmentLicense() {
         return renewalStatus;
     }
   };
+
+  // Pill widths: based on longest displayed label to keep table columns aligned.
+  const statusPillWidthCh = (() => {
+    let maxLen = 0;
+    for (const license of (licenses || [])) {
+      const derived = getDerivedStatus({ endDate: license.endDate, status: license.status });
+      if (derived.length > maxLen) maxLen = derived.length;
+    }
+    return Math.min(Math.max(maxLen, 8), 16);
+  })();
+
+  const renewalStatusPillWidthCh = (() => {
+    let maxLen = 0;
+    for (const license of (licenses || [])) {
+      const label = license.renewalStatus ? String(getRenewalStatusLabel(license.renewalStatus) || '').trim() : '';
+      if (label.length > maxLen) maxLen = label.length;
+    }
+    // Add a small buffer to reduce truncation risk with proportional fonts.
+    return Math.min(Math.max(maxLen + 2, 10), 22);
+  })();
 
   useEffect(() => {
     const readSlotEl = () => document.getElementById('page-sidebar-slot') as HTMLElement | null;
@@ -3749,17 +3815,27 @@ export default function GovernmentLicense() {
           <div className="text-xs text-gray-500 mt-0.5">Refine renewals</div>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" className="h-9" onClick={clearAllFilters}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 hover:border-indigo-300"
+            onClick={clearAllFilters}
+          >
             Clear all
           </Button>
-          <Button type="button" variant="ghost" className="h-9" onClick={() => setFiltersOpen(false)}>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-9 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+            onClick={() => setFiltersOpen(false)}
+          >
             Close
           </Button>
         </div>
       </div>
 
-      <div className="p-5 max-h-[calc(100vh-260px)] overflow-auto">
-        <Accordion type="multiple" defaultValue={["status", "price", "dates"]}>
+      <div className="p-5 max-h-[calc(100vh-260px)] overflow-auto overscroll-contain custom-scrollbar">
+        <Accordion type="multiple" defaultValue={["status", "price"]}>
           <AccordionItem value="price">
             <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
               Price
@@ -3783,32 +3859,6 @@ export default function GovernmentLicense() {
                   onChange={(e) => setRenewalFeeMax(e.target.value)}
                   className="h-9"
                 />
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-
-          <AccordionItem value="dates">
-            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
-              Dates
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-3">
-                <div>
-                  <div className="text-xs font-semibold text-gray-600 mb-1">Issue date</div>
-                  <div className="flex items-center gap-2">
-                    <Input type="date" value={issueDateFrom} onChange={(e) => setIssueDateFrom(e.target.value)} className="h-9" />
-                    <span className="text-sm text-gray-500">to</span>
-                    <Input type="date" value={issueDateTo} onChange={(e) => setIssueDateTo(e.target.value)} className="h-9" />
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-gray-600 mb-1">Expiry date</div>
-                  <div className="flex items-center gap-2">
-                    <Input type="date" value={expiryDateFrom} onChange={(e) => setExpiryDateFrom(e.target.value)} className="h-9" />
-                    <span className="text-sm text-gray-500">to</span>
-                    <Input type="date" value={expiryDateTo} onChange={(e) => setExpiryDateTo(e.target.value)} className="h-9" />
-                  </div>
-                </div>
               </div>
             </AccordionContent>
           </AccordionItem>
@@ -3884,6 +3934,15 @@ export default function GovernmentLicense() {
 
   return (
     <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
+      {isImporting && (
+        <div className="fixed inset-0 z-[12000] flex items-center justify-center bg-white/50 backdrop-blur-sm">
+          <div
+            className="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"
+            role="status"
+            aria-label="Importing"
+          />
+        </div>
+      )}
       <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
         <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
           <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
@@ -3946,7 +4005,7 @@ export default function GovernmentLicense() {
             <Button
               variant="outline"
               onClick={() => navigate('/renewal-log')}
-              className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200 h-10 rounded-lg"
+              className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200"
             >
               <Calendar className="h-4 w-4 mr-2" />
               History
@@ -3963,7 +4022,7 @@ export default function GovernmentLicense() {
                 setDataManagementSelectKey((k) => k + 1);
               }}
             >
-              <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+              <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
                 <SelectValue placeholder="Import/Export" />
               </SelectTrigger>
               <SelectContent>
@@ -4050,7 +4109,7 @@ export default function GovernmentLicense() {
                 <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" className="w-full table-fixed">
                 <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                     <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
-                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[240px]">
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[210px]">
                         <button
                           onClick={() => handleSort('licenseName')}
                           className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
@@ -4088,7 +4147,7 @@ export default function GovernmentLicense() {
                         </button>
                       </TableHead>
                       <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[100px]">Status</TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[130px]">Renewal Status</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[170px]">Renewal Status</TableHead>
                       <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 pr-4 text-right text-xs font-bold text-white uppercase tracking-wide w-[80px]">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -4103,7 +4162,7 @@ export default function GovernmentLicense() {
                             exit={{ opacity: 0 }}
                             transition={{ delay: 0.04 * index }}
                           >
-                            <TableCell className="px-4 py-3 w-[240px] min-w-0 text-left">
+                            <TableCell className="px-4 py-3 w-[210px] min-w-0 text-left">
                               <button
                                 type="button"
                                 onClick={() => handleEdit(license)}
@@ -4151,16 +4210,29 @@ export default function GovernmentLicense() {
                               {(() => {
                                 const derived = getDerivedStatus({ endDate: license.endDate, status: license.status });
                                 return (
-                                  <span className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border ${getStatusClassName(derived)}`}>
-                                    {derived}
+                                      <span
+                                        className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border ${getStatusClassName(derived)}`}
+                                        style={{ width: `calc(${statusPillWidthCh}ch + 1.5rem)`, maxWidth: '100%' }}
+                                      >
+                                        <span className="truncate whitespace-nowrap" title={derived}>
+                                          {derived}
+                                        </span>
                                   </span>
                                 );
                               })()}
                             </TableCell>
-                                <TableCell className="px-3 py-3.5 w-[130px] text-left">
+                                <TableCell className="px-3 py-3.5 w-[170px] text-left">
                               {license.renewalStatus ? (
-                                <span className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none ${getRenewalStatusClassName(license.renewalStatus)}`}>
-                                  {getRenewalStatusLabel(license.renewalStatus)}
+                                    <span
+                                      className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border ${getRenewalStatusClassName(license.renewalStatus)}`}
+                                      style={{ width: `calc(${renewalStatusPillWidthCh}ch + 1.5rem)`, maxWidth: '100%' }}
+                                    >
+                                      <span
+                                        className="truncate whitespace-nowrap"
+                                        title={getRenewalStatusLabel(license.renewalStatus)}
+                                      >
+                                        {getRenewalStatusLabel(license.renewalStatus)}
+                                      </span>
                                 </span>
                               ) : (
                                 <span className="text-gray-400 text-xs">-</span>
@@ -5255,6 +5327,7 @@ export default function GovernmentLicense() {
                                 options={ISSUING_AUTHORITIES}
                                 placeholder="Select or type authority"
                                 className="w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 placeholder:text-gray-400"
+                                onEnterMoveFocus={() => issuingAuthorityPhoneInputRef.current?.focus()}
                               />
                             </FormControl>
                             <FormMessage className="text-red-500" />
@@ -5266,6 +5339,7 @@ export default function GovernmentLicense() {
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-slate-700">Contact Number</label>
                         <Input
+                          ref={issuingAuthorityPhoneInputRef}
                           type="text"
                           maxLength={16}
                           className={`w-full border-slate-300 rounded-lg p-2.5 text-base focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 ${

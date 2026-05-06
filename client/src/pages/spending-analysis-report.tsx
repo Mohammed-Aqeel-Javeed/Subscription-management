@@ -767,7 +767,7 @@ export default function SpendingAnalysisReport() {
                           <TableCell className="px-3 py-3 w-[220px] max-w-[220px] overflow-hidden text-left">
                             {categoryValue ? (
                               <span
-                                className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border max-w-full text-left ${badgeClass}`}
+                                className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border max-w-full text-left ${badgeClass}`}
                                 style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
                               >
                                 <span className="truncate whitespace-nowrap" title={categoryValue}>

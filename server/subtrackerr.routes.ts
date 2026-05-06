@@ -1672,6 +1672,47 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
           await db.collection("reminders").deleteMany({ 
             $or: [ { subscriptionId: id }, { subscriptionId: new ObjectId(id) } ] 
           });
+
+          // Create history record for deletion (so Subscription History shows the event)
+          try {
+            const historyCollection = db.collection("history");
+            const changedBy = await resolveHistoryChangedBy(db, req.user);
+            const { decrypt } = await import("./encryption.service.js");
+
+            const subscriptionIdForHistory = (() => {
+              try {
+                return new ObjectId(id);
+              } catch {
+                return id;
+              }
+            })();
+
+            const serviceNameEncrypted = (subscriptionToDelete as any)?.serviceName;
+            const serviceName = serviceNameEncrypted ? decrypt(serviceNameEncrypted) : String((subscriptionToDelete as any)?.serviceName || '').trim();
+
+            await historyCollection.insertOne({
+              tenantId,
+              subscriptionId: subscriptionIdForHistory,
+              action: "deleted",
+              timestamp: new Date(),
+              loggedAt: new Date(),
+              changedBy,
+              subscriptionName: serviceName || undefined,
+              data: {
+                _id: subscriptionIdForHistory,
+                // Keep raw fields so history endpoints can decrypt as needed
+                serviceName: serviceNameEncrypted ?? serviceName,
+                vendor: (subscriptionToDelete as any)?.vendor,
+                amount: (subscriptionToDelete as any)?.amount,
+                paymentMethod: (subscriptionToDelete as any)?.paymentMethod,
+                owner: (subscriptionToDelete as any)?.owner,
+                ownerName: (subscriptionToDelete as any)?.ownerName,
+                status: (subscriptionToDelete as any)?.status,
+              },
+            });
+          } catch (historyError) {
+            console.error(`❌ [SUBTRACKERR] Failed to write subscription history on delete:`, historyError);
+          }
           
           // Send subscription lifecycle notifications for deletion (in-app + email)
           if (subscriptionToDelete) {

@@ -2269,9 +2269,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       // Cancel any outgoing refetches for this tenant
       await queryClient.cancelQueries({ queryKey: ["/api/subscriptions", tenantId] });
+      await queryClient.cancelQueries({ queryKey: ["/api/subscriptions"] });
       
       // Snapshot the previous value
       const previousSubscriptions = queryClient.getQueryData(["/api/subscriptions", tenantId]);
+      const previousSubscriptionsGlobal = queryClient.getQueryData(["/api/subscriptions"]);
       
       // Optimistically update to the new value
       if (isEditing && (newData as any).id) {
@@ -2280,6 +2282,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           if (!old) return old;
           return old.map((sub: any) => 
             (sub.id === (newData as any).id || sub._id === (newData as any).id) 
+              ? { ...sub, ...newData }
+              : sub
+          );
+        });
+
+        queryClient.setQueryData(["/api/subscriptions"], (old: any) => {
+          if (!old) return old;
+          return old.map((sub: any) =>
+            (sub.id === (newData as any).id || sub._id === (newData as any).id)
               ? { ...sub, ...newData }
               : sub
           );
@@ -2296,10 +2307,21 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           };
           return old ? [...old, optimisticSub] : [optimisticSub];
         });
+
+        queryClient.setQueryData(["/api/subscriptions"], (old: any) => {
+          const optimisticSub = {
+            ...newData,
+            _id: 'temp-' + Date.now(),
+            id: 'temp-' + Date.now(),
+            createdAt: new Date().toISOString(),
+            tenantId: tenantId,
+          };
+          return old ? [...old, optimisticSub] : [optimisticSub];
+        });
       }
       
       // Return a context object with the snapshotted value
-      return { previousSubscriptions, tenantId };
+      return { previousSubscriptions, previousSubscriptionsGlobal, tenantId };
     },
     onSuccess: (result, variables, context) => {
       void variables;
@@ -2369,6 +2391,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       if (context?.previousSubscriptions) {
         queryClient.setQueryData(["/api/subscriptions", tenantId], context.previousSubscriptions);
       }
+      if (context?.previousSubscriptionsGlobal) {
+        queryClient.setQueryData(["/api/subscriptions"], context.previousSubscriptionsGlobal);
+      }
       
       console.error("Mutation error:", error);
       toast({
@@ -2424,9 +2449,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       // Cancel any outgoing refetches for this tenant
       await queryClient.cancelQueries({ queryKey: ["/api/subscriptions", tenantId] });
+      await queryClient.cancelQueries({ queryKey: ["/api/subscriptions"] });
       
       // Snapshot the previous value
       const previousSubscriptions = queryClient.getQueryData(["/api/subscriptions", tenantId]);
+      const previousSubscriptionsGlobal = queryClient.getQueryData(["/api/subscriptions"]);
       
       // Optimistically update the cache
       const editingId = subscription?.id || subscription?._id;
@@ -2436,6 +2463,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           if (!old) return old;
           return old.map((sub: any) => 
             (sub.id === editingId || sub._id === editingId) 
+              ? { ...sub, ...newData, updatedAt: new Date().toISOString() }
+              : sub
+          );
+        });
+
+        queryClient.setQueryData(["/api/subscriptions"], (old: any) => {
+          if (!old) return old;
+          return old.map((sub: any) =>
+            (sub.id === editingId || sub._id === editingId)
               ? { ...sub, ...newData, updatedAt: new Date().toISOString() }
               : sub
           );
@@ -2454,10 +2490,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           };
           return old ? [optimisticDraft, ...old] : [optimisticDraft];
         });
+
+        queryClient.setQueryData(["/api/subscriptions"], (old: any) => {
+          const optimisticDraft = {
+            ...newData,
+            _id: 'temp-draft-' + Date.now(),
+            id: 'temp-draft-' + Date.now(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            tenantId: tenantId,
+            status: 'Draft',
+          };
+          return old ? [optimisticDraft, ...old] : [optimisticDraft];
+        });
       }
       
       // Return a context object with the snapshotted value
-      return { previousSubscriptions, tenantId };
+      return { previousSubscriptions, previousSubscriptionsGlobal, tenantId };
     },
     onSuccess: async (result, variables, context) => {
       void result;
@@ -2491,6 +2540,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Rollback to the previous value on error
       if (context?.previousSubscriptions) {
         queryClient.setQueryData(["/api/subscriptions", tenantId], context.previousSubscriptions);
+      }
+      if (context?.previousSubscriptionsGlobal) {
+        queryClient.setQueryData(["/api/subscriptions"], context.previousSubscriptionsGlobal);
       }
       
       console.error("Draft save error:", error);

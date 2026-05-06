@@ -249,8 +249,8 @@ export default function ComplianceLedger() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-4">
-              <div className="h-12 w-12 bg-gradient-to-br from-orange-500 to-amber-600 rounded-lg flex items-center justify-center shadow-lg">
-                <History className="h-6 w-6 text-white" />
+              <div className="h-12 w-12 flex items-center justify-center">
+                <History className="h-7 w-7 text-indigo-600" />
               </div>
               <div>
                 <h1
@@ -345,7 +345,7 @@ export default function ComplianceLedger() {
                           <TableCell className="text-left">
                             <div className="flex items-center justify-start">
                               <span
-                                className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getCategoryPillClasses(
+                                className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border min-w-[110px] ${getCategoryPillClasses(
                                   item.filingComplianceCategory
                                 )}`}
                               >

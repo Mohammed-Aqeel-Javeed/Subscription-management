@@ -198,6 +198,7 @@ export default function Subscriptions() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
   
   const { data: subscriptions, isLoading } = useQuery<SubscriptionWithExtras[]>({
     queryKey: ["/api/subscriptions"],
@@ -360,7 +361,15 @@ export default function Subscriptions() {
         // If not ok, throw error to trigger onError
         throw new Error(await res.text());
       }),
-    onSuccess: () => {
+    onSuccess: (_data, deletedIdRaw) => {
+      const deletedId = String(deletedIdRaw ?? "");
+      if (deletedId) {
+        queryClient.setQueryData(["/api/subscriptions"], (old: SubscriptionWithExtras[] | undefined) =>
+          Array.isArray(old)
+            ? old.filter((sub) => String(sub._id ?? sub.id ?? "") !== deletedId)
+            : old
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       toast({
@@ -368,6 +377,14 @@ export default function Subscriptions() {
         description: "Subscription deleted successfully",
         variant: "destructive",
       });
+
+      try {
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent('subscription-deleted', { detail: { id: deletedId } }));
+        }
+      } catch {
+        // ignore
+      }
     },
     onError: (error: any) => {
       toast({
@@ -743,6 +760,8 @@ export default function Subscriptions() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setIsImporting(true);
+
     const normalizeServiceName = (value: unknown) => String(value ?? '').trim().replace(/\s+/g, ' ');
     const existingServiceNames = new Set(
       (Array.isArray(subscriptions) ? subscriptions : [])
@@ -940,6 +959,7 @@ export default function Subscriptions() {
       } catch {
         toast({ title: 'Import error', description: 'Failed to read XLSX file', variant: 'destructive' });
       } finally {
+        setIsImporting(false);
         e.target.value = '';
       }
       return;
@@ -949,12 +969,18 @@ export default function Subscriptions() {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
-        const rows: any[] = results.data as any[];
-        await processRows(rows);
-        e.target.value = '';
+        try {
+          const rows: any[] = results.data as any[];
+          await processRows(rows);
+        } finally {
+          setIsImporting(false);
+          e.target.value = '';
+        }
       },
       error: () => {
         toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive' });
+        setIsImporting(false);
+        e.target.value = '';
       },
     });
   };
@@ -1101,6 +1127,19 @@ export default function Subscriptions() {
     // Clamp so badges don't get too tiny or too wide.
     return Math.min(Math.max(maxLen, 6), 28);
   })();
+
+  // Status pill sizing: use the longest displayed status label so all status pills are the same width.
+  const statusPillWidthCh = (() => {
+    let maxLen = 0;
+    for (const sub of (Array.isArray(subscriptions) ? subscriptions : [])) {
+      const isTrial = String(sub.billingCycle || '').toLowerCase() === 'trial' || sub.billingCycle === 'Trial';
+      const label = isTrial ? 'Trial' : String(sub.status || '').trim();
+      if (label.length > maxLen) maxLen = label.length;
+    }
+
+    // Clamp so it stays clean even if a custom status is long.
+    return Math.min(Math.max(maxLen, 8), 18);
+  })();
   
   // Toggle sort function
   const handleSort = (field: "serviceName" | "vendor" | "amount" | "billingCycle" | "nextRenewal" | "status") => {
@@ -1201,7 +1240,7 @@ export default function Subscriptions() {
       return <div className="px-2 py-1 text-sm text-gray-500">No options</div>;
     }
     return (
-      <div className="max-h-56 overflow-auto pr-1">
+      <div className="max-h-56 overflow-auto overscroll-contain custom-scrollbar pr-1">
         {options.map((opt) => {
           const checked = selected.includes(opt);
           const id = `${sectionId}-${opt}`.replace(/\s+/g, '-').toLowerCase();
@@ -1311,22 +1350,34 @@ export default function Subscriptions() {
 
   const FiltersSidebarPanel = () => (
     <div className="bg-white border border-gray-200  shadow-md overflow-hidden">
-      <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3">
+      <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3">
         <div>
           <div className="text-base font-semibold text-gray-900">Filters</div>
           <div className="text-xs text-gray-500 mt-0.5">Refine subscriptions</div>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" className="h-9" onClick={clearAllFilters}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 hover:border-indigo-300"
+            onClick={clearAllFilters}
+          >
             Clear all
           </Button>
-          <Button type="button" variant="ghost" className="h-9" onClick={() => setFiltersOpen(false)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+            onClick={() => setFiltersOpen(false)}
+          >
             Close
           </Button>
         </div>
       </div>
 
-      <div className="p-5 max-h-[calc(100vh-260px)] overflow-auto">
+      <div className="p-5 max-h-[calc(100vh-260px)] overflow-auto overscroll-contain custom-scrollbar">
         <Accordion type="multiple" defaultValue={["categories", "price", "vendor"]}>
           <AccordionItem value="categories">
             <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
@@ -1475,31 +1526,6 @@ export default function Subscriptions() {
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="dates">
-            <AccordionTrigger className="text-xs font-bold text-gray-800 tracking-wider uppercase">
-              Dates
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-3">
-                <div>
-                  <div className="text-xs font-semibold text-gray-600 mb-1">Start date</div>
-                  <div className="flex items-center gap-2">
-                    <Input type="date" value={startDateFrom} onChange={(e) => setStartDateFrom(e.target.value)} className="h-9" />
-                    <span className="text-sm text-gray-500">to</span>
-                    <Input type="date" value={startDateTo} onChange={(e) => setStartDateTo(e.target.value)} className="h-9" />
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-gray-600 mb-1">Next renewal</div>
-                  <div className="flex items-center gap-2">
-                    <Input type="date" value={nextRenewalFrom} onChange={(e) => setNextRenewalFrom(e.target.value)} className="h-9" />
-                    <span className="text-sm text-gray-500">to</span>
-                    <Input type="date" value={nextRenewalTo} onChange={(e) => setNextRenewalTo(e.target.value)} className="h-9" />
-                  </div>
-                </div>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
         </Accordion>
       </div>
     </div>
@@ -1561,6 +1587,15 @@ export default function Subscriptions() {
   
   return (
     <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
+      {isImporting && (
+        <div className="fixed inset-0 z-[12000] flex items-center justify-center bg-white/50 backdrop-blur-sm">
+          <div
+            className="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"
+            role="status"
+            aria-label="Importing"
+          />
+        </div>
+      )}
       <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
         <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
           <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
@@ -1659,7 +1694,7 @@ export default function Subscriptions() {
                 });
               }}
               onClick={() => navigate('/subscription-history')}
-              className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200 h-10 rounded-lg"
+              className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200"
             >
               <Calendar className="h-4 w-4 mr-2" />
               History
@@ -1680,7 +1715,7 @@ export default function Subscriptions() {
                 setDataManagementSelectKey((k) => k + 1);
               }}
             >
-              <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+              <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
                 <SelectValue placeholder="Import/Export" />
               </SelectTrigger>
               <SelectContent>
@@ -1901,7 +1936,7 @@ export default function Subscriptions() {
 
                           return (
                             <span
-                              className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border max-w-full text-left ${badgeClass}`}
+                              className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border max-w-full text-left ${badgeClass}`}
                               style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
                             >
                               <span className="truncate whitespace-nowrap" title={raw}>
@@ -1949,8 +1984,14 @@ export default function Subscriptions() {
                                   ? 'bg-rose-50 text-rose-700 border-rose-200'
                                   : 'bg-slate-50 text-slate-700 border-slate-200'
                           }`}
+                          style={{ width: `calc(${statusPillWidthCh}ch + 1.5rem)`, maxWidth: '100%' }}
                         >
-                          {subscription.billingCycle === 'Trial' ? 'Trial' : subscription.status}
+                          <span
+                            className="truncate whitespace-nowrap"
+                            title={subscription.billingCycle === 'Trial' ? 'Trial' : subscription.status}
+                          >
+                            {subscription.billingCycle === 'Trial' ? 'Trial' : subscription.status}
+                          </span>
                         </span>
                       </TableCell>
                       <TableCell className="px-1 pr-2 py-3 text-right w-[60px]">

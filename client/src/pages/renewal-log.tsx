@@ -182,8 +182,8 @@ export default function RenewalLog() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-4">
-              <div className="h-12 w-12 bg-gradient-to-br from-orange-500 to-amber-600 rounded-lg flex items-center justify-center shadow-lg">
-                <History className="h-6 w-6 text-white" />
+              <div className="h-12 w-12 flex items-center justify-center">
+                <History className="h-7 w-7 text-indigo-600" />
               </div>
               <div>
                 {(() => {

@@ -338,7 +338,7 @@ export default function ComplianceSpendAuditHistoryReport() {
                         </TableCell>
                         <TableCell className="px-4 py-3 w-[220px] text-left">
                           <span
-                            className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] ${getCategoryPillClasses(
+                            className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border min-w-[110px] ${getCategoryPillClasses(
                               r.category
                             )}`}
                           >

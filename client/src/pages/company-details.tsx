@@ -737,7 +737,7 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
                 setDataManagementSelectKey((k) => k + 1);
               }}
             >
-              <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
                 <SelectValue placeholder="Import/Export" />
               </SelectTrigger>
               <SelectContent>
@@ -1827,7 +1827,7 @@ function UserManagementTab() {
               setUserDataManagementSelectKey((k) => k + 1);
             }}
           >
-            <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+            <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
               <SelectValue placeholder="Import/Export" />
             </SelectTrigger>
             <SelectContent>
@@ -3888,7 +3888,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                                 setDepartmentDataManagementSelectKey((k) => k + 1);
                               }}
                             >
-                              <SelectTrigger className="w-44 bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200 text-purple-700 hover:from-purple-100 hover:to-purple-200 hover:border-purple-300 font-medium transition-all duration-200">
+                              <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
                                 <SelectValue placeholder="Import/Export" />
                               </SelectTrigger>
                               <SelectContent>
@@ -4704,7 +4704,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                                 setCategoryDataManagementSelectKey((k) => k + 1);
                               }}
                             >
-                              <SelectTrigger className="w-44 h-10 text-sm">
+                              <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
                                 <SelectValue placeholder="Import/Export" />
                               </SelectTrigger>
                               <SelectContent>

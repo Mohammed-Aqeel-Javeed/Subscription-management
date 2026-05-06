@@ -281,7 +281,7 @@ export default function Dashboard() {
 
     return (
       <span
-        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold leading-none border max-w-full ${badgeClass}`}
+        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold leading-tight border max-w-full ${badgeClass}`}
         style={{ width: `${modalCategoryBadgeWidthCh}ch`, maxWidth: "100%" }}
         title={raw}
       >

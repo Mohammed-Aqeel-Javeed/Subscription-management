@@ -632,7 +632,7 @@ export default function ComplianceDashboard() {
                               </TableCell>
                               <TableCell className="px-4 py-3 w-[240px] max-w-[240px] min-w-0 overflow-hidden">
                                 <span
-                                  className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border min-w-[110px] max-w-[200px] truncate whitespace-nowrap ${getCategoryPillClasses(
+                                  className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border min-w-[110px] max-w-[200px] truncate whitespace-nowrap ${getCategoryPillClasses(
                                     category
                                   )}`}
                                   title={category}

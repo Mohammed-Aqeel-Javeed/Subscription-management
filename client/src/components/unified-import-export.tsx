@@ -185,6 +185,7 @@ const currencyList = [
 
 export function UnifiedImportExport({ localCurrency = "LCY" }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [duplicateAlert, setDuplicateAlert] = useState<{
@@ -1431,14 +1432,20 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Show loading toast
-    const loadingToast = toast({
-      title: "Importing...",
-      description: "Please wait while we import your data. This may take a moment.",
-      duration: Infinity, // Keep showing until import completes
-    });
+    setIsImporting(true);
 
     const reader = new FileReader();
+    reader.onerror = () => {
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      toast({
+        title: "Import Failed",
+        description: "Unable to read the selected file.",
+        variant: "destructive",
+      });
+    };
     reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
@@ -2188,9 +2195,6 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
           }
         }
 
-        // Dismiss loading toast
-        loadingToast.dismiss();
-        
         // Show specific error for all duplicates
         if (allDuplicates.length > 0) {
           // Track if any items were successfully imported
@@ -2222,23 +2226,23 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         });
 
         // Refresh the page to show new data
+        setIsImporting(false);
         window.location.reload();
       } catch (error) {
-        // Dismiss loading toast on error
-        loadingToast.dismiss();
-        
+        console.error(error);
         toast({
           title: "Import Failed",
           description: "Failed to parse Excel file. Please check the format.",
           variant: "destructive",
         });
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
     };
     reader.readAsArrayBuffer(file);
-    
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
 
   const handleCloseDuplicateDialog = () => {
@@ -2270,6 +2274,16 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
 
   return (
     <>
+      {isImporting && (
+        <div className="fixed inset-0 z-[12000] flex items-center justify-center bg-white/50 backdrop-blur-sm">
+          <div
+            className="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"
+            role="status"
+            aria-label="Importing"
+          />
+        </div>
+      )}
+
       {/* Custom Centered Alert for Duplicate Items */}
       {duplicateAlert.show && (
         <div 

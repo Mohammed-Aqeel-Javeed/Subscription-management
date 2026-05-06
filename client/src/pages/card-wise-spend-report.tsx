@@ -786,7 +786,7 @@ export default function CardWiseSpendReport() {
                           <TableCell className="px-3 py-3 text-sm text-gray-700 w-[160px] max-w-[160px] overflow-hidden text-left">
                             {category ? (
                               <span
-                                className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border max-w-full text-left ${getCategoryBadgeClass(
+                                className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border max-w-full text-left ${getCategoryBadgeClass(
                                   category
                                 )}`}
                                 style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
