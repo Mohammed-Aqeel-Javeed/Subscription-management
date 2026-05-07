@@ -1011,7 +1011,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     // No example row: keep Subscriptions sheet empty by default.
     
     // Add Commitment cycle dropdown and other validations for Subscriptions
-    const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trial', 'Pay-as-you-go'];
+    const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', '2 Years', '3 Years', 'Trial', 'Pay-as-you-go'];
+    const paymentFrequencies = ['Weekly', '28 Days', 'Monthly', 'Quarterly', 'Yearly', '2 Years', '3 Years'];
     const subscriptionStatuses = ['Active', 'Inactive'];
     const reminderPolicies = ['One time', 'Two times', 'Until Renewal'];
     
@@ -1122,7 +1123,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       paymentFreqCell.dataValidation = {
         type: 'list',
         allowBlank: true,
-        formulae: [`"${commitmentCycles.join(',')}"`],
+        formulae: [`"${paymentFrequencies.join(',')}"`],
         showInputMessage: true,
         promptTitle: 'Select Payment Frequency',
         prompt: 'Choose how often payments are made.',
@@ -1147,17 +1148,17 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a valid payment method.'
       };
       
-      // Set date format for Start Date column to text format (preserves slashes) (K column)
+      // Set date format for Start Date column (K column)
       const startDateCell = subsSheet.getCell(`K${i}`);
-      startDateCell.numFmt = '@';
+      startDateCell.numFmt = 'dd/mm/yyyy';
       
       // Add Next Renewal formula for all rows (L column)
       const renewalCell = subsSheet.getCell(`L${i}`);
       renewalCell.value = {
-        formula: `IF(AND(K${i}<>"",H${i}<>""),TEXT(IF(H${i}="Monthly",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i}))-1,IF(H${i}="Quarterly",DATE(YEAR(K${i}),MONTH(K${i})+3,DAY(K${i}))-1,IF(H${i}="Yearly",DATE(YEAR(K${i})+1,MONTH(K${i}),DAY(K${i}))-1,IF(H${i}="Weekly",K${i}+6,IF(H${i}="Trial",K${i}+30,""))))) ,"dd/mm/yyyy"),"")`,
+        formula: `IF(AND(K${i}<>"",OR(I${i}<>"",H${i}<>"")),IF(IF(I${i}<>"",I${i},H${i})="Monthly",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="Quarterly",DATE(YEAR(K${i}),MONTH(K${i})+3,DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="Yearly",DATE(YEAR(K${i})+1,MONTH(K${i}),DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="2 Years",DATE(YEAR(K${i})+2,MONTH(K${i}),DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="3 Years",DATE(YEAR(K${i})+3,MONTH(K${i}),DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="Weekly",K${i}+6,IF(IF(I${i}<>"",I${i},H${i})="28 Days",K${i}+27,IF(IF(I${i}<>"",I${i},H${i})="Trial",K${i}+30,"")))))))),"")`,
         result: ''
       };
-      renewalCell.numFmt = '@'; // Text format to preserve slashes
+      renewalCell.numFmt = 'dd/mm/yyyy';
       renewalCell.protection = { locked: true };
       
       // Auto Renewal dropdown (M column) - Yes/No
@@ -2050,6 +2051,52 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
             // Fallback to today
             return new Date().toISOString().split('T')[0];
           };
+
+          // Like normalizeDate, but returns '' when no value is provided
+          const normalizeDateOptional = (dateVal: any): string => {
+            if (!dateVal || String(dateVal).trim() === '') return '';
+            return normalizeDate(dateVal);
+          };
+
+          const computeNextRenewalFromFrequency = (start: string, frequency: unknown): string => {
+            if (!start || !frequency) return '';
+            const token = String(frequency).toLowerCase().trim();
+            if (!token) return '';
+
+            const base = new Date(`${start}T00:00:00`);
+            if (Number.isNaN(base.getTime())) return '';
+            const end = new Date(base);
+
+            const dayMatch = token.match(/^(\d+)\s*days?$/);
+            if (dayMatch) {
+              const days = Math.max(1, parseInt(dayMatch[1], 10));
+              end.setDate(end.getDate() + (days - 1));
+            } else if (token === 'weekly') {
+              end.setDate(end.getDate() + 6);
+            } else if (token === 'trial') {
+              end.setDate(end.getDate() + 30);
+            } else if (token === 'monthly') {
+              end.setMonth(end.getMonth() + 1);
+              end.setDate(end.getDate() - 1);
+            } else if (token === 'quarterly') {
+              end.setMonth(end.getMonth() + 3);
+              end.setDate(end.getDate() - 1);
+            } else if (token === 'yearly') {
+              end.setFullYear(end.getFullYear() + 1);
+              end.setDate(end.getDate() - 1);
+            } else if (token === '2 years') {
+              end.setFullYear(end.getFullYear() + 2);
+              end.setDate(end.getDate() - 1);
+            } else if (token === '3 years') {
+              end.setFullYear(end.getFullYear() + 3);
+              end.setDate(end.getDate() - 1);
+            }
+
+            const yyyy = end.getFullYear();
+            const mm = String(end.getMonth() + 1).padStart(2, '0');
+            const dd = String(end.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+          };
           
           // Track subscription duplicates
           const subDuplicatesWithExisting: string[] = [];
@@ -2148,7 +2195,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
                 paymentFrequency: (row['Payment Frequency'] || row['payment frequency'] || row['PaymentFrequency'] || '').toString().toLowerCase(),
                 paymentMethod: row['Payment Method'] || row['payment method'] || row['PaymentMethod'] || '',
                 startDate: normalizeDate(row['Start Date'] || row['StartDate']),
-                nextRenewal: normalizeDate(row['Next Renewal'] || row['NextRenewal']),
+                nextRenewal: normalizeDateOptional(row['Next Renewal'] || row['NextRenewal']),
                 autoRenewal: autoRenewal,
                 status: row['Status'] || row['status'] || 'Draft',
                 category: row['Category'] || row['category'] || '',
@@ -2160,6 +2207,13 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
                 reminderDays: parseInt(row['Reminder Days'] || row['ReminderDays']) || 7,
                 notes: notesArray.length > 0 ? JSON.stringify(notesArray) : undefined
               };
+
+              if (!payload.nextRenewal) {
+                payload.nextRenewal =
+                  computeNextRenewalFromFrequency(payload.startDate, payload.paymentFrequency) ||
+                  computeNextRenewalFromFrequency(payload.startDate, payload.billingCycle) ||
+                  payload.startDate;
+              }
               
               // Basic validation
               if (!payload.serviceName) {

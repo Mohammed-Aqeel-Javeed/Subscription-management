@@ -763,35 +763,44 @@ function toISODateOnly(val: any): string {
 }
 function calculateEndDate(startDate: string, billingCycle: string): string {
   if (!startDate || !billingCycle) return "";
+  const cycle = String(billingCycle || '').toLowerCase().trim();
   const date = parseInputDate(startDate);
   let endDate = new Date(date);
-  switch (billingCycle) {
-    case "monthly":
+
+  // Support generic day-based frequencies like "28 days"
+  const dayMatch = cycle.match(/^(\d+)\s*days?$/);
+  if (dayMatch) {
+    const days = Math.max(1, parseInt(dayMatch[1], 10));
+    endDate.setDate(endDate.getDate() + (days - 1));
+  } else {
+    switch (cycle) {
+      case "monthly":
       endDate.setMonth(endDate.getMonth() + 1);
       endDate.setDate(endDate.getDate() - 1);
       break;
-    case "quarterly":
+      case "quarterly":
       endDate.setMonth(endDate.getMonth() + 3);
       endDate.setDate(endDate.getDate() - 1);
       break;
-    case "yearly":
+      case "yearly":
       endDate.setFullYear(endDate.getFullYear() + 1);
       endDate.setDate(endDate.getDate() - 1);
       break;
-    case "2 years":
+      case "2 years":
       endDate.setFullYear(endDate.getFullYear() + 2);
       endDate.setDate(endDate.getDate() - 1);
       break;
-    case "3 years":
+      case "3 years":
       endDate.setFullYear(endDate.getFullYear() + 3);
       endDate.setDate(endDate.getDate() - 1);
       break;
-    case "weekly":
+      case "weekly":
       endDate.setDate(endDate.getDate() + 6);
       break;
-    case "trial":
+      case "trial":
       endDate.setDate(endDate.getDate() + 30); // 30 days for trial period
       break;
+    }
   }
   const yyyy = endDate.getFullYear();
   const mm = String(endDate.getMonth() + 1).padStart(2, '0');
@@ -827,7 +836,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
-  const isEditing = !!subscription && subscription.status !== 'Draft';
+  // Consider any subscription with an existing id as an edit, even if its status is "Draft".
+  // Imported subscriptions may have status "Draft" and must remain editable/savable.
+  const isEditing = !!subscription && !!(subscription?._id || subscription?.id);
 
   // Prevent duplicate draft creation on slow networks by using a per-modal draft session id
   // and a synchronous single-flight guard.
@@ -1243,8 +1254,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (open) {
       // If this is a new subscription (different ID) or first time opening
       if (currentSubId !== lastSubscriptionIdRef.current) {
-        // Prefer initialDate if it exists, otherwise use startDate
-        const initialDateValue = (subscription as any)?.initialDate || subscription?.startDate;
+        // Prefer editable firstPurchaseDate (if present), otherwise fall back to legacy initialDate, then startDate.
+        const initialDateValue = (subscription as any)?.firstPurchaseDate || (subscription as any)?.initialDate || subscription?.startDate;
         if (initialDateValue) {
           const dateValue = toISODateOnly(initialDateValue);
           setInitialDate(dateValue);
@@ -1266,10 +1277,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Initialize original total amount when editing
   useEffect(() => {
-    if (isEditing && subscription?.totalAmount) {
-      setOriginalTotalAmount(Number(subscription.totalAmount));
+    if (!open || !isEditing) return;
+
+    const rawTotal = Number((subscription as any)?.totalAmount);
+    const qty = Number((subscription as any)?.qty);
+    const amount = Number((subscription as any)?.amount);
+    const fallbackTotal = Number.isFinite(qty) && Number.isFinite(amount) ? qty * amount : NaN;
+
+    // Keep existing logic (effective date dialog triggers based on original vs current total),
+    // but ensure imports that didn't persist totalAmount still initialize a stable original value.
+    if (Number.isFinite(rawTotal)) {
+      setOriginalTotalAmount(rawTotal);
+    } else if (Number.isFinite(fallbackTotal)) {
+      setOriginalTotalAmount(fallbackTotal);
+    } else {
+      setOriginalTotalAmount(0);
     }
-  }, [subscription?.totalAmount, isEditing, open]);
+  }, [subscription?.totalAmount, (subscription as any)?.qty, (subscription as any)?.amount, isEditing, open]);
   // Removed unused isPopoverOpen state
   const [isRenewing, setIsRenewing] = useState(false);
   const [lcyAmount, setLcyAmount] = useState<string>('');
@@ -2117,12 +2141,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   }, [totalAmount, taxAmount]);
 
   useEffect(() => {
-    if (startDate && billingCycle) {
-      const calculatedEndDate = calculateEndDate(startDate, billingCycle);
+    const commitment = (form.watch('billingCycle') || billingCycle || '').toString();
+    const frequency = (form.watch('paymentFrequency') || commitment).toString();
+    if (startDate && frequency) {
+      const calculatedEndDate = calculateEndDate(startDate, frequency);
       setEndDate(calculatedEndDate);
       form.setValue('nextRenewal', calculatedEndDate);
     }
-  }, [startDate, billingCycle, form]);
+  }, [startDate, billingCycle, form, form.watch('billingCycle'), form.watch('paymentFrequency')]);
 
   // Calculate LCY Amount based on totalAmountInclTax, currency, and exchange rate (inverted)
   useEffect(() => {
@@ -2658,7 +2684,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         departments: selectedDepartments,
         department: JSON.stringify(selectedDepartments),
         startDate: new Date(data.startDate ?? ""),
-        initialDate: new Date(data.startDate ?? ""), // Set initialDate to startDate for new subscriptions
+        // Keep legacy initialDate behavior, but also persist editable First Purchase Date via firstPurchaseDate.
+        // Server preserves initialDate once set; firstPurchaseDate is editable.
+        initialDate: savedInitialDateRef.current || initialDate || data.startDate,
+        firstPurchaseDate: savedInitialDateRef.current || initialDate || undefined,
+        currentCycleStart: data.startDate,
         nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
         tenantId,
         documents: documents.length > 0 ? documents : undefined, // Include documents if uploaded
@@ -2666,7 +2696,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       };
       if (isEditing) {
         // Update existing subscription
-        const validId = getValidObjectId(subscription?.id);
+        const validId = getValidObjectId(subscription?.id || subscription?._id);
         if (!validId) {
           toast({
             title: "Error",
@@ -2742,7 +2772,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       departments: selectedDepartments,
       department: JSON.stringify(selectedDepartments),
       startDate: new Date(data.startDate ?? ""),
-      initialDate: savedInitialDateRef.current || initialDate || new Date(data.startDate ?? ""), // Preserve initialDate
+      // Preserve legacy initialDate (server keeps it immutable once set), but always update firstPurchaseDate.
+      initialDate: savedInitialDateRef.current || initialDate || data.startDate,
+      firstPurchaseDate: savedInitialDateRef.current || initialDate || undefined,
+      currentCycleStart: data.startDate,
       nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
       tenantId,
       documents: documents.length > 0 ? documents : undefined,
@@ -4027,7 +4060,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </div>
                 {/* LCY Amount Field - Read-only calculated field */}
                 <div className="form-item">
-                  <label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2">
+                  <label className="block text-sm font-semibold text-gray-900 tracking-tight mb-2 whitespace-nowrap">
                     LCY Amount ({companyInfo?.defaultCurrency || 'Local Currency'})
                   </label>
                   <div className="relative">
@@ -4180,7 +4213,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         return [...baseHierarchy, '2 years'];
                       }
                       if (commitmentCycle === '3 years') {
-                        return [...baseHierarchy, '3 years'];
+                        return [...baseHierarchy, '2 years', '3 years'];
                       }
 
                       const commitmentIndex = baseHierarchy.indexOf(commitmentCycle);
@@ -4192,7 +4225,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <FormLabel className="block text-sm font-medium text-slate-700">Payment Frequency</FormLabel>
                         <SearchableStringDropdown
                           value={field.value || ""}
-                          onChange={field.onChange}
+                          onChange={(val) => {
+                            field.onChange(val);
+                            const currentStart = form.getValues('startDate') || startDate;
+                            const commitment = form.getValues('billingCycle') || billingCycle;
+                            const freq = (val || commitment || '').toString();
+                            if (currentStart && freq) {
+                              const nextDate = calculateEndDate(currentStart, freq);
+                              form.setValue('nextRenewal', nextDate);
+                              setEndDate(nextDate);
+                            }
+                          }}
                           options={availableFrequencies}
                           placeholder={isTrialOrPayAsYouGo ? "N/A" : !billingCycle ? "Select commitment cycle first" : "Select"}
                           disabled={isDisabled}
@@ -4683,15 +4726,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               
                               setStartDate(newStartDate);
                               form.setValue("startDate", newStartDate);
-                              
-                              // Update next renewal if auto-renewal is on
-                              if (autoRenewal) {
-                                const cycle = form.watch("billingCycle") || billingCycle;
-                                if (cycle) {
-                                  const nextDate = calculateEndDate(newStartDate, cycle);
-                                  form.setValue("nextRenewal", nextDate);
-                                  setEndDate(nextDate);
-                                }
+
+                              // Update Next Payment Date from Payment Frequency (fallback: Commitment cycle)
+                              const freq = form.getValues('paymentFrequency') || form.getValues('billingCycle') || billingCycle;
+                              if (freq) {
+                                const nextDate = calculateEndDate(newStartDate, String(freq));
+                                form.setValue("nextRenewal", nextDate);
+                                setEndDate(nextDate);
                               }
                             }}
                           />

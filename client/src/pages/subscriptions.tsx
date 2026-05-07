@@ -454,296 +454,433 @@ export default function Subscriptions() {
     void setSecureUrlForSubscriptionCreate();
   };
 
-  // EXPORT current (filtered) subscriptions to CSV
-  const handleExport = () => {
+  const toDdMmYyyy = (val: unknown): string => {
+    if (!val) return '';
+    const d = val instanceof Date ? val : new Date(String(val));
+    if (Number.isNaN(d.getTime())) return '';
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(d.getFullYear());
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  const downloadSubscriptionsWorkbook = async (options: {
+    filename: string;
+    seedRows?: Array<{
+      serviceName: string;
+      website?: string;
+      vendor?: string;
+      qty?: number;
+      amount?: number;
+      totalAmount?: number;
+      billingCycle?: string;
+      paymentFrequency?: string;
+      startDate?: string;
+      nextRenewal?: string;
+      autoRenewal?: string;
+      status?: string;
+      reminderPolicy?: string;
+      reminderDays?: number;
+      notes?: string;
+      firstPurchaseDate?: string;
+    }>;
+    toastTitle: string;
+    toastDescription: string;
+  }) => {
+    const { filename, seedRows = [], toastTitle, toastDescription } = options;
+    const workbook = new ExcelJS.Workbook();
+    const sheetName = 'Subscriptions';
+    const subsSheet = workbook.addWorksheet(sheetName);
+
+    subsSheet.views = [{ state: 'frozen', ySplit: 1 }];
+    subsSheet.columns = [
+      { header: 'Service Name', key: 'serviceName', width: 20 },
+      { header: 'Website', key: 'website', width: 30 },
+      { header: 'Vendor', key: 'vendor', width: 20 },
+      { header: 'Qty', key: 'qty', width: 10 },
+      { header: 'Amount per unit', key: 'amount', width: 15 },
+      { header: 'Total Amount', key: 'totalAmount', width: 15 },
+      { header: 'Commitment cycle', key: 'billingCycle', width: 18 },
+      { header: 'Payment Frequency', key: 'paymentFrequency', width: 18 },
+      { header: 'First Purchase Date', key: 'firstPurchaseDate', width: 18 },
+      { header: 'Start Date', key: 'startDate', width: 15 },
+      { header: 'Next Renewal', key: 'nextRenewal', width: 15 },
+      { header: 'Auto Renewal', key: 'autoRenewal', width: 13 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Reminder Policy', key: 'reminderPolicy', width: 18 },
+      { header: 'Reminder Days', key: 'reminderDays', width: 15 },
+      { header: 'Notes', key: 'notes', width: 35 },
+    ];
+
+    // Header styles (match bulk template)
+    const headerRow = subsSheet.getRow(1);
+    headerRow.height = 20;
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+
+    for (let col = 1; col <= 16; col++) {
+      const cell = headerRow.getCell(col);
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } },
+      };
+    }
+
+    // Lookup lists stored in hidden columns within the SAME sheet (single-sheet file)
+    // AA (hidden)
+    // NOTE: Vendor supports dropdown but also allows typing.
+    const vendorCol = 27; // AA
+
+    [vendorCol].forEach((col) => {
+      const column = subsSheet.getColumn(col);
+      column.hidden = true;
+      column.width = 2;
+    });
+
+    VENDOR_LIST.forEach((vendor, idx) => {
+      subsSheet.getCell(idx + 2, vendorCol).value = vendor;
+    });
+
+    const rangeFor = (colLetter: string, count: number) => {
+      const safeCount = Math.max(1, count);
+      const lastRow = 1 + safeCount;
+      return `'${sheetName}'!$${colLetter}$2:$${colLetter}$${lastRow}`;
+    };
+
+    const vendorRange = rangeFor('AA', VENDOR_LIST.length);
+
+    const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', '2 Years', '3 Years', 'Trial', 'Pay-as-you-go'];
+    const paymentFrequencies = ['Weekly', '28 Days', 'Monthly', 'Quarterly', 'Yearly', '2 Years', '3 Years'];
+    const subscriptionStatuses = ['Active', 'Inactive', 'Cancelled'];
+    const reminderPolicies = ['One time', 'Two times', 'Until Renewal'];
+
+    for (let i = 2; i <= 500; i++) {
+      const totalAmountCell = subsSheet.getCell(`F${i}`);
+      totalAmountCell.value = { formula: `IF(AND(D${i}<>"",E${i}<>""),D${i}*E${i},"")`, result: '' };
+      totalAmountCell.numFmt = '0.00';
+      totalAmountCell.protection = { locked: true };
+
+      const serviceNameCell = subsSheet.getCell(`A${i}`);
+      serviceNameCell.dataValidation = {
+        type: 'custom',
+        allowBlank: false,
+        formulae: [`COUNTIF($A$2:$A$500,A${i})=1`],
+        showInputMessage: true,
+        promptTitle: 'Service Name Required',
+        prompt: 'Enter a unique service name. Duplicates are not allowed.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Duplicate Service Name',
+        error: 'This service name already exists! Please use a unique name.',
+      };
+
+      const vendorCell = subsSheet.getCell(`C${i}`);
+      vendorCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [vendorRange],
+        showInputMessage: true,
+        promptTitle: 'Select Vendor',
+        prompt: 'Choose a vendor from the dropdown or type your own.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Vendor',
+        error: 'Please select a valid vendor from the dropdown list.',
+      };
+
+      const qtyCell = subsSheet.getCell(`D${i}`);
+      qtyCell.dataValidation = {
+        type: 'whole',
+        operator: 'greaterThanOrEqual',
+        allowBlank: false,
+        formulae: [1],
+        showInputMessage: true,
+        promptTitle: 'Quantity',
+        prompt: 'Enter the quantity (must be at least 1).',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Quantity',
+        error: 'Please enter a whole number >= 1.',
+      };
+
+      const amountCell = subsSheet.getCell(`E${i}`);
+      amountCell.numFmt = '0.00';
+      amountCell.dataValidation = {
+        type: 'decimal',
+        operator: 'greaterThanOrEqual',
+        allowBlank: false,
+        formulae: [0],
+        showInputMessage: true,
+        promptTitle: 'Amount Required',
+        prompt: 'Enter the subscription amount as a number (e.g., 15.99, 100.00). Must be 0 or greater.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Amount',
+        error: 'Please enter a valid number. Decimal values are allowed (e.g., 15.99).',
+      };
+
+      const cycleCell = subsSheet.getCell(`G${i}`);
+      cycleCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${commitmentCycles.join(',')}"`],
+        showInputMessage: true,
+        promptTitle: 'Select Commitment Cycle',
+        prompt: 'Choose a commitment cycle.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Cycle',
+        error: 'Please select a valid commitment cycle.',
+      };
+
+      const paymentFreqCell = subsSheet.getCell(`H${i}`);
+      paymentFreqCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${paymentFrequencies.join(',')}"`],
+        showInputMessage: true,
+        promptTitle: 'Select Payment Frequency',
+        prompt: 'Choose how often payments are made.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Frequency',
+        error: 'Please select a valid payment frequency.',
+      };
+
+      // First Purchase Date (I): must not be in the future
+      const firstPurchaseCell = subsSheet.getCell(`I${i}`);
+      firstPurchaseCell.numFmt = 'dd/mm/yyyy';
+      firstPurchaseCell.dataValidation = {
+        type: 'custom',
+        allowBlank: true,
+        formulae: [`OR(I${i}="",IFERROR(DATEVALUE(I${i}),I${i})<=TODAY())`],
+        showInputMessage: true,
+        promptTitle: 'First Purchase Date',
+        prompt: 'Must not be in the future.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Date',
+        error: 'First Purchase Date cannot be in the future.',
+      };
+
+      const startDateCell = subsSheet.getCell(`J${i}`);
+      startDateCell.numFmt = 'dd/mm/yyyy';
+
+      // Validate Current Cycle Start (Start Date) >= First Purchase Date
+      // NOTE: This relies on Excel treating entered values as dates (serials) for correct comparisons.
+      // It is intentionally permissive when either cell is blank.
+      startDateCell.dataValidation = {
+        type: 'custom',
+        allowBlank: true,
+        formulae: [
+          `OR(J${i}="",I${i}="",IFERROR(DATEVALUE(J${i}),J${i})>=IFERROR(DATEVALUE(I${i}),I${i}))`,
+        ],
+        showInputMessage: true,
+        promptTitle: 'Current Cycle Start',
+        prompt: 'Must be on or after First Purchase Date.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Date',
+        error: 'Current Cycle Start must be on or after First Purchase Date.',
+      };
+
+      const renewalCell = subsSheet.getCell(`K${i}`);
+      renewalCell.value = {
+        formula: `IF(AND(J${i}<>"",OR(H${i}<>"",G${i}<>"")),IF(IF(H${i}<>"",H${i},G${i})="Monthly",DATE(YEAR(J${i}),MONTH(J${i})+1,DAY(J${i}))-1,IF(IF(H${i}<>"",H${i},G${i})="Quarterly",DATE(YEAR(J${i}),MONTH(J${i})+3,DAY(J${i}))-1,IF(IF(H${i}<>"",H${i},G${i})="Yearly",DATE(YEAR(J${i})+1,MONTH(J${i}),DAY(J${i}))-1,IF(IF(H${i}<>"",H${i},G${i})="2 Years",DATE(YEAR(J${i})+2,MONTH(J${i}),DAY(J${i}))-1,IF(IF(H${i}<>"",H${i},G${i})="3 Years",DATE(YEAR(J${i})+3,MONTH(J${i}),DAY(J${i}))-1,IF(IF(H${i}<>"",H${i},G${i})="Weekly",J${i}+6,IF(IF(H${i}<>"",H${i},G${i})="28 Days",J${i}+27,IF(IF(H${i}<>"",H${i},G${i})="Trial",J${i}+30,"")))))))),"")`,
+        result: '',
+      };
+      renewalCell.numFmt = 'dd/mm/yyyy';
+      renewalCell.protection = { locked: true };
+
+      const autoRenewalCell = subsSheet.getCell(`L${i}`);
+      autoRenewalCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"Yes,No"'],
+        showInputMessage: true,
+        promptTitle: 'Auto Renewal',
+        prompt: 'Select Yes to enable automatic renewal, No to disable.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Value',
+        error: 'Please select Yes or No.',
+      };
+
+      const statusCell = subsSheet.getCell(`M${i}`);
+      statusCell.dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: [`"${subscriptionStatuses.join(',')}"`],
+        showInputMessage: true,
+        promptTitle: 'Select Status',
+        prompt: 'Choose subscription status from the dropdown.',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Status',
+        error: 'Please select a valid status.',
+      };
+
+      const reminderPolicyCell = subsSheet.getCell(`N${i}`);
+      reminderPolicyCell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${reminderPolicies.join(',')}"`],
+        showInputMessage: true,
+        promptTitle: 'Select Reminder Policy',
+        prompt: 'Choose reminder policy: One time, Two times, or Until Renewal.',
+        showErrorMessage: true,
+        errorStyle: 'warning',
+        errorTitle: 'Invalid Reminder Policy',
+        error: 'Please select a valid reminder policy from the dropdown.',
+      };
+
+      const reminderDaysCell = subsSheet.getCell(`O${i}`);
+      reminderDaysCell.dataValidation = {
+        type: 'whole',
+        operator: 'between',
+        allowBlank: true,
+        formulae: [1, 365],
+        showInputMessage: true,
+        promptTitle: 'Reminder Days',
+        prompt: 'Enter the number of days before renewal to send a reminder (1-365).',
+        showErrorMessage: true,
+        errorStyle: 'error',
+        errorTitle: 'Invalid Reminder Days',
+        error: 'Please enter a whole number between 1 and 365.',
+      };
+    }
+
+    // Unlock editable cells (lock computed columns: Total Amount (F) and Next Renewal (K))
+    for (let i = 2; i <= 500; i++) {
+      const editableColumns = ['A', 'B', 'C', 'D', 'E', 'G', 'H', 'I', 'J', 'L', 'M', 'N', 'O', 'P'];
+      editableColumns.forEach((col) => {
+        subsSheet.getCell(`${col}${i}`).protection = { locked: false };
+      });
+    }
+
+    // Seed exported rows (keep formulas but provide cached result values for F/K so imports work without opening Excel)
+    for (let idx = 0; idx < seedRows.length && idx < 499; idx++) {
+      const r = seedRows[idx];
+      const rowNum = idx + 2;
+
+      subsSheet.getCell(`A${rowNum}`).value = r.serviceName || '';
+      subsSheet.getCell(`B${rowNum}`).value = r.website || '';
+      subsSheet.getCell(`C${rowNum}`).value = r.vendor || '';
+      subsSheet.getCell(`D${rowNum}`).value = Number.isFinite(r.qty as any) ? Number(r.qty) : 1;
+      subsSheet.getCell(`E${rowNum}`).value = Number.isFinite(r.amount as any) ? Number(r.amount) : 0;
+      subsSheet.getCell(`G${rowNum}`).value = r.billingCycle || '';
+      subsSheet.getCell(`H${rowNum}`).value = r.paymentFrequency || '';
+      subsSheet.getCell(`I${rowNum}`).value = r.firstPurchaseDate || '';
+      subsSheet.getCell(`J${rowNum}`).value = r.startDate || '';
+      subsSheet.getCell(`L${rowNum}`).value = r.autoRenewal || '';
+      subsSheet.getCell(`M${rowNum}`).value = r.status || '';
+      subsSheet.getCell(`N${rowNum}`).value = r.reminderPolicy || '';
+      subsSheet.getCell(`O${rowNum}`).value = Number.isFinite(r.reminderDays as any) ? Number(r.reminderDays) : '';
+      subsSheet.getCell(`P${rowNum}`).value = r.notes || '';
+
+      const qtyVal = Number(subsSheet.getCell(`D${rowNum}`).value || 0);
+      const amtVal = Number(subsSheet.getCell(`E${rowNum}`).value || 0);
+      const computedTotal = Number.isFinite(r.totalAmount as any) ? Number(r.totalAmount) : qtyVal * amtVal;
+
+      const totalAmountCell = subsSheet.getCell(`F${rowNum}`);
+      totalAmountCell.value = { formula: `IF(AND(D${rowNum}<>"",E${rowNum}<>""),D${rowNum}*E${rowNum},"")`, result: computedTotal };
+
+      const renewalCell = subsSheet.getCell(`K${rowNum}`);
+      const renewalResult = r.nextRenewal || '';
+      renewalCell.value = {
+        formula: `IF(AND(J${rowNum}<>"",OR(H${rowNum}<>"",G${rowNum}<>"")),IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="Monthly",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+1,DAY(J${rowNum}))-1,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="Quarterly",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+3,DAY(J${rowNum}))-1,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="Yearly",DATE(YEAR(J${rowNum})+1,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="2 Years",DATE(YEAR(J${rowNum})+2,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="3 Years",DATE(YEAR(J${rowNum})+3,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="Weekly",J${rowNum}+6,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="28 Days",J${rowNum}+27,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="Trial",J${rowNum}+30,"")))))))),"")`,
+        result: renewalResult,
+      };
+    }
+
+    await subsSheet.protect('', {
+      selectLockedCells: true,
+      selectUnlockedCells: true,
+      formatCells: false,
+      formatColumns: false,
+      formatRows: false,
+      insertRows: false,
+      insertColumns: false,
+      deleteRows: false,
+      deleteColumns: false,
+      sort: false,
+      autoFilter: false,
+      insertHyperlinks: false,
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), filename);
+    toast({ title: toastTitle, description: toastDescription, variant: 'success' });
+  };
+
+  // EXPORT current (filtered) subscriptions to XLSX (same template structure)
+  const handleExport = async () => {
     if (!filteredSubscriptions.length) {
       toast({ title: 'No data', description: 'There are no subscriptions to export', variant: 'destructive'});
       return;
     }
-    const rows = filteredSubscriptions.map(sub => ({
-      ServiceName: sub.serviceName,
-      Vendor: sub.vendor,
-      Amount: sub.amount,
-      BillingCycle: sub.billingCycle,
-      StartDate: sub.startDate ? new Date(sub.startDate).toISOString().split('T')[0] : '',
-      NextRenewal: sub.nextRenewal ? new Date(sub.nextRenewal).toISOString().split('T')[0] : '',
-      Status: sub.status,
-      Category: sub.category,
-      Departments: (sub.departments || []).join('|'),
-      ReminderPolicy: sub.reminderPolicy,
-      ReminderDays: sub.reminderDays,
-      Notes: sub.notes || ''
-    }));
-    const csv = Papa.unparse(rows);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `subscriptions_export_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast({ title: 'Exported', description: 'Subscriptions exported to CSV' });
+
+    const seedRows = filteredSubscriptions.map((sub) => {
+      const statusRaw = String((sub as any)?.status ?? '').trim();
+      const isDraftStatus = statusRaw.toLowerCase() === 'draft';
+      const qty = Number((sub as any)?.qty ?? 1);
+      const amount = Number((sub as any)?.amount ?? 0);
+      const totalAmount = Number((sub as any)?.totalAmount ?? qty * amount);
+
+      const firstPurchaseRaw = (sub as any)?.firstPurchaseDate ?? (sub as any)?.initialDate;
+      return {
+        serviceName: String((sub as any)?.serviceName ?? '').trim(),
+        website: String((sub as any)?.website ?? ''),
+        vendor: String((sub as any)?.vendor ?? ''),
+        qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
+        amount: Number.isFinite(amount) ? amount : 0,
+        totalAmount: Number.isFinite(totalAmount) ? totalAmount : undefined,
+        billingCycle: String((sub as any)?.billingCycle ?? ''),
+        paymentFrequency: String((sub as any)?.paymentFrequency ?? ''),
+        startDate: toDdMmYyyy((sub as any)?.startDate),
+        nextRenewal: toDdMmYyyy((sub as any)?.nextRenewal),
+        autoRenewal: (sub as any)?.autoRenewal === true ? 'Yes' : (sub as any)?.autoRenewal === false ? 'No' : '',
+        // Keep template-valid values: treat Draft as blank so re-import produces Draft.
+        status: isDraftStatus ? '' : statusRaw,
+        reminderPolicy: String((sub as any)?.reminderPolicy ?? ''),
+        reminderDays: Number((sub as any)?.reminderDays ?? ''),
+        notes: String((sub as any)?.notes ?? ''),
+        firstPurchaseDate: toDdMmYyyy(firstPurchaseRaw),
+      };
+    }).filter(r => r.serviceName);
+
+    if (!seedRows.length) {
+      toast({ title: 'No data', description: 'There are no subscriptions to export', variant: 'destructive'});
+      return;
+    }
+
+    try {
+      await downloadSubscriptionsWorkbook({
+        filename: `Subscriptions_Export_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        seedRows,
+        toastTitle: 'Exported',
+        toastDescription: 'Subscriptions exported (template format)',
+      });
+    } catch {
+      toast({
+        title: 'Export error',
+        description: 'Failed to export subscriptions. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const downloadSubscriptionsImportTemplate = async () => {
     try {
-      const workbook = new ExcelJS.Workbook();
-      const sheetName = 'Subscriptions';
-      const subsSheet = workbook.addWorksheet(sheetName);
-
-      subsSheet.views = [{ state: 'frozen', ySplit: 1 }];
-      subsSheet.columns = [
-        { header: 'Service Name', key: 'serviceName', width: 20 },
-        { header: 'Website', key: 'website', width: 30 },
-        { header: 'Vendor', key: 'vendor', width: 20 },
-        { header: 'Qty', key: 'qty', width: 10 },
-        { header: 'Amount per unit', key: 'amount', width: 15 },
-        { header: 'Total Amount', key: 'totalAmount', width: 15 },
-        { header: 'Commitment cycle', key: 'billingCycle', width: 18 },
-        { header: 'Payment Frequency', key: 'paymentFrequency', width: 18 },
-        { header: 'Start Date', key: 'startDate', width: 15 },
-        { header: 'Next Renewal', key: 'nextRenewal', width: 15 },
-        { header: 'Auto Renewal', key: 'autoRenewal', width: 13 },
-        { header: 'Status', key: 'status', width: 12 },
-        { header: 'Reminder Policy', key: 'reminderPolicy', width: 18 },
-        { header: 'Reminder Days', key: 'reminderDays', width: 15 },
-        { header: 'Notes', key: 'notes', width: 35 },
-      ];
-
-      // Header styles (match bulk template)
-      const headerRow = subsSheet.getRow(1);
-      headerRow.height = 20;
-      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-
-      for (let col = 1; col <= 15; col++) {
-        const cell = headerRow.getCell(col);
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FF000000' } },
-          left: { style: 'thin', color: { argb: 'FF000000' } },
-          bottom: { style: 'thin', color: { argb: 'FF000000' } },
-          right: { style: 'thin', color: { argb: 'FF000000' } },
-        };
-      }
-
-      // Lookup lists stored in hidden columns within the SAME sheet (single-sheet file)
-      // AA (hidden)
-      // NOTE: Vendor supports dropdown but also allows typing.
-      const vendorCol = 27; // AA
-
-      [vendorCol].forEach((col) => {
-        const column = subsSheet.getColumn(col);
-        column.hidden = true;
-        column.width = 2;
+      await downloadSubscriptionsWorkbook({
+        filename: 'Subscriptions_Import_Template.xlsx',
+        seedRows: [],
+        toastTitle: 'Template Downloaded',
+        toastDescription: 'Subscriptions template downloaded (single sheet)',
       });
-
-      VENDOR_LIST.forEach((vendor, idx) => {
-        subsSheet.getCell(idx + 2, vendorCol).value = vendor;
-      });
-
-      const rangeFor = (colLetter: string, count: number) => {
-        const safeCount = Math.max(1, count);
-        const lastRow = 1 + safeCount;
-        return `'${sheetName}'!$${colLetter}$2:$${colLetter}$${lastRow}`;
-      };
-
-      const vendorRange = rangeFor('AA', VENDOR_LIST.length);
-
-      const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trial', 'Pay-as-you-go'];
-      const subscriptionStatuses = ['Active', 'Inactive', 'Cancelled'];
-      const reminderPolicies = ['One time', 'Two times', 'Until Renewal'];
-
-      for (let i = 2; i <= 500; i++) {
-        const totalAmountCell = subsSheet.getCell(`F${i}`);
-        totalAmountCell.value = { formula: `IF(AND(D${i}<>"",E${i}<>""),D${i}*E${i},"")` };
-        totalAmountCell.numFmt = '0.00';
-        totalAmountCell.protection = { locked: true };
-
-        const serviceNameCell = subsSheet.getCell(`A${i}`);
-        serviceNameCell.dataValidation = {
-          type: 'custom',
-          allowBlank: false,
-          formulae: [`COUNTIF($A$2:$A$500,A${i})=1`],
-          showInputMessage: true,
-          promptTitle: 'Service Name Required',
-          prompt: 'Enter a unique service name. Duplicates are not allowed.',
-          showErrorMessage: true,
-          errorStyle: 'error',
-          errorTitle: 'Duplicate Service Name',
-          error: 'This service name already exists! Please use a unique name.',
-        };
-
-        const vendorCell = subsSheet.getCell(`C${i}`);
-        vendorCell.dataValidation = {
-          type: 'list',
-          allowBlank: true,
-          formulae: [vendorRange],
-          showInputMessage: true,
-          promptTitle: 'Select Vendor',
-          prompt: 'Choose a vendor from the dropdown or type your own.',
-          showErrorMessage: true,
-          errorStyle: 'warning',
-          errorTitle: 'Invalid Vendor',
-          error: 'Please select a valid vendor from the dropdown list.',
-        };
-
-        const qtyCell = subsSheet.getCell(`D${i}`);
-        qtyCell.dataValidation = {
-          type: 'whole',
-          operator: 'greaterThanOrEqual',
-          allowBlank: false,
-          formulae: [1],
-          showInputMessage: true,
-          promptTitle: 'Quantity',
-          prompt: 'Enter the quantity (must be at least 1).',
-          showErrorMessage: true,
-          errorStyle: 'error',
-          errorTitle: 'Invalid Quantity',
-          error: 'Please enter a whole number >= 1.',
-        };
-
-        const amountCell = subsSheet.getCell(`E${i}`);
-        amountCell.numFmt = '0.00';
-        amountCell.dataValidation = {
-          type: 'decimal',
-          operator: 'greaterThanOrEqual',
-          allowBlank: false,
-          formulae: [0],
-          showInputMessage: true,
-          promptTitle: 'Amount Required',
-          prompt: 'Enter the subscription amount as a number (e.g., 15.99, 100.00). Must be 0 or greater.',
-          showErrorMessage: true,
-          errorStyle: 'error',
-          errorTitle: 'Invalid Amount',
-          error: 'Please enter a valid number. Decimal values are allowed (e.g., 15.99).',
-        };
-
-        const cycleCell = subsSheet.getCell(`G${i}`);
-        cycleCell.dataValidation = {
-          type: 'list',
-          allowBlank: true,
-          formulae: [`"${commitmentCycles.join(',')}"`],
-          showInputMessage: true,
-          promptTitle: 'Select Commitment Cycle',
-          prompt: 'Choose a commitment cycle.',
-          showErrorMessage: true,
-          errorStyle: 'warning',
-          errorTitle: 'Invalid Cycle',
-          error: 'Please select a valid commitment cycle.',
-        };
-
-        const paymentFreqCell = subsSheet.getCell(`H${i}`);
-        paymentFreqCell.dataValidation = {
-          type: 'list',
-          allowBlank: true,
-          formulae: [`"${commitmentCycles.join(',')}"`],
-          showInputMessage: true,
-          promptTitle: 'Select Payment Frequency',
-          prompt: 'Choose how often payments are made.',
-          showErrorMessage: true,
-          errorStyle: 'warning',
-          errorTitle: 'Invalid Frequency',
-          error: 'Please select a valid payment frequency.',
-        };
-
-        const startDateCell = subsSheet.getCell(`I${i}`);
-        startDateCell.numFmt = '@';
-
-        const renewalCell = subsSheet.getCell(`J${i}`);
-        renewalCell.value = {
-          formula: `IF(AND(I${i}<>"",G${i}<>""),TEXT(IF(G${i}="Monthly",DATE(YEAR(I${i}),MONTH(I${i})+1,DAY(I${i}))-1,IF(G${i}="Quarterly",DATE(YEAR(I${i}),MONTH(I${i})+3,DAY(I${i}))-1,IF(G${i}="Yearly",DATE(YEAR(I${i})+1,MONTH(I${i}),DAY(I${i}))-1,IF(G${i}="Weekly",I${i}+6,IF(G${i}="Trial",I${i}+30,""))))),"dd/mm/yyyy"),"")`,
-          result: '',
-        };
-        renewalCell.numFmt = '@';
-        renewalCell.protection = { locked: true };
-
-        const autoRenewalCell = subsSheet.getCell(`K${i}`);
-        autoRenewalCell.dataValidation = {
-          type: 'list',
-          allowBlank: true,
-          formulae: ['"Yes,No"'],
-          showInputMessage: true,
-          promptTitle: 'Auto Renewal',
-          prompt: 'Select Yes to enable automatic renewal, No to disable.',
-          showErrorMessage: true,
-          errorStyle: 'warning',
-          errorTitle: 'Invalid Value',
-          error: 'Please select Yes or No.',
-        };
-
-        const statusCell = subsSheet.getCell(`L${i}`);
-        statusCell.dataValidation = {
-          type: 'list',
-          allowBlank: false,
-          formulae: [`"${subscriptionStatuses.join(',')}"`],
-          showInputMessage: true,
-          promptTitle: 'Select Status',
-          prompt: 'Choose subscription status from the dropdown.',
-          showErrorMessage: true,
-          errorStyle: 'error',
-          errorTitle: 'Invalid Status',
-          error: 'Please select a valid status.',
-        };
-
-        const reminderPolicyCell = subsSheet.getCell(`M${i}`);
-        reminderPolicyCell.dataValidation = {
-          type: 'list',
-          allowBlank: true,
-          formulae: [`"${reminderPolicies.join(',')}"`],
-          showInputMessage: true,
-          promptTitle: 'Select Reminder Policy',
-          prompt: 'Choose reminder policy: One time, Two times, or Until Renewal.',
-          showErrorMessage: true,
-          errorStyle: 'warning',
-          errorTitle: 'Invalid Reminder Policy',
-          error: 'Please select a valid reminder policy from the dropdown.',
-        };
-
-        const reminderDaysCell = subsSheet.getCell(`N${i}`);
-        reminderDaysCell.dataValidation = {
-          type: 'whole',
-          operator: 'between',
-          allowBlank: true,
-          formulae: [1, 365],
-          showInputMessage: true,
-          promptTitle: 'Reminder Days',
-          prompt: 'Enter the number of days before renewal to send a reminder (1-365).',
-          showErrorMessage: true,
-          errorStyle: 'error',
-          errorTitle: 'Invalid Reminder Days',
-          error: 'Please enter a whole number between 1 and 365.',
-        };
-      }
-
-      // Unlock editable cells (lock computed columns: Total Amount (F) and Next Renewal (J))
-      for (let i = 2; i <= 500; i++) {
-        const editableColumns = ['A', 'B', 'C', 'D', 'E', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O'];
-        editableColumns.forEach((col) => {
-          subsSheet.getCell(`${col}${i}`).protection = { locked: false };
-        });
-      }
-
-      await subsSheet.protect('', {
-        selectLockedCells: true,
-        selectUnlockedCells: true,
-        formatCells: false,
-        formatColumns: false,
-        formatRows: false,
-        insertRows: false,
-        insertColumns: false,
-        deleteRows: false,
-        deleteColumns: false,
-        sort: false,
-        autoFilter: false,
-        insertHyperlinks: false,
-      });
-
-      const buffer = await workbook.xlsx.writeBuffer();
-      saveAs(new Blob([buffer]), 'Subscriptions_Import_Template.xlsx');
-      toast({ title: 'Template Downloaded', description: 'Subscriptions template downloaded (single sheet)', variant: 'success' });
     } catch {
       toast({
         title: 'Template error',
@@ -806,6 +943,47 @@ export default function Subscriptions() {
       return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
     };
 
+    const computeNextRenewalFromFrequency = (start: string, frequency: unknown): string => {
+      if (!start || !frequency) return '';
+      const s = toIsoDate(start);
+      if (!s) return '';
+      const token = String(frequency).toLowerCase().trim();
+      if (!token) return '';
+
+      const base = new Date(`${s}T00:00:00`);
+      const end = new Date(base);
+
+      const dayMatch = token.match(/^(\d+)\s*days?$/);
+      if (dayMatch) {
+        const days = Math.max(1, parseInt(dayMatch[1], 10));
+        end.setDate(end.getDate() + (days - 1));
+      } else if (token === 'weekly') {
+        end.setDate(end.getDate() + 6);
+      } else if (token === 'trial') {
+        end.setDate(end.getDate() + 30);
+      } else if (token === 'monthly') {
+        end.setMonth(end.getMonth() + 1);
+        end.setDate(end.getDate() - 1);
+      } else if (token === 'quarterly') {
+        end.setMonth(end.getMonth() + 3);
+        end.setDate(end.getDate() - 1);
+      } else if (token === 'yearly') {
+        end.setFullYear(end.getFullYear() + 1);
+        end.setDate(end.getDate() - 1);
+      } else if (token === '2 years') {
+        end.setFullYear(end.getFullYear() + 2);
+        end.setDate(end.getDate() - 1);
+      } else if (token === '3 years') {
+        end.setFullYear(end.getFullYear() + 3);
+        end.setDate(end.getDate() - 1);
+      }
+
+      const yyyy = end.getFullYear();
+      const mm = String(end.getMonth() + 1).padStart(2, '0');
+      const dd = String(end.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
     const parseDepartments = (val: unknown): string[] => {
       const raw = String(val ?? '').trim();
       if (!raw) return [];
@@ -842,7 +1020,9 @@ export default function Subscriptions() {
           getValue(row, ['Payment Frequency', 'paymentFrequency', 'PaymentFrequency']),
           getValue(row, ['Payment Method', 'paymentMethod', 'PaymentMethod']),
           getValue(row, ['Start Date', 'StartDate', 'startDate']),
+          getValue(row, ['Current Cycle Start', 'CurrentCycleStart', 'currentCycleStart']),
           getValue(row, ['Next Renewal', 'NextRenewal', 'nextRenewal']),
+          getValue(row, ['First Purchase Date', 'FirstPurchaseDate', 'firstPurchaseDate', 'Initial Date', 'InitialDate', 'initialDate']),
           getValue(row, ['Status', 'status']),
           getValue(row, ['Category', 'category']),
           getValue(row, ['Departments', 'departments']),
@@ -893,6 +1073,23 @@ export default function Subscriptions() {
           const amountPerUnit = parseNumber(getValue(row, ['Amount per unit', 'Amount Per Unit', 'Amount', 'amount']));
           const totalAmount = parseNumber(getValue(row, ['Total Amount', 'TotalAmount', 'totalAmount'])) || qty * amountPerUnit;
 
+          // Optional date fields (kept backward-compatible with existing templates/files)
+          const firstPurchaseDate = toIsoDate(
+            getValue(row, [
+              'First Purchase Date',
+              'FirstPurchaseDate',
+              'firstPurchaseDate',
+              'Initial Date',
+              'InitialDate',
+              'initialDate',
+            ])
+          );
+          const currentCycleStart = toIsoDate(
+            getValue(row, ['Current Cycle Start', 'CurrentCycleStart', 'currentCycleStart'])
+          );
+          const startDateFromFile = toIsoDate(getValue(row, ['Start Date', 'StartDate', 'startDate']));
+          const effectiveStartDate = currentCycleStart || startDateFromFile;
+
           const payload: any = {
             serviceName: normalizedName,
             website: getValue(row, ['Website', 'website']),
@@ -904,7 +1101,11 @@ export default function Subscriptions() {
             billingCycle: getValue(row, ['Commitment cycle', 'BillingCycle', 'billingCycle', 'Commitment Cycle']),
             paymentFrequency: getValue(row, ['Payment Frequency', 'paymentFrequency', 'PaymentFrequency']),
             paymentMethod: getValue(row, ['Payment Method', 'paymentMethod', 'PaymentMethod']),
-            startDate: toIsoDate(getValue(row, ['Start Date', 'StartDate', 'startDate'])),
+            startDate: effectiveStartDate,
+            // These are optional in the backend, but sending them when available keeps parity with UI.
+            firstPurchaseDate: firstPurchaseDate || undefined,
+            initialDate: firstPurchaseDate || undefined,
+            currentCycleStart: (currentCycleStart || effectiveStartDate) || undefined,
             nextRenewal: toIsoDate(getValue(row, ['Next Renewal', 'NextRenewal', 'nextRenewal'])),
             autoRenewal: normalizeYesNoToBool(getValue(row, ['Auto Renewal', 'AutoRenewal', 'autoRenewal'])),
             status: getValue(row, ['Status', 'status']) || 'Draft',
@@ -919,7 +1120,12 @@ export default function Subscriptions() {
           };
 
           if (!payload.startDate) payload.startDate = new Date().toISOString().split('T')[0];
-          if (!payload.nextRenewal) payload.nextRenewal = payload.startDate;
+          if (!payload.nextRenewal) {
+            payload.nextRenewal =
+              computeNextRenewalFromFrequency(payload.startDate, payload.paymentFrequency) ||
+              computeNextRenewalFromFrequency(payload.startDate, payload.billingCycle) ||
+              payload.startDate;
+          }
 
           await apiRequest('POST', '/api/subscriptions', payload);
           seenInFile.add(key);

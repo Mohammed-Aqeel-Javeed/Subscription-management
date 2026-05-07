@@ -43,7 +43,14 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={() => {
+        // AddCompanyModal renders via a portal, so clicks inside it bubble through this React tree.
+        // Avoid closing the switcher while the add-company modal is open.
+        if (!addCompanyOpen) onClose();
+      }}
+    >
       <AddCompanyModal open={addCompanyOpen} onOpenChange={setAddCompanyOpen} onSuccess={()=>queryClient.invalidateQueries({queryKey:["/api/user/companies"]})} />
       <motion.div initial={{opacity:0,scale:0.96,y:6}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.96}} transition={{duration:0.16}}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 border border-gray-100" onClick={e=>e.stopPropagation()}>
