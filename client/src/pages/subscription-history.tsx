@@ -298,6 +298,51 @@ function formatValue(value: any) {
   }
 }
 
+function formatNotesValue(value: any) {
+  if (value === null || value === undefined || value === "") return "Not Set";
+
+  let parsed: any = value;
+  if (typeof parsed === "string") {
+    const s = parsed.trim();
+    if (!s) return "Not Set";
+    if (s === "Not Set") return "Not Set";
+    if (s.startsWith("[") || s.startsWith("{")) {
+      try {
+        parsed = JSON.parse(s);
+      } catch {
+        // If it's not valid JSON, fall back to the string as-is.
+        parsed = s;
+      }
+    } else {
+      return s;
+    }
+  }
+
+  if (Array.isArray(parsed)) {
+    const texts = parsed
+      .map((item) => {
+        if (item === null || item === undefined) return "";
+        if (typeof item === "string") return item.trim();
+        if (typeof item === "object") {
+          const t = (item as any)?.text ?? (item as any)?.note ?? (item as any)?.message;
+          if (typeof t === "string" && t.trim()) return t.trim();
+          return "";
+        }
+        return String(item).trim();
+      })
+      .filter(Boolean);
+    return texts.length > 0 ? texts.join("; ") : "Not Set";
+  }
+
+  if (typeof parsed === "object") {
+    const t = (parsed as any)?.text ?? (parsed as any)?.note ?? (parsed as any)?.message;
+    if (typeof t === "string" && t.trim()) return t.trim();
+    return "Not Set";
+  }
+
+  return String(parsed).trim() || "Not Set";
+}
+
 function formatDateDdMmYyyy(value: any) {
   if (value === null || value === undefined || value === "") return "Not Set";
   const date = new Date(value);
@@ -404,6 +449,7 @@ function buildChangesText(record: HistoryRecord) {
   const isRenewal = action === "renewed" || inferDisplayAction(record) === "renewed";
 
   const lines: string[] = [];
+  let suppressedChange = false;
   for (const key of fieldsToCompare) {
     if (!(key in newData)) continue;
     
@@ -414,8 +460,43 @@ function buildChangesText(record: HistoryRecord) {
     const after = newData[key];
 
     const isDateField = dateFields.has(key);
-    let beforeText = isDateField ? formatDateDdMmYyyy(before) : formatValue(before);
-    let afterText = isDateField ? formatDateDdMmYyyy(after) : formatValue(after);
+    const isNotesField = key === "notes";
+    let beforeText = isDateField ? formatDateDdMmYyyy(before) : (isNotesField ? formatNotesValue(before) : formatValue(before));
+    let afterText = isDateField ? formatDateDdMmYyyy(after) : (isNotesField ? formatNotesValue(after) : formatValue(after));
+
+    const keyLower = String(key).toLowerCase();
+    const isSuppressedField =
+      keyLower === 'notes' ||
+      keyLower === 'documents' ||
+      keyLower === 'document' ||
+      keyLower === 'attachments' ||
+      keyLower === 'attachment' ||
+      keyLower === 'files' ||
+      keyLower.includes('document') ||
+      keyLower.includes('attachment');
+
+    const hasChanged = (() => {
+      if (numericFields.has(key)) {
+        const beforeNum = parseMoneyLike(before);
+        const afterNum = parseMoneyLike(after);
+        if (beforeNum !== null && afterNum !== null) {
+          const beforeRounded = Math.round(beforeNum * 100) / 100;
+          const afterRounded = Math.round(afterNum * 100) / 100;
+          return beforeRounded !== afterRounded;
+        }
+        // If we can't parse as numbers, fall back to text comparison.
+        return beforeText !== afterText;
+      }
+      return beforeText !== afterText;
+    })();
+
+    if (!hasChanged) continue;
+
+    // Hide notes/documents changes in the UI; show a generic message instead.
+    if (isSuppressedField) {
+      suppressedChange = true;
+      continue;
+    }
 
     if (numericFields.has(key)) {
       const beforeNum = parseMoneyLike(before);
@@ -444,6 +525,9 @@ function buildChangesText(record: HistoryRecord) {
   }
 
   const main = lines.join("\n");
+  if (!main && suppressedChange) {
+    return ["Subscription updated", reason].filter(Boolean).join("\n");
+  }
   return [main, reason].filter(Boolean).join("\n");
 }
 
@@ -658,7 +742,9 @@ export default function SubscriptionHistory() {
     "Selected Subscription";
 
   const headerName = subscriptionNameParam || firstName;
-  const headerTitle = effectiveSubscriptionId ? `${headerName} History Log` : "Subscription History Log";
+  const isNamedHistory = Boolean(effectiveSubscriptionId);
+  const headerTitle = isNamedHistory ? `${headerName} History Log` : "Subscription History Log";
+  const displayedHeaderName = isNamedHistory ? (truncateText(String(headerName), 45) || String(headerName)) : "";
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 font-['Inter']">
@@ -671,7 +757,19 @@ export default function SubscriptionHistory() {
                 <History className="h-7 w-7 text-indigo-600" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{headerTitle}</h1>
+                <h1
+                  className="text-2xl font-semibold text-gray-900 tracking-tight max-w-[70vw] flex items-center gap-2 min-w-0"
+                  title={headerTitle}
+                >
+                  {isNamedHistory ? (
+                    <>
+                      <span className="truncate min-w-0">{displayedHeaderName}</span>
+                      <span className="flex-shrink-0 whitespace-nowrap">History Log</span>
+                    </>
+                  ) : (
+                    <span className="truncate">{headerTitle}</span>
+                  )}
+                </h1>
                 {tokenError ? <p className="text-sm text-red-600 mt-1">{tokenError}</p> : null}
               </div>
             </div>

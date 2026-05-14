@@ -333,10 +333,10 @@ export default function ComplianceDashboard() {
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1 w-full">
-          <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
+          <div className="w-full px-2 sm:px-3 lg:px-4 py-4">
             {/* Greeting Card (match Dashboard header) */}
             <div
-              className="mb-6 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
+              className="mb-4 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-6 py-5 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
               style={{
                 background:
                   "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",
@@ -419,7 +419,7 @@ export default function ComplianceDashboard() {
                 {/* Metric Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
                   <div
-                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-blue-500 cursor-pointer hover:shadow-md transition-shadow"
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-blue-500 cursor-pointer hover:shadow-md transition-shadow group"
                     onClick={() => openModal("total")}
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -431,11 +431,17 @@ export default function ComplianceDashboard() {
                         <FileText className="h-5 w-5 text-blue-500" />
                       </div>
                     </div>
-                    <div className="text-sm text-gray-400">Click to view details</div>
+                    <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                      <span className="relative">
+                        Click to view details
+                        <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                      </span>
+                      <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                    </div>
                   </div>
 
                   <div
-                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow"
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow group"
                     onClick={() => openModal("dueToday")}
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -447,11 +453,17 @@ export default function ComplianceDashboard() {
                         <Calendar className="h-5 w-5 text-green-500" />
                       </div>
                     </div>
-                    <div className="text-sm text-gray-400">Click to view details</div>
+                    <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                      <span className="relative">
+                        Click to view details
+                        <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                      </span>
+                      <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                    </div>
                   </div>
 
                   <div
-                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow"
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow group"
                     onClick={() => openModal("upcoming7Days")}
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -463,11 +475,17 @@ export default function ComplianceDashboard() {
                         <TrendingUp className="h-5 w-5 text-purple-500" />
                       </div>
                     </div>
-                    <div className="text-sm text-gray-400">Click to view details</div>
+                    <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                      <span className="relative">
+                        Click to view details
+                        <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                      </span>
+                      <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                    </div>
                   </div>
 
                   <div
-                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow"
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow group"
                     onClick={() => openModal("overdue")}
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -479,11 +497,17 @@ export default function ComplianceDashboard() {
                         <AlertTriangle className="h-5 w-5 text-orange-500" />
                       </div>
                     </div>
-                    <div className="text-sm text-gray-400">Click to view details</div>
+                    <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                      <span className="relative">
+                        Click to view details
+                        <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                      </span>
+                      <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                    </div>
                   </div>
 
                   <div
-                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-emerald-500 cursor-pointer hover:shadow-md transition-shadow"
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-emerald-500 cursor-pointer hover:shadow-md transition-shadow group"
                     onClick={() => openModal("completedThisMonth")}
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -495,7 +519,13 @@ export default function ComplianceDashboard() {
                         <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                       </div>
                     </div>
-                    <div className="text-sm text-gray-400">Click to view details</div>
+                    <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                      <span className="relative">
+                        Click to view details
+                        <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                      </span>
+                      <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                    </div>
                   </div>
                 </div>
 
@@ -512,13 +542,13 @@ export default function ComplianceDashboard() {
                           <div className="h-full flex items-center justify-center text-sm text-gray-500">No status data</div>
                         ) : (
                           <ResponsiveContainer width="100%" height={240}>
-                            <PieChart>
+                            <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                               <Pie
                                 data={statusDonutData}
                                 cx="50%"
                                 cy="50%"
-                                innerRadius={70}
-                                outerRadius={110}
+                                innerRadius="58%"
+                                outerRadius="86%"
                                 paddingAngle={2}
                                 dataKey="count"
                                 nameKey="category"

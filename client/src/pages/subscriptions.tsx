@@ -552,8 +552,7 @@ export default function Subscriptions() {
 
     const vendorRange = rangeFor('AA', VENDOR_LIST.length);
 
-    const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', '2 Years', '3 Years', 'Trial', 'Pay-as-you-go'];
-    const paymentFrequencies = ['Weekly', '28 Days', 'Monthly', 'Quarterly', 'Yearly', '2 Years', '3 Years'];
+    const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trial', 'Pay-as-you-go'];
     const subscriptionStatuses = ['Active', 'Inactive', 'Cancelled'];
     const reminderPolicies = ['One time', 'Two times', 'Until Renewal'];
 
@@ -640,7 +639,7 @@ export default function Subscriptions() {
       paymentFreqCell.dataValidation = {
         type: 'list',
         allowBlank: true,
-        formulae: [`"${paymentFrequencies.join(',')}"`],
+        formulae: [`"${commitmentCycles.join(',')}"`],
         showInputMessage: true,
         promptTitle: 'Select Payment Frequency',
         prompt: 'Choose how often payments are made.',
@@ -652,7 +651,7 @@ export default function Subscriptions() {
 
       // First Purchase Date (I): must not be in the future
       const firstPurchaseCell = subsSheet.getCell(`I${i}`);
-      firstPurchaseCell.numFmt = 'dd/mm/yyyy';
+      firstPurchaseCell.numFmt = '@';
       firstPurchaseCell.dataValidation = {
         type: 'custom',
         allowBlank: true,
@@ -667,7 +666,7 @@ export default function Subscriptions() {
       };
 
       const startDateCell = subsSheet.getCell(`J${i}`);
-      startDateCell.numFmt = 'dd/mm/yyyy';
+      startDateCell.numFmt = '@';
 
       // Validate Current Cycle Start (Start Date) >= First Purchase Date
       // NOTE: This relies on Excel treating entered values as dates (serials) for correct comparisons.
@@ -689,10 +688,10 @@ export default function Subscriptions() {
 
       const renewalCell = subsSheet.getCell(`K${i}`);
       renewalCell.value = {
-        formula: `IF(AND(J${i}<>"",OR(H${i}<>"",G${i}<>"")),IF(IF(H${i}<>"",H${i},G${i})="Monthly",DATE(YEAR(J${i}),MONTH(J${i})+1,DAY(J${i}))-1,IF(IF(H${i}<>"",H${i},G${i})="Quarterly",DATE(YEAR(J${i}),MONTH(J${i})+3,DAY(J${i}))-1,IF(IF(H${i}<>"",H${i},G${i})="Yearly",DATE(YEAR(J${i})+1,MONTH(J${i}),DAY(J${i}))-1,IF(IF(H${i}<>"",H${i},G${i})="2 Years",DATE(YEAR(J${i})+2,MONTH(J${i}),DAY(J${i}))-1,IF(IF(H${i}<>"",H${i},G${i})="3 Years",DATE(YEAR(J${i})+3,MONTH(J${i}),DAY(J${i}))-1,IF(IF(H${i}<>"",H${i},G${i})="Weekly",J${i}+6,IF(IF(H${i}<>"",H${i},G${i})="28 Days",J${i}+27,IF(IF(H${i}<>"",H${i},G${i})="Trial",J${i}+30,"")))))))),"")`,
+        formula: `IF(AND(J${i}<>"",G${i}<>""),TEXT(IF(G${i}="Monthly",DATE(YEAR(J${i}),MONTH(J${i})+1,DAY(J${i}))-1,IF(G${i}="Quarterly",DATE(YEAR(J${i}),MONTH(J${i})+3,DAY(J${i}))-1,IF(G${i}="Yearly",DATE(YEAR(J${i})+1,MONTH(J${i}),DAY(J${i}))-1,IF(G${i}="Weekly",J${i}+6,IF(G${i}="Trial",J${i}+30,""))))),"dd/mm/yyyy"),"")`,
         result: '',
       };
-      renewalCell.numFmt = 'dd/mm/yyyy';
+      renewalCell.numFmt = '@';
       renewalCell.protection = { locked: true };
 
       const autoRenewalCell = subsSheet.getCell(`L${i}`);
@@ -791,7 +790,7 @@ export default function Subscriptions() {
       const renewalCell = subsSheet.getCell(`K${rowNum}`);
       const renewalResult = r.nextRenewal || '';
       renewalCell.value = {
-        formula: `IF(AND(J${rowNum}<>"",OR(H${rowNum}<>"",G${rowNum}<>"")),IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="Monthly",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+1,DAY(J${rowNum}))-1,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="Quarterly",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+3,DAY(J${rowNum}))-1,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="Yearly",DATE(YEAR(J${rowNum})+1,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="2 Years",DATE(YEAR(J${rowNum})+2,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="3 Years",DATE(YEAR(J${rowNum})+3,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="Weekly",J${rowNum}+6,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="28 Days",J${rowNum}+27,IF(IF(H${rowNum}<>"",H${rowNum},G${rowNum})="Trial",J${rowNum}+30,"")))))))),"")`,
+        formula: `IF(AND(J${rowNum}<>"",G${rowNum}<>""),TEXT(IF(G${rowNum}="Monthly",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+1,DAY(J${rowNum}))-1,IF(G${rowNum}="Quarterly",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+3,DAY(J${rowNum}))-1,IF(G${rowNum}="Yearly",DATE(YEAR(J${rowNum})+1,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(G${rowNum}="Weekly",J${rowNum}+6,IF(G${rowNum}="Trial",J${rowNum}+30,""))))),"dd/mm/yyyy"),"")`,
         result: renewalResult,
       };
     }
@@ -943,47 +942,6 @@ export default function Subscriptions() {
       return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
     };
 
-    const computeNextRenewalFromFrequency = (start: string, frequency: unknown): string => {
-      if (!start || !frequency) return '';
-      const s = toIsoDate(start);
-      if (!s) return '';
-      const token = String(frequency).toLowerCase().trim();
-      if (!token) return '';
-
-      const base = new Date(`${s}T00:00:00`);
-      const end = new Date(base);
-
-      const dayMatch = token.match(/^(\d+)\s*days?$/);
-      if (dayMatch) {
-        const days = Math.max(1, parseInt(dayMatch[1], 10));
-        end.setDate(end.getDate() + (days - 1));
-      } else if (token === 'weekly') {
-        end.setDate(end.getDate() + 6);
-      } else if (token === 'trial') {
-        end.setDate(end.getDate() + 30);
-      } else if (token === 'monthly') {
-        end.setMonth(end.getMonth() + 1);
-        end.setDate(end.getDate() - 1);
-      } else if (token === 'quarterly') {
-        end.setMonth(end.getMonth() + 3);
-        end.setDate(end.getDate() - 1);
-      } else if (token === 'yearly') {
-        end.setFullYear(end.getFullYear() + 1);
-        end.setDate(end.getDate() - 1);
-      } else if (token === '2 years') {
-        end.setFullYear(end.getFullYear() + 2);
-        end.setDate(end.getDate() - 1);
-      } else if (token === '3 years') {
-        end.setFullYear(end.getFullYear() + 3);
-        end.setDate(end.getDate() - 1);
-      }
-
-      const yyyy = end.getFullYear();
-      const mm = String(end.getMonth() + 1).padStart(2, '0');
-      const dd = String(end.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    };
-
     const parseDepartments = (val: unknown): string[] => {
       const raw = String(val ?? '').trim();
       if (!raw) return [];
@@ -1120,12 +1078,7 @@ export default function Subscriptions() {
           };
 
           if (!payload.startDate) payload.startDate = new Date().toISOString().split('T')[0];
-          if (!payload.nextRenewal) {
-            payload.nextRenewal =
-              computeNextRenewalFromFrequency(payload.startDate, payload.paymentFrequency) ||
-              computeNextRenewalFromFrequency(payload.startDate, payload.billingCycle) ||
-              payload.startDate;
-          }
+          if (!payload.nextRenewal) payload.nextRenewal = payload.startDate;
 
           await apiRequest('POST', '/api/subscriptions', payload);
           seenInFile.add(key);

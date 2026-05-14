@@ -429,10 +429,10 @@ export default function Dashboard() {
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1 w-full">
-          <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
+          <div className="w-full px-2 sm:px-3 lg:px-4 py-4">
             {/* Greeting Card */}
             <div
-              className="mb-6 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
+              className="mb-4 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-6 py-5 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
               style={{
                 background:
                   "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",
@@ -589,7 +589,7 @@ export default function Dashboard() {
 
               {/* Active Subscriptions Card */}
               <div 
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow" 
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow group" 
                 onClick={() => setActiveSubscriptionsModalOpen(true)}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -603,12 +603,18 @@ export default function Dashboard() {
                     <RotateCcw className="h-5 w-5 text-purple-500" />
                   </div>
                 </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
+                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                  <span className="relative">
+                    Click to view details
+                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                  </span>
+                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                </div>
               </div>
 
               {/* Upcoming Renewals Card */}
               <div 
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow" 
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow group" 
                 onClick={() => setUpcomingRenewalsModalOpen(true)}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -622,7 +628,16 @@ export default function Dashboard() {
                     <Bell className="h-5 w-5 text-orange-500" />
                   </div>
                 </div>
-                <div className="text-sm text-gray-400">Next 30 days · Click to view</div>
+                <div className="mt-1 text-sm text-gray-600">
+                  <span className="text-gray-500">Next 30 days · </span>
+                  <span className="inline-flex items-center gap-1 group-hover:text-indigo-600 transition-colors duration-200">
+                    <span className="relative">
+                      Click to view
+                      <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                    </span>
+                    <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                  </span>
+                </div>
               </div>
             </div>
 

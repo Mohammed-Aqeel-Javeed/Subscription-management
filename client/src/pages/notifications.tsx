@@ -607,7 +607,8 @@ return (
 
 		{/* Content */}
 		<div className="flex-1 min-w-0">
-			<div className="flex items-center gap-2 flex-wrap">
+			<div className="min-w-0">
+				<div className="flex items-center gap-2 min-w-0">
 							<span className="font-semibold text-gray-900 text-sm">
 								{(() => {
 									let displayName = '';
@@ -630,12 +631,16 @@ return (
 										);
 										displayName = subscription?.serviceName || notification.subscriptionName || 'Unknown Subscription';
 									}
-									if (displayName.length > 30) {
-										return displayName.substring(0, 27) + '...';
-									}
-									return displayName;
+									const shown = displayName.length > 30 ? displayName.substring(0, 27) + '...' : displayName;
+									return (
+										<span className="truncate min-w-0" title={displayName}>
+											{shown}
+										</span>
+									);
 								})()}
 							</span>
+							</div>
+							<div className="mt-0.5 flex items-center gap-2 flex-wrap">
 								<span className="text-gray-400">·</span>
 								<span className="text-xs text-gray-500">
 	 												{notification.type === 'compliance'
@@ -759,12 +764,13 @@ return (
 										}
 									})()}
 									</Badge>
-			</div>
+						</div>
+					</div>
 		</div>
 
 		{/* Time and View button */}
 		<div className="flex items-center gap-3 flex-shrink-0">
-			<span className="text-xs text-gray-400">
+			<span className="text-xs text-gray-500 whitespace-nowrap">
 				{(() => {
 					const timestamp = notification.timestamp || notification.createdAt || notification.reminderTriggerDate;
 					if (!timestamp) return '';

@@ -74,16 +74,17 @@ export default function CategoryChart({ data }: CategoryChartProps) {
   };
 
   return (
-    <div className="h-[320px] w-full flex flex-col sm:flex-row items-start gap-6">
-      <div className="h-[320px] w-full sm:flex-1 min-w-0">
+    <div className="w-full min-h-[320px] flex flex-col sm:flex-row items-start gap-6">
+      <div className="h-[320px] w-full sm:flex-1 min-w-0 flex items-center justify-center">
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
+          <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
             <Pie
               data={donutData}
               cx="50%"
               cy="50%"
-              innerRadius={70}
-              outerRadius={110}
+              // Use percentage radii so the chart never gets clipped on narrower cards.
+              innerRadius="58%"
+              outerRadius="86%"
               paddingAngle={2}
               dataKey="amount"
               nameKey="category"
@@ -109,14 +110,14 @@ export default function CategoryChart({ data }: CategoryChartProps) {
         </ResponsiveContainer>
       </div>
 
-      <div className="w-full sm:w-60">
-        <div className="max-h-[280px] overflow-y-auto custom-scrollbar pr-2">
+      <div className="w-full sm:w-60 sm:max-h-[320px]">
+        <div className="max-h-[280px] sm:max-h-[320px] overflow-y-auto custom-scrollbar pr-2">
           <div className="space-y-4">
           {donutData.map((item) => {
             return (
               <div key={item.category} className="flex items-center gap-3">
                 <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: item.color }} />
-                <div className="text-sm text-gray-700">{item.category}</div>
+                <div className="text-sm text-gray-700 break-words">{item.category}</div>
               </div>
             );
           })}

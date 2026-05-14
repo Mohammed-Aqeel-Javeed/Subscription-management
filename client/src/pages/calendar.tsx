@@ -642,7 +642,7 @@ export default function CalendarPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <div className="flex-1 w-full">
-          <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
+          <div className="w-full px-2 sm:px-3 lg:px-4 py-4">
         {/* Day list modal (opened by '+N more') */}
         <Dialog open={dayListOpen} onOpenChange={setDayListOpen}>
           <DialogContent className="max-w-xl max-h-[80vh] overflow-hidden bg-white text-slate-900 border-slate-200 shadow-2xl rounded-2xl">
@@ -876,7 +876,7 @@ export default function CalendarPage() {
 
         {/* Greeting Card (match Dashboard header) */}
         <div
-          className="mb-6 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
+          className="mb-4 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-6 py-5 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
           style={{
             background:
               "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",

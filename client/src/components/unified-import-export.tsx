@@ -1015,6 +1015,17 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     const paymentFrequencies = ['Weekly', '28 Days', 'Monthly', 'Quarterly', 'Yearly', '2 Years', '3 Years'];
     const subscriptionStatuses = ['Active', 'Inactive'];
     const reminderPolicies = ['One time', 'Two times', 'Until Renewal'];
+
+    // Hidden list for conditional Payment Frequency dropdown (AA)
+    const paymentFrequencyCol = 27; // AA
+    const pfCol = subsSheet.getColumn(paymentFrequencyCol);
+    pfCol.hidden = true;
+    pfCol.width = 2;
+    subsSheet.getCell(1, paymentFrequencyCol).value = '';
+    paymentFrequencies.forEach((freq, idx) => {
+      subsSheet.getCell(idx + 2, paymentFrequencyCol).value = freq;
+    });
+    const paymentFrequencyRange = `'Subscriptions'!$AA$2:$AA$${paymentFrequencies.length + 1}`;
     
     for (let i = 2; i <= 500; i++) {
       // Total Amount formula for all rows (column G/7) = Qty * Amount per unit (only if both exist)
@@ -1123,7 +1134,8 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       paymentFreqCell.dataValidation = {
         type: 'list',
         allowBlank: true,
-        formulae: [`"${paymentFrequencies.join(',')}"`],
+        // Disable Payment Frequency when Commitment cycle is Pay-as-you-go (only blank allowed)
+        formulae: [`IF($H${i}="Pay-as-you-go",'Subscriptions'!$AA$1,${paymentFrequencyRange})`],
         showInputMessage: true,
         promptTitle: 'Select Payment Frequency',
         prompt: 'Choose how often payments are made.',
@@ -1155,7 +1167,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       // Add Next Renewal formula for all rows (L column)
       const renewalCell = subsSheet.getCell(`L${i}`);
       renewalCell.value = {
-        formula: `IF(AND(K${i}<>"",OR(I${i}<>"",H${i}<>"")),IF(IF(I${i}<>"",I${i},H${i})="Monthly",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="Quarterly",DATE(YEAR(K${i}),MONTH(K${i})+3,DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="Yearly",DATE(YEAR(K${i})+1,MONTH(K${i}),DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="2 Years",DATE(YEAR(K${i})+2,MONTH(K${i}),DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="3 Years",DATE(YEAR(K${i})+3,MONTH(K${i}),DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="Weekly",K${i}+6,IF(IF(I${i}<>"",I${i},H${i})="28 Days",K${i}+27,IF(IF(I${i}<>"",I${i},H${i})="Trial",K${i}+30,"")))))))),"")`,
+        formula: `IF(AND(K${i}<>"",OR(I${i}<>"",H${i}<>"")),IF(IF(I${i}<>"",I${i},H${i})="Pay-as-you-go",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i})),IF(IF(I${i}<>"",I${i},H${i})="Monthly",DATE(YEAR(K${i}),MONTH(K${i})+1,DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="Quarterly",DATE(YEAR(K${i}),MONTH(K${i})+3,DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="Yearly",DATE(YEAR(K${i})+1,MONTH(K${i}),DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="2 Years",DATE(YEAR(K${i})+2,MONTH(K${i}),DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="3 Years",DATE(YEAR(K${i})+3,MONTH(K${i}),DAY(K${i}))-1,IF(IF(I${i}<>"",I${i},H${i})="Weekly",K${i}+6,IF(IF(I${i}<>"",I${i},H${i})="28 Days",K${i}+27,IF(IF(I${i}<>"",I${i},H${i})="Trial",K${i}+30,""))))))))),"")`,
         result: ''
       };
       renewalCell.numFmt = 'dd/mm/yyyy';
@@ -2073,6 +2085,9 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
               end.setDate(end.getDate() + (days - 1));
             } else if (token === 'weekly') {
               end.setDate(end.getDate() + 6);
+            } else if (token === 'pay-as-you-go') {
+              // Pay-as-you-go: next payment follows a monthly cycle (same day next month)
+              end.setMonth(end.getMonth() + 1);
             } else if (token === 'trial') {
               end.setDate(end.getDate() + 30);
             } else if (token === 'monthly') {

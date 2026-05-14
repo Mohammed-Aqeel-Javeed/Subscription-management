@@ -3,6 +3,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FileText, Calendar, CheckCircle, XCircle, Clock, ArrowLeft, History } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -35,6 +42,22 @@ const formatDate = (dateStr?: string): string => {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yyyy = String(d.getFullYear());
   return `${dd}/${mm}/${yyyy}`;
+};
+
+const toDateMs = (value: unknown): number => {
+  if (!value) return 0;
+  const d = new Date(String(value));
+  const t = d.getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
+const ledgerSortMs = (item: any): number => {
+  return (
+    toDateMs(item?.filingSubmissionDate) ||
+    toDateMs(item?.createdAt) ||
+    toDateMs(item?.updatedAt) ||
+    0
+  );
 };
 
 // Dynamic status calculation - same as in compliance.tsx
@@ -123,6 +146,12 @@ const getCategoryPillClasses = (category?: string) => {
   return palette[hash % palette.length];
 };
 
+const truncateText = (value: unknown, maxChars: number) => {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars)).trimEnd()}...` : text;
+};
+
 export default function ComplianceLedger() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -187,7 +216,141 @@ export default function ComplianceLedger() {
 
   const complianceId = resolvedComplianceId;
   const isFilteredById = Boolean(complianceId);
-  const tableColumnCount = isFilteredById ? 5 : 6;
+
+  type ColumnDef = {
+    id: string;
+    label: string;
+    defaultVisible: boolean;
+    headerClassName?: string;
+    cellClassName?: string;
+    renderCell: (item: any) => React.ReactNode;
+  };
+
+  const columns = React.useMemo<ColumnDef[]>(() => {
+    const base: ColumnDef[] = [];
+
+    if (!isFilteredById) {
+      base.push({
+        id: "filingName",
+        label: "Filing Name",
+        defaultVisible: true,
+        cellClassName: "font-medium text-gray-900 max-w-[280px] truncate",
+        renderCell: (item) => (
+          <span title={String(item.filingName || "")}>
+            {truncateText(String(item.filingName || ""), 28) || "-"}
+          </span>
+        ),
+      });
+    }
+
+    base.push(
+      {
+        id: "category",
+        label: "Category",
+        defaultVisible: true,
+        renderCell: (item) => (
+          <div className="flex items-center justify-start">
+            <span
+              className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border min-w-[110px] ${getCategoryPillClasses(
+                item.filingComplianceCategory
+              )}`}
+            >
+              {item.filingComplianceCategory || "-"}
+            </span>
+          </div>
+        ),
+      },
+      {
+        id: "startDate",
+        label: "Start Date",
+        defaultVisible: true,
+        renderCell: (item) => (
+          <div className="flex items-center text-gray-700">
+            <Calendar className="w-4 h-4 mr-2 text-gray-500" />
+            {formatDate(item.filingStartDate)}
+          </div>
+        ),
+      },
+      {
+        id: "endDate",
+        label: "End Date",
+        defaultVisible: true,
+        renderCell: (item) => (
+          <div className="flex items-center text-gray-700">
+            <Calendar className="w-4 h-4 mr-2 text-gray-500" />
+            {formatDate(item.filingEndDate)}
+          </div>
+        ),
+      },
+      {
+        id: "submissionDate",
+        label: "Submission Date",
+        defaultVisible: true,
+        renderCell: (item) => (
+          <div className="flex items-center text-gray-700">
+            <Calendar className="w-4 h-4 mr-2 text-gray-500" />
+            {formatDate(item.filingSubmissionDate)}
+          </div>
+        ),
+      },
+      {
+        id: "submissionNotes",
+        label: "Submission Notes",
+        defaultVisible: false,
+        cellClassName: "max-w-[360px] truncate",
+        renderCell: (item) => {
+          const raw =
+            (typeof item?.submissionNotes === "string" && item.submissionNotes.trim())
+              ? item.submissionNotes
+              : (typeof item?.filingRemarks === "string" ? item.filingRemarks : "");
+          const value = String(raw || "").trim();
+          return <span title={value}>{truncateText(value, 48) || "-"}</span>;
+        },
+      },
+      {
+        id: "status",
+        label: "Status",
+        defaultVisible: true,
+        renderCell: (item) => {
+          let displayStatus = item.filingSubmissionStatus;
+          if (item.filingSubmissionDate) {
+            displayStatus = "Completed";
+          } else {
+            displayStatus = getComplianceStatus(item.filingEndDate, item.filingSubmissionDeadline);
+          }
+          const statusInfo = getStatusInfo(displayStatus);
+          return (
+            <Badge variant="outline" className={`${statusInfo.color} flex items-center gap-1 border-0`}>
+              {statusInfo.icon}
+              {statusInfo.text}
+            </Badge>
+          );
+        },
+      }
+    );
+
+    return base;
+  }, [isFilteredById]);
+
+  const [visibleColumnIds, setVisibleColumnIds] = React.useState<string[]>(() =>
+    columns.filter((c) => c.defaultVisible).map((c) => c.id)
+  );
+
+  React.useEffect(() => {
+    setVisibleColumnIds((prev) => {
+      const allowed = new Set(columns.map((c) => c.id));
+      const next = prev.filter((id) => allowed.has(id));
+      if (next.length > 0) return next;
+      return columns.filter((c) => c.defaultVisible).map((c) => c.id);
+    });
+  }, [columns]);
+
+  const visibleColumns = React.useMemo(() => {
+    const set = new Set(visibleColumnIds);
+    return columns.filter((c) => set.has(c.id));
+  }, [columns, visibleColumnIds]);
+
+  const tableColumnCount = visibleColumns.length;
   
   const fetchLedger = async () => {
     setLoading(true);
@@ -200,7 +363,12 @@ export default function ComplianceLedger() {
       if (complianceId) {
         filteredData = data.filter((item: any) => item.complianceId === complianceId || item._id === complianceId);
       }
-      setLedgerItems(filteredData);
+      const sortedData = [...(Array.isArray(filteredData) ? filteredData : [])].sort((a: any, b: any) => {
+        const diff = ledgerSortMs(b) - ledgerSortMs(a);
+        if (diff !== 0) return diff;
+        return String(b?._id || b?.id || '').localeCompare(String(a?._id || a?.id || ''));
+      });
+      setLedgerItems(sortedData);
     } catch {
       setLedgerItems([]);
     }
@@ -234,13 +402,9 @@ export default function ComplianceLedger() {
   
   const derivedName = displayedLedgerItems?.[0]?.filingName || displayedLedgerItems?.[0]?.policy;
   const headerName = complianceNameParam || derivedName;
-  const headerTitle = isFilteredById && headerName ? `${headerName} History Log` : "Compliance History Log";
-
-  const truncateText = (value: string | undefined | null, maxChars: number) => {
-    const text = String(value ?? '').trim();
-    if (!text) return '';
-    return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars)).trimEnd()}...` : text;
-  };
+  const isNamedHistory = Boolean(isFilteredById && headerName);
+  const headerTitle = isNamedHistory ? `${headerName} History Log` : "Compliance History Log";
+  const displayedHeaderName = isNamedHistory ? (truncateText(String(headerName), 45) || String(headerName)) : "";
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 font-['Inter']">
@@ -254,16 +418,57 @@ export default function ComplianceLedger() {
               </div>
               <div>
                 <h1
-                  className="text-2xl font-semibold text-gray-900 tracking-tight truncate max-w-[70vw]"
+                  className="text-2xl font-semibold text-gray-900 tracking-tight max-w-[70vw] flex items-center gap-2 min-w-0"
                   title={headerTitle}
                 >
-                  {truncateText(headerTitle, 80) || headerTitle}
+                  {isNamedHistory ? (
+                    <>
+                      <span className="truncate min-w-0">{displayedHeaderName}</span>
+                      <span className="flex-shrink-0 whitespace-nowrap">History Log</span>
+                    </>
+                  ) : (
+                    <span className="truncate">{headerTitle}</span>
+                  )}
                 </h1>
                 {tokenError ? <p className="text-sm text-red-600 mt-1">{tokenError}</p> : null}
               </div>
             </div>
 
             <div className="flex items-center gap-3">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-2 bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
+                  >
+                    Modify Columns
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64 max-h-72 overflow-y-auto">
+                  {columns.map((col) => {
+                    const checked = visibleColumnIds.includes(col.id);
+                    return (
+                      <DropdownMenuItem
+                        key={col.id}
+                        className="flex items-center gap-3 cursor-pointer"
+                        onSelect={(e) => {
+                          // keep menu open while toggling
+                          e.preventDefault();
+                          setVisibleColumnIds((prev) => {
+                            const exists = prev.includes(col.id);
+                            if (!exists) return [...prev, col.id];
+                            if (prev.length <= 1) return prev;
+                            return prev.filter((id) => id !== col.id);
+                          });
+                        }}
+                      >
+                        <Checkbox checked={checked} />
+                        <span className="text-sm text-gray-900">{col.label}</span>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 onClick={handleBackToCompliance}
                 variant="outline"
@@ -281,16 +486,16 @@ export default function ComplianceLedger() {
             <Table containerClassName="flex-1 min-h-0 h-full overflow-auto" className="w-full table-fixed">
               <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                 <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
-                  {!isFilteredById && (
-                    <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">
-                      Filing Name
+                  {visibleColumns.map((col) => (
+                    <TableHead
+                      key={col.id}
+                      className={`sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide ${
+                        col.headerClassName || ""
+                      }`}
+                    >
+                      {col.label}
                     </TableHead>
-                  )}
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Category</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Start Date</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">End Date</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Submission Date</TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Status</TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -315,68 +520,18 @@ export default function ComplianceLedger() {
                     </TableRow>
                   ) : (
                     displayedLedgerItems.map((item: any, index: number) => {
-                      // Calculate dynamic status based on submission date and deadline
-                      let displayStatus = item.filingSubmissionStatus;
-                      
-                      // If there's a submission date, it's completed
-                      if (item.filingSubmissionDate) {
-                        displayStatus = "Completed";
-                      } else {
-                        // Otherwise calculate based on dates
-                        displayStatus = getComplianceStatus(item.filingEndDate, item.filingSubmissionDeadline);
-                      }
-                      
-                      const statusInfo = getStatusInfo(displayStatus);
                       return (
                         <TableRow
                           key={item._id}
                           className={`border-b border-gray-100 transition-colors ${
                             index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
-                          } hover:bg-indigo-50/40`}
+                          }`}
                         >
-                          {!isFilteredById && (
-                            <TableCell
-                              className="font-medium text-gray-900 max-w-[280px] truncate"
-                              title={String(item.filingName || '')}
-                            >
-                              {truncateText(String(item.filingName || ''), 28) || '-'}
+                          {visibleColumns.map((col) => (
+                            <TableCell key={col.id} className={col.cellClassName}>
+                              {col.renderCell(item)}
                             </TableCell>
-                          )}
-                          <TableCell className="text-left">
-                            <div className="flex items-center justify-start">
-                              <span
-                                className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border min-w-[110px] ${getCategoryPillClasses(
-                                  item.filingComplianceCategory
-                                )}`}
-                              >
-                                {item.filingComplianceCategory || "-"}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center text-gray-700">
-                              <Calendar className="w-4 h-4 mr-2 text-gray-500" />
-                              {formatDate(item.filingStartDate)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center text-gray-700">
-                              <Calendar className="w-4 h-4 mr-2 text-gray-500" />
-                              {formatDate(item.filingEndDate)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center text-gray-700">
-                              <Calendar className="w-4 h-4 mr-2 text-gray-500" />
-                              {formatDate(item.filingSubmissionDate)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={`${statusInfo.color} flex items-center gap-1`}>
-                              {statusInfo.icon}
-                              {statusInfo.text}
-                            </Badge>
-                          </TableCell>
+                          ))}
                         </TableRow>
                       );
                     })

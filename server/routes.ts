@@ -5803,6 +5803,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const paymentMethod = sub?.paymentMethod ? decrypt(sub.paymentMethod) : sub?.paymentMethod;
       const category = sub?.category ? decrypt(sub.category) : sub?.category;
       const currency = sub?.currency ? decrypt(sub.currency) : sub?.currency;
+      const notesRaw = sub?.notes;
+      const notes = (typeof notesRaw === 'string' || typeof notesRaw === 'number')
+        ? decrypt(notesRaw)
+        : notesRaw;
 
       const amountRaw = sub?.amount != null ? decrypt(sub.amount) : sub?.amount;
       const amountNumber = typeof amountRaw === "number" ? amountRaw : parseFloat(String(amountRaw ?? "0"));
@@ -5816,6 +5820,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentMethod,
         category,
         currency,
+        notes,
         amount: Number.isFinite(amountNumber) ? amountNumber : 0,
       });
     } catch {

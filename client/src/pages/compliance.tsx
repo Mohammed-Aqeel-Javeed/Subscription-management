@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -757,7 +757,19 @@ export default function Compliance() {
       : [];
 
     const docsNormalized = Array.isArray(input.submissionDocuments) ? input.submissionDocuments : [];
-    const notesNormalized = Array.isArray(input.notes) ? input.notes : [];
+    const notesNormalized = (() => {
+      const raw = (input as any)?.notes;
+      if (Array.isArray(raw)) return raw;
+      if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    })();
 
     const dyn = input.dynamicFieldValues && typeof input.dynamicFieldValues === 'object'
       ? input.dynamicFieldValues
@@ -819,6 +831,20 @@ export default function Compliance() {
         };
       })
       .filter(Boolean) as any;
+  };
+
+  const normalizeNotesInput = (input: any): any[] => {
+    if (!input) return [];
+    if (Array.isArray(input)) return input;
+    if (typeof input === 'string') {
+      try {
+        const parsed = JSON.parse(input);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
   };
 
   const lastHydratedSubmissionDocsComplianceIdRef = useRef<string>('');
@@ -996,6 +1022,20 @@ export default function Compliance() {
   const [showViewNoteDialog, setShowViewNoteDialog] = useState(false);
   const [selectedNote, setSelectedNote] = useState<{id: string, text: string, createdAt: string, createdBy: string} | null>(null);
   const [newNoteText, setNewNoteText] = useState('');
+  const [deleteNoteConfirm, setDeleteNoteConfirm] = useState<{ open: boolean; noteId: string | null }>({ open: false, noteId: null });
+
+  const displayedNotes = useMemo(() => {
+    const copy = Array.isArray(notes) ? [...notes] : [];
+    copy.sort((a, b) => {
+      const aMs = new Date(a?.createdAt || '').getTime();
+      const bMs = new Date(b?.createdAt || '').getTime();
+      const safeAMs = Number.isFinite(aMs) ? aMs : 0;
+      const safeBMs = Number.isFinite(bMs) ? bMs : 0;
+      if (safeBMs !== safeAMs) return safeBMs - safeAMs;
+      return String(b?.id || '').localeCompare(String(a?.id || ''));
+    });
+    return copy;
+  }, [notes]);
   
   // Get current user name for notes (same logic as subscription modal)
   const [currentUserName, setCurrentUserName] = useState<string>('');
@@ -2222,6 +2262,7 @@ export default function Compliance() {
       const currentItem = complianceItems[index] as ComplianceItem;
       const depts = parseDepartments(currentItem.department);
       const nextDocs = normalizeSubmissionDocumentsInput((currentItem as any)?.documents ?? (currentItem as any)?.submissionDocuments);
+      const nextNotes = normalizeNotesInput((currentItem as any)?.notes);
       setSelectedDepartments(depts);
       const nextForm = {
         filingName: currentItem.policy,
@@ -2251,13 +2292,13 @@ export default function Compliance() {
       formRef.current = nextForm;
       setForm(nextForm);
       setDynamicFieldValues({});
-      setNotes([]);
+      setNotes(nextNotes);
       setSubmissionDocuments(nextDocs);
       initialComplianceSnapshotRef.current = buildComplianceSnapshot({
         form: nextForm,
         selectedDepartments: depts,
         dynamicFieldValues: {},
-        notes: [],
+        notes: nextNotes,
         submissionDocuments: nextDocs,
       });
 
@@ -2306,6 +2347,7 @@ export default function Compliance() {
         const currentItem = complianceItems[index] as ComplianceItem;
         const depts = parseDepartments(currentItem.department);
         const nextDocs = normalizeSubmissionDocumentsInput((currentItem as any)?.documents ?? (currentItem as any)?.submissionDocuments);
+        const nextNotes = normalizeNotesInput((currentItem as any)?.notes);
         setSelectedDepartments(depts);
         const nextForm = {
           filingName: currentItem.policy,
@@ -2335,13 +2377,13 @@ export default function Compliance() {
         formRef.current = nextForm;
         setForm(nextForm);
         setDynamicFieldValues({});
-        setNotes([]);
+        setNotes(nextNotes);
         setSubmissionDocuments(nextDocs);
         initialComplianceSnapshotRef.current = buildComplianceSnapshot({
           form: nextForm,
           selectedDepartments: depts,
           dynamicFieldValues: {},
-          notes: [],
+          notes: nextNotes,
           submissionDocuments: nextDocs,
         });
         
@@ -3463,6 +3505,7 @@ export default function Compliance() {
                             const currentItem = complianceItems[index] as ComplianceItem;
                             const depts = parseDepartments(currentItem.department);
                             const nextDocs = normalizeSubmissionDocumentsInput((currentItem as any)?.documents ?? (currentItem as any)?.submissionDocuments);
+                            const nextNotes = normalizeNotesInput((currentItem as any)?.notes);
                             setSelectedDepartments(depts);
                             const nextForm = {
                               filingName: currentItem.policy,
@@ -3492,13 +3535,13 @@ export default function Compliance() {
                             formRef.current = nextForm;
                             setForm(nextForm);
                             setDynamicFieldValues({});
-                            setNotes([]);
+                            setNotes(nextNotes);
                             setSubmissionDocuments(nextDocs);
                             initialComplianceSnapshotRef.current = buildComplianceSnapshot({
                               form: nextForm,
                               selectedDepartments: depts,
                               dynamicFieldValues: {},
-                              notes: [],
+                              notes: nextNotes,
                               submissionDocuments: nextDocs,
                             });
                           }}
@@ -3562,6 +3605,7 @@ export default function Compliance() {
                               const currentItem = complianceItems[index] as ComplianceItem;
                               const depts = parseDepartments(currentItem.department);
                               const nextDocs = normalizeSubmissionDocumentsInput((currentItem as any)?.documents ?? (currentItem as any)?.submissionDocuments);
+                              const nextNotes = normalizeNotesInput((currentItem as any)?.notes);
                               setSelectedDepartments(depts);
                               const nextForm = {
                                 filingName: currentItem.policy,
@@ -3591,13 +3635,13 @@ export default function Compliance() {
                               formRef.current = nextForm;
                               setForm(nextForm);
                               setDynamicFieldValues({});
-                              setNotes([]);
+                              setNotes(nextNotes);
                               setSubmissionDocuments(nextDocs);
                               initialComplianceSnapshotRef.current = buildComplianceSnapshot({
                                 form: nextForm,
                                 selectedDepartments: depts,
                                 dynamicFieldValues: {},
-                                notes: [],
+                                notes: nextNotes,
                                 submissionDocuments: nextDocs,
                               });
                             }}
@@ -3649,6 +3693,7 @@ export default function Compliance() {
                                       const currentItem = complianceItems[index] as ComplianceItem;
                                       const depts = parseDepartments(currentItem.department);
                                       const nextDocs = normalizeSubmissionDocumentsInput((currentItem as any)?.documents ?? (currentItem as any)?.submissionDocuments);
+                                      const nextNotes = normalizeNotesInput((currentItem as any)?.notes);
                                       setSelectedDepartments(depts);
                                       const nextForm = {
                                         filingName: currentItem.policy,
@@ -3690,13 +3735,13 @@ export default function Compliance() {
                                       formRef.current = nextForm;
                                       setForm(nextForm);
                                       setDynamicFieldValues({});
-                                      setNotes([]);
+                                      setNotes(nextNotes);
                                       setSubmissionDocuments(nextDocs);
                                       initialComplianceSnapshotRef.current = buildComplianceSnapshot({
                                         form: nextForm,
                                         selectedDepartments: depts,
                                         dynamicFieldValues: {},
-                                        notes: [],
+                                        notes: nextNotes,
                                         submissionDocuments: nextDocs,
                                       });
                                     }}
@@ -4828,9 +4873,16 @@ export default function Compliance() {
                   <li>Until Renewal: Daily reminders from {form.reminderDays} days until renewal</li>
                 </ul>
               </div>
-              {/* Card-based Notes Section (like subscription modal) */}
-              {!showSubmissionDetails && (
-              <div className="col-span-full mb-6">
+
+            </div>
+            </>
+            )}
+            
+            {/* Removed duplicate Reminder and Remarks sections; these fields are now in Compliance Details */}
+
+            {/* Notes Section (hide in Submission view) */}
+            {!showSubmissionDetails && (
+              <div className="mb-6">
                 <div className="flex items-center gap-3 mb-4">
                   <h3 className="text-base font-semibold text-gray-700">Notes ({notes.length})</h3>
                   <button
@@ -4846,10 +4898,10 @@ export default function Compliance() {
                     </svg>
                   </button>
                 </div>
-                
-                {notes.length > 0 ? (
-                  <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                    {notes.map((note) => (
+
+                {displayedNotes.length > 0 ? (
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto overscroll-contain custom-scrollbar pr-1">
+                    {displayedNotes.map((note) => (
                       <div key={note.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
                         <div className="flex items-start justify-between gap-3 mb-2">
                           <button
@@ -4865,7 +4917,7 @@ export default function Compliance() {
                           <button
                             type="button"
                             onClick={() => {
-                              setNotes(notes.filter(n => n.id !== note.id));
+                              setDeleteNoteConfirm({ open: true, noteId: note.id });
                             }}
                             className="text-red-500 hover:text-red-700 text-sm font-medium flex-shrink-0"
                           >
@@ -4873,7 +4925,11 @@ export default function Compliance() {
                           </button>
                         </div>
                         <div className="text-sm text-gray-500 flex items-center gap-2">
-                          <span>{new Date(note.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '/')}</span>
+                          <span>
+                            {new Date(note.createdAt)
+                              .toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                              .replace(/\//g, '/')}
+                          </span>
                           <span>•</span>
                           <span className="uppercase">{note.createdBy}</span>
                         </div>
@@ -4884,13 +4940,7 @@ export default function Compliance() {
                   <p className="text-gray-400 text-sm italic">No notes added yet. Click + to add a note.</p>
                 )}
               </div>
-              )}
-              
-            </div>
-            </>
             )}
-            
-            {/* Removed duplicate Reminder and Remarks sections; these fields are now in Compliance Details */}
 
             {/* Always show action buttons (including in Submission view) */}
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
@@ -4981,6 +5031,7 @@ export default function Compliance() {
                     department: form.department,
                     departments: selectedDepartments,
                     complianceFieldValues: dynamicFieldValues,
+                    notes: Array.isArray(notes) ? notes : [],
                     isDraft: true // Mark as draft
                   };
 
@@ -5175,6 +5226,7 @@ export default function Compliance() {
                     department: form.department,
                     departments: selectedDepartments,
                     complianceFieldValues: dynamicFieldValues, // <--- store dynamic field values
+                    notes: Array.isArray(notes) ? notes : [],
                     isDraft: false // Explicitly mark as not draft when saving
                   };
                   // Get complianceId for ledger entry if editing
@@ -5252,7 +5304,7 @@ export default function Compliance() {
                         body: JSON.stringify(ledgerData)
                       });
                       if (!res.ok) throw new Error('Failed to save ledger data');
-                      toast({ title: 'Ledger entry created' });
+                      toast({ title: 'Ledger entry created', variant: 'success' });
                     } catch (error) {
                       toast({
                         title: 'Error',
@@ -6473,6 +6525,91 @@ export default function Compliance() {
               className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
             >
               Exit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Note Confirmation Dialog */}
+      <AlertDialog
+        open={deleteNoteConfirm.open}
+        onOpenChange={(open) => !open && setDeleteNoteConfirm({ open: false, noteId: null })}
+      >
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              Delete Note
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              Are you sure you want to delete this note?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setDeleteNoteConfirm({ open: false, noteId: null })}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const noteId = deleteNoteConfirm.noteId;
+                if (!noteId) {
+                  setDeleteNoteConfirm({ open: false, noteId: null });
+                  return;
+                }
+
+                const prevNotes = Array.isArray(notes) ? notes : [];
+                const nextNotes = prevNotes.filter((n) => n.id !== noteId);
+                setNotes(nextNotes);
+                setDeleteNoteConfirm({ open: false, noteId: null });
+
+                const complianceId =
+                  editIndex !== null
+                    ? String(
+                        (complianceItems as any)?.[editIndex]?._id ||
+                          (complianceItems as any)?.[editIndex]?.id ||
+                          ''
+                      )
+                    : '';
+
+                // If not saved yet (create mode), just delete locally.
+                if (!complianceId) return;
+
+                void (async () => {
+                  try {
+                    await editMutation.mutateAsync({
+                      _id: complianceId,
+                      data: {
+                        notes: nextNotes,
+                      },
+                    });
+
+                    // Notes are persisted immediately; update baseline snapshot without wiping other unsaved changes.
+                    const baseline = initialComplianceSnapshotRef.current;
+                    if (baseline) {
+                      try {
+                        const parsed = JSON.parse(baseline);
+                        parsed.notes = nextNotes;
+                        initialComplianceSnapshotRef.current = JSON.stringify(parsed);
+                      } catch {
+                        // ignore baseline update failures
+                      }
+                    }
+                  } catch (error: any) {
+                    setNotes(prevNotes);
+                    toast({
+                      title: 'Error',
+                      description: error?.message || 'Failed to delete note',
+                      variant: 'destructive',
+                    });
+                  }
+                })();
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -163,7 +163,9 @@ export default function ComplianceLogPage() {
     },
   });
 
-  const title = licenseId && licenseNameParam ? `${decodeURIComponent(licenseNameParam)} Log` : "Compliance Log";
+  const decodedName = licenseId && licenseNameParam ? decodeURIComponent(licenseNameParam) : undefined;
+  const title = decodedName ? `${decodedName} Log` : "Compliance Log";
+  const displayedHeaderName = decodedName ? (truncateText(decodedName, 45) || decodedName) : "";
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 font-['Inter']">
@@ -175,8 +177,15 @@ export default function ComplianceLogPage() {
                 <History className="h-7 w-7 text-indigo-600" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight truncate max-w-[70vw]" title={title}>
-                  {truncateText(title, 80) || title}
+                <h1 className="text-2xl font-semibold text-gray-900 tracking-tight max-w-[70vw] flex items-center gap-2 min-w-0" title={title}>
+                  {decodedName ? (
+                    <>
+                      <span className="truncate min-w-0">{displayedHeaderName}</span>
+                      <span className="flex-shrink-0 whitespace-nowrap">Log</span>
+                    </>
+                  ) : (
+                    <span className="truncate">{title}</span>
+                  )}
                 </h1>
                 {tokenError ? <p className="text-sm text-red-600 mt-1">{tokenError}</p> : null}
               </div>

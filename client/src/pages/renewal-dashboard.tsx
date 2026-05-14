@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useUser } from "@/context/UserContext";
 import { API_BASE_URL } from "@/lib/config";
-import { AlertTriangle, Calendar, CheckCircle2, FileText, ShieldCheck, TrendingUp, X } from "lucide-react";
+import { AlertTriangle, Calendar, FileText, ShieldCheck, TrendingUp, X } from "lucide-react";
 
 type ModalKey = "total" | "dueThisMonth" | "upcoming30d" | "overdue" | "active" | "completedThisYear";
 
@@ -140,6 +140,13 @@ export default function RenewalDashboard() {
       return Number.isFinite(dt.getTime()) ? dt : null;
     }
 
+    const dmyDash = s.match(/^\d{2}-\d{2}-\d{4}$/);
+    if (dmyDash) {
+      const [dd, mm, yyyy] = s.split("-").map((v) => Number(v));
+      const dt = new Date(yyyy, mm - 1, dd);
+      return Number.isFinite(dt.getTime()) ? dt : null;
+    }
+
     const dt = new Date(s);
     if (!Number.isFinite(dt.getTime())) return null;
     return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
@@ -168,20 +175,20 @@ export default function RenewalDashboard() {
   const getRenewalStatusPillClasses = (renewalStatus: string) => {
     switch (renewalStatus) {
       case "Approved":
-        return "bg-green-600 text-white";
+        return "bg-emerald-50 text-emerald-700 border border-emerald-200";
       case "Cancelled":
       case "Rejected":
-        return "bg-red-600 text-white";
+        return "bg-rose-50 text-rose-700 border border-rose-200";
       case "Renewal Initiated":
-        return "bg-blue-600 text-white";
+        return "bg-blue-50 text-blue-700 border border-blue-200";
       case "Application Submitted":
-        return "bg-indigo-600 text-white";
+        return "bg-indigo-50 text-indigo-700 border border-indigo-200";
       case "Amendments/ Appeal Submitted":
-        return "bg-orange-600 text-white";
+        return "bg-orange-50 text-orange-700 border border-orange-200";
       case "Resubmitted":
-        return "bg-purple-600 text-white";
+        return "bg-purple-50 text-purple-700 border border-purple-200";
       default:
-        return "bg-blue-600 text-white";
+        return "bg-gray-50 text-gray-700 border border-gray-200";
     }
   };
 
@@ -293,56 +300,55 @@ export default function RenewalDashboard() {
 
   const statusBuckets = useMemo(() => {
     const colors = {
-      Active: "hsl(var(--chart-3))",
-      "Expiring Soon": "hsl(var(--chart-4))",
-      Expired: "hsl(var(--chart-5))",
-      Pending: "hsl(var(--chart-2))",
+      Overdue: "hsl(var(--chart-5))",
+      "Upcoming (30d)": "hsl(var(--chart-4))",
+      "Due This Month": "hsl(var(--chart-2))",
+      "Active Licenses": "hsl(var(--chart-3))",
     } as const;
 
     const counts: Record<keyof typeof colors, number> = {
-      Active: 0,
-      "Expiring Soon": 0,
-      Expired: 0,
-      Pending: 0,
-    };
-
-    const isPending = (lic: License) => {
-      const derived = getDerivedStatus(lic);
-      if (derived !== "Active") return false;
-      const renewalStatus = String(lic.renewalStatus || "").trim();
-      if (!renewalStatus) return false;
-      if (renewalStatus === "Approved" || renewalStatus === "Rejected" || renewalStatus === "Cancelled") return false;
-      return true;
+      Overdue: 0,
+      "Upcoming (30d)": 0,
+      "Due This Month": 0,
+      "Active Licenses": 0,
     };
 
     for (const lic of items) {
       const derived = getDerivedStatus(lic);
 
-      // 1) Expired
+      // Overdue (matches metric card: derived === "Expired")
       if (derived === "Expired") {
-        counts.Expired += 1;
+        counts.Overdue += 1;
         continue;
       }
 
-      // 2) Pending (renewal workflow in progress)
-      if (isPending(lic)) {
-        counts.Pending += 1;
-        continue;
-      }
-
-      // 3) Expiring soon (next 30 days)
+      // Upcoming (30d) (matches metric card: isExpiringSoon)
       if (isExpiringSoon(lic)) {
-        counts["Expiring Soon"] += 1;
+        counts["Upcoming (30d)"] += 1;
         continue;
       }
 
-      // 4) Otherwise active
-      counts.Active += 1;
+      // Due This Month (matches metric card: isDueThisMonth), but kept exclusive
+      // by evaluating after Overdue/Upcoming.
+      if (isDueThisMonth(lic)) {
+        counts["Due This Month"] += 1;
+        continue;
+      }
+
+      // Remaining actives
+      if (derived === "Active") {
+        counts["Active Licenses"] += 1;
+      }
     }
 
-    const ordered: Array<keyof typeof colors> = ["Active", "Expiring Soon", "Expired", "Pending"];
+    const ordered: Array<keyof typeof colors> = [
+      "Upcoming (30d)",
+      "Due This Month",
+      "Active Licenses",
+      "Overdue",
+    ];
     return ordered.map((status) => ({ status, count: counts[status], color: colors[status] }));
-  }, [isExpiringSoon, items]);
+  }, [isDueThisMonth, isExpiringSoon, items]);
 
   const statusTotal = useMemo(() => statusBuckets.reduce((sum, b) => sum + b.count, 0), [statusBuckets]);
 
@@ -360,7 +366,7 @@ export default function RenewalDashboard() {
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
     return (
-      <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600}>
+      <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700}>
         {(percent * 100).toFixed(0)}%
       </text>
     );
@@ -386,10 +392,10 @@ export default function RenewalDashboard() {
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1 w-full">
-          <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
+          <div className="w-full px-2 sm:px-3 lg:px-4 py-4">
             {/* Greeting Card (match Dashboard header) */}
             <div
-              className="mb-6 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-8 py-6 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
+              className="mb-4 relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-2xl px-4 sm:px-6 py-5 shadow-sm border border-purple-200 overflow-hidden backdrop-blur-xl"
               style={{
                 background:
                   "linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.95) 40%, rgba(232, 224, 255, 0.95) 70%, rgba(240, 236, 255, 0.95) 100%)",
@@ -457,9 +463,9 @@ export default function RenewalDashboard() {
             </div>
 
             {isLoading ? (
-              <div className="mt-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
-                  {Array.from({ length: 6 }).map((_, i) => (
+              <div className="mt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                  {Array.from({ length: 5 }).map((_, i) => (
                     <Skeleton key={i} className="h-24" />
                   ))}
                 </div>
@@ -471,9 +477,9 @@ export default function RenewalDashboard() {
             ) : (
               <>
             {/* Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-blue-500 cursor-pointer hover:shadow-md transition-shadow"
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-blue-500 cursor-pointer hover:shadow-md transition-shadow group"
                 onClick={() => openModal("total")}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -485,11 +491,17 @@ export default function RenewalDashboard() {
                     <FileText className="h-5 w-5 text-blue-500" />
                   </div>
                 </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
+                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                  <span className="relative">
+                    Click to view details
+                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                  </span>
+                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                </div>
               </div>
 
               <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow"
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow group"
                 onClick={() => openModal("dueThisMonth")}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -501,11 +513,17 @@ export default function RenewalDashboard() {
                     <Calendar className="h-5 w-5 text-green-500" />
                   </div>
                 </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
+                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                  <span className="relative">
+                    Click to view details
+                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                  </span>
+                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                </div>
               </div>
 
               <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow"
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow group"
                 onClick={() => openModal("upcoming30d")}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -517,11 +535,17 @@ export default function RenewalDashboard() {
                     <TrendingUp className="h-5 w-5 text-purple-500" />
                   </div>
                 </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
+                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                  <span className="relative">
+                    Click to view details
+                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                  </span>
+                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                </div>
               </div>
 
               <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow"
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow group"
                 onClick={() => openModal("overdue")}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -533,11 +557,17 @@ export default function RenewalDashboard() {
                     <AlertTriangle className="h-5 w-5 text-orange-500" />
                   </div>
                 </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
+                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                  <span className="relative">
+                    Click to view details
+                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                  </span>
+                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                </div>
               </div>
 
               <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-emerald-500 cursor-pointer hover:shadow-md transition-shadow"
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-emerald-500 cursor-pointer hover:shadow-md transition-shadow group"
                 onClick={() => openModal("active")}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -549,31 +579,22 @@ export default function RenewalDashboard() {
                     <ShieldCheck className="h-5 w-5 text-emerald-600" />
                   </div>
                 </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
+                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                  <span className="relative">
+                    Click to view details
+                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                  </span>
+                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                </div>
               </div>
 
-              <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-cyan-500 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => openModal("completedThisYear")}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Completed This Year</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.completedThisYear}</p>
-                  </div>
-                  <div className="h-10 w-10 bg-cyan-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <CheckCircle2 className="h-5 w-5 text-cyan-600" />
-                  </div>
-                </div>
-                <div className="text-sm text-gray-400">Click to view details</div>
-              </div>
             </div>
 
             {/* Charts */}
             <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <div className="mb-6 flex items-center justify-between gap-4">
-                  <h3 className="text-lg font-bold text-gray-900">Renewal Status</h3>
+                  <h3 className="text-lg font-bold text-gray-900">Expiry Outlook</h3>
                 </div>
 
                 <div className="h-[320px] w-full flex flex-col sm:flex-row items-start gap-6">
@@ -582,15 +603,15 @@ export default function RenewalDashboard() {
                       <div className="h-full flex items-center justify-center text-sm text-gray-500">No status data</div>
                     ) : (
                       <ResponsiveContainer width="100%" height={240}>
-                        <PieChart>
+                        <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                           <Pie
                             data={statusDonutData}
                             dataKey="count"
                             nameKey="category"
                             cx="50%"
                             cy="50%"
-                            innerRadius={70}
-                            outerRadius={110}
+                            innerRadius="58%"
+                            outerRadius="86%"
                             paddingAngle={2}
                             labelLine={false}
                             label={renderDonutLabel}
@@ -600,7 +621,11 @@ export default function RenewalDashboard() {
                             ))}
                           </Pie>
                           <Tooltip
-                            formatter={(value: any) => [`${value}`, "Count"]}
+                            formatter={(value: any) => {
+                              const n = typeof value === "number" ? value : Number(value);
+                              const pct = statusTotal > 0 && Number.isFinite(n) ? Math.round((n / statusTotal) * 100) : 0;
+                              return [`${pct}%`, "Share"];
+                            }}
                             cursor={false}
                             contentStyle={{
                               backgroundColor: "#fff",
@@ -622,9 +647,7 @@ export default function RenewalDashboard() {
                           <div key={s.status} className="flex items-center gap-3">
                             <span className="h-3 w-3 rounded-full" style={{ backgroundColor: s.color }} />
                             <div className="text-sm text-gray-700 whitespace-nowrap">{s.status}</div>
-                            <div className="text-sm text-gray-500 tabular-nums whitespace-nowrap">
-                              {s.count.toLocaleString()} ({percent}%)
-                            </div>
+                            <div className="text-sm text-gray-500 tabular-nums whitespace-nowrap">({percent}%)</div>
                           </div>
                         );
                       })}
@@ -702,7 +725,7 @@ export default function RenewalDashboard() {
                           </TableHead>
                           <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[170px]">
                             Renewal Status
-                          </TableHead>
+                          </TableHead>]
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -742,7 +765,7 @@ export default function RenewalDashboard() {
                               <TableCell className="px-4 py-3 w-[170px]">
                                 {renewalStatus ? (
                                   <span
-                                    className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none min-w-[140px] ${getRenewalStatusPillClasses(
+                                    className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none min-w-[140px] whitespace-nowrap ${getRenewalStatusPillClasses(
                                       renewalStatus
                                     )}`}
                                     title={renewalStatus}

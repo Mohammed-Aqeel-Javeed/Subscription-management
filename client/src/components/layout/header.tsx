@@ -369,7 +369,7 @@ export default function Header() {
                     <div className="text-sm text-gray-500">No notifications</div>
                   </div>
                 ) : (
-                  <div className="max-h-80 overflow-y-auto">
+                  <div className="max-h-80 overflow-y-auto overscroll-contain custom-scrollbar">
                     {topNotifications.map((n, idx) => {
                       const isUnread = !Boolean((n as any)?.isRead ?? (n as any)?.read ?? false);
                       return (
@@ -393,22 +393,29 @@ export default function Header() {
                             </div>
 
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-semibold text-gray-900 text-sm">
-                                  {getNotificationTitle(n)}
-                                </span>
-                                <span className="text-gray-400">·</span>
-                                <span className="text-xs text-gray-500">
-                                  {getCategoryText(n)}
-                                </span>
-                                <Badge className={`text-xs font-medium px-2 py-0.5 rounded-md ${getBadgeClass(n)}`}>
-                                  {getBadgeText(n)}
-                                </Badge>
-                              </div>
-                            </div>
+                              <div className="flex items-start justify-between gap-3 min-w-0">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span
+                                      className="font-semibold text-gray-900 text-sm truncate min-w-0"
+                                      title={getNotificationTitle(n)}
+                                    >
+                                      {getNotificationTitle(n)}
+                                    </span>
+                                  </div>
+                                  <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+                                    <span className="text-gray-400">·</span>
+                                    <span className="text-xs text-gray-500">{getCategoryText(n)}</span>
+                                    <Badge className={`text-xs font-medium px-2 py-0.5 rounded-md ${getBadgeClass(n)}`}>
+                                      {getBadgeText(n)}
+                                    </Badge>
+                                  </div>
+                                </div>
 
-                            <div className="text-xs text-gray-400 flex-shrink-0">
-                              {getNotificationTimeText(n)}
+                                <div className="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
+                                  {getNotificationTimeText(n)}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </button>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "@/lib/config";
 // Type for dynamic subscription fields
@@ -774,6 +774,10 @@ function calculateEndDate(startDate: string, billingCycle: string): string {
     endDate.setDate(endDate.getDate() + (days - 1));
   } else {
     switch (cycle) {
+      case "pay-as-you-go":
+        // Pay-as-you-go: next payment follows a monthly cycle (same day next month)
+        endDate.setMonth(endDate.getMonth() + 1);
+        break;
       case "monthly":
       endDate.setMonth(endDate.getMonth() + 1);
       endDate.setDate(endDate.getDate() - 1);
@@ -1790,10 +1794,38 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   
   // Notes management state
   const [notes, setNotes] = useState<Array<{id: string, text: string, createdAt: string, createdBy: string}>>([]);
+  const notesSnapshotRef = useRef<string>('[]');
   const [showAddNoteDialog, setShowAddNoteDialog] = useState(false);
   const [showViewNoteDialog, setShowViewNoteDialog] = useState(false);
   const [selectedNote, setSelectedNote] = useState<{id: string, text: string, createdAt: string, createdBy: string} | null>(null);
   const [newNoteText, setNewNoteText] = useState('');
+  const [deleteNoteConfirm, setDeleteNoteConfirm] = useState<{ open: boolean; noteId: string | null }>({ open: false, noteId: null });
+
+  const displayedNotes = useMemo(() => {
+    const copy = Array.isArray(notes) ? [...notes] : [];
+    copy.sort((a, b) => {
+      const aMs = new Date(a?.createdAt || '').getTime();
+      const bMs = new Date(b?.createdAt || '').getTime();
+      const safeAMs = Number.isFinite(aMs) ? aMs : 0;
+      const safeBMs = Number.isFinite(bMs) ? bMs : 0;
+      if (safeBMs !== safeAMs) return safeBMs - safeAMs;
+      return String(b?.id || '').localeCompare(String(a?.id || ''));
+    });
+    return copy;
+  }, [notes]);
+
+  const stableNotesSnapshot = (input: unknown) => {
+    try {
+      return JSON.stringify(Array.isArray(input) ? input : []);
+    } catch {
+      return '[]';
+    }
+  };
+
+  const hasUnsavedChanges = () => {
+    const notesDirty = stableNotesSnapshot(notes) !== notesSnapshotRef.current;
+    return Boolean(form.formState.isDirty || notesDirty);
+  };
   
   // Predefined vendor list
   const VENDOR_LIST = [
@@ -1935,6 +1967,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setDocuments([]);
       setIsEditingWebsite(false);
       setNotes([]);
+      notesSnapshotRef.current = '[]';
       setSubscriptionCreated(false); // Reset subscription created flag
       setInitialDate(''); // Reset First Purchase Date
       savedInitialDateRef.current = ''; // Reset saved initial date ref
@@ -2004,12 +2037,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           const parsedNotes = typeof (subscription as any).notes === 'string' 
             ? JSON.parse((subscription as any).notes) 
             : (subscription as any).notes;
-          setNotes(Array.isArray(parsedNotes) ? parsedNotes : []);
+          const normalizedNotes = Array.isArray(parsedNotes) ? parsedNotes : [];
+          setNotes(normalizedNotes);
+          notesSnapshotRef.current = stableNotesSnapshot(normalizedNotes);
         } catch {
           setNotes([]);
+          notesSnapshotRef.current = '[]';
         }
       } else {
         setNotes([]);
+        notesSnapshotRef.current = '[]';
       }
       
       // Set totalAmount state for display
@@ -2146,7 +2183,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     if (startDate && frequency) {
       const calculatedEndDate = calculateEndDate(startDate, frequency);
       setEndDate(calculatedEndDate);
-      form.setValue('nextRenewal', calculatedEndDate);
+      const existing = String(form.getValues('nextRenewal') || '');
+      if (existing !== calculatedEndDate) {
+        form.setValue('nextRenewal', calculatedEndDate, { shouldDirty: false });
+      }
     }
   }, [startDate, billingCycle, form, form.watch('billingCycle'), form.watch('paymentFrequency')]);
 
@@ -2189,7 +2229,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         if (amount && currency) {
           // Trigger a recalculation by slightly changing and restoring a dependency
           const currentCurrency = form.getValues('currency');
-          form.setValue('currency', currentCurrency);
+          form.setValue('currency', currentCurrency, { shouldDirty: false });
         }
       }, 100);
     };
@@ -2205,7 +2245,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     
     // Only set qty to 1 if serviceName is not empty and qty is currently empty
     if (serviceName && serviceName.trim() !== '' && (!currentQty || currentQty === '')) {
-      form.setValue('qty', 1);
+      form.setValue('qty', 1, { shouldDirty: false });
     }
   }, [form.watch('serviceName'), form]);
 
@@ -2692,7 +2732,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
         tenantId,
         documents: documents.length > 0 ? documents : undefined, // Include documents if uploaded
-        notes: notes.length > 0 ? JSON.stringify(notes) : undefined, // Include notes as JSON string
+        // IMPORTANT: send empty string when notes are cleared so backend actually removes previous notes
+        notes: notes.length > 0 ? JSON.stringify(notes) : "", // Include notes as JSON string
       };
       if (isEditing) {
         // Update existing subscription
@@ -2779,7 +2820,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       nextRenewal: data.nextRenewal ? new Date(data.nextRenewal) : new Date(),
       tenantId,
       documents: documents.length > 0 ? documents : undefined,
-      notes: notes.length > 0 ? JSON.stringify(notes) : undefined,
+      // IMPORTANT: send empty string when notes are cleared so backend actually removes previous notes
+      notes: notes.length > 0 ? JSON.stringify(notes) : "",
     };
     
     mutation.mutate({
@@ -2909,8 +2951,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // initialDate represents when the subscription was first created, not when it was renewed
       
       // Update form values
-      form.setValue('startDate', newStartDate);
-      form.setValue('nextRenewal', newEndDate);
+      form.setValue('startDate', newStartDate, { shouldDirty: false });
+      form.setValue('nextRenewal', newEndDate, { shouldDirty: false });
       
       // Prepare payload for API - include all fields including lcyAmount and effectiveDate
       const formValues = form.getValues();
@@ -2952,6 +2994,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           ? subId
           : (subId?.toString?.() || "");
         await apiRequest("PUT", `/api/subscriptions/${validSubscriptionId}`, payload);
+
+        // Clear any dirty flags caused by the renewal date updates.
+        // Renewal is immediately persisted, so closing the modal should not prompt Confirm Exit.
+        form.reset({
+          ...form.getValues(),
+          startDate: newStartDate,
+          nextRenewal: newEndDate,
+        });
+        notesSnapshotRef.current = stableNotesSnapshot(notes);
         
         // Invalidate queries to refresh data
         queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
@@ -3524,7 +3575,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         onOpenChange={(v) => {
           if (!v) {
             // Only confirm exit when there are unsaved changes.
-            if (form.formState.isDirty) {
+            if (hasUnsavedChanges()) {
               setExitConfirmDialog({ show: true });
               return;
             }
@@ -3775,7 +3826,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 title="Close"
                 className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-3 py-2 rounded-lg transition-all duration-200 h-10 w-10 p-0 flex items-center justify-center border-indigo-200 shadow-sm"
                 onClick={() => {
-                  if (form.formState.isDirty) {
+                  if (hasUnsavedChanges()) {
                     setExitConfirmDialog({ show: true });
                     return;
                   }
@@ -4847,7 +4898,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </div>
               </div>
               
-              {/* Notes Section with Card-based UI */}
+              {/* Notes Section */}
               <div className="mb-6">
                 <div className="flex items-center gap-3 mb-4">
                   <h3 className="text-base font-semibold text-gray-700">Notes ({notes.length})</h3>
@@ -4866,8 +4917,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 </div>
                 
                 {notes.length > 0 ? (
-                  <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                    {notes.map((note) => (
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto overscroll-contain custom-scrollbar pr-1">
+                    {displayedNotes.map((note) => (
                       <div key={note.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
                         <div className="flex items-start justify-between gap-3 mb-2">
                           <button
@@ -4883,7 +4934,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           <button
                             type="button"
                             onClick={() => {
-                              setNotes(notes.filter(n => n.id !== note.id));
+                              setDeleteNoteConfirm({ open: true, noteId: note.id });
                             }}
                             className="text-red-500 hover:text-red-700 text-sm font-medium flex-shrink-0"
                           >
@@ -4891,7 +4942,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           </button>
                         </div>
                         <div className="text-sm text-gray-500 flex items-center gap-2">
-                          <span>{new Date(note.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '/')}</span>
+                          <span>
+                            {new Date(note.createdAt)
+                              .toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                              .replace(/\//g, '/')}
+                          </span>
                           <span>•</span>
                           <span>{note.createdBy}</span>
                         </div>
@@ -4922,7 +4977,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   variant="outline" 
                   className="border-gray-300 text-gray-700 hover:bg-gray-100 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md"
                   onClick={() => {
-                    if (form.formState.isDirty) {
+                    if (hasUnsavedChanges()) {
                       setExitConfirmDialog({ show: true });
                       return;
                     }
@@ -5019,6 +5074,74 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
             >
               Exit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Note Confirmation Dialog */}
+      <AlertDialog
+        open={deleteNoteConfirm.open}
+        onOpenChange={(open) => !open && setDeleteNoteConfirm({ open: false, noteId: null })}
+      >
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              Delete Note
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              Are you sure you want to delete this note?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setDeleteNoteConfirm({ open: false, noteId: null })}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const noteId = deleteNoteConfirm.noteId;
+                if (noteId) {
+                  const nextNotes = notes.filter((n) => n.id !== noteId);
+                  setNotes(nextNotes);
+                  notesSnapshotRef.current = stableNotesSnapshot(nextNotes);
+
+                  // Persist immediately for existing subscriptions so deletion sticks on reopen
+                  if (isEditing) {
+                    const validId = getValidObjectId(subscription?.id || (subscription as any)?._id);
+                    if (validId) {
+                      // Update list cache for immediate UI consistency
+                      queryClient.setQueryData(["/api/subscriptions"], (oldData: any) => {
+                        if (!Array.isArray(oldData)) return oldData;
+                        return oldData.map((sub: any) =>
+                          String(sub?.id || sub?._id || '') === String(validId)
+                            ? { ...sub, notes: nextNotes.length > 0 ? JSON.stringify(nextNotes) : "" }
+                            : sub
+                        );
+                      });
+
+                      apiRequest("PUT", `/api/subscriptions/${validId}`, {
+                        notes: nextNotes.length > 0 ? JSON.stringify(nextNotes) : "",
+                      } as any).catch((e: any) => {
+                        // Revert to server truth if persistence fails
+                        queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"], exact: false });
+                        toast({
+                          title: 'Error',
+                          description: e?.message || 'Failed to delete note',
+                          variant: 'destructive',
+                        });
+                      });
+                    }
+                  }
+                }
+                setDeleteNoteConfirm({ open: false, noteId: null });
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

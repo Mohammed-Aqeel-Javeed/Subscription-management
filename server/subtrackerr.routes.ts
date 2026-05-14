@@ -1580,6 +1580,10 @@ if (!tenantId) {
       const vendor = sub.vendor ? decrypt(sub.vendor) : sub.vendor;
       const paymentMethod = sub.paymentMethod ? decrypt(sub.paymentMethod) : sub.paymentMethod;
       const category = sub.category ? decrypt(sub.category) : sub.category;
+      const notesRaw = (sub as any)?.notes;
+      const notes = (typeof notesRaw === 'string' || typeof notesRaw === 'number')
+        ? decrypt(notesRaw)
+        : notesRaw;
 
       // LCY Amount must be based on Total Amount Incl. Tax
       const currency = sub.currency ? decrypt(sub.currency) : sub.currency;
@@ -1614,8 +1618,9 @@ if (!tenantId) {
         vendor,
         paymentMethod,
         category,
+        notes,
         lcyAmount,
-        // Don't decrypt description, notes unless needed
+        // Notes are needed for notes preview + modal.
         id: sub._id?.toString(),
         _id: sub._id?.toString()
       };
@@ -3214,7 +3219,16 @@ const update = {
 
       res.status(200).json({ 
         message: "Subscription updated",
-        subscription: updatedDoc
+        subscription: (() => {
+          const normalizedId = updatedDoc?._id?.toString?.() ?? String(id);
+          const decrypted = decryptSubscriptionData(updatedDoc);
+          return {
+            ...updatedDoc,
+            ...decrypted,
+            id: normalizedId,
+            _id: normalizedId,
+          };
+        })()
       });
 
       // Run reminders + notifications in background so the update API stays fast.
@@ -4895,7 +4909,69 @@ router.get("/api/logs", async (req, res) => {
       .limit(100)
       .toArray();
 
-    res.status(200).json(logs);
+    const normalizeEmail = (v: any) => String(v || '').trim().toLowerCase();
+    const candidateEmails = Array.from(
+      new Set(
+        (logs || [])
+          .map((l: any) => normalizeEmail(l?.user))
+          .filter((e: string) => Boolean(e) && e.includes('@'))
+      )
+    );
+
+    let logsWithDisplayNames: any[] = logs;
+    if (candidateEmails.length > 0) {
+      const emailToName = new Map<string, string>();
+
+      try {
+        const users = await db
+          .collection('users')
+          .find({ tenantId, email: { $in: candidateEmails } }, { projection: { email: 1, name: 1, fullName: 1 } })
+          .toArray();
+        for (const u of users) {
+          const email = normalizeEmail((u as any)?.email);
+          const name = String((u as any)?.name || (u as any)?.fullName || '').trim();
+          if (email && name && !emailToName.has(email)) emailToName.set(email, name);
+        }
+      } catch {
+        // ignore
+      }
+
+      try {
+        const loginUsers = await db
+          .collection('login')
+          .find({ tenantId, email: { $in: candidateEmails } }, { projection: { email: 1, name: 1, fullName: 1 } })
+          .toArray();
+        for (const u of loginUsers) {
+          const email = normalizeEmail((u as any)?.email);
+          const name = String((u as any)?.name || (u as any)?.fullName || '').trim();
+          if (email && name && !emailToName.has(email)) emailToName.set(email, name);
+        }
+      } catch {
+        // ignore
+      }
+
+      try {
+        const employees = await db
+          .collection('employees')
+          .find({ tenantId, email: { $in: candidateEmails } }, { projection: { email: 1, name: 1, fullName: 1 } })
+          .toArray();
+        for (const u of employees) {
+          const email = normalizeEmail((u as any)?.email);
+          const name = String((u as any)?.name || (u as any)?.fullName || '').trim();
+          if (email && name && !emailToName.has(email)) emailToName.set(email, name);
+        }
+      } catch {
+        // ignore
+      }
+
+      logsWithDisplayNames = (logs || []).map((l: any) => {
+        const email = normalizeEmail(l?.user);
+        const displayName = email ? emailToName.get(email) : undefined;
+        return displayName ? { ...l, userDisplayName: displayName } : l;
+      });
+    }
+
+    res.status(200).json(logsWithDisplayNames);
   } catch (error: unknown) {
     console.error("Error fetching logs:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -4915,7 +4991,7 @@ router.post("/api/logs", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
 
-    const { licenseId, licenseName, action, changes } = req.body;
+    const { licenseId, licenseName, action, changes, renewalInitiatedDate, renewalStatus, submittedBy, amount, approvedIssueDate } = req.body;
 
     const logEntry = {
       tenantId,
@@ -4924,6 +5000,11 @@ router.post("/api/logs", async (req, res) => {
       user,
       action, // 'create', 'update', 'delete'
       changes,
+      ...(renewalInitiatedDate !== undefined ? { renewalInitiatedDate } : {}),
+      ...(renewalStatus !== undefined ? { renewalStatus } : {}),
+      ...(submittedBy !== undefined ? { submittedBy } : {}),
+      ...(amount !== undefined ? { amount } : {}),
+      ...(approvedIssueDate !== undefined ? { approvedIssueDate } : {}),
       timestamp: new Date(),
     };
 
