@@ -356,6 +356,784 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const normalizeInternalNext = (raw: unknown): string => {
+    const v = String(raw ?? "").trim();
+    if (!v) return "";
+    if (!v.startsWith("/")) return "";
+    if (v.startsWith("//") || v.includes("://")) return "";
+    return v;
+  };
+
+  const joinUrl = (base: string, path: string): string => {
+    const b = String(base || "").trim().replace(/\/+$/, "");
+    const p = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
+    if (!b) return p;
+    return `${b}${p}`;
+  };
+
+  const inferExternalBaseUrl = (req: any): string => {
+    const explicit = String(process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+    if (explicit) return explicit;
+
+    const render = String(process.env.RENDER_EXTERNAL_URL || "").trim().replace(/\/+$/, "");
+    if (render) return render;
+
+    const xfProto = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
+    const proto = xfProto || String(req?.protocol || "http");
+    let host = String(req?.headers?.host || req?.get?.("host") || "").trim();
+
+    // In local dev, Vite proxy commonly forwards as 127.0.0.1; Google Console entries
+    // are usually set up with localhost, so normalize to reduce mismatch.
+    host = host.replace(/^127\.0\.0\.1(?=:\d+$)/, "localhost");
+    host = host.replace(/^0\.0\.0\.0(?=:\d+$)/, "localhost");
+
+    return host ? `${proto}://${host}` : "";
+  };
+
+  const inferFrontendBaseUrl = (): string => {
+    // When frontend is served by backend, leave empty so redirects are relative.
+    return String(process.env.FRONTEND_URL || "").trim().replace(/\/+$/, "");
+  };
+
+  const redirectToFrontendPath = (res: any, path: string) => {
+    const safePath = normalizeInternalNext(path) || "/";
+    const frontendBase = inferFrontendBaseUrl();
+    return res.redirect(frontendBase ? joinUrl(frontendBase, safePath) : safePath);
+  };
+
+  app.get("/api/auth/google/start", async (req, res) => {
+    try {
+      const clientId = String(process.env.GOOGLE_CLIENT_ID || "").trim();
+      if (!clientId) {
+        return res.status(501).json({ message: "Google auth is not configured" });
+      }
+
+      const externalBase = inferExternalBaseUrl(req);
+      if (!externalBase) {
+        return res.status(500).json({ message: "Unable to determine server URL" });
+      }
+
+      const redirectUri = joinUrl(externalBase, "/api/auth/google/callback");
+      const state = crypto.randomBytes(16).toString("hex");
+
+      const next = normalizeInternalNext((req as any)?.query?.next);
+      const isProd = process.env.NODE_ENV === "production";
+
+      console.log("[Google OAuth] start", {
+        externalBase,
+        redirectUri,
+        next: next || "",
+      });
+
+      res.cookie("google_oauth_state", state, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: "lax" as any,
+        path: "/",
+        maxAge: 10 * 60 * 1000,
+      });
+      res.cookie("google_oauth_next", next, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: "lax" as any,
+        path: "/",
+        maxAge: 10 * 60 * 1000,
+      });
+
+      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", "openid email profile");
+      authUrl.searchParams.set("state", state);
+      authUrl.searchParams.set("prompt", "select_account");
+
+      return res.redirect(authUrl.toString());
+    } catch (e) {
+      console.error("[Google OAuth] start error:", e);
+      return res.status(500).json({ message: "Failed to start Google auth" });
+    }
+  });
+
+  app.get("/api/auth/google/callback", async (req, res) => {
+    const isProd = process.env.NODE_ENV === "production";
+
+    const clearOauthCookies = () => {
+      res.cookie("google_oauth_state", "", {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: "lax" as any,
+        path: "/",
+        expires: new Date(0),
+      });
+      res.cookie("google_oauth_next", "", {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: "lax" as any,
+        path: "/",
+        expires: new Date(0),
+      });
+    };
+
+    try {
+      const code = String((req as any)?.query?.code || "").trim();
+      const state = String((req as any)?.query?.state || "").trim();
+      const expectedState = String((req as any)?.cookies?.google_oauth_state || "").trim();
+      const nextFromCookie = normalizeInternalNext((req as any)?.cookies?.google_oauth_next);
+
+      if (!code || !state || !expectedState || state !== expectedState) {
+        clearOauthCookies();
+        return redirectToFrontendPath(res, "/auth?error=google_state");
+      }
+
+      const clientId = String(process.env.GOOGLE_CLIENT_ID || "").trim();
+      const clientSecret = String(process.env.GOOGLE_CLIENT_SECRET || "").trim();
+      if (!clientId || !clientSecret) {
+        clearOauthCookies();
+        return redirectToFrontendPath(res, "/auth?error=google_not_configured");
+      }
+
+      const externalBase = inferExternalBaseUrl(req);
+      const redirectUri = joinUrl(externalBase, "/api/auth/google/callback");
+
+      console.log("[Google OAuth] callback exchanging code", {
+        externalBase,
+        redirectUri,
+        hasNext: Boolean(nextFromCookie),
+      });
+
+      // Exchange code for tokens
+      const tokenBody = new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      });
+
+      const tokenRes = await axios.post(
+        "https://oauth2.googleapis.com/token",
+        tokenBody.toString(),
+        { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 15_000 }
+      );
+
+      const idToken = String(tokenRes?.data?.id_token || "").trim();
+      const accessToken = String(tokenRes?.data?.access_token || "").trim();
+      if (!idToken) {
+        clearOauthCookies();
+        return redirectToFrontendPath(res, "/auth?error=google_no_id_token");
+      }
+
+      // Verify token via Google tokeninfo endpoint
+      const tokenInfoRes = await axios.get("https://oauth2.googleapis.com/tokeninfo", {
+        params: { id_token: idToken },
+        timeout: 15_000,
+      });
+
+      const tokenInfo = tokenInfoRes?.data || {};
+      const aud = String(tokenInfo?.aud || "").trim();
+      const email = String(tokenInfo?.email || "").trim().toLowerCase();
+      const emailVerified = String(tokenInfo?.email_verified || "").trim().toLowerCase();
+      const googleSub = String(tokenInfo?.sub || "").trim();
+
+      if (!email || aud !== clientId) {
+        clearOauthCookies();
+        return redirectToFrontendPath(res, "/auth?error=google_token_invalid");
+      }
+
+      if (emailVerified && emailVerified !== "true") {
+        clearOauthCookies();
+        return redirectToFrontendPath(res, "/auth?error=google_email_not_verified");
+      }
+
+      // Optional: fetch profile name/picture for audit/debug
+      let profileName = "";
+      let profilePicture = "";
+      try {
+        if (accessToken) {
+          const userInfoRes = await axios.get("https://openidconnect.googleapis.com/v1/userinfo", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            timeout: 15_000,
+          });
+          profileName = String(userInfoRes?.data?.name || "").trim();
+          profilePicture = String(userInfoRes?.data?.picture || "").trim();
+        }
+      } catch {
+        // ignore profile failures
+      }
+
+      const normalizeEmail = (raw: unknown) => String(raw ?? "").trim().toLowerCase();
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const emailKey = normalizeEmail(email);
+      const emailRegex = new RegExp(`^${escapeRegExp(emailKey)}$`, "i");
+
+      const db = await connectToDatabase();
+      const platformSettings = await getPlatformSettingsCached(db);
+      const securitySettings = platformSettings.security;
+
+      // Prefer platform-level global_admin record if present
+      let user: any = await db.collection("login").findOne({ email: { $regex: emailRegex }, role: "global_admin" });
+      if (!user) {
+        user =
+          (await db.collection("login").findOne({ email: { $regex: emailRegex }, isDefaultCompany: true })) ||
+          (await db.collection("login").findOne({ email: { $regex: emailRegex } }));
+      }
+      let isNewUserSystem = false;
+      if (!user) {
+        user = await db.collection("users").findOne({ email: { $regex: emailRegex } });
+        isNewUserSystem = !!user;
+      }
+
+      if (!user) {
+        clearOauthCookies();
+
+        console.log("[Google OAuth] New user detected; starting onboarding", {
+          email: emailKey,
+          googleSub,
+          hasProfileName: Boolean(profileName),
+          next: nextFromCookie || "",
+        });
+
+        const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+        const onboardingToken = jwt.sign(
+          {
+            typ: "google_onboarding",
+            email: emailKey,
+            name: profileName || "",
+            picture: profilePicture || "",
+            googleSub,
+            next: nextFromCookie || "",
+          },
+          jwtSecret,
+          { expiresIn: "15m" }
+        );
+
+        res.cookie("google_onboarding", onboardingToken, {
+          httpOnly: true,
+          secure: isProd,
+          sameSite: (isProd ? "none" : "lax") as any,
+          path: "/",
+          maxAge: 15 * 60 * 1000,
+        });
+
+        console.log("[Google OAuth] Onboarding cookie set; redirecting to frontend", {
+          redirect: "/auth?google=onboarding",
+        });
+
+        await writeAuditEvent(db, {
+          tenantId: null,
+          action: "GOOGLE_ONBOARDING_STARTED",
+          description: "Google signup started (new user)",
+          email: emailKey,
+          severity: "info",
+          meta: {
+            auth: "google",
+            googleSub,
+            name: profileName || undefined,
+          },
+        });
+
+        return redirectToFrontendPath(res, "/auth?google=onboarding");
+      }
+
+      // Block access for suspended/disabled accounts (except global_admin)
+      if (String((user as any)?.role || "").toLowerCase() !== "global_admin") {
+        const status = String((user as any)?.status || "").trim().toLowerCase();
+        if (status && status !== "active") {
+          clearOauthCookies();
+          return redirectToFrontendPath(res, "/auth?error=account_inactive");
+        }
+      }
+
+      // For department_editor and department_viewer, find department from employees
+      let userDepartment = (user as any)?.department || null;
+      if (((user as any)?.role === "department_editor" || (user as any)?.role === "department_viewer") && (user as any)?.tenantId) {
+        const employee = await db.collection("employees").findOne({
+          tenantId: (user as any)?.tenantId,
+          email: (user as any)?.email,
+        });
+        if (employee && (employee as any)?.department) {
+          userDepartment = (employee as any).department;
+        }
+      }
+
+      const role = String((user as any)?.role || "viewer");
+      if (role !== "global_admin" && !(user as any)?.tenantId) {
+        clearOauthCookies();
+        return redirectToFrontendPath(res, "/auth?error=no_company");
+      }
+
+      const rawForwardedFor = String((req as any).headers?.["x-forwarded-for"] || "");
+      const clientIp = (rawForwardedFor.split(",")[0] || (req as any).ip || "").trim();
+      const userAgent = String((req as any).headers?.["user-agent"] || "");
+
+      const tokenPayload: any = {
+        userId: (user as any)?._id?.toString?.() || String((user as any)?._id),
+        email: emailKey,
+        tenantId: role === "global_admin" ? null : ((user as any)?.tenantId || null),
+        actingTenantId: role === "global_admin" ? null : undefined,
+        role,
+        department: userDepartment,
+      };
+      tokenPayload.jti = crypto.randomUUID();
+
+      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const token = securitySettings.jwtExpiryEnabled
+        ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${securitySettings.jwtExpiryMinutes}m` })
+        : jwt.sign(tokenPayload, jwtSecret);
+
+      const sessionDoc: any = {
+        _id: tokenPayload.jti,
+        userId: tokenPayload.userId,
+        email: emailKey,
+        tenantId: tokenPayload.tenantId ?? null,
+        actingTenantId: tokenPayload.actingTenantId ?? null,
+        role,
+        department: userDepartment ?? null,
+        createdAt: new Date(),
+        lastSeenAt: new Date(),
+        revokedAt: null,
+      };
+
+      let refreshTokenValue: string | null = null;
+      if (securitySettings.refreshTokensEnabled) {
+        const refreshSecret = crypto.randomBytes(32).toString("hex");
+        sessionDoc.refreshTokenHash = sha256Hex(refreshSecret);
+        sessionDoc.refreshIssuedAt = new Date();
+        refreshTokenValue = `${tokenPayload.jti}.${refreshSecret}`;
+      }
+
+      if (securitySettings.ipTrackingEnabled) {
+        sessionDoc.ip = clientIp;
+        sessionDoc.userAgent = userAgent;
+      }
+      await db.collection("auth_sessions").insertOne(sessionDoc);
+
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: (isProd ? "none" : "lax") as any,
+        path: "/",
+      });
+
+      if (refreshTokenValue) {
+        res.cookie("refresh_token", refreshTokenValue, {
+          httpOnly: true,
+          secure: isProd,
+          sameSite: (isProd ? "none" : "lax") as any,
+          path: "/",
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+        });
+      } else {
+        res.cookie("refresh_token", "", {
+          httpOnly: true,
+          secure: isProd,
+          sameSite: (isProd ? "none" : "lax") as any,
+          path: "/",
+          expires: new Date(0),
+        });
+      }
+
+      // Keep legacy login collection in sync when authenticating from the RBAC users collection.
+      if (isNewUserSystem) {
+        await db.collection("login").updateOne({ email: { $regex: emailRegex } }, { $set: { lastLogin: new Date() } });
+      } else {
+        await db.collection("login").updateOne({ _id: (user as any)?._id }, { $set: { lastLogin: new Date() } });
+      }
+
+      await writeAuditEvent(db, {
+        tenantId: (tokenPayload.tenantId ?? null) as any,
+        action: "LOGIN_SUCCESS",
+        description: "User logged in (Google)",
+        email: emailKey,
+        severity: "info",
+        meta: {
+          role,
+          auth: "google",
+          googleSub,
+          name: profileName || undefined,
+          picture: profilePicture || undefined,
+          ip: securitySettings.ipTrackingEnabled ? clientIp : undefined,
+          userAgent: securitySettings.ipTrackingEnabled ? userAgent : undefined,
+        },
+      });
+
+      clearOauthCookies();
+
+      const target = role === "global_admin" ? "/platform-admin" : (nextFromCookie || "/dashboard");
+      console.log("[Google OAuth] Existing user authenticated; redirecting to frontend", { email: emailKey, role, target });
+      return redirectToFrontendPath(res, target);
+    } catch (e) {
+      console.error("[Google OAuth] callback error:", e);
+      clearOauthCookies();
+      return redirectToFrontendPath(res, "/auth?error=google_callback");
+    }
+  });
+
+  app.get("/api/auth/google/pending", async (req, res) => {
+    const isProd = process.env.NODE_ENV === "production";
+    try {
+      const token = String((req as any)?.cookies?.google_onboarding || "").trim();
+      if (!token) {
+        return res.status(404).json({ message: "No pending Google signup" });
+      }
+
+      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const decoded = jwt.verify(token, jwtSecret);
+      if (typeof decoded !== "object" || !decoded) {
+        return res.status(404).json({ message: "No pending Google signup" });
+      }
+      const d: any = decoded;
+      if (String(d?.typ || "") !== "google_onboarding" || !String(d?.email || "").trim()) {
+        return res.status(404).json({ message: "No pending Google signup" });
+      }
+
+      const db = await connectToDatabase();
+      const platformSettings = await getPlatformSettingsCached(db);
+
+      return res.status(200).json({
+        email: String(d.email || "").trim().toLowerCase(),
+        fullName: String(d.name || "").trim(),
+        picture: String(d.picture || "").trim(),
+        defaultCurrency: String(platformSettings?.billing?.defaultCurrency || "USD"),
+        next: String(d.next || ""),
+        prod: isProd,
+      });
+    } catch {
+      return res.status(404).json({ message: "No pending Google signup" });
+    }
+  });
+
+  app.post("/api/auth/google/complete", async (req, res) => {
+    const isProd = process.env.NODE_ENV === "production";
+
+    const clearOnboardingCookie = () => {
+      res.cookie("google_onboarding", "", {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: (isProd ? "none" : "lax") as any,
+        path: "/",
+        expires: new Date(0),
+      });
+    };
+
+    try {
+      const onboardingToken = String((req as any)?.cookies?.google_onboarding || "").trim();
+      if (!onboardingToken) {
+        return res.status(400).json({ message: "Google signup session expired. Please try again." });
+      }
+
+      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const decoded = jwt.verify(onboardingToken, jwtSecret);
+      if (typeof decoded !== "object" || !decoded) {
+        clearOnboardingCookie();
+        return res.status(400).json({ message: "Google signup session expired. Please try again." });
+      }
+
+      const d: any = decoded;
+      if (String(d?.typ || "") !== "google_onboarding") {
+        clearOnboardingCookie();
+        return res.status(400).json({ message: "Google signup session expired. Please try again." });
+      }
+
+      const emailKey = String(d?.email || "").trim().toLowerCase();
+      const fullName = String(d?.name || "").trim() || "Google User";
+      const googleSub = String(d?.googleSub || "").trim();
+      const nextFromToken = String(d?.next || "").trim();
+
+      const companyNameRaw = String((req as any)?.body?.companyName || "").trim();
+      const defaultCurrencyRaw = String((req as any)?.body?.defaultCurrency || "").trim().toUpperCase();
+      const passwordRaw = String((req as any)?.body?.password || "");
+      const confirmPasswordRaw = String((req as any)?.body?.confirmPassword || "");
+
+      if (!emailKey) {
+        clearOnboardingCookie();
+        return res.status(400).json({ message: "Google signup session expired. Please try again." });
+      }
+      if (!companyNameRaw) {
+        return res.status(400).json({ message: "Company Name is required" });
+      }
+      if (!defaultCurrencyRaw) {
+        return res.status(400).json({ message: "LCY is required" });
+      }
+      if (!passwordRaw) {
+        return res.status(400).json({ message: "Password is required" });
+      }
+      if (!confirmPasswordRaw) {
+        return res.status(400).json({ message: "Confirm Password is required" });
+      }
+      if (passwordRaw !== confirmPasswordRaw) {
+        return res.status(400).json({ message: "Passwords do not match" });
+      }
+
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const emailRegex = new RegExp(`^${escapeRegExp(emailKey)}$`, "i");
+
+      const db = await connectToDatabase();
+      const platformSettings = await getPlatformSettingsCached(db);
+      const securitySettings = platformSettings.security;
+
+      if (securitySettings.forceStrongPasswords) {
+        // Keep policy aligned with /api/signup
+        const password = String(passwordRaw || "");
+        if (password.length < 8) {
+          return res.status(400).json({ message: "Password must be at least 8 characters long" });
+        }
+        if (!/[A-Z]/.test(password)) {
+          return res.status(400).json({ message: "Password must contain at least one uppercase letter" });
+        }
+        if (!/[a-z]/.test(password)) {
+          return res.status(400).json({ message: "Password must contain at least one lowercase letter" });
+        }
+        if (!/[0-9]/.test(password)) {
+          return res.status(400).json({ message: "Password must contain at least one number" });
+        }
+        if (!/[!@#$%^&*(),.?\":{}|<>]/.test(password)) {
+          return res.status(400).json({ message: "Password must contain at least one special character" });
+        }
+      }
+
+      // If user was created in the meantime, just log them in.
+      const existing = await db.collection("login").findOne({ email: { $regex: emailRegex } });
+      if (existing) {
+        clearOnboardingCookie();
+        return res.status(409).json({ message: "Account already exists for this email. Please login with Google again." });
+      }
+
+      const existingLoginCount = await db.collection("login").estimatedDocumentCount();
+      const bootstrapPlatformOwner = existingLoginCount === 0;
+      const platformOwner = bootstrapPlatformOwner || isPlatformOwner(emailKey);
+
+      let tenantId: string | null = null;
+      if (!platformOwner) {
+        if (platformSettings.tenantOnboarding.autoCreateCompanyOnSignup) {
+          tenantId = `tenant-${new ObjectId().toHexString()}`;
+        } else {
+          return res.status(400).json({ message: "Company onboarding is disabled. Contact support." });
+        }
+      }
+
+      // Enforce unique company names (case-insensitive) for tenant signups.
+      if (!platformOwner) {
+        const normalizeCompanyKey = (value: unknown) =>
+          String(value ?? "")
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "");
+
+        const desiredKey = normalizeCompanyKey(companyNameRaw);
+        if (desiredKey) {
+          const [loginNames, companyInfoNames] = await Promise.all([
+            db.collection("login").distinct("companyName", {
+              tenantId: { $ne: null },
+              role: { $ne: "global_admin" },
+              companyName: { $exists: true, $ne: null },
+            }),
+            db.collection("companyInfo").distinct("companyName", { companyName: { $exists: true, $ne: null } }),
+          ]);
+
+          const existingKeys = new Set(
+            [...loginNames, ...companyInfoNames].map(normalizeCompanyKey).filter(Boolean)
+          );
+
+          if (existingKeys.has(desiredKey)) {
+            return res.status(409).json({ message: "Company name already exists. Please use a unique company name." });
+          }
+        }
+      }
+
+      const now = new Date();
+      const trialDays = Math.max(Number(platformSettings.billing.trialDays || 0), 0);
+      const initialPlan: string = trialDays > 0 ? "trial" : platformSettings.tenantOnboarding.defaultPlan;
+      const trialStartedAt: Date | null = trialDays > 0 ? now : null;
+      const trialEndsAt: Date | null = trialDays > 0 ? new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000) : null;
+
+      let initialRole: string = platformOwner ? "global_admin" : "super_admin";
+      if (!platformOwner && tenantId) {
+        const existingSuperAdmins = await db
+          .collection("login")
+          .countDocuments({ role: "super_admin", tenantId: String(tenantId) });
+        if (existingSuperAdmins > 0) {
+          initialRole = "viewer";
+        }
+      }
+
+      const hashedPassword = await bcrypt.hash(String(passwordRaw), 10);
+
+      const doc: any = {
+        fullName,
+        email: emailKey,
+        password: hashedPassword,
+        tenantId: platformOwner ? null : String(tenantId),
+        companyName: platformOwner ? (companyNameRaw || "Platform") : companyNameRaw,
+        defaultCurrency: defaultCurrencyRaw || platformSettings.billing.defaultCurrency || null,
+        role: initialRole,
+        status: "active",
+        createdAt: now,
+        plan: initialPlan,
+        trialStartedAt,
+        trialEndsAt,
+        planActivatedAt: null,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        authProvider: "google",
+        googleSub: googleSub || null,
+        emailVerified: true,
+        onboardingCompletedAt: now,
+      };
+
+      const signupInsert = await db.collection("signup").insertOne(doc);
+      // Ensure we have a stable user id for sessions.
+      if (!(doc as any)?._id) {
+        (doc as any)._id = signupInsert.insertedId;
+      }
+      await db.collection("login").insertOne(doc);
+
+      // Ensure tenant default currency exists (best-effort)
+      if (!platformOwner) {
+        const tenantKey = String(tenantId || "").trim();
+        const currencyCode = String(doc.defaultCurrency || "").trim().toUpperCase();
+        if (tenantKey && currencyCode) {
+          try {
+            const resolveCurrencySymbol = (code: string): string => {
+              try {
+                const parts = new Intl.NumberFormat("en", {
+                  style: "currency",
+                  currency: code,
+                  currencyDisplay: "symbol",
+                }).formatToParts(1);
+                const sym = parts.find((p) => p.type === "currency")?.value;
+                return String(sym || "").trim() || code;
+              } catch {
+                return code;
+              }
+            };
+
+            const resolveCurrencyName = (code: string): string => {
+              try {
+                const AnyIntl: any = Intl as any;
+                if (typeof AnyIntl.DisplayNames !== "function") return code;
+                const dn = new AnyIntl.DisplayNames(["en"], { type: "currency" });
+                const name = dn.of(code);
+                return String(name || "").trim() || code;
+              } catch {
+                return code;
+              }
+            };
+
+            const currencies = db.collection("currencies");
+            await currencies.updateOne(
+              { tenantId: tenantKey, code: currencyCode },
+              {
+                $setOnInsert: {
+                  tenantId: tenantKey,
+                  code: currencyCode,
+                  name: resolveCurrencyName(currencyCode),
+                  symbol: resolveCurrencySymbol(currencyCode),
+                  isoNumber: "",
+                  exchangeRate: 1,
+                  visible: true,
+                  created: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }),
+                  createdAt: new Date(),
+                },
+              },
+              { upsert: true }
+            );
+          } catch (e) {
+            console.warn("[Google Signup] Failed to upsert default currency:", e);
+          }
+        }
+      }
+
+      // Issue auth session + cookies
+      const role = String(doc.role || "viewer");
+      const tokenPayload: any = {
+        userId: (doc as any)?._id?.toString?.() || String((doc as any)?._id || ""),
+        email: emailKey,
+        tenantId: role === "global_admin" ? null : (doc.tenantId || null),
+        actingTenantId: role === "global_admin" ? null : undefined,
+        role,
+        department: null,
+      };
+      tokenPayload.jti = crypto.randomUUID();
+
+      const token = securitySettings.jwtExpiryEnabled
+        ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${securitySettings.jwtExpiryMinutes}m` })
+        : jwt.sign(tokenPayload, jwtSecret);
+
+      const sessionDoc: any = {
+        _id: tokenPayload.jti,
+        userId: tokenPayload.userId,
+        email: emailKey,
+        tenantId: tokenPayload.tenantId ?? null,
+        actingTenantId: tokenPayload.actingTenantId ?? null,
+        role,
+        department: null,
+        createdAt: new Date(),
+        lastSeenAt: new Date(),
+        revokedAt: null,
+      };
+
+      let refreshTokenValue: string | null = null;
+      if (securitySettings.refreshTokensEnabled) {
+        const refreshSecret = crypto.randomBytes(32).toString("hex");
+        sessionDoc.refreshTokenHash = sha256Hex(refreshSecret);
+        sessionDoc.refreshIssuedAt = new Date();
+        refreshTokenValue = `${tokenPayload.jti}.${refreshSecret}`;
+      }
+
+      await db.collection("auth_sessions").insertOne(sessionDoc);
+
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: (isProd ? "none" : "lax") as any,
+        path: "/",
+      });
+
+      if (refreshTokenValue) {
+        res.cookie("refresh_token", refreshTokenValue, {
+          httpOnly: true,
+          secure: isProd,
+          sameSite: (isProd ? "none" : "lax") as any,
+          path: "/",
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+        });
+      } else {
+        res.cookie("refresh_token", "", {
+          httpOnly: true,
+          secure: isProd,
+          sameSite: (isProd ? "none" : "lax") as any,
+          path: "/",
+          expires: new Date(0),
+        });
+      }
+
+      clearOnboardingCookie();
+
+      await writeAuditEvent(db, {
+        tenantId: (tokenPayload.tenantId ?? null) as any,
+        action: "USER_SIGNUP",
+        description: "User signup completed (Google)",
+        email: emailKey,
+        severity: "info",
+        meta: {
+          role,
+          auth: "google",
+          googleSub: googleSub || undefined,
+          companyName: String(doc.companyName || ""),
+        },
+      });
+
+      const redirectTo = role === "global_admin" ? "/platform-admin" : (nextFromToken || "/dashboard");
+      return res.status(201).json({ message: "Signup successful", token, user: { role }, redirectTo });
+    } catch (e) {
+      console.error("[Google Signup] complete error:", e);
+      clearOnboardingCookie();
+      return res.status(500).json({ message: "Failed to complete Google signup" });
+    }
+  });
+
   const sessionLastSeenWrite = new Map<string, number>();
   const SESSION_LAST_SEEN_WRITE_MS = 30_000;
 
@@ -1457,8 +2235,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Login =====
   app.post("/api/login", async (req, res) => {
     try {
-      const { email, password } = req.body;
-      if (!email || !password) {
+      const body = (req as any)?.body as any;
+      const email = typeof body?.email === "string" ? body.email : "";
+      const password = typeof body?.password === "string" ? body.password : "";
+
+      if (!email.trim() || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
       const normalizeEmail = (raw: unknown) => String(raw ?? "").trim().toLowerCase();
@@ -1584,20 +2365,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // First try the 'login' collection (primary auth collection)
+      // Prefer records that actually have a password, since this endpoint is email+password auth.
+      const baseEmailQuery = { email: { $regex: emailRegex } } as const;
+      const withPasswordQuery = { password: { $exists: true, $ne: "" } } as const;
+
       // Prefer platform-level global_admin record if present
-      let user = await db.collection("login").findOne({ email: { $regex: emailRegex }, role: "global_admin" });
+      let user =
+        (await db
+          .collection("login")
+          .findOne({ ...baseEmailQuery, role: "global_admin", ...withPasswordQuery })) ||
+        (await db.collection("login").findOne({ ...baseEmailQuery, role: "global_admin" }));
+
       if (!user) {
         // If multiple tenant-bound records exist for the same email, prefer the user's chosen default.
         user =
-          (await db.collection("login").findOne({ email: { $regex: emailRegex }, isDefaultCompany: true })) ||
-          (await db.collection("login").findOne({ email: { $regex: emailRegex } }));
+          (await db
+            .collection("login")
+            .findOne({ ...baseEmailQuery, isDefaultCompany: true, ...withPasswordQuery })) ||
+          (await db.collection("login").findOne({ ...baseEmailQuery, ...withPasswordQuery })) ||
+          (await db.collection("login").findOne({ ...baseEmailQuery, isDefaultCompany: true })) ||
+          (await db.collection("login").findOne({ ...baseEmailQuery }));
       }
       let isNewUserSystem = false;
       
       // If not found in login collection, try the 'users' collection (RBAC users with passwords)
       if (!user) {
-        user = await db.collection("users").findOne({ email: { $regex: emailRegex }, password: { $exists: true } });
+        user = await db
+          .collection("users")
+          .findOne({ ...baseEmailQuery, ...withPasswordQuery });
         isNewUserSystem = !!user;
+      }
+
+      // Fallback: some historical flows wrote password-bearing accounts into `signup` but not `login`.
+      // For email+password login, accept those accounts and migrate them into `login` (best-effort).
+      if (!user) {
+        const signupUser = await db
+          .collection("signup")
+          .findOne({ ...baseEmailQuery, ...withPasswordQuery });
+
+        if (signupUser) {
+          user = signupUser;
+          isNewUserSystem = false;
+
+          try {
+            const existingLogin = await db.collection("login").findOne({ ...baseEmailQuery });
+            if (!existingLogin) {
+              await db.collection("login").insertOne(signupUser);
+            }
+          } catch (e) {
+            // Do not block login on migration failure.
+            console.warn("[Login] Failed to migrate signup user into login collection:", e);
+          }
+        }
       }
       
       if (!user) {
@@ -1613,6 +2432,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             reason: "user_not_found",
           },
         });
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      // If a record exists but has no password, treat as a Google-only account (or invalid) without burning attempts.
+      // This preserves existing login behavior for password-based accounts while giving a clearer UX for Google sign-in.
+      if (!user.password) {
+        const provider = String((user as any)?.authProvider || "").toLowerCase();
+        const hasGoogleSub = Boolean((user as any)?.googleSub);
+        if (provider === "google" || hasGoogleSub) {
+          return res.status(401).json({
+            message:
+              "This account uses Google sign-in. Click Continue with Google, or use Forgot Password to set a password.",
+            code: "GOOGLE_PASSWORD_NOT_SET",
+          });
+        }
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
@@ -1659,7 +2493,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // All passwords are now hashed with bcrypt
       let isPasswordValid = false;
       if (user.password) {
-        isPasswordValid = await bcrypt.compare(password, user.password);
+        const storedPasswordRaw = String(user.password);
+        const looksLikeBcrypt = storedPasswordRaw.startsWith("$2");
+
+        if (looksLikeBcrypt) {
+          isPasswordValid = await bcrypt.compare(password, storedPasswordRaw);
+        } else {
+          // Backward-compat: some legacy records stored plaintext or encrypted passwords.
+          // Never throw here; a failure should behave like an auth mismatch, not a 500.
+          let legacyPlain = storedPasswordRaw;
+          try {
+            legacyPlain = decrypt(storedPasswordRaw);
+          } catch {
+            legacyPlain = storedPasswordRaw;
+          }
+          isPasswordValid = password === legacyPlain;
+
+          // If legacy auth succeeds, migrate to bcrypt.
+          if (isPasswordValid) {
+            try {
+              const upgradedHash = await bcrypt.hash(password, 10);
+              await db.collection(userCollectionName).updateOne(
+                { _id: user._id },
+                { $set: { password: upgradedHash } }
+              );
+            } catch (e) {
+              // Do not block login on migration failure.
+              console.warn("[Login] Password hash migration failed:", e);
+            }
+          }
+        }
       }
       
       if (!isPasswordValid) {
@@ -1877,6 +2740,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (err) {
+      console.error("[Login] Error:", err);
       res.status(500).json({ message: "Login failed" });
     }
   });
@@ -2018,6 +2882,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!dbUser) {
         return res.status(404).json({ message: "Company not found for this tenant" });
       }
+
+      // Fallbacks for legacy or incomplete records (prevents UI showing "Select company..." for valid users)
+      let resolvedCompanyName: string | null = (dbUser as any).companyName || null;
+      let resolvedDefaultCurrency: string | null = (dbUser as any).defaultCurrency || null;
+      if (!resolvedCompanyName || !resolvedDefaultCurrency) {
+        try {
+          const companyInfo = await db.collection("companyInfo").findOne({ tenantId: effectiveTenantId });
+          if (companyInfo) {
+            resolvedCompanyName = resolvedCompanyName || (companyInfo as any).companyName || null;
+            resolvedDefaultCurrency = resolvedDefaultCurrency || (companyInfo as any).defaultCurrency || null;
+          }
+          if (!resolvedCompanyName || !resolvedDefaultCurrency) {
+            const anyLogin = await db.collection("login").findOne({
+              tenantId: effectiveTenantId,
+              companyName: { $exists: true, $ne: null },
+            });
+            resolvedCompanyName = resolvedCompanyName || (anyLogin as any)?.companyName || null;
+            resolvedDefaultCurrency = resolvedDefaultCurrency || (anyLogin as any)?.defaultCurrency || null;
+          }
+        } catch {
+          // ignore fallback failures
+        }
+      }
       
       // Get role and department from JWT token (already set during login)
       const role = user.role || dbUser.role || "viewer";
@@ -2028,9 +2915,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: dbUser.email,
         fullName: dbUser.fullName || null,
         profileImage: dbUser.profileImage || null,
-        companyName: dbUser.companyName || null,
+        companyName: resolvedCompanyName,
         tenantId: dbUser.tenantId || null,
-        defaultCurrency: dbUser.defaultCurrency || null,
+        defaultCurrency: resolvedDefaultCurrency,
         role: role,
         department: department,
         plan: (dbUser as any).plan || null,

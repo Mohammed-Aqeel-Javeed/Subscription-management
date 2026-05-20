@@ -357,10 +357,13 @@ const handleMarkAsRead = async () => {
 			
 			// Clear selection
 			setSelectedNotifications(new Set());
+
+			const markedCount = notificationIds.length;
+			const markedDescription = `Marked ${markedCount} notification${markedCount === 1 ? "" : "s"} as read`;
 			
 			toast({
 				title: "Marked as read",
-				description: result.message || `${notificationIds.length} notification(s) marked as read`,
+				description: markedDescription,
 				variant: "success",
 			});
 		} else {

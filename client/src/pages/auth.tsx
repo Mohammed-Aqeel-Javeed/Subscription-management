@@ -1,14 +1,19 @@
-import React, { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { CheckCircle2, Eye, EyeOff, XCircle } from "lucide-react";
+import ReactCountryFlag from "react-country-flag";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../lib/config";
 import { queryClient } from "../lib/queryClient";
+import { currencyList, getCountryCodeForCurrency } from "../lib/currency-data";
 
 export default function AuthPage() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const googleOnboarding = urlParams.get("google") === "onboarding" || urlParams.get("error") === "no_account";
 
   const [forgotOpen, setForgotOpen] = useState(false);
   const [resetStep, setResetStep] = useState<"request" | "confirm">("request");
@@ -22,7 +27,7 @@ export default function AuthPage() {
 
   const navigate = useNavigate();
 
-  const nextParamRaw = new URLSearchParams(window.location.search).get("next");
+  const nextParamRaw = urlParams.get("next");
   const nextParam = (() => {
     const v = String(nextParamRaw ?? "").trim();
     // Prevent open-redirects: only allow internal paths.
@@ -30,6 +35,199 @@ export default function AuthPage() {
     if (v.startsWith("//") || v.includes("://")) return "";
     return v;
   })();
+
+  const [googlePending, setGooglePending] = useState<null | {
+    fullName: string;
+    email: string;
+    picture?: string;
+    defaultCurrency?: string;
+    next?: string;
+  }>(null);
+  const [googleCompanyName, setGoogleCompanyName] = useState("");
+  const [googleCurrency, setGoogleCurrency] = useState("");
+  const [googleShowCurrencyDropdown, setGoogleShowCurrencyDropdown] = useState(false);
+  const [googleFilteredCurrencies, setGoogleFilteredCurrencies] = useState<
+    Array<{ code: string; description: string; symbol: string; countryCode?: string }>
+  >([]);
+  const [googlePassword, setGooglePassword] = useState("");
+  const [googleConfirmPassword, setGoogleConfirmPassword] = useState("");
+  const [googleShowPassword, setGoogleShowPassword] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleError, setGoogleError] = useState("");
+
+  // Password policy validation (keep aligned with the Signup page UI)
+  const validatePassword = (password: string) => {
+    return {
+      minLength: password.length >= 8,
+      hasUpperCase: /[A-Z]/.test(password),
+      hasLowerCase: /[a-z]/.test(password),
+      hasNumber: /[0-9]/.test(password),
+      hasSpecialChar: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+    };
+  };
+
+  const googlePasswordValidation = validatePassword(googlePassword);
+  const isGooglePasswordValid = Object.values(googlePasswordValidation).every(Boolean);
+
+  const handleGoogleCurrencyChange = (value: string) => {
+    const upperValue = value.toUpperCase();
+    setGoogleCurrency(upperValue);
+
+    if (upperValue.length > 0) {
+      const filtered = currencyList
+        .filter(
+          (curr) =>
+            curr.code.startsWith(upperValue) || curr.description.toUpperCase().includes(upperValue)
+        )
+        .map((curr) => ({
+          ...curr,
+          countryCode: getCountryCodeForCurrency(curr.code),
+        }));
+
+      setGoogleFilteredCurrencies(filtered);
+      setGoogleShowCurrencyDropdown(filtered.length > 0);
+    } else {
+      setGoogleShowCurrencyDropdown(false);
+      setGoogleFilteredCurrencies([]);
+    }
+  };
+
+  const handleGoogleCurrencySelect = (currency: { code: string; description: string; symbol: string }) => {
+    setGoogleCurrency(currency.code);
+    setGoogleShowCurrencyDropdown(false);
+    setGoogleFilteredCurrencies([]);
+  };
+
+  useEffect(() => {
+    if (!googleOnboarding) return;
+
+    // Back-compat: older backend used /auth?error=no_account for new Google users.
+    // Normalize to /auth?google=onboarding (preserve next= if present).
+    try {
+      const current = new URL(window.location.href);
+      const search = current.searchParams;
+      if (search.get("error") === "no_account" && search.get("google") !== "onboarding") {
+        search.delete("error");
+        search.set("google", "onboarding");
+        const normalized = `${current.pathname}?${search.toString()}`;
+        window.history.replaceState(null, "", normalized);
+      }
+    } catch {
+      // ignore URL parsing issues
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      setGoogleBusy(true);
+      setGoogleError("");
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/auth/google/pending`, {
+          method: "GET",
+          credentials: "include",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data?.message || "Google signup session expired. Please try again.");
+        }
+        if (cancelled) return;
+        const pending = {
+          fullName: String(data?.fullName || "").trim(),
+          email: String(data?.email || "").trim(),
+          picture: String(data?.picture || "").trim(),
+          defaultCurrency: String(data?.defaultCurrency || "USD").trim(),
+          next: String(data?.next || "").trim(),
+        };
+        setGooglePending(pending);
+        setGoogleCurrency(pending.defaultCurrency || "USD");
+      } catch (e) {
+        if (cancelled) return;
+        setGooglePending(null);
+        setGoogleError(e instanceof Error ? e.message : "Google signup session expired. Please try again.");
+      } finally {
+        if (!cancelled) setGoogleBusy(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [googleOnboarding]);
+
+  const submitGoogleOnboarding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGoogleError("");
+
+    const companyName = String(googleCompanyName || "").trim();
+    const defaultCurrency = String(googleCurrency || "").trim().toUpperCase();
+
+    if (!companyName) {
+      setGoogleError("Please enter Company Name.");
+      return;
+    }
+    if (!defaultCurrency) {
+      setGoogleError("Please enter LCY.");
+      return;
+    }
+
+    const password = String(googlePassword || "");
+    const confirmPassword = String(googleConfirmPassword || "");
+    if (!password) {
+      setGoogleError("Please create a password.");
+      return;
+    }
+    if (!isGooglePasswordValid) {
+      setGoogleError("Password does not meet the security requirements.");
+      return;
+    }
+    if (!confirmPassword) {
+      setGoogleError("Please confirm your password.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setGoogleError("Passwords do not match.");
+      return;
+    }
+    const currencyOk = currencyList.some((c) => c.code === defaultCurrency);
+    if (!currencyOk) {
+      setGoogleError("Please select a valid currency code.");
+      return;
+    }
+
+    setGoogleBusy(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/google/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ companyName, defaultCurrency, password, confirmPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setGoogleError(data?.message || "Failed to complete Google signup");
+        return;
+      }
+
+      const role = data?.user?.role;
+      const token = data?.token;
+      const redirectTo = String(data?.redirectTo || "").trim();
+
+      queryClient.clear();
+      sessionStorage.clear();
+      sessionStorage.setItem("isAuthenticated", "true");
+      if (token) {
+        const normalized = String(token).trim().replace(/^Bearer\s+/i, "");
+        sessionStorage.setItem("token", normalized);
+      }
+
+      const target = redirectTo || (role === "global_admin" ? "/platform-admin" : (googlePending?.next || nextParam || "/dashboard"));
+      window.location.href = target;
+    } catch {
+      setGoogleError("Network error");
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
 
   // Login handler
   const handleLogin = async (e: React.FormEvent) => {
@@ -383,8 +581,328 @@ export default function AuthPage() {
           }}
         >
           <div style={{ width: "100%", maxWidth: 380 }}>
-            {/* Login Form */}
-            <div>
+            {googleOnboarding ? (
+              <div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    marginBottom: 12,
+                  }}
+                >
+                  <h2
+                    style={{
+                      fontWeight: 700,
+                      fontSize: 22,
+                      color: "#111827",
+                      marginBottom: 4,
+                    }}
+                  >
+                    Complete Signup
+                  </h2>
+                  <p style={{ color: "#6b7280", fontSize: 12, textAlign: "center" }}>
+                    Finish onboarding to create your account.
+                  </p>
+                </div>
+
+                <form onSubmit={submitGoogleOnboarding}>
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={googlePending?.fullName || ""}
+                      disabled
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        marginTop: 6,
+                        borderRadius: 999,
+                        border: "1px solid #e5e7eb",
+                        fontSize: 15,
+                        background: "#f9fafb",
+                        outline: "none",
+                        opacity: 0.9,
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      value={googlePending?.email || ""}
+                      disabled
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        marginTop: 6,
+                        borderRadius: 999,
+                        border: "1px solid #e5e7eb",
+                        fontSize: 15,
+                        background: "#f9fafb",
+                        outline: "none",
+                        opacity: 0.9,
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
+                      Company Name
+                    </label>
+                    <input
+                      type="text"
+                      value={googleCompanyName}
+                      onChange={(e) => setGoogleCompanyName(e.target.value)}
+                      required
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        marginTop: 6,
+                        borderRadius: 999,
+                        border: "1px solid #e5e7eb",
+                        fontSize: 15,
+                        background: "#f9fafb",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
+                      LCY
+                    </label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        type="text"
+                        value={googleCurrency}
+                        onChange={(e) => handleGoogleCurrencyChange(e.target.value)}
+                        onFocus={() => {
+                          if (googleCurrency) handleGoogleCurrencyChange(googleCurrency);
+                        }}
+                        onBlur={() => {
+                          // small delay to allow click selection
+                          setTimeout(() => setGoogleShowCurrencyDropdown(false), 150);
+                        }}
+                        placeholder="Enter currency (e.g. USD)"
+                        required
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          marginTop: 6,
+                          borderRadius: 999,
+                          border: "1px solid #e5e7eb",
+                          fontSize: 15,
+                          background: "#f9fafb",
+                          outline: "none",
+                          textTransform: "uppercase",
+                        }}
+                      />
+
+                      {googleShowCurrencyDropdown && googleFilteredCurrencies.length > 0 && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            zIndex: 50,
+                            width: "100%",
+                            marginTop: 6,
+                            background: "white",
+                            border: "1px solid #e5e7eb",
+                            borderRadius: 12,
+                            boxShadow: "0 10px 25px rgba(15,23,42,0.18)",
+                            maxHeight: 200,
+                            overflowY: "auto",
+                          }}
+                        >
+                          {googleFilteredCurrencies.map((curr) => (
+                            <button
+                              key={curr.code}
+                              type="button"
+                              onPointerDown={(e) => {
+                                e.preventDefault();
+                                handleGoogleCurrencySelect(curr);
+                              }}
+                              onClick={() => handleGoogleCurrencySelect(curr)}
+                              style={{
+                                width: "100%",
+                                padding: "8px 14px",
+                                textAlign: "left",
+                                background: "transparent",
+                                border: 0,
+                                borderBottom: "1px solid #f3f4f6",
+                                cursor: "pointer",
+                                transition: "background 0.15s, transform 0.1s",
+                                fontSize: 12,
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = "#eef2ff";
+                                e.currentTarget.style.transform = "translateY(-1px)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = "transparent";
+                                e.currentTarget.style.transform = "translateY(0)";
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                {curr.countryCode && (
+                                  <ReactCountryFlag
+                                    svg
+                                    countryCode={curr.countryCode}
+                                    style={{ width: "1.1rem", height: "1.1rem", borderRadius: "999px" }}
+                                  />
+                                )}
+                                <span style={{ fontWeight: 600, color: "#111827" }}>
+                                  {curr.description} ({curr.code})
+                                </span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
+                      Password
+                    </label>
+                    <div style={{ position: "relative", marginTop: 6 }}>
+                      <input
+                        type={googleShowPassword ? "text" : "password"}
+                        value={googlePassword}
+                        onChange={(e) => setGooglePassword(e.target.value)}
+                        required
+                        style={{
+                          width: "100%",
+                          padding: "10px 40px 10px 12px",
+                          borderRadius: 999,
+                          border: "1px solid #e5e7eb",
+                          fontSize: 15,
+                          background: "#f9fafb",
+                          outline: "none",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setGoogleShowPassword(!googleShowPassword)}
+                        style={{
+                          position: "absolute",
+                          right: 12,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 4,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#6b7280",
+                        }}
+                      >
+                        {googleShowPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+
+                    {googlePassword && !isGooglePasswordValid && (
+                      <div style={{ marginTop: 8, fontSize: 11.5, lineHeight: 1.6 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 4, color: "#4b5563" }}>
+                          Password must contain:
+                        </div>
+                        <PasswordRequirement met={googlePasswordValidation.minLength} text="At least 8 characters" />
+                        <PasswordRequirement met={googlePasswordValidation.hasUpperCase} text="One uppercase letter (A-Z)" />
+                        <PasswordRequirement met={googlePasswordValidation.hasLowerCase} text="One lowercase letter (a-z)" />
+                        <PasswordRequirement met={googlePasswordValidation.hasNumber} text="One number (0-9)" />
+                        <PasswordRequirement met={googlePasswordValidation.hasSpecialChar} text="One special character (!@#$%^&*)" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
+                      Confirm Password
+                    </label>
+                    <input
+                      type="password"
+                      value={googleConfirmPassword}
+                      onChange={(e) => setGoogleConfirmPassword(e.target.value)}
+                      required
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        marginTop: 6,
+                        borderRadius: 999,
+                        border: "1px solid #e5e7eb",
+                        fontSize: 15,
+                        background: "#f9fafb",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={googleBusy || !googlePending}
+                    style={{
+                      width: "100%",
+                      padding: 10,
+                      background: "linear-gradient(90deg, #4f46e5, #7c3aed)",
+                      color: "#fff",
+                      border: 0,
+                      borderRadius: 999,
+                      fontWeight: 600,
+                      fontSize: 15,
+                      boxShadow: "0 14px 30px rgba(79,70,229,0.35)",
+                      cursor: googleBusy ? "not-allowed" : "pointer",
+                      marginTop: 4,
+                      opacity: googleBusy || !googlePending ? 0.75 : 1,
+                    }}
+                  >
+                    {googleBusy ? "Creating…" : "Create account"}
+                  </button>
+
+                  {googleError && (
+                    <div
+                      style={{
+                        color: "#dc2626",
+                        marginTop: 12,
+                        textAlign: "center",
+                        fontSize: 13,
+                      }}
+                    >
+                      {googleError}
+                    </div>
+                  )}
+
+                  <div style={{ textAlign: "center", marginTop: 14, fontSize: 12 }}>
+                    <button
+                      type="button"
+                      disabled={googleBusy}
+                      onClick={() => {
+                        window.location.href = "/auth";
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: 0,
+                        color: "#4f46e5",
+                        cursor: googleBusy ? "not-allowed" : "pointer",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Back to login
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <>
+                {/* Login Form */}
+                <div>
               <div
                 style={{
                   display: "flex",
@@ -819,16 +1337,20 @@ export default function AuthPage() {
                 >
                   <button
                     type="button"
+                    onClick={() => {
+                      const next = nextParam ? `?next=${encodeURIComponent(nextParam)}` : "";
+                      window.location.assign(`${API_BASE_URL}/api/auth/google/start${next}`);
+                    }}
                     style={{
                       flex: 1,
-                      padding: "7px 9px",
+                      padding: "9px 14px",
                       borderRadius: 999,
                       border: "1px solid #e5e7eb",
                       background: "#ffffff",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
+                      justifyContent: "flex-start",
+                      gap: 10,
                       fontSize: 13,
                       cursor: "pointer",
                       color: "#374151",
@@ -845,14 +1367,14 @@ export default function AuthPage() {
                     type="button"
                     style={{
                       flex: 1,
-                      padding: "8px 10px",
+                      padding: "9px 14px",
                       borderRadius: 999,
                       border: "1px solid #e5e7eb",
                       background: "#ffffff",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
+                      justifyContent: "flex-start",
+                      gap: 10,
                       fontSize: 13,
                       cursor: "pointer",
                       color: "#1d4ed8",
@@ -885,9 +1407,20 @@ export default function AuthPage() {
                 Sign up
               </button>
             </div>
+              </>
+            )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PasswordRequirement({ met, text }: { met: boolean; text: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, color: met ? "#2e7d32" : "#dc2626" }}>
+      {met ? <CheckCircle2 size={14} color="#388e3c" /> : <XCircle size={14} color="#dc2626" />}
+      <span>{text}</span>
     </div>
   );
 }

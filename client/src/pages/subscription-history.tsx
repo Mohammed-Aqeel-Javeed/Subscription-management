@@ -156,6 +156,9 @@ function prettyFieldLabel(key: string) {
       return "Draft";
     case "startDate":
       return "Start Date";
+    case "currentCycleStart":
+    case "CurrentCycleStart":
+      return "CurrentCycleStart";
     case "nextRenewal":
       return "End Date";
     case "endDate":
@@ -443,10 +446,26 @@ function buildChangesText(record: HistoryRecord) {
     "totalAmountInclTax",
   ]);
 
-  const dateFields = new Set(["startDate", "nextRenewal", "endDate", "initialDate"]);
+  const dateFields = new Set(["startDate", "nextRenewal", "endDate", "initialDate", "currentCycleStart", "CurrentCycleStart"]);
   
   // Check if this is a renewal action
   const isRenewal = action === "renewed" || inferDisplayAction(record) === "renewed";
+  const isAutoRenewal = (() => {
+    const by = String(record.changedBy || "").toLowerCase();
+    const r = String(record.changeReason || "").toLowerCase();
+    return by.includes("auto-renewal") || r.includes("auto-renewal");
+  })();
+
+  if (isRenewal) {
+    const beforeStart = (oldData as any)?.currentCycleStart ?? (oldData as any)?.CurrentCycleStart ?? (oldData as any)?.startDate;
+    const beforeEnd = (oldData as any)?.nextRenewal ?? (oldData as any)?.endDate;
+    const afterStart = (newData as any)?.currentCycleStart ?? (newData as any)?.CurrentCycleStart ?? (newData as any)?.startDate;
+    const afterEnd = (newData as any)?.nextRenewal ?? (newData as any)?.endDate;
+
+    const summary = `${isAutoRenewal ? "Auto Renewed" : "Renewed"}: ${formatDateDdMmYyyy(beforeStart)} → ${formatDateDdMmYyyy(afterStart)} | ${formatDateDdMmYyyy(beforeEnd)} → ${formatDateDdMmYyyy(afterEnd)}`;
+    // Keep the reason line if present.
+    return [summary, reason].filter(Boolean).join("\n");
+  }
 
   const lines: string[] = [];
   let suppressedChange = false;

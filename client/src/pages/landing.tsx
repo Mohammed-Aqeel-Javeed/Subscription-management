@@ -1,17 +1,17 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useNavigationType } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   BarChart3,
   Bell,
   Calendar,
   Check,
-  ChevronRight,
   DollarSign,
   FileUp,
   HelpCircle,
   Layers,
   Mail,
+  MapPin,
   Menu,
   MessageSquare,
   RefreshCw,
@@ -81,145 +81,65 @@ function SpendMiniChart() {
 function DashboardMockup() {
   return (
     <div className="relative">
-      <div className="rounded-2xl border border-indigo-100 bg-white shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-indigo-50 bg-white">
-          <div className="flex items-center gap-2">
-            <img src="/assets/logo.png" alt="Trackla" className="w-6 h-6 object-contain" />
-            <span className="text-xs font-bold text-indigo-600">Dashboard</span>
+      <div className="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200/60 bg-white/70">
+          <div className="flex items-center gap-2.5">
+            <img src="/assets/logo.png" alt="Trackla" className="w-7 h-7 object-contain" />
+            <span className="text-xs font-semibold text-slate-700">Trackla Analytics</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-gradient-to-r from-indigo-600 to-violet-500 text-white">
-              Get Started
-            </span>
-          </div>
+          <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-indigo-50 text-indigo-700">
+            Live
+          </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4">
-          {[
-            { label: "Monthly Spend", value: "$447k", sub: "+12%", cls: "text-indigo-600", bg: "bg-indigo-50" },
-            { label: "Active Subs", value: "14", sub: "active", cls: "text-emerald-600", bg: "bg-emerald-50" },
-            { label: "Renewals", value: "2", sub: "next 30d", cls: "text-orange-500", bg: "bg-orange-50" },
-            { label: "Compliance", value: "92%", sub: "compliant", cls: "text-blue-600", bg: "bg-blue-50" },
-          ].map((c) => (
-            <div key={c.label} className={`rounded-xl p-3 shadow-sm border border-slate-100 ${c.bg}`}>
-              <p className="text-[10px] font-medium text-slate-500 mb-1">{c.label}</p>
-              <p className={`text-lg font-extrabold leading-none ${c.cls}`}>{c.value}</p>
-              <p className={`text-[10px] font-semibold mt-1 ${c.cls}`}>{c.sub}</p>
-            </div>
-          ))}
-        </div>
+        <div className="p-5">
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Monthly spend", value: "$447k", meta: "+12%", metaCls: "text-emerald-600" },
+              { label: "Renewals due", value: "2", meta: "next 30 days", metaCls: "text-slate-500" },
+              { label: "Compliance", value: "92%", meta: "healthy", metaCls: "text-indigo-600" },
+            ].map((m) => (
+              <div key={m.label} className="rounded-2xl bg-white/70 border border-slate-200/60 px-4 py-3">
+                <p className="text-[11px] text-slate-500 font-medium">{m.label}</p>
+                <div className="mt-1 flex items-end justify-between gap-2">
+                  <p className="text-2xl font-extrabold text-slate-900 leading-none">{m.value}</p>
+                  <p className={`text-[11px] font-semibold ${m.metaCls}`}>{m.meta}</p>
+                </div>
+              </div>
+            ))}
+          </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 px-4 pb-4">
-          <div className="sm:col-span-3 rounded-xl p-3 border border-indigo-50 bg-white shadow-sm">
+          <div className="mt-4 rounded-3xl bg-white/70 border border-slate-200/60 p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] font-bold text-slate-900">Spending Trends</p>
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-600">+14.2%</span>
+              <p className="text-[11px] font-semibold text-slate-700">Spend trend</p>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">+14.2%</span>
             </div>
             <SpendMiniChart />
-            <div className="flex justify-between mt-1">
-              {[
-                "Oct",
-                "Nov",
-                "Dec",
-                "Jan",
-                "Feb",
-                "Mar",
-              ].map((m) => (
-                <span key={m} className="text-[9px] text-slate-400">
-                  {m}
-                </span>
-              ))}
-            </div>
           </div>
 
-          <div className="sm:col-span-2 rounded-xl p-3 border border-indigo-50 bg-white shadow-sm">
-            <p className="text-[11px] font-bold text-slate-900 mb-2">Top Categories</p>
-            <svg viewBox="0 0 80 80" className="w-20 h-20 mx-auto" role="img" aria-label="Top categories">
-              <circle cx="40" cy="40" r="28" fill="none" stroke="currentColor" className="text-indigo-100" strokeWidth="14" />
-              <circle
-                cx="40"
-                cy="40"
-                r="28"
-                fill="none"
-                stroke="currentColor"
-                className="text-indigo-600"
-                strokeWidth="14"
-                strokeDasharray="70 106"
-                transform="rotate(-90 40 40)"
-              />
-              <circle
-                cx="40"
-                cy="40"
-                r="28"
-                fill="none"
-                stroke="currentColor"
-                className="text-orange-500"
-                strokeWidth="14"
-                strokeDasharray="35 141"
-                strokeDashoffset="-70"
-                transform="rotate(-90 40 40)"
-              />
-              <circle
-                cx="40"
-                cy="40"
-                r="28"
-                fill="none"
-                stroke="currentColor"
-                className="text-blue-600"
-                strokeWidth="14"
-                strokeDasharray="25 151"
-                strokeDashoffset="-105"
-                transform="rotate(-90 40 40)"
-              />
-              <text x="40" y="44" textAnchor="middle" className="fill-slate-900" style={{ fontSize: 12, fontWeight: 800 }}>
-                14
-              </text>
-            </svg>
-            <div className="space-y-1 mt-2">
-              {[
-                { label: "Productivity", color: "bg-indigo-600" },
-                { label: "Dev & Hosting", color: "bg-orange-500" },
-                { label: "Analytics", color: "bg-blue-600" },
-              ].map((l) => (
-                <div key={l.label} className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${l.color}`} />
-                  <span className="text-[10px] text-slate-500">{l.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="px-4 pb-4">
-          <div className="rounded-xl overflow-hidden border border-indigo-50">
-            <div className="px-3 py-2 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-blue-600">
-              <span className="text-[11px] font-bold text-white">Recent Subscriptions</span>
-              <span className="text-[10px] text-white/80">View all →</span>
+          <div className="mt-4 rounded-3xl bg-white/70 border border-slate-200/60 overflow-hidden">
+            <div className="px-4 py-3 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-500">
+              <span className="text-[11px] font-semibold text-white">Upcoming renewals</span>
+              <span className="text-[11px] text-white/80">View all →</span>
             </div>
             {[
-              { name: "Microsoft 365", cost: "$12.5k", status: "Active" },
-              { name: "AWS", cost: "$8.2k", status: "Active" },
-              { name: "Adobe CC", cost: "$3.1k", status: "Expiring" },
-              { name: "Slack", cost: "$1.8k", status: "Active" },
-            ].map((row, i) => {
-              const expiring = row.status === "Expiring";
-              return (
-                <div
-                  key={row.name}
-                  className={`flex items-center justify-between px-3 py-2 ${i % 2 === 0 ? "bg-slate-50" : "bg-white"} ${i === 0 ? "" : "border-t border-indigo-50"}`}
-                >
-                  <span className="text-[10px] font-semibold text-slate-900">{row.name}</span>
-                  <span className="text-[10px] text-slate-500">{row.cost}</span>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${
-                      expiring ? "bg-orange-50 text-orange-600" : "bg-emerald-50 text-emerald-600"
-                    }`}
-                  >
-                    {row.status}
+              { name: "Adobe Creative Cloud", days: "7d", status: "Expiring", cls: "bg-amber-50 text-amber-700" },
+              { name: "AWS Enterprise", days: "22d", status: "Pending", cls: "bg-slate-100 text-slate-700" },
+              { name: "Microsoft 365", days: "34d", status: "Scheduled", cls: "bg-emerald-50 text-emerald-700" },
+            ].map((row, i) => (
+              <div
+                key={row.name}
+                className={`flex items-center justify-between px-4 py-2.5 ${i === 0 ? "" : "border-t border-slate-200/60"}`}
+              >
+                <span className="text-[12px] font-semibold text-slate-900">{row.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${row.cls}`}>{row.status}</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-50 text-slate-600 border border-slate-200/60">
+                    {row.days}
                   </span>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -260,12 +180,12 @@ function FeatureCard({
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: Math.min(index * 0.04, 0.2) }}
       viewport={{ once: true, amount: 0.2 }}
-      className="rounded-2xl p-5 bg-white border border-indigo-100 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-1"
+      className="rounded-3xl p-6 bg-white/80 backdrop-blur border border-slate-200/70 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
     >
       <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4 bg-gradient-to-r from-indigo-600 to-violet-500 text-white">
         <Icon size={20} />
       </div>
-      <h3 className="text-[15px] font-bold text-slate-900 mb-2">{title}</h3>
+      <h3 className="font-heading text-[16px] font-bold text-slate-900 mb-2">{title}</h3>
       <p className="text-[13px] text-slate-600 leading-relaxed">{description}</p>
     </motion.div>
   );
@@ -297,6 +217,7 @@ function PricingCard({
   onCtaClick?: () => void;
 }) {
   const isActive = Boolean(selected);
+  const isPopular = Boolean(popular);
   return (
     <motion.div
       whileHover={{ y: -6, scale: 1.01 }}
@@ -305,8 +226,10 @@ function PricingCard({
       className={`relative rounded-2xl p-6 flex flex-col h-full cursor-pointer transition-shadow duration-200 ${
         isActive
           ? "bg-gradient-to-br from-indigo-600 to-violet-500 text-white shadow-2xl"
-          : "bg-white border border-indigo-100 shadow-sm"
-      } ${selected ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-50" : ""}`}
+          : "bg-white/80 backdrop-blur border border-slate-200/70 shadow-sm"
+      } ${selected ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-50" : ""} ${
+        !isActive && isPopular ? "md:scale-[1.03] md:-translate-y-1 ring-1 ring-indigo-200/80 shadow-md" : ""
+      }`}
       role="button"
       tabIndex={0}
       onClick={onSelect}
@@ -359,6 +282,12 @@ function PricingCard({
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
+  const supportPhoneDisplay = "+65 9386 7621";
+  const supportPhoneTel = "+6593867621";
+  const supportPhoneWhatsApp = "6593867621";
+  const [supportActionsOpen, setSupportActionsOpen] = useState(false);
+  const animateHeroOnMount = navigationType !== "POP";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pricingLoading, setPricingLoading] = useState<string | null>(null);
   const [pricingError, setPricingError] = useState<string | null>(null);
@@ -408,10 +337,15 @@ export default function LandingPage() {
       {/* NAVBAR */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-b border-indigo-100 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <button type="button" onClick={() => scrollTo("hero")} className="flex items-center gap-2" aria-label="Trackla Home">
-              <img src="/assets/logo.png" alt="Trackla" className="w-10 h-10 object-contain" />
-              <span className="text-lg font-extrabold text-indigo-600 tracking-tight">Trackla</span>
+          <div className="flex items-center justify-between h-24">
+            <button
+              type="button"
+              onClick={() => scrollTo("hero")}
+              className="inline-flex items-center gap-4"
+              aria-label="Trackla Home"
+            >
+              <img src="/assets/logo.png" alt="Trackla" className="w-20 h-20 object-contain" />
+              <span className="font-bold text-4xl tracking-[0.03em] text-slate-900 leading-none">Trackla</span>
             </button>
 
             <div className="hidden md:flex items-center gap-7">
@@ -425,9 +359,12 @@ export default function LandingPage() {
                   key={l.id}
                   type="button"
                   onClick={() => scrollTo(l.id)}
-                  className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+                  className="group inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors"
                 >
-                  {l.label}
+                  <span className="relative">
+                    {l.label}
+                    <span className="absolute bottom-0 left-0 h-[2px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                  </span>
                 </button>
               ))}
             </div>
@@ -503,20 +440,34 @@ export default function LandingPage() {
       </nav>
 
       {/* HERO */}
-      <Section id="hero" className="pt-28 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-14 items-center">
-          <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
+      <Section id="hero" className="relative overflow-hidden pt-40 pb-24 px-4 sm:px-6 lg:px-8">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-24 -left-24 w-[420px] h-[420px] rounded-full bg-indigo-400/20 blur-3xl" />
+          <div className="absolute top-10 -right-24 w-[480px] h-[480px] rounded-full bg-violet-400/20 blur-3xl" />
+        </div>
+
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center relative">
+          <motion.div
+            initial={animateHeroOnMount ? { opacity: 0, y: 14 } : false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55 }}
+          >
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6 text-xs font-semibold bg-white/70 border border-indigo-100 text-indigo-600 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-indigo-600" />
               SaaS Subscription, Compliance &amp; Renewal Platform
             </div>
 
-            <h1 className="mb-6 leading-tight text-slate-900 font-extrabold" style={{ fontSize: "clamp(2rem, 4vw, 3rem)", letterSpacing: "-0.06em" }}>
-              Manage Subscriptions, <span className="bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent">Compliance &amp; Renewals</span> — in One Dashboard
+            <h1
+              className="font-heading mb-6 leading-[1.05] text-slate-900 font-bold tracking-tight"
+              style={{ fontSize: "clamp(2.4rem, 5vw, 3.6rem)" }}
+            >
+              Manage Subscriptions, <span className="bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent">Compliance &amp; Renewals</span>
+              <br />
+              in One Place.
             </h1>
 
             <p className="mb-8 text-slate-600 leading-relaxed" style={{ fontSize: 17, maxWidth: 520 }}>
-              Track spend, never miss renewals, and assign ownership with ease. Built for finance, operations, and founders who move fast.
+              Track spend, stay compliant, and never miss renewals—with clear ownership.
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -525,7 +476,7 @@ export default function LandingPage() {
                 onClick={() => navigate("/signup")}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-indigo-600 to-violet-500 shadow-lg transition-all duration-200 hover:-translate-y-0.5"
               >
-                Get Started Free <ChevronRight size={16} />
+                Get Started Free
               </button>
               <button
                 type="button"
@@ -536,27 +487,18 @@ export default function LandingPage() {
               </button>
             </div>
 
-            <div className="flex items-center gap-6 mt-8">
-              {[
-                { v: "500+", l: "Teams" },
-                { v: "$12M+", l: "Spend tracked" },
-                { v: "99.9%", l: "Uptime" },
-              ].map((s) => (
-                <div key={s.l}>
-                  <p className="text-lg font-extrabold text-indigo-600">{s.v}</p>
-                  <p className="text-[11px] text-slate-400 font-medium">{s.l}</p>
-                </div>
-              ))}
+            <div className="mt-6 text-sm text-slate-500">
+              Trusted by finance, operations, and IT teams.
             </div>
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
+            initial={animateHeroOnMount ? { opacity: 0, y: 16 } : false}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.65, delay: 0.05 }}
             className="relative w-full order-last lg:order-none mt-10 lg:mt-0"
           >
-            <div className="max-w-xl mx-auto lg:max-w-none scale-[0.98] sm:scale-100 origin-top">
+            <div className="max-w-xl mx-auto lg:max-w-none origin-top">
               <DashboardMockup />
             </div>
           </motion.div>
@@ -564,13 +506,13 @@ export default function LandingPage() {
       </Section>
 
       {/* PRODUCT OVERVIEW */}
-      <Section id="overview" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
+      <Section id="overview" className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-14">
+          <div className="text-center mb-16">
             <p className="text-xs font-semibold tracking-widest text-indigo-600 mb-3">PRODUCT OVERVIEW</p>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">Three Modules. One System of Record.</h2>
+            <h2 className="font-heading text-3xl md:text-4xl font-bold text-slate-900 mb-4 tracking-tight">Three Modules. One System of Record.</h2>
             <p className="text-slate-600 max-w-2xl mx-auto leading-relaxed">
-              Trackla brings subscriptions, compliance, and renewals into one unified workflow — so nothing slips through the cracks.
+              Trackla unifies subscriptions, compliance, and renewals into one workflow, so nothing slips through the cracks.
             </p>
           </div>
 
@@ -616,7 +558,7 @@ export default function LandingPage() {
                 <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold mb-3 bg-indigo-50 text-indigo-600">Subscriptions</span>
                 <h3 className="text-[17px] font-bold text-slate-900 mb-2">Control Every Subscription</h3>
                 <p className="text-sm text-slate-600 leading-relaxed">
-                  Capture and manage all your subscriptions in one place. Track spend, assign owners, and understand exactly where your money goes.
+                  Capture and manage all your subscriptions in one place. Track spend, assign owners, and see exactly where your money goes.
                 </p>
               </div>
             </div>
@@ -691,7 +633,7 @@ export default function LandingPage() {
                 <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold mb-3 bg-blue-50 text-blue-600">Compliance</span>
                 <h3 className="text-[17px] font-bold text-slate-900 mb-2">Stay Ahead of Deadlines</h3>
                 <p className="text-sm text-slate-600 leading-relaxed">
-                  Stay on top of compliance requirements with clear tracking, evidence storage, and deadline visibility — all in one dashboard.
+                  Stay on top of compliance requirements with clear tracking, evidence storage, and deadline visibility—all in one dashboard.
                 </p>
               </div>
             </div>
@@ -739,15 +681,15 @@ export default function LandingPage() {
       </Section>
 
       {/* FEATURES */}
-      <Section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
+      <Section id="features" className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-14">
+          <div className="text-center mb-16">
             <p className="text-sm font-semibold text-indigo-600 mb-2">KEY FEATURES</p>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">Everything Your Team Needs</h2>
+            <h2 className="font-heading text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">Everything Your Team Needs</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
-              { icon: Bell, title: "Renewal Reminders", description: "Auto-alerts before contracts expire, so your team never gets caught off guard." },
+              { icon: Bell, title: "Renewal Reminders", description: "Automatic alerts before contracts expire, so your team never gets caught off guard." },
               { icon: Calendar, title: "Unified Calendar", description: "All subscription deadlines, compliance dates, and renewals in one view." },
               { icon: BarChart3, title: "Spend Analytics (LCY)", description: "Multi-currency spend tracking with local currency conversion and trends." },
               { icon: Shield, title: "Compliance Workflows", description: "Assign owners, track statuses, and store evidence end-to-end." },
@@ -761,15 +703,15 @@ export default function LandingPage() {
       </Section>
 
       {/* USE CASES */}
-      <Section id="usecases" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+      <Section id="usecases" className="py-24 px-4 sm:px-6 lg:px-8 bg-white">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-14">
+          <div className="text-center mb-16">
             <p className="text-sm font-semibold text-indigo-600 mb-2">USE CASES</p>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">
+            <h2 className="font-heading text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">
               Built for Teams That Manage <span className="bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent">Recurring Operations</span>
             </h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               {
                 icon: DollarSign,
@@ -809,11 +751,11 @@ export default function LandingPage() {
       </Section>
 
       {/* PRICING */}
-      <Section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
+      <Section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-14">
+          <div className="text-center mb-16">
             <p className="text-sm font-semibold text-indigo-600 mb-2">PRICING</p>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">Simple, Transparent Pricing</h2>
+            <h2 className="font-heading text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">Simple, Transparent Pricing</h2>
             <p className="mt-3 text-slate-600">Start for free. Scale when you're ready.</p>
             {pricingError && <div className="mt-5 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3 inline-block">{pricingError}</div>}
           </div>
@@ -858,18 +800,18 @@ export default function LandingPage() {
       </Section>
 
       {/* HELP */}
-      <Section id="help" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+      <Section id="help" className="py-24 px-4 sm:px-6 lg:px-8 bg-white">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-14">
+          <div className="text-center mb-16">
             <p className="text-sm font-semibold text-indigo-600 mb-2">SUPPORT</p>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">Need Help?</h2>
+            <h2 className="font-heading text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">Need Help?</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
                 icon: HelpCircle,
                 title: "Getting Started Guide",
-                description: "Step-by-step docs to set up Trackla and import your first subscriptions in minutes.",
+                description: "Step-by-step documentation to set up Trackla and import your first subscriptions in minutes.",
                 cta: "Read Docs",
                 color: "bg-indigo-600",
                 text: "text-indigo-600",
@@ -887,7 +829,7 @@ export default function LandingPage() {
               {
                 icon: MessageSquare,
                 title: "Live Chat / Support",
-                description: "Our support team is available weekdays, 9–5. Average response time is under 2 hours.",
+                description: "Our support team is available weekdays, 9am–5pm. Average response time is under 2 hours.",
                 cta: "Start Chat",
                 color: "bg-emerald-600",
                 text: "text-emerald-600",
@@ -900,19 +842,49 @@ export default function LandingPage() {
                 </div>
                 <h3 className="text-[15px] font-bold text-slate-900 mb-2">{h.title}</h3>
                 <p className="text-[13px] text-slate-700 leading-relaxed mb-4">{h.description}</p>
-                <button
-                  type="button"
-                  className={`text-sm font-semibold inline-flex items-center gap-1 hover:opacity-75 transition-opacity ${h.text}`}
-                  onClick={() => {
-                    if (h.cta === "Start Chat") {
-                      window.location.href = "mailto:support@trackla.io";
-                    } else {
+                {h.title === "Live Chat / Support" ? (
+                  <>
+                    <button
+                      type="button"
+                      className={`text-sm font-semibold inline-flex items-center gap-1 hover:opacity-75 transition-opacity ${h.text}`}
+                      onClick={() => setSupportActionsOpen((v) => !v)}
+                    >
+                      {supportActionsOpen ? "Hide" : "Contact Support"}
+                    </button>
+
+                    {supportActionsOpen && (
+                      <div className="mt-4 rounded-xl bg-white/70 border border-white/60 p-3">
+                        <div className="text-[13px] font-semibold text-slate-900 mb-2">{supportPhoneDisplay}</div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`tel:${supportPhoneTel}`}
+                            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:opacity-90 transition-opacity"
+                          >
+                            Call
+                          </a>
+                          <a
+                            href={`https://wa.me/${supportPhoneWhatsApp}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                          >
+                            WhatsApp
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className={`text-sm font-semibold inline-flex items-center gap-1 hover:opacity-75 transition-opacity ${h.text}`}
+                    onClick={() => {
                       scrollTo("contact");
-                    }
-                  }}
-                >
-                  {h.cta} <ChevronRight size={14} />
-                </button>
+                    }}
+                  >
+                    {h.cta}
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -920,20 +892,23 @@ export default function LandingPage() {
       </Section>
 
       {/* CONTACT */}
-      <Section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
+      <Section id="contact" className="py-24 px-4 sm:px-6 lg:px-8 bg-slate-50">
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
             <div>
               <p className="text-sm font-semibold text-indigo-600 mb-2">CONTACT US</p>
-              <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight mb-4">Talk to Us</h2>
+              <h2 className="font-heading text-3xl md:text-4xl font-bold text-slate-900 tracking-tight mb-4">Talk to Us</h2>
               <p className="text-slate-700 leading-relaxed mb-8">
                 Have questions about pricing, features, or implementation? Our team responds within 2 business hours.
               </p>
               <div className="space-y-4">
                 {[
-                  { icon: Mail, label: "Email", value: "hello@trackla.io" },
-                  { icon: MessageSquare, label: "Live Chat", value: "Available Mon–Fri, 9–5" },
-                  { icon: Calendar, label: "Demo", value: "Book a 30-minute walkthrough" },
+                  { icon: Mail, label: "Email", value: "sales@perfectaconsulting.com" },
+                  {
+                    icon: MapPin,
+                    label: "Address",
+                    value: "3791 Jalan Bukit Merah,\n#04-03 E-Centre @ Redhill,\nSingapore 159471",
+                  },
                 ].map((c) => (
                   <div key={c.label} className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-r from-indigo-600 to-violet-500 text-white">
@@ -941,7 +916,7 @@ export default function LandingPage() {
                     </div>
                     <div>
                       <p className="text-[11px] text-slate-400 font-medium">{c.label}</p>
-                      <p className="text-[13px] font-semibold text-slate-900">{c.value}</p>
+                      <p className="text-[13px] font-semibold text-slate-900 whitespace-pre-line">{c.value}</p>
                     </div>
                   </div>
                 ))}
@@ -997,7 +972,7 @@ export default function LandingPage() {
                       rows={4}
                       value={contactForm.message}
                       onChange={(e) => setContactForm((p) => ({ ...p, message: e.target.value }))}
-                      placeholder="Tell us about your use case..."
+                        placeholder="Tell us about your use case."
                       className="w-full rounded-xl px-4 py-2.5 text-sm outline-none border border-indigo-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 resize-none"
                     />
                   </div>
@@ -1017,20 +992,18 @@ export default function LandingPage() {
       {/* FINAL CTA */}
       <Section id="finalcta" className="py-24 px-4 sm:px-6 lg:px-8 text-center bg-gradient-to-r from-indigo-600 to-violet-500">
         <div className="max-w-3xl mx-auto">
-          <h2 className="text-white font-extrabold mb-4" style={{ fontSize: "clamp(1.8rem,4vw,2.8rem)", letterSpacing: "-0.04em" }}>
+          <h2 className="font-heading text-white font-bold mb-4" style={{ fontSize: "clamp(1.8rem,4vw,2.8rem)", letterSpacing: "-0.04em" }}>
             Stop Missing Renewals.
             <br />
             Start Tracking Everything Today.
           </h2>
-          <p className="mb-8 text-white/80" style={{ fontSize: 17 }}>
-            Join 500+ teams already using Trackla to stay on top of subscriptions.
-          </p>
+          
           <button
             type="button"
             onClick={() => navigate("/signup")}
             className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-base bg-white text-indigo-600 shadow-2xl transition-all duration-200 hover:-translate-y-1"
           >
-            Get Started Free <ChevronRight size={18} />
+            Get Started Free
           </button>
         </div>
       </Section>
@@ -1038,9 +1011,9 @@ export default function LandingPage() {
       {/* FOOTER */}
       <footer className="py-10 px-4 sm:px-6 lg:px-8 border-t border-indigo-100 bg-white">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <img src="/assets/logo.png" alt="Trackla" className="w-8 h-8 object-contain" />
-            <span className="font-bold text-indigo-600">Trackla</span>
+          <div className="inline-flex items-center gap-2">
+            <img src="/assets/logo.png" alt="Trackla" className="w-14 h-14 object-contain" />
+            <span className="font-bold text-2xl text-slate-900 tracking-[0.03em] leading-none">Trackla</span>
           </div>
           <div className="flex items-center gap-6">
             {[
@@ -1053,9 +1026,12 @@ export default function LandingPage() {
                 key={l.id}
                 type="button"
                 onClick={() => scrollTo(l.id)}
-                className="text-sm text-slate-500 hover:text-slate-900 transition-colors"
+                className="group inline-flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600 transition-colors"
               >
-                {l.label}
+                <span className="relative">
+                  {l.label}
+                  <span className="absolute bottom-0 left-0 h-[2px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                </span>
               </button>
             ))}
           </div>

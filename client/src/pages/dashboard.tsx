@@ -552,8 +552,8 @@ export default function Dashboard() {
                   ${cardMonthlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </p>
               </div>
-                  <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Calendar className="h-5 w-5 text-blue-500" />
+                  <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-blue-500 to-indigo-500 shadow-lg shadow-blue-500/20 ring-1 ring-white/30">
+                    <Calendar className="h-5 w-5 text-white" />
                   </div>
                 </div>
                 <div className="flex items-center text-sm">
@@ -574,8 +574,8 @@ export default function Dashboard() {
                   ${cardYearlySpend.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </p>
               </div>
-                  <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <TrendingUp className="h-5 w-5 text-green-500" />
+                  <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-emerald-500 to-green-600 shadow-lg shadow-emerald-500/20 ring-1 ring-white/30">
+                    <TrendingUp className="h-5 w-5 text-white" />
                   </div>
                 </div>
                 <div className="flex items-center text-sm">
@@ -599,8 +599,8 @@ export default function Dashboard() {
                   {cardActiveSubscriptions}
                 </p>
               </div>
-                  <div className="h-10 w-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <RotateCcw className="h-5 w-5 text-purple-500" />
+                  <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-purple-500 to-fuchsia-500 shadow-lg shadow-purple-500/20 ring-1 ring-white/30">
+                    <RotateCcw className="h-5 w-5 text-white" />
                   </div>
                 </div>
                 <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
@@ -624,8 +624,8 @@ export default function Dashboard() {
                   {cardUpcomingRenewals}
                 </p>
               </div>
-                  <div className="h-10 w-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Bell className="h-5 w-5 text-orange-500" />
+                  <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-amber-500/25 ring-1 ring-white/30">
+                    <Bell className="h-5 w-5 text-white" />
                   </div>
                 </div>
                 <div className="mt-1 text-sm text-gray-600">

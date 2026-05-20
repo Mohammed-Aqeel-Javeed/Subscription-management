@@ -4651,7 +4651,7 @@ export default function GovernmentLicense() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="block text-sm font-medium text-slate-700">
-                                Renewal Initiated date:
+                                Date
                                 <span className="text-red-500"> *</span>
                               </FormLabel>
                               <FormControl>
@@ -5633,7 +5633,7 @@ export default function GovernmentLicense() {
             }
           }}
         >
-              <DialogContent showClose={false} className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
+              <DialogContent showClose={false} className="max-w-4xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
                 <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
                   <div className="flex items-start justify-between">
                     <div>

@@ -1341,6 +1341,7 @@ router.put("/api/compliance/:id", async (req, res) => {
     const db = await connectToDatabase();
     const collection = db.collection("compliance");
     const { id } = req.params;
+    const tenantId = req.user?.tenantId;
     
     // Get the document before update for notification
     const oldDoc = await collection.findOne({ _id: new ObjectId(id) });
@@ -1367,72 +1368,70 @@ router.put("/api/compliance/:id", async (req, res) => {
     if (result.matchedCount === 1) {
       // Get the updated document for reminder generation
       const updatedDoc = await collection.findOne({ _id: new ObjectId(id) });
-      
-      // Regenerate reminders for compliance
-      try {
-        const tenantId = req.user?.tenantId;
-        if (tenantId) {
-          const complianceName = updatedDoc?.filingName || updatedDoc?.complianceName || updatedDoc?.name || 'Unnamed Filing';
-await generateRemindersForCompliance(updatedDoc, tenantId, db);
 
-          // Run reminder check immediately so due reminders send without requiring a server restart.
-          try {
-            const { runComplianceReminderCheck } = await import("./compliance-reminder.service.js");
-            await runComplianceReminderCheck(tenantId);
-          } catch (e) {
-            console.error(`❌ [COMPLIANCE] Immediate reminder check failed:`, e);
-          }
-}
-      } catch (reminderError) {
-        console.error(`❌ [COMPLIANCE] Failed to regenerate reminders:`, reminderError);
-        // Don't throw - let compliance update succeed even if reminder generation fails
-      }
-      
-      // Send lifecycle notifications for compliance updates
-      try {
-        const tenantId = req.user?.tenantId;
-        if (tenantId && updatedDoc) {
-          // Detect what changed
-          const changes = detectComplianceChanges(oldDoc, updatedDoc);
-          
-          console.log(`[COMPLIANCE UPDATE] Change detection for ${updatedDoc.filingName || updatedDoc.name}:`, {
-            ownerChanged: changes.ownerChanged,
-            submitted: changes.submitted,
-            oldOwner: changes.oldOwner,
-            newOwner: updatedDoc.owner,
-            oldStatus: changes.oldStatus,
-            newStatus: updatedDoc.status
-          });
-          
-          // Send appropriate notifications based on what changed
-          if (changes.ownerChanged) {
-            console.log(`[COMPLIANCE UPDATE] Owner changed detected - sending ownerChange notifications...`);
-            await sendComplianceNotifications(
-              'ownerChange',
-              { ...updatedDoc, id: id },
-              oldDoc,
-              tenantId,
-              db
-            );
-          } else if (changes.submitted) {
-            console.log(`[COMPLIANCE UPDATE] Submitted status detected - sending submitted notifications...`);
-            await sendComplianceNotifications(
-              'submitted',
-              { ...updatedDoc, id: id },
-              oldDoc,
-              tenantId,
-              db
-            );
-          } else {
-            console.log(`[COMPLIANCE UPDATE] No significant changes detected for notifications`);
-          }
-          // Note: 'otherFields' doesn't send notifications per matrix
-        }
-      } catch (notificationError) {
-        console.error(`❌ [COMPLIANCE] Failed to send lifecycle notifications:`, notificationError);
-      }
-      
+      // Respond immediately; run heavy side-effects in the background.
       res.status(200).json({ message: "Compliance filing updated" });
+
+      void (async () => {
+        // Regenerate reminders for compliance (non-blocking)
+        try {
+          if (tenantId && updatedDoc) {
+            await generateRemindersForCompliance(updatedDoc, tenantId, db);
+
+            // Run reminder check immediately so due reminders send without requiring a server restart.
+            try {
+              const { runComplianceReminderCheck } = await import("./compliance-reminder.service.js");
+              await runComplianceReminderCheck(tenantId);
+            } catch (e) {
+              console.error(`❌ [COMPLIANCE] Immediate reminder check failed:`, e);
+            }
+          }
+        } catch (reminderError) {
+          console.error(`❌ [COMPLIANCE] Failed to regenerate reminders:`, reminderError);
+        }
+
+        // Send lifecycle notifications for compliance updates (non-blocking)
+        try {
+          if (tenantId && updatedDoc) {
+            const changes = detectComplianceChanges(oldDoc, updatedDoc);
+
+            console.log(`[COMPLIANCE UPDATE] Change detection for ${updatedDoc.filingName || updatedDoc.name}:`, {
+              ownerChanged: changes.ownerChanged,
+              submitted: changes.submitted,
+              oldOwner: changes.oldOwner,
+              newOwner: updatedDoc.owner,
+              oldStatus: changes.oldStatus,
+              newStatus: updatedDoc.status,
+            });
+
+            if (changes.ownerChanged) {
+              console.log(`[COMPLIANCE UPDATE] Owner changed detected - sending ownerChange notifications...`);
+              await sendComplianceNotifications(
+                'ownerChange',
+                { ...updatedDoc, id: id },
+                oldDoc,
+                tenantId,
+                db
+              );
+            } else if (changes.submitted) {
+              console.log(`[COMPLIANCE UPDATE] Submitted status detected - sending submitted notifications...`);
+              await sendComplianceNotifications(
+                'submitted',
+                { ...updatedDoc, id: id },
+                oldDoc,
+                tenantId,
+                db
+              );
+            } else {
+              console.log(`[COMPLIANCE UPDATE] No significant changes detected for notifications`);
+            }
+          }
+        } catch (notificationError) {
+          console.error(`❌ [COMPLIANCE] Failed to send lifecycle notifications:`, notificationError);
+        }
+      })();
+
+      return;
     } else {
       res.status(404).json({ message: "Compliance filing not found" });
     }

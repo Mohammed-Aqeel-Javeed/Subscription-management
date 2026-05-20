@@ -378,10 +378,12 @@ export default function SignupPage() {
   return (
     <div
       style={{
+        height: "100%",
         minHeight: "100vh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        overflow: "hidden",
         background: "linear-gradient(135deg, #5b3cff, #7c3aed)",
         padding: "0.75rem",
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif",
@@ -397,6 +399,7 @@ export default function SignupPage() {
           gridTemplateColumns: "1.1fr 1fr",
           background: "#5b3cff",
           boxShadow: "0 24px 80px rgba(15, 23, 42, 0.45)",
+          height: "calc(100vh - 1.5rem)",
         }}
       >
         {/* Left marketing / hero panel */}
@@ -412,7 +415,7 @@ export default function SignupPage() {
             position: "relative",
           }}
         >
-          <div style={{ maxWidth: 360 }}>
+          <div style={{ maxWidth: 360, transform: "translateY(-12px)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
               <img
                 src="/assets/logo.png"
@@ -457,6 +460,81 @@ export default function SignupPage() {
             </div>
           </div>
 
+          {/* Social sign-in buttons (moved here so they are visible without scrolling) */}
+          <div
+            style={{
+              position: "absolute",
+              left: "2rem",
+              right: "2rem",
+              bottom: "3.25rem",
+            }}
+          >
+            <div
+              style={{
+                marginBottom: 10,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                color: "rgba(255,255,255,0.75)",
+                fontSize: 11,
+              }}
+            >
+              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.28)" }} />
+              <span>OR</span>
+              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.28)" }} />
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.assign(`${API_BASE_URL}/api/auth/google/start`);
+                }}
+                style={{
+                  flex: 1,
+                  padding: "9px 14px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.35)",
+                  background: "rgba(255,255,255,0.92)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-start",
+                  gap: 10,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  color: "#374151",
+                }}
+              >
+                <img src="/assets/social/google.svg" alt="Google logo" style={{ width: 28, height: 28 }} />
+                <span>Google</span>
+              </button>
+              <button
+                type="button"
+                style={{
+                  flex: 1,
+                  padding: "9px 14px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.35)",
+                  background: "rgba(255,255,255,0.92)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-start",
+                  gap: 10,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  color: "#1d4ed8",
+                }}
+              >
+                <img
+                  src="/assets/social/facebook.svg"
+                  alt="Facebook logo"
+                  style={{ width: 18, height: 18, borderRadius: 999 }}
+                />
+                <span>Facebook</span>
+              </button>
+            </div>
+          </div>
+
           <div
             style={{
               position: "absolute",
@@ -477,10 +555,20 @@ export default function SignupPage() {
             padding: "1.3rem 1.9rem",
             display: "flex",
             flexDirection: "column",
-            justifyContent: "space-between",
+            justifyContent: "flex-start",
+            minHeight: 0,
+            height: "100%",
           }}
         >
-          <div>
+          <div
+            className="no-scrollbar"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: "auto",
+              overscrollBehavior: "contain",
+            }}
+          >
             <div
               style={{
                 display: "flex",
@@ -499,10 +587,11 @@ export default function SignupPage() {
               >
                 Create Account
               </h2>
-              <p style={{ color: "#6b7280", fontSize: 12 }}>
-                {step === "details" && "Let’s get started with your 30 days free trial."}
-                {step === "otp" && "Step 2: Verify OTP to complete your signup."}
-              </p>
+              {step === "otp" && (
+                <p style={{ color: "#6b7280", fontSize: 12 }}>
+                  Step 2: Verify OTP to complete your signup.
+                </p>
+              )}
             </div>
 
             {/* Plan banner shown when arriving from landing page pricing */}
@@ -522,7 +611,13 @@ export default function SignupPage() {
                 }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M20 6L9 17l-5-5" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path
+                    d="M20 6L9 17l-5-5"
+                    stroke="#16a34a"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
                 You're signing up for the{" "}
                 <strong style={{ textTransform: "capitalize" }}>{planFromUrl}</strong>{" "}
@@ -540,7 +635,7 @@ export default function SignupPage() {
                   <input
                     type="text"
                     value={fullName}
-                    onChange={e => setFullName(e.target.value)}
+                    onChange={(e) => setFullName(e.target.value)}
                     required
                     style={{
                       width: "100%",
@@ -554,6 +649,7 @@ export default function SignupPage() {
                     }}
                   />
                 </div>
+
                 <div style={{ marginBottom: 10 }}>
                   <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
                     Company Name
@@ -561,7 +657,7 @@ export default function SignupPage() {
                   <input
                     type="text"
                     value={companyName}
-                    onChange={e => setCompanyName(e.target.value)}
+                    onChange={(e) => setCompanyName(e.target.value)}
                     required
                     style={{
                       width: "100%",
@@ -575,6 +671,7 @@ export default function SignupPage() {
                     }}
                   />
                 </div>
+
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
                     Email Address
@@ -582,7 +679,7 @@ export default function SignupPage() {
                   <input
                     type="email"
                     value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    onChange={(e) => setEmail(e.target.value)}
                     required
                     style={{
                       width: "100%",
@@ -601,6 +698,7 @@ export default function SignupPage() {
                     </div>
                   )}
                 </div>
+
                 <div style={{ marginBottom: 10, position: "relative" }}>
                   <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
                     LCY
@@ -608,14 +706,13 @@ export default function SignupPage() {
                   <input
                     type="text"
                     value={companyCurrency}
-                    onChange={e => handleCurrencyChange(e.target.value)}
+                    onChange={(e) => handleCurrencyChange(e.target.value)}
                     onFocus={() => {
                       if (companyCurrency && filteredCurrencies.length > 0) {
                         setShowCurrencyDropdown(true);
                       }
                     }}
                     onBlur={() => {
-                      // Delay to allow click on dropdown item
                       setTimeout(() => setShowCurrencyDropdown(false), 200);
                     }}
                     required
@@ -631,6 +728,7 @@ export default function SignupPage() {
                     }}
                     autoComplete="off"
                   />
+
                   {/* Autocomplete Dropdown */}
                   {showCurrencyDropdown && filteredCurrencies.length > 0 && (
                     <div
@@ -647,12 +745,11 @@ export default function SignupPage() {
                         overflowY: "auto",
                       }}
                     >
-                      {filteredCurrencies.map(curr => (
+                      {filteredCurrencies.map((curr) => (
                         <button
                           key={curr.code}
                           type="button"
                           onPointerDown={(e) => {
-                            // Select before the input's onBlur closes the dropdown.
                             e.preventDefault();
                             handleCurrencySelect(curr);
                           }}
@@ -668,11 +765,11 @@ export default function SignupPage() {
                             transition: "background 0.15s, transform 0.1s",
                             fontSize: 12,
                           }}
-                          onMouseEnter={e => {
+                          onMouseEnter={(e) => {
                             e.currentTarget.style.background = "#eef2ff";
                             e.currentTarget.style.transform = "translateY(-1px)";
                           }}
-                          onMouseLeave={e => {
+                          onMouseLeave={(e) => {
                             e.currentTarget.style.background = "transparent";
                             e.currentTarget.style.transform = "translateY(0)";
                           }}
@@ -694,6 +791,7 @@ export default function SignupPage() {
                     </div>
                   )}
                 </div>
+
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
                     Password
@@ -702,7 +800,7 @@ export default function SignupPage() {
                     <input
                       type={showPassword ? "text" : "password"}
                       value={password}
-                      onChange={e => setPassword(e.target.value)}
+                      onChange={(e) => setPassword(e.target.value)}
                       required
                       style={{
                         width: "100%",
@@ -732,47 +830,23 @@ export default function SignupPage() {
                         color: "#6b7280",
                       }}
                     >
-                      {showPassword ? (
-                        <EyeOff size={18} />
-                      ) : (
-                        <Eye size={18} />
-                      )}
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
                   {password && !Object.values(passwordValidation).every(Boolean) && (
                     <div style={{ marginTop: 8, fontSize: 11.5, lineHeight: 1.6 }}>
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          marginBottom: 4,
-                          color: "#4b5563",
-                        }}
-                      >
+                      <div style={{ fontWeight: 600, marginBottom: 4, color: "#4b5563" }}>
                         Password must contain:
                       </div>
-                      <PasswordRequirement
-                        met={passwordValidation.minLength}
-                        text="At least 8 characters"
-                      />
-                      <PasswordRequirement
-                        met={passwordValidation.hasUpperCase}
-                        text="One uppercase letter (A-Z)"
-                      />
-                      <PasswordRequirement
-                        met={passwordValidation.hasLowerCase}
-                        text="One lowercase letter (a-z)"
-                      />
-                      <PasswordRequirement
-                        met={passwordValidation.hasNumber}
-                        text="One number (0-9)"
-                      />
-                      <PasswordRequirement
-                        met={passwordValidation.hasSpecialChar}
-                        text="One special character (!@#$%^&*)"
-                      />
+                      <PasswordRequirement met={passwordValidation.minLength} text="At least 8 characters" />
+                      <PasswordRequirement met={passwordValidation.hasUpperCase} text="One uppercase letter (A-Z)" />
+                      <PasswordRequirement met={passwordValidation.hasLowerCase} text="One lowercase letter (a-z)" />
+                      <PasswordRequirement met={passwordValidation.hasNumber} text="One number (0-9)" />
+                      <PasswordRequirement met={passwordValidation.hasSpecialChar} text="One special character (!@#$%^&*)" />
                     </div>
                   )}
                 </div>
+
                 <div style={{ marginBottom: 12 }}>
                   <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
                     Confirm Password
@@ -780,7 +854,7 @@ export default function SignupPage() {
                   <input
                     type="password"
                     value={confirmPassword}
-                    onChange={e => setConfirmPassword(e.target.value)}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                     style={{
                       width: "100%",
@@ -794,15 +868,14 @@ export default function SignupPage() {
                     }}
                   />
                 </div>
+
                 <button
                   type="submit"
                   disabled={loading}
                   style={{
                     width: "100%",
                     padding: 10,
-                    background: loading
-                      ? "#9ca3af"
-                      : "linear-gradient(90deg, #2563eb, #3b82f6)",
+                    background: loading ? "#9ca3af" : "linear-gradient(90deg, #2563eb, #3b82f6)",
                     color: "#fff",
                     border: 0,
                     borderRadius: 999,
@@ -815,100 +888,14 @@ export default function SignupPage() {
                 >
                   {loading ? "Sending OTP..." : "Send OTP"}
                 </button>
-                
-                {/* Social sign-in UI (visual only) */}
-                <div
-                  style={{
-                    marginTop: 10,
-                    marginBottom: 4,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    color: "#9ca3af",
-                    fontSize: 12,
-                  }}
-                >
-                  <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
-                  <span>OR</span>
-                  <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    marginBottom: 2,
-                  }}
-                >
-                  <button
-                    type="button"
-                    style={{
-                      flex: 1,
-                      padding: "7px 9px",
-                      borderRadius: 999,
-                      border: "1px solid #e5e7eb",
-                      background: "#ffffff",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      fontSize: 13,
-                      cursor: "pointer",
-                      color: "#374151",
-                    }}
-                  >
-                    <img
-                      src="/assets/social/google.svg"
-                      alt="Google logo"
-                      style={{ width: 28, height: 28}}
-                    />
-                    <span>Google</span>
-                  </button>
-                  <button
-                    type="button"
-                    style={{
-                      flex: 1,
-                      padding: "8px 10px",
-                      borderRadius: 999,
-                      border: "1px solid #e5e7eb",
-                      background: "#ffffff",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      fontSize: 13,
-                      cursor: "pointer",
-                      color: "#1d4ed8",
-                    }}
-                  >
-                    <img
-                      src="/assets/social/facebook.svg"
-                      alt="Facebook logo"
-                      style={{ width: 18, height: 18, borderRadius: 999 }}
-                    />
-                    <span>Facebook</span>
-                  </button>
-                </div>
+
                 {error && (
-                  <div
-                    style={{
-                      color: "#dc2626",
-                      marginTop: 12,
-                      textAlign: "center",
-                      fontSize: 13,
-                    }}
-                  >
+                  <div style={{ color: "#dc2626", marginTop: 12, textAlign: "center", fontSize: 13 }}>
                     {error}
                   </div>
                 )}
                 {success && (
-                  <div
-                    style={{
-                      color: "#16a34a",
-                      marginTop: 12,
-                      textAlign: "center",
-                      fontSize: 13,
-                    }}
-                  >
+                  <div style={{ color: "#16a34a", marginTop: 12, textAlign: "center", fontSize: 13 }}>
                     {success}
                   </div>
                 )}
@@ -925,7 +912,7 @@ export default function SignupPage() {
                   <input
                     type="text"
                     value={otp}
-                    onChange={e => setOtp(e.target.value.replace(/\D/g, ""))}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
                     required
                     maxLength={6}
                     style={{
@@ -943,15 +930,16 @@ export default function SignupPage() {
                     }}
                   />
                 </div>
-                
-                {/* Timer and Resend Button */}
-                <div style={{ 
-                  display: "flex", 
-                  justifyContent: "space-between", 
-                  alignItems: "center",
-                  marginBottom: 14,
-                  fontSize: 13,
-                }}>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 14,
+                    fontSize: 13,
+                  }}
+                >
                   <span style={{ color: getTimerColor(), fontWeight: 500 }}>
                     Time remaining: {formatTime(timeLeft)}
                   </span>
@@ -972,16 +960,14 @@ export default function SignupPage() {
                     Resend OTP
                   </button>
                 </div>
-                
+
                 <button
                   type="submit"
                   disabled={loading}
                   style={{
                     width: "100%",
                     padding: 12,
-                    background: loading
-                      ? "#9ca3af"
-                      : "linear-gradient(90deg, #2563eb, #3b82f6)",
+                    background: loading ? "#9ca3af" : "linear-gradient(90deg, #2563eb, #3b82f6)",
                     color: "#fff",
                     border: 0,
                     borderRadius: 999,
@@ -1016,34 +1002,21 @@ export default function SignupPage() {
                 >
                   ← Back to Details
                 </button>
+
                 {error && (
-                  <div
-                    style={{
-                      color: "#dc2626",
-                      marginTop: 12,
-                      textAlign: "center",
-                      fontSize: 13,
-                    }}
-                  >
+                  <div style={{ color: "#dc2626", marginTop: 12, textAlign: "center", fontSize: 13 }}>
                     {error}
                   </div>
                 )}
                 {success && (
-                  <div
-                    style={{
-                      color: "#16a34a",
-                      marginTop: 12,
-                      textAlign: "center",
-                      fontSize: 13,
-                    }}
-                  >
+                  <div style={{ color: "#16a34a", marginTop: 12, textAlign: "center", fontSize: 13 }}>
                     {success}
                   </div>
                 )}
               </form>
             )}
           </div>
-          
+
           <div style={{ textAlign: "center", marginTop: 10, fontSize: 12 }}>
             <span style={{ color: "#6b7280" }}>Already have an account? </span>
             <button

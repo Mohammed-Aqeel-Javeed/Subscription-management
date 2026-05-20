@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useUser } from "@/context/UserContext";
 import ComplianceCategoryChart from "@/components/charts/compliance-category-chart";
-import { AlertTriangle, Calendar, CheckCircle2, FileText, TrendingUp, X } from "lucide-react";
+import { AlertTriangle, Calendar, CalendarX, FileText, X } from "lucide-react";
 
-type ModalKey = "total" | "dueToday" | "upcoming7Days" | "overdue" | "completedThisMonth";
+type ModalKey = "total" | "due" | "noDue" | "overdue";
 
 // Error boundary wrapper
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
@@ -70,25 +70,6 @@ export default function ComplianceDashboard() {
     return d;
   }, []);
 
-  const startOfTomorrow = useMemo(() => {
-    const d = new Date(startOfToday);
-    d.setDate(d.getDate() + 1);
-    return d;
-  }, [startOfToday]);
-
-  const startOfNext7Days = useMemo(() => {
-    const d = new Date(startOfToday);
-    d.setDate(d.getDate() + 7);
-    return d;
-  }, [startOfToday]);
-
-  const startOfMonth = useMemo(() => {
-    const d = new Date();
-    d.setDate(1);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
-
   const parseDateSafe = (value: unknown) => {
     const d = new Date(String(value ?? ""));
     return Number.isFinite(d.getTime()) ? d : null;
@@ -134,9 +115,6 @@ export default function ComplianceDashboard() {
 
   const getStatusPill = (c: any) => {
     const raw = String(c?.status ?? "").toLowerCase();
-    if (raw === "draft") {
-      return { label: "Draft", classes: "bg-amber-50 text-amber-700 border-amber-200" };
-    }
     if (raw === "submitted") {
       return { label: "Submitted", classes: "bg-green-50 text-green-700 border-green-200" };
     }
@@ -159,18 +137,17 @@ export default function ComplianceDashboard() {
   const metrics = useMemo(() => {
     const total = items.length;
 
-    const dueToday = items.filter((c: any) => {
+    const noDue = items.filter((c: any) => {
       if (isSubmitted(c)) return false;
       const deadline = parseDateSafe(c?.submissionDeadline);
-      if (!deadline) return false;
-      return deadline >= startOfToday && deadline < startOfTomorrow;
+      return !deadline;
     }).length;
 
-    const upcoming7Days = items.filter((c: any) => {
+    const due = items.filter((c: any) => {
       if (isSubmitted(c)) return false;
       const deadline = parseDateSafe(c?.submissionDeadline);
       if (!deadline) return false;
-      return deadline >= startOfTomorrow && deadline <= startOfNext7Days;
+      return deadline >= startOfToday;
     }).length;
 
     const overdue = items.filter((c: any) => {
@@ -180,50 +157,32 @@ export default function ComplianceDashboard() {
       return deadline < startOfToday;
     }).length;
 
-    const completedThisMonth = items.filter((c: any) => {
-      if (!isSubmitted(c)) return false;
-      const dt =
-        parseDateSafe((c as any)?.submissionDate) ||
-        parseDateSafe((c as any)?.filingSubmissionDate) ||
-        parseDateSafe((c as any)?.updatedAt) ||
-        parseDateSafe((c as any)?.createdAt);
-      if (!dt) return false;
-      return dt >= startOfMonth;
-    }).length;
-
-    return { total, dueToday, upcoming7Days, overdue, completedThisMonth };
-  }, [items, startOfMonth, startOfNext7Days, startOfToday, startOfTomorrow]);
+    return { total, due, noDue, overdue };
+  }, [items, startOfToday]);
 
   const statusBuckets = useMemo(() => {
     const colors = {
       "No Due": "hsl(var(--chart-3))",
-      Draft: "hsl(var(--chart-4))",
       Due: "hsl(var(--chart-2))",
       Late: "hsl(var(--chart-1))",
     } as const;
 
     const counts: Record<keyof typeof colors, number> = {
       "No Due": 0,
-      Draft: 0,
       Due: 0,
       Late: 0,
     };
 
     for (const c of items) {
-      const statusRaw = String(c?.status ?? "").toLowerCase();
+      if (isSubmitted(c)) continue;
       const deadline = getDueDate(c);
 
-      if (statusRaw === "draft") {
-        counts.Draft += 1;
-        continue;
-      }
-
-      if (isSubmitted(c) || !deadline) {
+      if (!deadline) {
         counts["No Due"] += 1;
         continue;
       }
 
-      if (statusRaw === "overdue" || deadline < startOfToday) {
+      if (deadline < startOfToday) {
         counts.Late += 1;
         continue;
       }
@@ -231,36 +190,21 @@ export default function ComplianceDashboard() {
       counts.Due += 1;
     }
 
-    const ordered: Array<keyof typeof colors> = ["No Due", "Draft", "Due", "Late"];
+    const ordered: Array<keyof typeof colors> = ["No Due", "Due", "Late"];
     return ordered.map((status) => ({ status, count: counts[status], color: colors[status] }));
   }, [items, startOfToday]);
 
   const statusTotal = useMemo(() => statusBuckets.reduce((sum, b) => sum + b.count, 0), [statusBuckets]);
 
   const statusDonutData = useMemo(() => {
-    return statusBuckets
-      .filter((s) => s.count > 0)
-      .map((s) => ({ category: s.status, count: s.count, color: s.color }));
+    return statusBuckets.map((s) => ({ category: s.status, count: s.count, color: s.color }));
   }, [statusBuckets]);
-
-  const renderDonutLabel = (props: any) => {
-    const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
-    if (typeof percent !== 'number' || percent < 0.08) return null;
-    const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-    return (
-      <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600}>
-        {(percent * 100).toFixed(0)}%
-      </text>
-    );
-  };
 
   const categoryData = useMemo(() => {
     const counts = new Map<string, number>();
     for (const c of items) {
       const category = getCategory(c);
+      if (String(category).trim().toLowerCase() === 'other') continue;
       counts.set(category, (counts.get(category) || 0) + 1);
     }
     return Array.from(counts.entries())
@@ -271,16 +215,16 @@ export default function ComplianceDashboard() {
   const rowsByModalKey = useMemo(() => {
     const list = items;
 
-    const dueTodayRows = list.filter((c: any) => {
+    const noDueRows = list.filter((c: any) => {
       if (isSubmitted(c)) return false;
       const deadline = getDueDate(c);
-      return !!deadline && deadline >= startOfToday && deadline < startOfTomorrow;
+      return !deadline;
     });
 
-    const upcoming7DaysRows = list.filter((c: any) => {
+    const dueRows = list.filter((c: any) => {
       if (isSubmitted(c)) return false;
       const deadline = getDueDate(c);
-      return !!deadline && deadline >= startOfTomorrow && deadline <= startOfNext7Days;
+      return !!deadline && deadline >= startOfToday;
     });
 
     const overdueRows = list.filter((c: any) => {
@@ -291,37 +235,24 @@ export default function ComplianceDashboard() {
       return statusRaw === "overdue" || deadline < startOfToday;
     });
 
-    const completedThisMonthRows = list.filter((c: any) => {
-      if (!isSubmitted(c)) return false;
-      const dt =
-        parseDateSafe((c as any)?.submissionDate) ||
-        parseDateSafe((c as any)?.filingSubmissionDate) ||
-        parseDateSafe((c as any)?.updatedAt) ||
-        parseDateSafe((c as any)?.createdAt);
-      return !!dt && dt >= startOfMonth;
-    });
-
     return {
       total: list,
-      dueToday: dueTodayRows,
-      upcoming7Days: upcoming7DaysRows,
+      due: dueRows,
+      noDue: noDueRows,
       overdue: overdueRows,
-      completedThisMonth: completedThisMonthRows,
     } satisfies Record<ModalKey, any[]>;
-  }, [items, parseDateSafe, startOfMonth, startOfNext7Days, startOfToday, startOfTomorrow]);
+  }, [items, startOfToday]);
 
   const modalTitle = useMemo(() => {
     switch (activeModal) {
       case "total":
         return "Total Filings";
-      case "dueToday":
-        return "Due Today";
-      case "upcoming7Days":
-        return "Upcoming (7 days)";
+      case "due":
+        return "Due";
+      case "noDue":
+        return "No Due";
       case "overdue":
         return "Overdue / Late";
-      case "completedThisMonth":
-        return "Completed This Month";
       default:
         return "Filings";
     }
@@ -404,8 +335,8 @@ export default function ComplianceDashboard() {
             </div>
             {complianceLoading ? (
               <div className="mt-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
-                  {Array.from({ length: 5 }).map((_, i) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-5">
+                  {Array.from({ length: 4 }).map((_, i) => (
                     <Skeleton key={i} className="h-24" />
                   ))}
                 </div>
@@ -417,7 +348,7 @@ export default function ComplianceDashboard() {
             ) : (
               <>
                 {/* Metric Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-5">
                   <div
                     className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-blue-500 cursor-pointer hover:shadow-md transition-shadow group"
                     onClick={() => openModal("total")}
@@ -427,8 +358,8 @@ export default function ComplianceDashboard() {
                         <p className="text-sm font-medium text-gray-600 mb-1">Total Filings</p>
                         <p className="text-2xl font-bold text-gray-900">{metrics.total}</p>
                       </div>
-                      <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <FileText className="h-5 w-5 text-blue-500" />
+                      <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-blue-500 to-indigo-500 shadow-lg shadow-blue-500/20 ring-1 ring-white/30">
+                        <FileText className="h-5 w-5 text-white" />
                       </div>
                     </div>
                     <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
@@ -441,16 +372,16 @@ export default function ComplianceDashboard() {
                   </div>
 
                   <div
-                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow group"
-                    onClick={() => openModal("dueToday")}
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-amber-500 cursor-pointer hover:shadow-md transition-shadow group"
+                    onClick={() => openModal("due")}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-600 mb-1">Due Today</p>
-                        <p className="text-2xl font-bold text-gray-900">{metrics.dueToday}</p>
+                        <p className="text-sm font-medium text-gray-600 mb-1">Due</p>
+                        <p className="text-2xl font-bold text-gray-900">{metrics.due}</p>
                       </div>
-                      <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <Calendar className="h-5 w-5 text-green-500" />
+                      <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-amber-500/25 ring-1 ring-white/30">
+                        <Calendar className="h-5 w-5 text-white" />
                       </div>
                     </div>
                     <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
@@ -463,16 +394,16 @@ export default function ComplianceDashboard() {
                   </div>
 
                   <div
-                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow group"
-                    onClick={() => openModal("upcoming7Days")}
+                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-indigo-500 cursor-pointer hover:shadow-md transition-shadow group"
+                    onClick={() => openModal("noDue")}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-600 mb-1">Upcoming (7 days)</p>
-                        <p className="text-2xl font-bold text-gray-900">{metrics.upcoming7Days}</p>
+                        <p className="text-sm font-medium text-gray-600 mb-1">No Due</p>
+                        <p className="text-2xl font-bold text-gray-900">{metrics.noDue}</p>
                       </div>
-                      <div className="h-10 w-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <TrendingUp className="h-5 w-5 text-purple-500" />
+                      <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-indigo-500 to-violet-500 shadow-lg shadow-indigo-500/20 ring-1 ring-white/30">
+                        <CalendarX className="h-5 w-5 text-white" />
                       </div>
                     </div>
                     <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
@@ -493,30 +424,8 @@ export default function ComplianceDashboard() {
                         <p className="text-sm font-medium text-gray-600 mb-1">Overdue / Late</p>
                         <p className="text-2xl font-bold text-gray-900">{metrics.overdue}</p>
                       </div>
-                      <div className="h-10 w-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <AlertTriangle className="h-5 w-5 text-orange-500" />
-                      </div>
-                    </div>
-                    <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
-                      <span className="relative">
-                        Click to view details
-                        <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
-                      </span>
-                      <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
-                    </div>
-                  </div>
-
-                  <div
-                    className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-emerald-500 cursor-pointer hover:shadow-md transition-shadow group"
-                    onClick={() => openModal("completedThisMonth")}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-600 mb-1">Completed This Month</p>
-                        <p className="text-2xl font-bold text-gray-900">{metrics.completedThisMonth}</p>
-                      </div>
-                      <div className="h-10 w-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                      <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-amber-500/25 ring-1 ring-white/30">
+                        <AlertTriangle className="h-5 w-5 text-white" />
                       </div>
                     </div>
                     <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
@@ -538,29 +447,41 @@ export default function ComplianceDashboard() {
 
                     <div className="h-[320px] w-full flex flex-col sm:flex-row items-start gap-6">
                       <div className="h-[320px] w-full sm:flex-1 min-w-0 flex items-center justify-center">
-                        {statusDonutData.length === 0 ? (
+                        {statusTotal === 0 ? (
                           <div className="h-full flex items-center justify-center text-sm text-gray-500">No status data</div>
                         ) : (
                           <ResponsiveContainer width="100%" height={240}>
-                            <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                              <Pie
-                                data={statusDonutData}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius="58%"
-                                outerRadius="86%"
-                                paddingAngle={2}
-                                dataKey="count"
-                                nameKey="category"
-                                label={renderDonutLabel}
-                                labelLine={false}
-                              >
-                                {statusDonutData.map((entry) => (
-                                  <Cell key={entry.category} fill={entry.color} />
-                                ))}
-                              </Pie>
+                            <BarChart
+                              data={statusDonutData}
+                              margin={{ top: 6, right: 10, bottom: 6, left: 0 }}
+                            >
+                              <CartesianGrid
+                                strokeDasharray="0"
+                                stroke="hsl(var(--border))"
+                                strokeOpacity={0.55}
+                                vertical={false}
+                              />
+                              <XAxis
+                                dataKey="category"
+                                type="category"
+                                tick={{ fill: "#6b7280", fontSize: 12 }}
+                                axisLine={false}
+                                tickLine={false}
+                              />
+                              <YAxis
+                                type="number"
+                                allowDecimals={false}
+                                tick={{ fill: "#6b7280", fontSize: 12 }}
+                                axisLine={false}
+                                tickLine={false}
+                              />
                               <Tooltip
-                                formatter={(value: number) => [`${Number(value).toLocaleString()} filings`, 'Filings']}
+                                formatter={(value: any) => {
+                                  const n = typeof value === 'number' ? value : Number(value);
+                                  const pct = statusTotal > 0 && Number.isFinite(n) ? ((n / statusTotal) * 100).toFixed(1) : '0.0';
+                                  return [`${Number(n || 0).toLocaleString()} filings (${pct}%)`, 'Filings'];
+                                }}
+                                cursor={false}
                                 contentStyle={{
                                   backgroundColor: 'hsl(var(--card))',
                                   border: '1px solid hsl(var(--border))',
@@ -570,7 +491,12 @@ export default function ComplianceDashboard() {
                                 }}
                                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600, marginBottom: 6 }}
                               />
-                            </PieChart>
+                              <Bar dataKey="count" radius={[6, 6, 6, 6]}>
+                                {statusDonutData.map((entry) => (
+                                  <Cell key={entry.category} fill={entry.color} />
+                                ))}
+                              </Bar>
+                            </BarChart>
                           </ResponsiveContainer>
                         )}
                       </div>
@@ -578,7 +504,7 @@ export default function ComplianceDashboard() {
                       <div className="h-[240px] w-56 flex flex-col items-start justify-center">
                         <div className="space-y-4">
                           {statusDonutData.map((s) => {
-                            const percent = statusTotal ? Math.round((s.count / statusTotal) * 100) : 0;
+                            const percent = statusTotal ? ((s.count / statusTotal) * 100).toFixed(1) : '0.0';
                             return (
                               <div key={s.category} className="flex items-center gap-3">
                                 <span className="h-3 w-3 rounded-full" style={{ backgroundColor: s.color }} />

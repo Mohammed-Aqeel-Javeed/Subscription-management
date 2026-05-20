@@ -140,6 +140,24 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
 
   const isGlobalAdmin = currentUser?.role === "global_admin";
 
+  // Company name in the UI should reflect the active tenant, even if `currentUser.companyName` is missing.
+  // The companies endpoint already knows which tenant is active for the current session.
+  const { data: companiesForHeader = [] } = useQuery<Company[]>({
+    queryKey: ["/api/user/companies"],
+    queryFn: async () => {
+      const r = await apiFetch("/api/user/companies");
+      if (!r.ok) throw new Error();
+      return r.json();
+    },
+    enabled: !!currentUser && !isGlobalAdmin,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const activeCompanyNameFromList =
+    companiesForHeader.find((c) => c.isActive)?.companyName || companiesForHeader[0]?.companyName || null;
+  const headerCompanyName = currentUser?.companyName || activeCompanyNameFromList;
+
   const sidebarBackground = isGlobalAdmin
     ? "linear-gradient(180deg, #f5f3ff 0%, #ede9fe 45%, #ffffff 100%)"
     : "linear-gradient(180deg, #ede9fe 0%, #e0d8fd 50%, #ddd5fc 100%)";
@@ -213,7 +231,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           <button onClick={()=>setShowSwitcher(true)}
             className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 transition-all duration-200 w-full border border-indigo-200/40 group">
             <Shuffle size={14} className="text-indigo-500 flex-shrink-0"/>
-            <span className="text-sm font-semibold text-indigo-700 leading-tight truncate flex-1 text-left">{currentUser.companyName||"Select company..."}</span>
+            <span className="text-sm font-semibold text-indigo-700 leading-tight truncate flex-1 text-left">{headerCompanyName||"Select company..."}</span>
             <ChevronDown size={13} className="text-indigo-400 flex-shrink-0"/>
           </button>
         )}

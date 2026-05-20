@@ -221,7 +221,8 @@ function AppWithSidebar() {
   // For those routes, lock the outer page scroll so mouse-wheel doesn't move the whole view.
   const lockOuterScroll =
     location.pathname.startsWith("/company-details/") ||
-    location.pathname.startsWith("/configuration");
+    location.pathname.startsWith("/configuration") ||
+    location.pathname === "/signup";
 
   return (
     <SidebarSlotProvider>

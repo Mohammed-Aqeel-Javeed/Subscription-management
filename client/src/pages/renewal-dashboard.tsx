@@ -8,9 +8,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useUser } from "@/context/UserContext";
 import { API_BASE_URL } from "@/lib/config";
-import { AlertTriangle, Calendar, FileText, ShieldCheck, TrendingUp, X } from "lucide-react";
+import { AlertTriangle, Ban, Calendar, ShieldCheck, X } from "lucide-react";
 
-type ModalKey = "total" | "dueThisMonth" | "upcoming30d" | "overdue" | "active" | "completedThisYear";
+type ModalKey = "active" | "expiringSoon" | "expired" | "cancelled";
 
 type License = {
   id: string;
@@ -40,7 +40,7 @@ export default function RenewalDashboard() {
   const { user } = useUser();
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<ModalKey>("total");
+  const [activeModal, setActiveModal] = useState<ModalKey>("active");
 
   const { data: licenses, isLoading, error } = useQuery<License[]>({
     queryKey: ["/api/licenses"],
@@ -79,19 +79,6 @@ export default function RenewalDashboard() {
     d.setHours(0, 0, 0, 0);
     return d;
   }, []);
-
-  const startOfThisMonth = useMemo(() => {
-    const d = new Date(startOfToday);
-    d.setDate(1);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, [startOfToday]);
-
-  const startOfNextMonth = useMemo(() => {
-    const d = new Date(startOfThisMonth);
-    d.setMonth(d.getMonth() + 1);
-    return d;
-  }, [startOfThisMonth]);
 
   const startOfThisYear = useMemo(() => {
     const d = new Date(startOfToday);
@@ -166,7 +153,7 @@ export default function RenewalDashboard() {
       case "Expired":
         return "bg-rose-100 text-rose-800 border border-rose-200";
       case "Cancelled":
-        return "bg-rose-100 text-rose-800 border border-rose-200";
+        return "bg-slate-100 text-slate-800 border border-slate-200";
       default:
         return "bg-gray-100 text-gray-800 border border-gray-200";
     }
@@ -177,6 +164,7 @@ export default function RenewalDashboard() {
       case "Approved":
         return "bg-emerald-50 text-emerald-700 border border-emerald-200";
       case "Cancelled":
+        return "bg-slate-50 text-slate-700 border border-slate-200";
       case "Rejected":
         return "bg-rose-50 text-rose-700 border border-rose-200";
       case "Renewal Initiated":
@@ -221,134 +209,99 @@ export default function RenewalDashboard() {
     return end >= startOfTomorrow && end <= startOfNext30Days;
   };
 
-  const isDueThisMonth = (lic: License) => {
-    const derived = getDerivedStatus(lic);
-    if (derived === "Cancelled") return false;
-    const end = parseLocalDate(String(lic.endDate || ""));
-    if (!end) return false;
-    return end >= startOfThisMonth && end < startOfNextMonth;
-  };
-
-  const isCompletedThisYear = (lic: License) => {
-    const renewalStatus = String(lic.renewalStatus || "").trim();
-    if (renewalStatus !== "Approved") return false;
-    const end = parseLocalDate(String(lic.endDate || ""));
-    if (!end) return false;
-    return end >= startOfThisYear && end < startOfNextYear;
-  };
-
   const openModal = (key: ModalKey) => {
     setActiveModal(key);
     setModalOpen(true);
   };
 
   const metrics = useMemo(() => {
-    const total = items.length;
-    let dueThisMonth = 0;
-    let upcoming30d = 0;
-    let overdue = 0;
     let active = 0;
-    let completedThisYear = 0;
+    let expiringSoon = 0;
+    let expired = 0;
+    let cancelled = 0;
 
     for (const lic of items) {
       const derived = getDerivedStatus(lic);
-      if (isDueThisMonth(lic)) dueThisMonth += 1;
-      if (isExpiringSoon(lic)) upcoming30d += 1;
-      if (derived === "Expired") overdue += 1;
-      if (derived === "Active") active += 1;
-      if (isCompletedThisYear(lic)) completedThisYear += 1;
+
+      if (derived === "Cancelled") {
+        cancelled += 1;
+        continue;
+      }
+      if (derived === "Expired") {
+        expired += 1;
+        continue;
+      }
+      // Active includes Expiring Soon (Expiring Soon is an alert/sub-status)
+      active += 1;
+      if (isExpiringSoon(lic)) expiringSoon += 1;
     }
 
-    return { total, dueThisMonth, upcoming30d, overdue, active, completedThisYear };
-  }, [items, isDueThisMonth, isExpiringSoon, isCompletedThisYear]);
+    return { active, expiringSoon, expired, cancelled };
+  }, [items, isExpiringSoon]);
 
   const activeRows = useMemo(() => {
     switch (activeModal) {
-      case "dueThisMonth":
-        return items.filter((l) => isDueThisMonth(l));
-      case "upcoming30d":
+      case "expiringSoon":
         return items.filter((l) => isExpiringSoon(l));
-      case "overdue":
+      case "expired":
         return items.filter((l) => getDerivedStatus(l) === "Expired");
+      case "cancelled":
+        return items.filter((l) => getDerivedStatus(l) === "Cancelled");
       case "active":
-        return items.filter((l) => getDerivedStatus(l) === "Active");
-      case "completedThisYear":
-        return items.filter((l) => isCompletedThisYear(l));
-      case "total":
       default:
-        return items;
+        return items.filter((l) => getDerivedStatus(l) === "Active");
     }
-  }, [activeModal, isCompletedThisYear, isDueThisMonth, items]);
+  }, [activeModal, isExpiringSoon, items]);
 
   const modalTitle = useMemo(() => {
     switch (activeModal) {
-      case "dueThisMonth":
-        return "Due This Month";
-      case "upcoming30d":
-        return "Upcoming (Next 30 Days)";
-      case "overdue":
-        return "Overdue";
+      case "expiringSoon":
+        return "Expiring Soon";
+      case "expired":
+        return "Expired";
+      case "cancelled":
+        return "Cancelled";
       case "active":
-        return "Active Licenses";
-      case "completedThisYear":
-        return "Completed This Year";
-      case "total":
       default:
-        return "All Renewals";
+        return "Active";
     }
   }, [activeModal]);
 
   const statusBuckets = useMemo(() => {
     const colors = {
-      Overdue: "hsl(var(--chart-5))",
-      "Upcoming (30d)": "hsl(var(--chart-4))",
-      "Due This Month": "hsl(var(--chart-2))",
-      "Active Licenses": "hsl(var(--chart-3))",
+      Active: "hsl(var(--chart-3))",
+      Expired: "hsl(var(--chart-1))",
+      Cancelled: "hsl(var(--chart-4))",
     } as const;
 
     const counts: Record<keyof typeof colors, number> = {
-      Overdue: 0,
-      "Upcoming (30d)": 0,
-      "Due This Month": 0,
-      "Active Licenses": 0,
+      Active: 0,
+      Expired: 0,
+      Cancelled: 0,
     };
 
     for (const lic of items) {
       const derived = getDerivedStatus(lic);
 
-      // Overdue (matches metric card: derived === "Expired")
+      if (derived === "Cancelled") {
+        counts.Cancelled += 1;
+        continue;
+      }
+
       if (derived === "Expired") {
-        counts.Overdue += 1;
+        counts.Expired += 1;
         continue;
       }
-
-      // Upcoming (30d) (matches metric card: isExpiringSoon)
-      if (isExpiringSoon(lic)) {
-        counts["Upcoming (30d)"] += 1;
-        continue;
-      }
-
-      // Due This Month (matches metric card: isDueThisMonth), but kept exclusive
-      // by evaluating after Overdue/Upcoming.
-      if (isDueThisMonth(lic)) {
-        counts["Due This Month"] += 1;
-        continue;
-      }
-
-      // Remaining actives
-      if (derived === "Active") {
-        counts["Active Licenses"] += 1;
-      }
+      counts.Active += 1;
     }
 
     const ordered: Array<keyof typeof colors> = [
-      "Upcoming (30d)",
-      "Due This Month",
-      "Active Licenses",
-      "Overdue",
+      "Active",
+      "Expired",
+      "Cancelled",
     ];
     return ordered.map((status) => ({ status, count: counts[status], color: colors[status] }));
-  }, [isDueThisMonth, isExpiringSoon, items]);
+  }, [isExpiringSoon, items]);
 
   const statusTotal = useMemo(() => statusBuckets.reduce((sum, b) => sum + b.count, 0), [statusBuckets]);
 
@@ -367,7 +320,7 @@ export default function RenewalDashboard() {
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
     return (
       <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700}>
-        {(percent * 100).toFixed(0)}%
+        {(percent * 100).toFixed(1)}%
       </text>
     );
   };
@@ -464,8 +417,8 @@ export default function RenewalDashboard() {
 
             {isLoading ? (
               <div className="mt-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                  {Array.from({ length: 5 }).map((_, i) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
                     <Skeleton key={i} className="h-24" />
                   ))}
                 </div>
@@ -477,106 +430,84 @@ export default function RenewalDashboard() {
             ) : (
               <>
             {/* Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-              <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-blue-500 cursor-pointer hover:shadow-md transition-shadow group"
-                onClick={() => openModal("total")}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Total Renewals</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.total}</p>
-                  </div>
-                  <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <FileText className="h-5 w-5 text-blue-500" />
-                  </div>
-                </div>
-                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
-                  <span className="relative">
-                    Click to view details
-                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
-                  </span>
-                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
-                </div>
-              </div>
-
-              <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-green-500 cursor-pointer hover:shadow-md transition-shadow group"
-                onClick={() => openModal("dueThisMonth")}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Due This Month</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.dueThisMonth}</p>
-                  </div>
-                  <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Calendar className="h-5 w-5 text-green-500" />
-                  </div>
-                </div>
-                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
-                  <span className="relative">
-                    Click to view details
-                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
-                  </span>
-                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
-                </div>
-              </div>
-
-              <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-purple-500 cursor-pointer hover:shadow-md transition-shadow group"
-                onClick={() => openModal("upcoming30d")}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Upcoming (30d)</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.upcoming30d}</p>
-                  </div>
-                  <div className="h-10 w-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <TrendingUp className="h-5 w-5 text-purple-500" />
-                  </div>
-                </div>
-                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
-                  <span className="relative">
-                    Click to view details
-                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
-                  </span>
-                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
-                </div>
-              </div>
-
-              <div
-                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-orange-500 cursor-pointer hover:shadow-md transition-shadow group"
-                onClick={() => openModal("overdue")}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Overdue</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.overdue}</p>
-                  </div>
-                  <div className="h-10 w-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <AlertTriangle className="h-5 w-5 text-orange-500" />
-                  </div>
-                </div>
-                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
-                  <span className="relative">
-                    Click to view details
-                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
-                  </span>
-                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
-                </div>
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div
                 className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-emerald-500 cursor-pointer hover:shadow-md transition-shadow group"
                 onClick={() => openModal("active")}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">Active Licenses</p>
+                    <p className="text-sm font-medium text-gray-600 mb-1">Active</p>
                     <p className="text-2xl font-bold text-gray-900">{metrics.active}</p>
                   </div>
-                  <div className="h-10 w-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                  <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-emerald-500 to-teal-500 shadow-lg shadow-emerald-500/20 ring-1 ring-white/30">
+                    <ShieldCheck className="h-5 w-5 text-white" />
+                  </div>
+                </div>
+                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                  <span className="relative">
+                    Click to view details
+                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                  </span>
+                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                </div>
+              </div>
+
+              <div
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-amber-500 cursor-pointer hover:shadow-md transition-shadow group"
+                onClick={() => openModal("expiringSoon")}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 mb-1">Expiring Soon</p>
+                    <p className="text-2xl font-bold text-gray-900">{metrics.expiringSoon}</p>
+                  </div>
+                  <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-amber-500/25 ring-1 ring-white/30">
+                    <Calendar className="h-5 w-5 text-white" />
+                  </div>
+                </div>
+                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                  <span className="relative">
+                    Click to view details
+                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                  </span>
+                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                </div>
+              </div>
+
+              <div
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-rose-500 cursor-pointer hover:shadow-md transition-shadow group"
+                onClick={() => openModal("expired")}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 mb-1">Expired</p>
+                    <p className="text-2xl font-bold text-gray-900">{metrics.expired}</p>
+                  </div>
+                  <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-rose-500 to-red-600 shadow-lg shadow-rose-500/25 ring-1 ring-white/30">
+                    <AlertTriangle className="h-5 w-5 text-white" />
+                  </div>
+                </div>
+                <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
+                  <span className="relative">
+                    Click to view details
+                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                  </span>
+                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                </div>
+              </div>
+
+              <div
+                className="bg-white rounded-xl p-5 shadow-sm border-t-4 border-slate-500 cursor-pointer hover:shadow-md transition-shadow group"
+                onClick={() => openModal("cancelled")}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 mb-1">Cancelled</p>
+                    <p className="text-2xl font-bold text-gray-900">{metrics.cancelled}</p>
+                  </div>
+                  <div className="h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-slate-600 to-zinc-800 shadow-lg shadow-slate-500/20 ring-1 ring-white/30">
+                    <Ban className="h-5 w-5 text-white" />
                   </div>
                 </div>
                 <div className="mt-1 inline-flex items-center gap-1 text-sm text-gray-600 group-hover:text-indigo-600 transition-colors duration-200">
@@ -610,7 +541,6 @@ export default function RenewalDashboard() {
                             nameKey="category"
                             cx="50%"
                             cy="50%"
-                            innerRadius="58%"
                             outerRadius="86%"
                             paddingAngle={2}
                             labelLine={false}
@@ -623,7 +553,7 @@ export default function RenewalDashboard() {
                           <Tooltip
                             formatter={(value: any) => {
                               const n = typeof value === "number" ? value : Number(value);
-                              const pct = statusTotal > 0 && Number.isFinite(n) ? Math.round((n / statusTotal) * 100) : 0;
+                              const pct = statusTotal > 0 && Number.isFinite(n) ? ((n / statusTotal) * 100).toFixed(1) : '0.0';
                               return [`${pct}%`, "Share"];
                             }}
                             cursor={false}
@@ -642,7 +572,7 @@ export default function RenewalDashboard() {
                   <div className="w-full sm:w-[220px] flex flex-col justify-end">
                     <div className="flex flex-col gap-4 mt-8 sm:mt-16">
                       {statusBuckets.map((s) => {
-                        const percent = statusTotal > 0 ? Math.round((s.count / statusTotal) * 100) : 0;
+                        const percent = statusTotal > 0 ? ((s.count / statusTotal) * 100).toFixed(1) : '0.0';
                         return (
                           <div key={s.status} className="flex items-center gap-3">
                             <span className="h-3 w-3 rounded-full" style={{ backgroundColor: s.color }} />
@@ -725,7 +655,7 @@ export default function RenewalDashboard() {
                           </TableHead>
                           <TableHead className="sticky top-0 z-20 bg-purple-100 h-12 px-4 text-left text-xs font-bold text-slate-900 uppercase tracking-wide w-[170px]">
                             Renewal Status
-                          </TableHead>]
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>

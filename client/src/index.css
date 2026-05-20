@@ -59,6 +59,11 @@
     height: 100%;
   }
 
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   * {
     border-color: hsl(var(--border));
   }
@@ -70,6 +75,13 @@
     line-height: 1.6;
     letter-spacing: -0.01em;
     font-weight: 400;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
   }
   
   h1, h2, h3, h4, h5, h6 {

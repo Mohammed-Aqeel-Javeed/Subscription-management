@@ -721,6 +721,7 @@ export default function Compliance() {
   const [showSubmissionDetails, setShowSubmissionDetails] = useState(false);
   const [submissionOpenedFromTable, setSubmissionOpenedFromTable] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const complianceModalBodyRef = useRef<HTMLDivElement | null>(null);
   const departmentDropdownRef = useRef<HTMLDivElement>(null);
   const [submissionDocuments, setSubmissionDocuments] = useState<
     Array<{ name: string; url: string; remark?: string; updatedBy?: string; updatedAt?: string }>
@@ -734,6 +735,14 @@ export default function Compliance() {
   const [isPersistingSubmissionDocuments, setIsPersistingSubmissionDocuments] = useState(false);
 
   const initialComplianceSnapshotRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    // Reset scroll so edit opens at the top (avoids keeping previous scroll position).
+    requestAnimationFrame(() => {
+      complianceModalBodyRef.current?.scrollTo({ top: 0 });
+    });
+  }, [modalOpen, showSubmissionDetails]);
   function buildComplianceSnapshot(input: {
     form: any;
     selectedDepartments: any;
@@ -2610,15 +2619,18 @@ export default function Compliance() {
       return { _id, data };
     },
     onSuccess: ({ _id, data }) => {
-      queryClient.setQueryData(["compliance"], (oldData: ComplianceItem[]) =>
-        oldData ? oldData.map(item =>
-          item._id === _id ? { ...item, ...data } : item
-        ) : []
+      const upsertToFront = <T extends any>(oldData: T[] | undefined, match: (item: T) => boolean) => {
+        if (!oldData) return [] as T[];
+        const existing = oldData.find(match);
+        const updated = existing ? ({ ...(existing as any), ...(data as any) } as T) : ({ ...(data as any) } as T);
+        return [updated, ...oldData.filter(item => !match(item))];
+      };
+
+      queryClient.setQueryData(["compliance"], (oldData: ComplianceItem[] | undefined) =>
+        upsertToFront(oldData, (item) => (item as any)?._id === _id)
       );
-      queryClient.setQueryData(["/api/compliance/list"], (oldData: ComplianceItem[]) =>
-        oldData ? oldData.map(item =>
-          ((item as any)?._id === _id || (item as any)?.id === _id) ? { ...(item as any), ...data } : item
-        ) : []
+      queryClient.setQueryData(["/api/compliance/list"], (oldData: ComplianceItem[] | undefined) =>
+        upsertToFront(oldData, (item) => ((item as any)?._id === _id || (item as any)?.id === _id))
       );
       queryClient.invalidateQueries({ queryKey: ["compliance"] });
       queryClient.invalidateQueries({ queryKey: ["/api/compliance/list"] });
@@ -2627,6 +2639,8 @@ export default function Compliance() {
   });
 
   const isSavingCompliance = addMutation.isPending || editMutation.isPending;
+
+  const [isSubmittingComplianceSubmission, setIsSubmittingComplianceSubmission] = useState(false);
 
   const normalizePolicyName = (name: string) => String(name || "").trim().replace(/\s+/g, " ").toLowerCase();
 
@@ -2644,7 +2658,7 @@ export default function Compliance() {
       lookupSheet.state = "veryHidden";
 
       // Must match the category names shown in the Compliance UI dropdown
-      const categoriesForTemplate = ["Tax", "Payroll", "Regulatory", "Legal", "Other"].filter(Boolean);
+      const categoriesForTemplate = ["Tax", "Payroll", "Regulatory", "Legal"].filter(Boolean);
 
       const authoritiesForTemplate = (
         Array.isArray(governingAuthorities) && governingAuthorities.length > 0
@@ -3957,7 +3971,7 @@ export default function Compliance() {
                 </Button>
               </div>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
+          <div ref={complianceModalBodyRef} className="flex-1 overflow-y-auto">
           <form className={`${isFullscreen ? 'p-4 md:p-6 lg:p-8' : 'p-6'}`}>
             {/* Show Submission Details when showSubmissionDetails is true */}
             {showSubmissionDetails && (
@@ -4271,19 +4285,16 @@ export default function Compliance() {
                     setAddComplianceCategoryOpen(true);
                   }}
                   options={(() => {
-                    const fallback = ['Tax', 'Payroll', 'Regulatory', 'Legal', 'Other'];
+                    const fallback = ['Tax', 'Payroll', 'Regulatory', 'Legal'];
                     const dynamic = (Array.isArray(complianceCategoryOptions) ? complianceCategoryOptions : []);
 
                     const base = [...fallback, ...dynamic]
                       .map((v) => String(v || '').trim())
-                      .filter(Boolean);
+                      .filter((v) => Boolean(v) && v.toLowerCase() !== 'other');
 
                     const unique = Array.from(new Set(base));
-                    const hasOther = unique.some((v) => v.toLowerCase() === 'other');
-                    if (!hasOther) unique.push('Other');
-
                     const current = String(form.filingComplianceCategory || '').trim();
-                    if (current && !unique.some((v) => v.toLowerCase() === current.toLowerCase())) {
+                    if (current && current.toLowerCase() !== 'other' && !unique.some((v) => v.toLowerCase() === current.toLowerCase())) {
                       unique.unshift(current);
                     }
                     return unique;
@@ -5092,8 +5103,14 @@ export default function Compliance() {
               <Button 
                 type="button" 
                 className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-medium px-6 py-2 shadow-md hover:shadow-lg"
-                disabled={isSavingCompliance}
+                disabled={isSavingCompliance || (showSubmissionDetails && isSubmittingComplianceSubmission)}
                 onClick={async () => {
+                  const isSubmissionAction = showSubmissionDetails;
+                  if (isSubmissionAction) {
+                    if (isSubmittingComplianceSubmission || isSavingCompliance) return;
+                    setIsSubmittingComplianceSubmission(true);
+                  }
+
                   try {
                     if (showSubmissionDetails) {
                       setSubmissionAmountError('');
@@ -5338,10 +5355,18 @@ export default function Compliance() {
                       description: error?.message || "Failed to save compliance",
                       variant: "destructive",
                     });
+                  } finally {
+                    if (isSubmissionAction) {
+                      setIsSubmittingComplianceSubmission(false);
+                    }
                   }
                 }}
               >
-                {isSavingCompliance ? 'Saving...' : (showSubmissionDetails ? 'Submit' : 'Save Compliance')}
+                {showSubmissionDetails && (isSavingCompliance || isSubmittingComplianceSubmission)
+                  ? 'Submitting...'
+                  : isSavingCompliance
+                    ? 'Saving...'
+                    : (showSubmissionDetails ? 'Submit' : 'Save Compliance')}
               </Button>
             </div>
           </form>
@@ -6229,7 +6254,7 @@ export default function Compliance() {
           }
         }}
       >
-        <DialogContent showClose={false} className="max-w-5xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
+        <DialogContent showClose={false} className="max-w-4xl max-h-[85vh] bg-white shadow-2xl border-2 border-gray-200 overflow-hidden flex flex-col">
           <DialogHeader className="border-b border-gray-200 pb-3 pr-8 flex-shrink-0">
             <div className="flex items-start justify-between">
               <div>
