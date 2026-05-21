@@ -3460,6 +3460,16 @@ function joinUrl(base: string, path: string): string {
   return b ? `${b}${p}` : p;
 }
 
+function isLocalhostBaseUrl(baseUrl: string): boolean {
+  const v = String(baseUrl || '').trim().toLowerCase();
+  if (!v) return false;
+  return (
+    v.includes('://localhost') ||
+    v.includes('://127.0.0.1') ||
+    v.includes('://0.0.0.0')
+  );
+}
+
 function inferFrontendBaseUrl(req: any): string {
   const explicit = String(
     process.env.FRONTEND_URL ||
@@ -3473,14 +3483,18 @@ function inferFrontendBaseUrl(req: any): string {
 
   // When requests come from the browser (your app UI), Origin is the *frontend* base URL.
   const origin = String(req?.headers?.origin || '').trim().replace(/\/+$/, '');
-  if (/^https?:\/\//i.test(origin)) return origin;
+  if (/^https?:\/\//i.test(origin) && !isLocalhostBaseUrl(origin)) return origin;
 
   const xfProto = String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim();
   const proto = xfProto || String(req?.protocol || 'http');
   let host = String(req?.headers?.host || req?.get?.('host') || '').trim();
   host = host.replace(/^127\.0\.0\.1(?=:\d+$)/, 'localhost');
   host = host.replace(/^0\.0\.0\.0(?=:\d+$)/, 'localhost');
-  return host ? `${proto}://${host}` : '';
+  const derived = host ? `${proto}://${host}` : '';
+  if (derived && !isLocalhostBaseUrl(derived)) return derived;
+
+  // Development fallback only.
+  return process.env.NODE_ENV !== 'production' ? 'http://localhost:5173' : '';
 }
 
 function sendWelcomeEmailInBackground(payload: { to: string; subject: string; html: string }) {
