@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useNavigationType } from "react-router-dom";
 import { motion } from "framer-motion";
+import DocsModal from "@/components/DocsModal";
 import {
   BarChart3,
   Bell,
@@ -14,6 +15,7 @@ import {
   MapPin,
   Menu,
   MessageSquare,
+  Phone,
   RefreshCw,
   Settings,
   Shield,
@@ -284,17 +286,19 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const navigationType = useNavigationType();
   const supportPhoneDisplay = "+65 9386 7621";
-  const supportPhoneTel = "+6593867621";
   const supportPhoneWhatsApp = "6593867621";
   const [supportActionsOpen, setSupportActionsOpen] = useState(false);
   const animateHeroOnMount = navigationType !== "POP";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
   const [pricingLoading, setPricingLoading] = useState<string | null>(null);
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<"starter" | "professional" | "enterprise">("professional");
 
   const [contactForm, setContactForm] = useState({ name: "", email: "", message: "" });
   const [contactSent, setContactSent] = useState(false);
+  const [contactSending, setContactSending] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -327,13 +331,41 @@ export default function LandingPage() {
     }
   };
 
-  const handleContactSubmit = (e: React.FormEvent) => {
+  const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setContactSent(true);
+    if (contactSending) return;
+
+    setContactError(null);
+    setContactSending(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: contactForm.name,
+          email: contactForm.email,
+          message: contactForm.message,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setContactError(data?.message || `Could not send message (${res.status}). Please try again.`);
+        return;
+      }
+
+      setContactSent(true);
+      setContactForm({ name: "", email: "", message: "" });
+    } catch {
+      setContactError("Network error — could not reach the server. Is it running?");
+    } finally {
+      setContactSending(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 via-slate-50 to-white">
+      <DocsModal open={docsOpen} onClose={() => setDocsOpen(false)} />
       {/* NAVBAR */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-b border-indigo-100 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -836,55 +868,55 @@ export default function LandingPage() {
                 bg: "bg-emerald-50",
               },
             ].map((h) => (
-              <div key={h.title} className={`rounded-2xl p-6 border border-indigo-50 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-1 ${h.bg}`}>
+              <div key={h.title} className={`rounded-2xl p-6 border border-indigo-50 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-1 flex flex-col ${h.bg}`}>
                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 ${h.color} text-white`}>
                   <h.icon size={20} />
                 </div>
                 <h3 className="text-[15px] font-bold text-slate-900 mb-2">{h.title}</h3>
                 <p className="text-[13px] text-slate-700 leading-relaxed mb-4">{h.description}</p>
-                {h.title === "Live Chat / Support" ? (
-                  <>
+                <div className="mt-auto">
+                  {h.title === "Live Chat / Support" ? (
+                    <>
+                      <button
+                        type="button"
+                        className={`text-[13px] sm:text-sm font-semibold inline-flex flex-nowrap items-center gap-1 leading-none hover:opacity-75 transition-opacity whitespace-nowrap ${h.text}`}
+                        onClick={() => setSupportActionsOpen((v) => !v)}
+                      >
+                        {supportActionsOpen ? "Hide" : "Contact Support"}
+                      </button>
+
+                      {supportActionsOpen && (
+                        <div className="mt-4 rounded-xl bg-white/70 border border-white/60 p-3">
+                          <div className="text-[13px] font-semibold text-slate-900 mb-2">{supportPhoneDisplay}</div>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={`https://wa.me/${supportPhoneWhatsApp}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                            >
+                              WhatsApp
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
                     <button
                       type="button"
-                      className={`text-sm font-semibold inline-flex items-center gap-1 hover:opacity-75 transition-opacity ${h.text}`}
-                      onClick={() => setSupportActionsOpen((v) => !v)}
+                      className={`text-[13px] sm:text-sm font-semibold inline-flex flex-nowrap items-center gap-1 leading-none hover:opacity-75 transition-opacity whitespace-nowrap ${h.text}`}
+                      onClick={() => {
+                        if (h.title === "Getting Started Guide") {
+                          setDocsOpen(true);
+                          return;
+                        }
+                        scrollTo("contact");
+                      }}
                     >
-                      {supportActionsOpen ? "Hide" : "Contact Support"}
+                      {h.cta}
                     </button>
-
-                    {supportActionsOpen && (
-                      <div className="mt-4 rounded-xl bg-white/70 border border-white/60 p-3">
-                        <div className="text-[13px] font-semibold text-slate-900 mb-2">{supportPhoneDisplay}</div>
-                        <div className="flex items-center gap-2">
-                          <a
-                            href={`tel:${supportPhoneTel}`}
-                            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:opacity-90 transition-opacity"
-                          >
-                            Call
-                          </a>
-                          <a
-                            href={`https://wa.me/${supportPhoneWhatsApp}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
-                          >
-                            WhatsApp
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    className={`text-sm font-semibold inline-flex items-center gap-1 hover:opacity-75 transition-opacity ${h.text}`}
-                    onClick={() => {
-                      scrollTo("contact");
-                    }}
-                  >
-                    {h.cta}
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -896,8 +928,7 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
             <div>
-              <p className="text-sm font-semibold text-indigo-600 mb-2">CONTACT US</p>
-              <h2 className="font-heading text-3xl md:text-4xl font-bold text-slate-900 tracking-tight mb-4">Talk to Us</h2>
+              <h2 className="font-heading text-3xl md:text-4xl font-bold text-slate-900 tracking-tight mb-4">Contact Us</h2>
               <p className="text-slate-700 leading-relaxed mb-8">
                 Have questions about pricing, features, or implementation? Our team responds within 2 business hours.
               </p>
@@ -909,6 +940,7 @@ export default function LandingPage() {
                     label: "Address",
                     value: "3791 Jalan Bukit Merah,\n#04-03 E-Centre @ Redhill,\nSingapore 159471",
                   },
+                  { icon: Phone, label: "Phone", value: supportPhoneDisplay },
                 ].map((c) => (
                   <div key={c.label} className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-r from-indigo-600 to-violet-500 text-white">
@@ -978,10 +1010,13 @@ export default function LandingPage() {
                   </div>
                   <button
                     type="submit"
+                    disabled={contactSending}
                     className="w-full py-3 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-indigo-600 to-violet-500 shadow-lg transition-all duration-200 hover:-translate-y-0.5"
                   >
-                    Send Message
+                    {contactSending ? "Sending..." : "Send Message"}
                   </button>
+
+                  {contactError && <p className="text-sm text-rose-600 font-medium">{contactError}</p>}
                 </form>
               )}
             </div>

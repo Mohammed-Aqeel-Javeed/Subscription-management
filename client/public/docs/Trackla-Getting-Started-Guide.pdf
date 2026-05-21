@@ -1,0 +1,1081 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R] /Count 5 >>
+endobj
+4 0 obj
+<< /Length 1551 >>
+stream
+q
+0.94 g
+0 756 612 36 re
+f
+Q
+BT
+/F2 16 Tf
+54 770 Td
+(Trackla  Getting Started Guide) Tj
+ET
+BT
+/F2 12 Tf
+54 732 Td
+(Version: May 2026) Tj
+ET
+BT
+/F1 11 Tf
+54 716 Td
+(A practical guide to set up your company, onboard users, and run renewals reliably.) Tj
+ET
+BT
+/F2 12 Tf
+54 702 Td
+(Table of Contents) Tj
+ET
+BT
+/F1 11 Tf
+54 686 Td
+(1. Trackla at a Glance) Tj
+ET
+BT
+/F1 11 Tf
+54 672 Td
+(2. Accounts, Company, and Access) Tj
+ET
+BT
+/F1 11 Tf
+54 658 Td
+(3. Subscriptions \(Fields + Best Practices\)) Tj
+ET
+BT
+/F1 11 Tf
+54 644 Td
+(4. Reminders and Notifications) Tj
+ET
+BT
+/F1 11 Tf
+54 630 Td
+(5. Auto Renewal \(How it works + How to test\)) Tj
+ET
+BT
+/F1 11 Tf
+54 616 Td
+(6. Import/Export) Tj
+ET
+BT
+/F1 11 Tf
+54 602 Td
+(7. Setup & Configuration) Tj
+ET
+BT
+/F1 11 Tf
+54 588 Td
+(8. Company Details) Tj
+ET
+BT
+/F1 11 Tf
+54 574 Td
+(9. Notifications) Tj
+ET
+BT
+/F1 11 Tf
+54 560 Td
+(10. Reports) Tj
+ET
+BT
+/F1 11 Tf
+54 546 Td
+(11. Compliance / Renewals) Tj
+ET
+BT
+/F1 11 Tf
+54 532 Td
+(12. History Log \(Audit Trail\)) Tj
+ET
+BT
+/F1 11 Tf
+54 518 Td
+(13. Troubleshooting) Tj
+ET
+BT
+/F2 12 Tf
+54 504 Td
+(Quick Start Checklist) Tj
+ET
+BT
+/F1 11 Tf
+72 488 Td
+(" Confirm Company Name and LCY \(local currency\).) Tj
+ET
+BT
+/F1 11 Tf
+72 474 Td
+(" Add users and assign roles \(Viewer / Contributor / Admin\).) Tj
+ET
+BT
+/F1 11 Tf
+72 460 Td
+(" Set up Payment Methods and any Custom Fields you need.) Tj
+ET
+BT
+/F1 11 Tf
+72 446 Td
+(" Add your first subscription and set Next Renewal \(YYYY-MM-DD\).) Tj
+ET
+q
+0.85 g
+54 52 m
+558 52 l
+S
+Q
+BT
+/F1 9 Tf
+54 36 Td
+(Page 1 of 5) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 4009 >>
+stream
+q
+0.94 g
+0 756 612 36 re
+f
+Q
+BT
+/F2 16 Tf
+54 770 Td
+(Trackla  Getting Started Guide) Tj
+ET
+BT
+/F2 12 Tf
+54 732 Td
+(1\) Trackla at a Glance) Tj
+ET
+BT
+/F1 11 Tf
+54 716 Td
+(Trackla helps you track subscriptions, control spend, and never miss renewals.) Tj
+ET
+BT
+/F2 12 Tf
+54 702 Td
+(Core pages) Tj
+ET
+BT
+/F1 11 Tf
+72 686 Td
+(" Dashboard: spend overview, trends, and quick access to what needs attention.) Tj
+ET
+BT
+/F1 11 Tf
+72 672 Td
+(" Subscriptions: create/edit subscriptions, manage renewal dates, reminder policies, and) Tj
+ET
+BT
+/F1 11 Tf
+54 658 Td
+(auto-renewal.) Tj
+ET
+BT
+/F1 11 Tf
+72 644 Td
+(" Notifications: in-app reminders generated from subscription dates and compliance) Tj
+ET
+BT
+/F1 11 Tf
+54 630 Td
+(schedules.) Tj
+ET
+BT
+/F1 11 Tf
+72 616 Td
+(" Reports: analytics and audit reporting across subscriptions and spend.) Tj
+ET
+BT
+/F1 11 Tf
+72 602 Td
+(" Setup & Configuration: currencies, payment methods, custom fields, and related setup.) Tj
+ET
+BT
+/F1 11 Tf
+72 588 Td
+(" Company Details: company profile, departments, employees, and user management.) Tj
+ET
+BT
+/F1 11 Tf
+72 574 Td
+(" Compliance / Renewals: track policy/filing/licence dates and set reminder schedules.) Tj
+ET
+BT
+/F2 12 Tf
+54 560 Td
+(Important data concept) Tj
+ET
+BT
+/F1 11 Tf
+72 544 Td
+(" Next Renewal: the key date used for reminders and auto-renewal.) Tj
+ET
+BT
+/F2 12 Tf
+54 516 Td
+(2\) Accounts, Company, and Access) Tj
+ET
+BT
+/F2 12 Tf
+54 500 Td
+(Company and currency) Tj
+ET
+BT
+/F1 11 Tf
+72 484 Td
+(" Company Name: displayed across the app and in the sidebar company selector.) Tj
+ET
+BT
+/F1 11 Tf
+72 470 Td
+(" LCY \(Local Currency\): used for normalized reporting and LCY Amount calculations.) Tj
+ET
+BT
+/F2 12 Tf
+54 456 Td
+(Switch Company) Tj
+ET
+BT
+/F1 11 Tf
+72 440 Td
+(" If your user has access to multiple companies, use the company selector in the sidebar to) Tj
+ET
+BT
+/F1 11 Tf
+54 426 Td
+(switch.) Tj
+ET
+BT
+/F1 11 Tf
+72 412 Td
+(" Switching changes the active tenant context \(data shown across the app\).) Tj
+ET
+BT
+/F2 12 Tf
+54 398 Td
+(User Management \(roles\)) Tj
+ET
+BT
+/F1 11 Tf
+72 382 Td
+(" Super Admin / Global Admin: full access \(may switch across tenants if enabled\).) Tj
+ET
+BT
+/F1 11 Tf
+72 368 Td
+(" Contributor: can create and update subscriptions and related data based on permissions.) Tj
+ET
+BT
+/F1 11 Tf
+72 354 Td
+(" Viewer: read-only access to pages and reports.) Tj
+ET
+BT
+/F2 12 Tf
+54 340 Td
+(Best practice) Tj
+ET
+BT
+/F1 11 Tf
+72 324 Td
+(" Keep Owner and Owner Email accurate for accountability and audits.) Tj
+ET
+BT
+/F1 11 Tf
+54 296 Td
+(3\) Subscriptions \(Fields + Best Practices\)) Tj
+ET
+BT
+/F1 11 Tf
+54 282 Td
+(Use these fields to keep renewal operations and reporting clean:) Tj
+ET
+BT
+/F2 12 Tf
+54 268 Td
+(Identity) Tj
+ET
+BT
+/F1 11 Tf
+72 252 Td
+(" Subscription Name \(Service Name\): the primary label used throughout the app.) Tj
+ET
+BT
+/F1 11 Tf
+72 238 Td
+(" Vendor: the supplier/provider of the subscription.) Tj
+ET
+BT
+/F1 11 Tf
+72 224 Td
+(" Website: vendor link for quick access to billing/admin portals.) Tj
+ET
+BT
+/F1 11 Tf
+72 210 Td
+(" Category: used for grouping and reporting.) Tj
+ET
+BT
+/F1 11 Tf
+72 196 Td
+(" Department\(s\): used for cost allocation and reporting.) Tj
+ET
+BT
+/F1 11 Tf
+72 182 Td
+(" Owner / Owner Email: internal responsibility \(use real owners for audit clarity\).) Tj
+ET
+BT
+/F2 12 Tf
+54 168 Td
+(Financials) Tj
+ET
+BT
+/F1 11 Tf
+72 152 Td
+(" Currency: billing currency for the subscription.) Tj
+ET
+BT
+/F1 11 Tf
+72 138 Td
+(" Amount: unit price for a single license/unit.) Tj
+ET
+BT
+/F1 11 Tf
+72 124 Td
+(" Qty: number of units \(licenses/seats\).) Tj
+ET
+BT
+/F1 11 Tf
+72 110 Td
+(" Total Amount: Amount ◊ Qty \(may be stored/derived depending on workflow\).) Tj
+ET
+BT
+/F1 11 Tf
+72 96 Td
+(" LCY Amount: normalized amount in LCY for consolidated reporting.) Tj
+ET
+BT
+/F1 11 Tf
+72 82 Td
+(" Payment Method: how this subscription is paid \(card/bank/etc\).) Tj
+ET
+q
+0.85 g
+54 52 m
+558 52 l
+S
+Q
+BT
+/F1 9 Tf
+54 36 Td
+(Page 2 of 5) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 3718 >>
+stream
+q
+0.94 g
+0 756 612 36 re
+f
+Q
+BT
+/F2 16 Tf
+54 770 Td
+(Trackla  Getting Started Guide) Tj
+ET
+BT
+/F2 12 Tf
+54 732 Td
+(Renewal schedule) Tj
+ET
+BT
+/F1 11 Tf
+72 716 Td
+(" Billing Cycle: Monthly / Quarterly / Yearly / Weekly \(affects auto-renew calculations\).) Tj
+ET
+BT
+/F1 11 Tf
+72 702 Td
+(" Start Date: current cycle start date.) Tj
+ET
+BT
+/F1 11 Tf
+72 688 Td
+(" Next Renewal: current cycle end date \(the date Trackla uses for reminders and) Tj
+ET
+BT
+/F1 11 Tf
+54 674 Td
+(auto-renewal\).) Tj
+ET
+BT
+/F2 12 Tf
+54 660 Td
+(Status and control) Tj
+ET
+BT
+/F1 11 Tf
+72 644 Td
+(" Status: Active/Inactive \(ensure Active for reminders and renewal operations\).) Tj
+ET
+BT
+/F1 11 Tf
+72 630 Td
+(" Auto Renewal: enable only if you want Trackla to renew automatically on the Next Renewal) Tj
+ET
+BT
+/F1 11 Tf
+54 616 Td
+(date.) Tj
+ET
+BT
+/F1 11 Tf
+72 602 Td
+(" Notes: store key contract information, renewal terms, or approval context.) Tj
+ET
+BT
+/F2 12 Tf
+54 574 Td
+(4\) Reminders and Notifications) Tj
+ET
+BT
+/F1 11 Tf
+54 558 Td
+(Trackla supports configurable reminder policies:) Tj
+ET
+BT
+/F2 12 Tf
+54 544 Td
+(Reminder Days) Tj
+ET
+BT
+/F1 11 Tf
+72 528 Td
+(" Number of days before Next Renewal that reminders should begin.) Tj
+ET
+BT
+/F2 12 Tf
+54 514 Td
+(Reminder Policy) Tj
+ET
+BT
+/F1 11 Tf
+72 498 Td
+(" One time: creates a single reminder at \(Next Renewal - Reminder Days\).) Tj
+ET
+BT
+/F1 11 Tf
+72 484 Td
+(" Two times: creates two reminders at \(Next Renewal - Reminder Days\) and at about half that) Tj
+ET
+BT
+/F1 11 Tf
+54 470 Td
+(distance.) Tj
+ET
+BT
+/F1 11 Tf
+72 456 Td
+(" Until Renewal: creates daily reminders from \(Next Renewal - Reminder Days\) through Next) Tj
+ET
+BT
+/F1 11 Tf
+54 442 Td
+(Renewal.) Tj
+ET
+BT
+/F2 12 Tf
+54 428 Td
+(Notifications page) Tj
+ET
+BT
+/F1 11 Tf
+72 412 Td
+(" Shows upcoming reminders and alerts created by subscriptions and compliance schedules.) Tj
+ET
+BT
+/F1 11 Tf
+72 398 Td
+(" Use it as an operational inbox for renewals and follow-ups.) Tj
+ET
+BT
+/F1 11 Tf
+54 370 Td
+(5\) Auto Renewal \(How it works + How to test\)) Tj
+ET
+BT
+/F2 12 Tf
+54 356 Td
+(How it works) Tj
+ET
+BT
+/F1 11 Tf
+72 340 Td
+(" Auto Renewal triggers when Auto Renewal is enabled AND Next Renewal equals today \(UTC) Tj
+ET
+BT
+/F1 11 Tf
+54 326 Td
+(date\).) Tj
+ET
+BT
+/F1 11 Tf
+72 312 Td
+(" When triggered, Trackla renews the subscription by setting Start Date to today and) Tj
+ET
+BT
+/F1 11 Tf
+54 298 Td
+(advancing Next Renewal based on Billing Cycle.) Tj
+ET
+BT
+/F1 11 Tf
+72 284 Td
+(" A history entry is created with Changed By = System \(Auto-Renewal\).) Tj
+ET
+BT
+/F2 12 Tf
+54 270 Td
+(How to test \(recommended\)) Tj
+ET
+BT
+/F1 11 Tf
+54 254 Td
+(1\) Pick a subscription and set Auto Renewal = ON.) Tj
+ET
+BT
+/F1 11 Tf
+54 240 Td
+(2\) Set Next Renewal to today in YYYY-MM-DD format \(example: 2026-05-20\).) Tj
+ET
+BT
+/F2 12 Tf
+54 226 Td
+(3\) Ensure Status is Active.) Tj
+ET
+BT
+/F1 11 Tf
+54 210 Td
+(4\) Restart the backend once OR wait for the midnight \(IST\) scheduled job.) Tj
+ET
+BT
+/F1 11 Tf
+54 196 Td
+(5\) Verify Start Date updated to today and Next Renewal moved forward correctly.) Tj
+ET
+BT
+/F1 11 Tf
+54 182 Td
+(6\) Check Subscription History for an Auto Renewed entry and date range change.) Tj
+ET
+BT
+/F2 12 Tf
+54 168 Td
+(Note) Tj
+ET
+BT
+/F1 11 Tf
+72 152 Td
+(" If Next Renewal is not a valid date, auto renewal will not trigger.) Tj
+ET
+BT
+/F2 12 Tf
+54 124 Td
+(6\) Import/Export) Tj
+ET
+BT
+/F1 11 Tf
+54 108 Td
+(Import/Export helps you onboard quickly and keep data consistent.) Tj
+ET
+BT
+/F2 12 Tf
+54 94 Td
+(Import tips) Tj
+ET
+BT
+/F1 11 Tf
+72 78 Td
+(" Use a consistent date format \(YYYY-MM-DD\) for Start Date and Next Renewal.) Tj
+ET
+q
+0.85 g
+54 52 m
+558 52 l
+S
+Q
+BT
+/F1 9 Tf
+54 36 Td
+(Page 3 of 5) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 3488 >>
+stream
+q
+0.94 g
+0 756 612 36 re
+f
+Q
+BT
+/F2 16 Tf
+54 770 Td
+(Trackla  Getting Started Guide) Tj
+ET
+BT
+/F1 11 Tf
+72 732 Td
+(" Ensure required identity fields \(Subscription Name, Vendor\) are present.) Tj
+ET
+BT
+/F1 11 Tf
+72 718 Td
+(" Validate currency codes \(USD, EUR, SGD, etc.\) and Qty values.) Tj
+ET
+BT
+/F1 11 Tf
+72 704 Td
+(" If you import departments, use consistent naming to avoid duplicates in reports.) Tj
+ET
+BT
+/F2 12 Tf
+54 690 Td
+(Export tips) Tj
+ET
+BT
+/F1 11 Tf
+72 674 Td
+(" Export is useful for audits, reconciliations, and bulk edits.) Tj
+ET
+BT
+/F1 11 Tf
+72 660 Td
+(" After re-importing, review Subscription History to confirm changes were applied as) Tj
+ET
+BT
+/F1 11 Tf
+54 646 Td
+(expected.) Tj
+ET
+BT
+/F2 12 Tf
+54 618 Td
+(7\) Setup & Configuration) Tj
+ET
+BT
+/F1 11 Tf
+54 602 Td
+(Setup & Configuration is where you define the building blocks used across subscriptions and) Tj
+ET
+BT
+/F1 11 Tf
+54 588 Td
+(reports.) Tj
+ET
+BT
+/F2 12 Tf
+54 574 Td
+(Currency) Tj
+ET
+BT
+/F1 11 Tf
+72 558 Td
+(" Maintain the list of currencies used for subscription billing.) Tj
+ET
+BT
+/F1 11 Tf
+72 544 Td
+(" LCY is your primary reporting currency.) Tj
+ET
+BT
+/F2 12 Tf
+54 530 Td
+(Payment Methods) Tj
+ET
+BT
+/F1 11 Tf
+72 514 Td
+(" Add and manage payment methods \(cards/bank accounts\) used by subscriptions.) Tj
+ET
+BT
+/F1 11 Tf
+72 500 Td
+(" Keep expiry dates accurate if you track payment expiry alerts.) Tj
+ET
+BT
+/F2 12 Tf
+54 486 Td
+(Custom Fields) Tj
+ET
+BT
+/F1 11 Tf
+72 470 Td
+(" Use custom fields to capture organization-specific data \(Cost Center, Contract ID, etc.\).) Tj
+ET
+BT
+/F1 11 Tf
+72 456 Td
+(" Keep naming consistent so imports and reports remain clean.) Tj
+ET
+BT
+/F2 12 Tf
+54 428 Td
+(8\) Company Details) Tj
+ET
+BT
+/F1 11 Tf
+54 412 Td
+(Company Details centralizes company-level data used throughout Trackla.) Tj
+ET
+BT
+/F2 12 Tf
+54 398 Td
+(Company Information) Tj
+ET
+BT
+/F1 11 Tf
+72 382 Td
+(" Company Name and key profile details for the tenant.) Tj
+ET
+BT
+/F2 12 Tf
+54 368 Td
+(Department) Tj
+ET
+BT
+/F1 11 Tf
+72 352 Td
+(" Define departments for spend allocation and access workflows.) Tj
+ET
+BT
+/F2 12 Tf
+54 338 Td
+(Employees) Tj
+ET
+BT
+/F1 11 Tf
+72 322 Td
+(" Maintain employees for ownership assignments and reporting.) Tj
+ET
+BT
+/F2 12 Tf
+54 308 Td
+(User Management) Tj
+ET
+BT
+/F1 11 Tf
+72 292 Td
+(" Add users, set roles, and confirm who has access to the tenant.) Tj
+ET
+BT
+/F2 12 Tf
+54 264 Td
+(9\) Notifications) Tj
+ET
+BT
+/F1 11 Tf
+54 248 Td
+(Notifications are generated from subscription reminder rules and compliance schedules.) Tj
+ET
+BT
+/F2 12 Tf
+54 234 Td
+(What you will see) Tj
+ET
+BT
+/F1 11 Tf
+72 218 Td
+(" Upcoming renewals and reminder types \(One time / Two times / Daily\).) Tj
+ET
+BT
+/F1 11 Tf
+72 204 Td
+(" Compliance-related reminders if you use Compliance / Renewals.) Tj
+ET
+BT
+/F2 12 Tf
+54 190 Td
+(Best practice) Tj
+ET
+BT
+/F1 11 Tf
+72 174 Td
+(" Treat Notifications as a daily inbox for renewals and follow-ups.) Tj
+ET
+BT
+/F2 12 Tf
+54 146 Td
+(10\) Reports) Tj
+ET
+BT
+/F1 11 Tf
+54 130 Td
+(Reports provide visibility into spend and change history:) Tj
+ET
+BT
+/F2 12 Tf
+54 116 Td
+(Common report outcomes) Tj
+ET
+BT
+/F1 11 Tf
+72 100 Td
+(" Spend analysis by vendor, category, department, or period.) Tj
+ET
+BT
+/F1 11 Tf
+72 86 Td
+(" Trend views to spot growth in recurring spend.) Tj
+ET
+BT
+/F1 11 Tf
+72 72 Td
+(" Audit-history style reports to review who changed what and when.) Tj
+ET
+q
+0.85 g
+54 52 m
+558 52 l
+S
+Q
+BT
+/F1 9 Tf
+54 36 Td
+(Page 4 of 5) Tj
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<< /Length 2408 >>
+stream
+q
+0.94 g
+0 756 612 36 re
+f
+Q
+BT
+/F2 16 Tf
+54 770 Td
+(Trackla  Getting Started Guide) Tj
+ET
+BT
+/F2 12 Tf
+54 732 Td
+(Best practice) Tj
+ET
+BT
+/F1 11 Tf
+72 716 Td
+(" Keep departments and categories consistent for clean reporting.) Tj
+ET
+BT
+/F2 12 Tf
+54 688 Td
+(11\) Compliance / Renewals) Tj
+ET
+BT
+/F1 11 Tf
+54 672 Td
+(Compliance and Renewals help you track deadlines beyond subscriptions \(policies, filings,) Tj
+ET
+BT
+/F1 11 Tf
+54 658 Td
+(licences\).) Tj
+ET
+BT
+/F2 12 Tf
+54 644 Td
+(What to set) Tj
+ET
+BT
+/F1 11 Tf
+72 628 Td
+(" Submission/renewal deadlines \(date-only fields\).) Tj
+ET
+BT
+/F1 11 Tf
+72 614 Td
+(" Reminder policy and reminder days similar to subscriptions.) Tj
+ET
+BT
+/F2 12 Tf
+54 600 Td
+(Outcome) Tj
+ET
+BT
+/F1 11 Tf
+72 584 Td
+(" Notifications are generated so teams never miss important compliance deadlines.) Tj
+ET
+BT
+/F2 12 Tf
+54 556 Td
+(12\) History Log \(Audit Trail\)) Tj
+ET
+BT
+/F1 11 Tf
+54 540 Td
+(Subscription History records key changes over time.) Tj
+ET
+BT
+/F2 12 Tf
+54 526 Td
+(You will see) Tj
+ET
+BT
+/F1 11 Tf
+72 510 Td
+(" Who changed it \(Changed By\).) Tj
+ET
+BT
+/F1 11 Tf
+72 496 Td
+(" What changed \(field-by-field changes\).) Tj
+ET
+BT
+/F1 11 Tf
+72 482 Td
+(" When it changed \(Updated On\).) Tj
+ET
+BT
+/F2 12 Tf
+54 468 Td
+(Auto Renewal entries) Tj
+ET
+BT
+/F1 11 Tf
+72 452 Td
+(" Display as Auto Renewed and show the date range change.) Tj
+ET
+BT
+/F1 11 Tf
+72 438 Td
+(" If you only see date lines, confirm the record is detected as a renewal and that) Tj
+ET
+BT
+/F1 11 Tf
+54 424 Td
+(auto-renewal is enabled.) Tj
+ET
+BT
+/F2 12 Tf
+54 396 Td
+(13\) Troubleshooting) Tj
+ET
+BT
+/F1 11 Tf
+54 380 Td
+(If reminders or auto-renewal do not work as expected:) Tj
+ET
+BT
+/F2 12 Tf
+54 366 Td
+(Checklist) Tj
+ET
+BT
+/F1 11 Tf
+72 350 Td
+(" Confirm the subscription is Active.) Tj
+ET
+BT
+/F1 11 Tf
+72 336 Td
+(" Confirm Next Renewal is a valid date in YYYY-MM-DD format.) Tj
+ET
+BT
+/F1 11 Tf
+72 322 Td
+(" Confirm Reminder Policy and Reminder Days are set.) Tj
+ET
+BT
+/F1 11 Tf
+72 308 Td
+(" Confirm Auto Renewal is enabled \(for auto-renew behavior\).) Tj
+ET
+BT
+/F1 11 Tf
+72 294 Td
+(" Check Subscription History for changes and whether a renewal was logged.) Tj
+ET
+BT
+/F2 12 Tf
+54 280 Td
+(Support) Tj
+ET
+BT
+/F1 11 Tf
+72 264 Td
+(" Use Contact Support \(WhatsApp\) from the Help section in the landing page.) Tj
+ET
+q
+0.85 g
+54 52 m
+558 52 l
+S
+Q
+BT
+/F1 9 Tf
+54 36 Td
+(Page 5 of 5) Tj
+ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 12 0 R >>
+endobj
+14 0 obj
+<< /Type /Catalog /Pages 3 0 R >>
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000000164 00000 n 
+0000000247 00000 n 
+0000001849 00000 n 
+0000001985 00000 n 
+0000006045 00000 n 
+0000006181 00000 n 
+0000009950 00000 n 
+0000010086 00000 n 
+0000013626 00000 n 
+0000013764 00000 n 
+0000016224 00000 n 
+0000016362 00000 n 
+trailer
+<< /Size 15 /Root 14 0 R >>
+startxref
+16412
+%%EOF

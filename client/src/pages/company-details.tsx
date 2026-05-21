@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Eye, EyeOff, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, ChevronDown, Check, MoreVertical, AlertCircle, Building, Tags, UserCog } from "lucide-react";
+import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, ChevronDown, Check, MoreVertical, AlertCircle, Building, Tags, UserCog } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,7 +23,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Can } from "@/components/Can";
 // ...existing code...
-import type { User as UserType, InsertUser, CompanyInfo, InsertCompanyInfo } from "@shared/types";
+import type { User as UserType, CompanyInfo, InsertCompanyInfo } from "@shared/types";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import Papa from 'papaparse';
@@ -1349,12 +1349,19 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
   );
 }
 function UserManagementTab() {
+  type UserFormValues = {
+    name: string;
+    email: string;
+    role: string;
+    status: string;
+    department?: string;
+  };
+
   const [modalOpen, setModalOpen] = useState(false);
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const exitConfirmActionRef = React.useRef<null | (() => void)>(null);
   const [editingUser, setEditingUser] = useState<UserType | undefined>();
   const [searchTerm, setSearchTerm] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [userDeleteConfirmOpen, setUserDeleteConfirmOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserType | null>(null);
   const [openActionsMenuForId, setOpenActionsMenuForId] = useState<string | null>(null);
@@ -1487,13 +1494,12 @@ function UserManagementTab() {
     }
   };
 
-  const form = useForm<InsertUser & { password: string; department?: string }>({
+  const form = useForm<UserFormValues>({
     // TODO: Provide a local zod schema for user validation or remove this line if not needed
     // resolver: zodResolver(insertUserSchema),
     defaultValues: {
       name: "",
       email: "",
-      password: "",
       role: "viewer",
       status: "active",
       department: "",
@@ -1507,7 +1513,6 @@ function UserManagementTab() {
 
   const closeUserDialogNow = () => {
     setModalOpen(false);
-    setShowPassword(false);
     form.reset();
     setEditingUser(undefined);
   };
@@ -1523,7 +1528,7 @@ function UserManagementTab() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (data: InsertUser) => apiRequest("POST", "/api/users", data),
+    mutationFn: (data: UserFormValues) => apiRequest("POST", "/api/users", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({
@@ -1546,7 +1551,7 @@ function UserManagementTab() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertUser> }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Partial<UserFormValues> }) => {
       try {
         const result = await apiRequest("PUT", `/api/users/${id}`, data);
         return result;
@@ -1616,9 +1621,7 @@ function UserManagementTab() {
       email: freshUser.email,
       role: freshUser.role,
       status: freshUser.status,
-      password: "••••••••",
     });
-    setShowPassword(false);
     setModalOpen(true);
   };
 
@@ -1633,15 +1636,13 @@ function UserManagementTab() {
     form.reset({
       name: "",
       email: "",
-      password: "",
       role: "viewer",
       status: "active",
     });
-    setShowPassword(false);
     setModalOpen(true);
   };
 
-  const onSubmit = (data: InsertUser) => {
+  const onSubmit = (data: UserFormValues) => {
     // Trim the data
     const trimmedData = {
       ...data,
@@ -1914,37 +1915,6 @@ function UserManagementTab() {
                             />
                           </FormControl>
                           <FormMessage className="text-red-600 text-sm font-medium mt-1" />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-gray-700 font-medium text-sm">Password</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <Input
-                                type={showPassword ? "text" : "password"}
-                                placeholder=""
-                                {...field}
-                                className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 pr-10 bg-white shadow-sm"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                              >
-                                {showPassword ? (
-                                  <EyeOff className="w-4 h-4" />
-                                ) : (
-                                  <Eye className="w-4 h-4" />
-                                )}
-                              </button>
-                            </div>
-                          </FormControl>
-                          <FormMessage />
                         </FormItem>
                       )}
                     />

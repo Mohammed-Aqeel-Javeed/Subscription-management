@@ -10,17 +10,19 @@ export default function AuthPage() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [loginInfo, setLoginInfo] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
   const googleOnboarding = urlParams.get("google") === "onboarding" || urlParams.get("error") === "no_account";
 
   const [forgotOpen, setForgotOpen] = useState(false);
-  const [resetStep, setResetStep] = useState<"request" | "confirm">("request");
+  const [resetStep, setResetStep] = useState<"request" | "code" | "confirm">("request");
   const [resetEmail, setResetEmail] = useState("");
   const [resetOtp, setResetOtp] = useState("");
   const [resetNewPassword, setResetNewPassword] = useState("");
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [resetShowPassword, setResetShowPassword] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState("");
   const [resetInfo, setResetInfo] = useState("");
@@ -68,6 +70,9 @@ export default function AuthPage() {
 
   const googlePasswordValidation = validatePassword(googlePassword);
   const isGooglePasswordValid = Object.values(googlePasswordValidation).every(Boolean);
+
+  const resetPasswordValidation = validatePassword(resetNewPassword);
+  const isResetPasswordValid = Object.values(resetPasswordValidation).every(Boolean);
 
   const handleGoogleCurrencyChange = (value: string) => {
     const upperValue = value.toUpperCase();
@@ -233,6 +238,7 @@ export default function AuthPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
+    setLoginInfo("");
     if (!loginEmail || !loginPassword) {
       setLoginError("Please enter both email and password.");
       return;
@@ -256,8 +262,10 @@ export default function AuthPage() {
           setResetOtp("");
           setResetNewPassword("");
           setResetConfirmPassword("");
+          setResetShowPassword(false);
           setResetError("");
-          setResetInfo(message);
+          setResetInfo("");
+          setResetError(message);
         }
         return;
       }
@@ -287,6 +295,8 @@ export default function AuthPage() {
     const email = String(resetEmail || "").trim().toLowerCase();
     setResetError("");
     setResetInfo("");
+    setResetOtp("");
+    setResetShowPassword(false);
     if (!email) {
       setResetError("Please enter your email.");
       return;
@@ -305,10 +315,7 @@ export default function AuthPage() {
         return;
       }
       setResetInfo(data.message || "Reset code sent.");
-      setResetStep("confirm");
-      if (data?.devOtp) {
-        setResetOtp(String(data.devOtp));
-      }
+      setResetStep("code");
     } catch {
       setResetError("Network error");
     } finally {
@@ -324,6 +331,18 @@ export default function AuthPage() {
 
     if (!email || !otp || !resetNewPassword) {
       setResetError("Please fill in email, code, and new password.");
+      return;
+    }
+    if (!/^\d{6}$/.test(otp)) {
+      setResetError("Reset code must be 6 digits.");
+      return;
+    }
+    if (!isResetPasswordValid) {
+      setResetError("Password does not meet the security requirements.");
+      return;
+    }
+    if (!resetConfirmPassword) {
+      setResetError("Please confirm your password.");
       return;
     }
     if (resetNewPassword !== resetConfirmPassword) {
@@ -349,7 +368,9 @@ export default function AuthPage() {
       setResetOtp("");
       setResetNewPassword("");
       setResetConfirmPassword("");
-      setLoginError("Password reset successful. Please login.");
+      setResetShowPassword(false);
+      setLoginError("");
+      setLoginInfo("Password reset successful. Please login.");
     } catch {
       setResetError("Network error");
     } finally {
@@ -1041,6 +1062,18 @@ export default function AuthPage() {
                   Login
                 </button>
 
+                {loginInfo && (
+                  <div
+                    style={{
+                      color: "#16a34a",
+                      marginTop: 12,
+                      textAlign: "center",
+                      fontSize: 13,
+                    }}
+                  >
+                    {loginInfo}
+                  </div>
+                )}
                 {loginError && (
                   <div
                     style={{
@@ -1112,14 +1145,14 @@ export default function AuthPage() {
                         value={resetEmail}
                         onChange={(e) => setResetEmail(e.target.value)}
                         placeholder="you@company.com"
-                        disabled={resetBusy}
+                        disabled={resetBusy || resetStep !== "request"}
                         style={{
                           width: "100%",
                           padding: "10px 12px",
                           marginTop: 6,
-                          borderRadius: 12,
+                          borderRadius: 999,
                           border: "1px solid #e5e7eb",
-                          fontSize: 14,
+                          fontSize: 15,
                           background: "#f9fafb",
                           outline: "none",
                         }}
@@ -1129,44 +1162,56 @@ export default function AuthPage() {
                     {resetStep === "confirm" && (
                       <>
                         <div style={{ marginTop: 12 }}>
-                          <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>Reset code</label>
-                          <input
-                            value={resetOtp}
-                            onChange={(e) => setResetOtp(e.target.value)}
-                            placeholder="6-digit code"
-                            disabled={resetBusy}
-                            style={{
-                              width: "100%",
-                              padding: "10px 12px",
-                              marginTop: 6,
-                              borderRadius: 12,
-                              border: "1px solid #e5e7eb",
-                              fontSize: 14,
-                              background: "#f9fafb",
-                              outline: "none",
-                              letterSpacing: 2,
-                              fontFamily: "'Courier New', monospace",
-                            }}
-                          />
-                        </div>
-                        <div style={{ marginTop: 12 }}>
                           <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>New password</label>
-                          <input
-                            type="password"
+                          <div style={{ position: "relative", marginTop: 6 }}>
+                            <input
+                              type={resetShowPassword ? "text" : "password"}
                             value={resetNewPassword}
                             onChange={(e) => setResetNewPassword(e.target.value)}
                             disabled={resetBusy}
                             style={{
                               width: "100%",
-                              padding: "10px 12px",
-                              marginTop: 6,
-                              borderRadius: 12,
+                              padding: "10px 40px 10px 12px",
+                              borderRadius: 999,
                               border: "1px solid #e5e7eb",
-                              fontSize: 14,
+                              fontSize: 15,
                               background: "#f9fafb",
                               outline: "none",
                             }}
                           />
+                            <button
+                              type="button"
+                              onClick={() => setResetShowPassword(!resetShowPassword)}
+                              style={{
+                                position: "absolute",
+                                right: 12,
+                                top: "50%",
+                                transform: "translateY(-50%)",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                padding: 4,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                color: "#6b7280",
+                              }}
+                            >
+                              {resetShowPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                          </div>
+                          {resetNewPassword && !Object.values(resetPasswordValidation).every(Boolean) && (
+                            <div style={{ marginTop: 8, fontSize: 11.5, lineHeight: 1.6 }}>
+                              <div style={{ fontWeight: 600, marginBottom: 4, color: "#4b5563" }}>
+                                Password must contain:
+                              </div>
+                              <PasswordRequirement met={resetPasswordValidation.minLength} text="At least 8 characters" />
+                              <PasswordRequirement met={resetPasswordValidation.hasUpperCase} text="One uppercase letter (A-Z)" />
+                              <PasswordRequirement met={resetPasswordValidation.hasLowerCase} text="One lowercase letter (a-z)" />
+                              <PasswordRequirement met={resetPasswordValidation.hasNumber} text="One number (0-9)" />
+                              <PasswordRequirement met={resetPasswordValidation.hasSpecialChar} text="One special character (!@#$%^&*)" />
+                            </div>
+                          )}
                         </div>
                         <div style={{ marginTop: 12 }}>
                           <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>Confirm password</label>
@@ -1179,9 +1224,9 @@ export default function AuthPage() {
                               width: "100%",
                               padding: "10px 12px",
                               marginTop: 6,
-                              borderRadius: 12,
+                              borderRadius: 999,
                               border: "1px solid #e5e7eb",
-                              fontSize: 14,
+                              fontSize: 15,
                               background: "#f9fafb",
                               outline: "none",
                             }}
@@ -1190,19 +1235,47 @@ export default function AuthPage() {
                       </>
                     )}
 
-                    {(resetError || resetInfo) && (
-                      <div
-                        style={{
-                          marginTop: 12,
-                          fontSize: 13,
-                          color: resetError ? "#dc2626" : "#0f766e",
-                          background: resetError ? "#fef2f2" : "#ecfdf5",
-                          border: `1px solid ${resetError ? "#fecaca" : "#bbf7d0"}`,
-                          borderRadius: 12,
-                          padding: "10px 12px",
-                        }}
-                      >
-                        {resetError || resetInfo}
+                    {resetStep === "code" && (
+                      <>
+                        <div style={{ marginTop: 12 }}>
+                          <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>Enter 6-digit OTP</label>
+                          <input
+                            value={resetOtp}
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            maxLength={6}
+                            onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                            placeholder="6-digit code"
+                            disabled={resetBusy}
+                            style={{
+                              width: "100%",
+                              padding: "12px 14px",
+                              marginTop: 6,
+                              borderRadius: 12,
+                              border: "1px solid #e5e7eb",
+                              fontSize: 16,
+                              background: "#f9fafb",
+                              outline: "none",
+                              textAlign: "center",
+                              letterSpacing: "0.2em",
+                              fontWeight: 600,
+                            }}
+                          />
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+                          OTP expires in 2 minutes.
+                        </div>
+                      </>
+                    )}
+
+                    {resetError && (
+                      <div style={{ color: "#dc2626", marginTop: 12, textAlign: "center", fontSize: 13 }}>
+                        {resetError}
+                      </div>
+                    )}
+                    {resetInfo && (
+                      <div style={{ color: "#16a34a", marginTop: 12, textAlign: "center", fontSize: 13 }}>
+                        {resetInfo}
                       </div>
                     )}
 
@@ -1234,7 +1307,7 @@ export default function AuthPage() {
                             padding: "10px 12px",
                             borderRadius: 12,
                             border: 0,
-                            background: "linear-gradient(90deg, #4f46e5, #7c3aed)",
+                            background: "linear-gradient(90deg, #2563eb, #3b82f6)",
                             cursor: resetBusy ? "not-allowed" : "pointer",
                             color: "#ffffff",
                             fontWeight: 700,
@@ -1242,7 +1315,34 @@ export default function AuthPage() {
                           }}
                           disabled={resetBusy}
                         >
-                          {resetBusy ? "Sending…" : "Send code"}
+                          {resetBusy ? "Sending OTP..." : "Send OTP"}
+                        </button>
+                      ) : resetStep === "code" ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResetError("");
+                            setResetInfo("");
+                            const otp = String(resetOtp || "").trim();
+                            if (!/^\d{6}$/.test(otp)) {
+                              setResetError("Please enter the 6-digit code.");
+                              return;
+                            }
+                            setResetStep("confirm");
+                          }}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: 12,
+                            border: 0,
+                            background: "linear-gradient(90deg, #2563eb, #3b82f6)",
+                            cursor: resetBusy ? "not-allowed" : "pointer",
+                            color: "#ffffff",
+                            fontWeight: 700,
+                            fontSize: 13,
+                          }}
+                          disabled={resetBusy}
+                        >
+                          Verify OTP
                         </button>
                       ) : (
                         <button
@@ -1252,7 +1352,7 @@ export default function AuthPage() {
                             padding: "10px 12px",
                             borderRadius: 12,
                             border: 0,
-                            background: "linear-gradient(90deg, #4f46e5, #7c3aed)",
+                            background: "linear-gradient(90deg, #2563eb, #3b82f6)",
                             cursor: resetBusy ? "not-allowed" : "pointer",
                             color: "#ffffff",
                             fontWeight: 700,
@@ -1265,7 +1365,7 @@ export default function AuthPage() {
                       )}
                     </div>
 
-                    {resetStep === "confirm" && (
+                    {(resetStep === "code" || resetStep === "confirm") && (
                       <div style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
                         Didn’t get a code?{" "}
                         <button

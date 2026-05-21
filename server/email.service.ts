@@ -1,5 +1,26 @@
 import nodemailer from 'nodemailer';
 
+const DEFAULT_EMAIL_FROM_NAME = String(process.env.EMAIL_FROM_NAME || 'Trackla').trim() || 'Trackla';
+
+function extractEmailAddress(rawFrom: string): string {
+  const v = String(rawFrom || '').trim();
+  if (!v) return '';
+  // Name <email@domain>
+  const angle = v.match(/<\s*([^>\s]+@[^>\s]+)\s*>/);
+  if (angle?.[1]) return angle[1].trim();
+  // Just an email address
+  const direct = v.match(/\b[^\s<>]+@[^\s<>]+\b/);
+  return direct?.[0]?.trim() || '';
+}
+
+function withDisplayName(rawFrom: string, displayName: string): string {
+  const email = extractEmailAddress(rawFrom);
+  if (!email) return String(rawFrom || '').trim();
+  const name = String(displayName || '').trim() || 'Trackla';
+  // Quote the display name to be safe across providers.
+  return `"${name}" <${email}>`;
+}
+
 interface EmailConfig {
   host: string;
   port: number;
@@ -141,7 +162,8 @@ class EmailService {
     if (preferResend) {
       if (this.isResendConfigured && this.resend) {
         try {
-          const from = String(process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+          const rawFrom = String(process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+          const from = withDisplayName(rawFrom, DEFAULT_EMAIL_FROM_NAME);
           if (!from) {
             throw new Error('RESEND_FROM (or SMTP_FROM/SMTP_USER) is required for sending email');
           }
@@ -221,7 +243,7 @@ class EmailService {
 
     try {
       const mailOptions = {
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        from: withDisplayName(String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim(), DEFAULT_EMAIL_FROM_NAME),
         to: emailData.to,
         subject: emailData.subject,
         html: emailData.html

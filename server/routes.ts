@@ -30,12 +30,81 @@ const stripe: Stripe | null = STRIPE_SECRET_KEY
   : null;
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  const escapeHtml = (input: any): string =>
+    String(input ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const contactFormSchema = z.object({
+    name: z.string().trim().min(1).max(80),
+    email: z.string().trim().email().max(254),
+    message: z.string().trim().min(1).max(4000),
+  });
+
   const toEpochMsServer = (raw: any): number => {
     if (!raw) return 0;
     const d = raw instanceof Date ? raw : new Date(String(raw));
     const t = d.getTime();
     return Number.isFinite(t) ? t : 0;
   };
+
+  app.post('/api/contact', async (req, res) => {
+    try {
+      const parsed = contactFormSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: 'Invalid contact form data', errors: parsed.error.flatten() });
+      }
+
+      const { name, email, message } = parsed.data;
+      const to = String(process.env.CONTACT_TO_EMAIL || 'sales@perfectaconsulting.com').trim();
+      if (!to) {
+        return res.status(500).json({ message: 'CONTACT_TO_EMAIL is not configured' });
+      }
+
+      const now = new Date();
+      const html = `
+        <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;line-height:1.5;color:#0f172a">
+          <h2 style="margin:0 0 12px">New Contact Message (Trackla)</h2>
+          <table style="border-collapse:collapse;width:100%;max-width:720px">
+            <tr>
+              <td style="padding:6px 0;color:#64748b;width:120px">Name</td>
+              <td style="padding:6px 0;font-weight:600">${escapeHtml(name)}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#64748b">Email</td>
+              <td style="padding:6px 0;font-weight:600"><a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#64748b">Sent</td>
+              <td style="padding:6px 0">${escapeHtml(now.toISOString())}</td>
+            </tr>
+          </table>
+          <div style="margin-top:14px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;white-space:pre-wrap">
+            ${escapeHtml(message)}
+          </div>
+        </div>
+      `;
+
+      const { emailService } = await import('./email.service.js');
+      const ok = await emailService.sendEmail({
+        to,
+        subject: `Trackla Contact Form — ${name}`,
+        html,
+      });
+
+      if (!ok) {
+        return res.status(503).json({ message: 'Email sending failed (email service not configured or send failed)' });
+      }
+
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error('❌ /api/contact error:', error);
+      return res.status(500).json({ message: 'Server error sending message' });
+    }
+  });
 
   const notificationDedupeKey = (n: any): string => {
     if (!n) return '';
@@ -1741,7 +1810,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const otp = generateOTP();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
 
       await db.collection("password_reset_otps").deleteMany({ email: { $regex: emailRegex } });
       await db.collection("password_reset_otps").updateOne(
@@ -1782,7 +1851,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   <p style="color: #3b82f6; font-size: 42px; font-weight: bold; margin: 0; letter-spacing: 8px; font-family: 'Courier New', monospace;">${otp}</p>
                 </div>
                 <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 24px 0 0 0; text-align: center;">
-                  This code will expire in <strong>10 minutes</strong>.
+                  This code will expire in <strong>2 minutes</strong>.
                 </p>
                 <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 12px 0 0 0; text-align: center;">
                   If you didn't request this, you can ignore this email.
@@ -5109,7 +5178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Proactively send a reset code (non-blocking if email isn't configured)
       const otp = generateOTP();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + 2 * 60 * 1000);
       await db.collection("password_reset_otps").deleteMany({ email: { $regex: emailRegex } });
       await db.collection("password_reset_otps").updateOne(
         { email: emailKey },
@@ -5130,7 +5199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               <div style="background: #f1f5f9; border: 2px dashed #3b82f6; border-radius: 8px; padding: 16px; text-align: center; max-width: 320px;">
                 <div style="font-size: 34px; font-weight: 700; letter-spacing: 6px; font-family: 'Courier New', monospace; color: #3b82f6;">${otp}</div>
               </div>
-              <p style="margin: 16px 0 0 0; color: #64748b;">This code expires in 10 minutes.</p>
+              <p style="margin: 16px 0 0 0; color: #64748b;">This code expires in 2 minutes.</p>
             </div>
           `,
         });

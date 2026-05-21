@@ -62,6 +62,7 @@ import { Router } from "express";
 import { connectToDatabase } from "./mongo.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import type { User } from "./types";
 import { sendSubscriptionNotifications, detectSubscriptionChanges } from "./subscription-notification.service.js";
 import { sendComplianceNotifications, detectComplianceChanges } from "./compliance-notification.service.js";
@@ -3441,6 +3442,233 @@ function isPlatformOwner(email?: string | null): boolean {
   return allow.includes(normalized);
 }
 
+function roleToLabel(role: unknown): string {
+  const v = String(role ?? '').trim().toLowerCase();
+  if (v === 'super_admin') return 'Super Admin';
+  if (v === 'admin') return 'Admin';
+  if (v === 'contributor') return 'Contributor';
+  if (v === 'department_editor') return 'Department Editor';
+  if (v === 'department_viewer') return 'Department Viewer';
+  if (v === 'viewer') return 'Viewer';
+  if (v === 'global_admin') return 'Global Admin';
+  return v ? v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Viewer';
+}
+
+function joinUrl(base: string, path: string): string {
+  const b = String(base || '').trim().replace(/\/+$/, '');
+  const p = String(path || '').startsWith('/') ? String(path || '') : `/${String(path || '')}`;
+  return b ? `${b}${p}` : p;
+}
+
+function inferFrontendBaseUrl(req: any): string {
+  const explicit = String(
+    process.env.FRONTEND_URL ||
+    process.env.PUBLIC_FRONTEND_URL ||
+    process.env.CLIENT_URL ||
+    ''
+  )
+    .trim()
+    .replace(/\/+$/, '');
+  if (explicit) return explicit;
+
+  // When requests come from the browser (your app UI), Origin is the *frontend* base URL.
+  const origin = String(req?.headers?.origin || '').trim().replace(/\/+$/, '');
+  if (/^https?:\/\//i.test(origin)) return origin;
+
+  const xfProto = String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim();
+  const proto = xfProto || String(req?.protocol || 'http');
+  let host = String(req?.headers?.host || req?.get?.('host') || '').trim();
+  host = host.replace(/^127\.0\.0\.1(?=:\d+$)/, 'localhost');
+  host = host.replace(/^0\.0\.0\.0(?=:\d+$)/, 'localhost');
+  return host ? `${proto}://${host}` : '';
+}
+
+function sendWelcomeEmailInBackground(payload: { to: string; subject: string; html: string }) {
+  void (async () => {
+    try {
+      const { emailService } = await import('./email.service.js');
+      await emailService.sendEmail(payload);
+    } catch {
+      // non-blocking
+    }
+  })();
+}
+
+function generateSecurePassword(length = 12): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnopqrstuvwxyz';
+  const digits = '23456789';
+  const special = '!@#$%^&*';
+  const all = `${upper}${lower}${digits}${special}`;
+
+  const pick = (chars: string) => chars[crypto.randomInt(0, chars.length)];
+  const chars: string[] = [pick(upper), pick(lower), pick(digits), pick(special)];
+
+  while (chars.length < Math.max(12, length)) {
+    chars.push(pick(all));
+  }
+
+  // Fisher–Yates shuffle
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+
+  return chars.join('');
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function normalizeLogoUrl(raw: unknown, frontendBase: string): string {
+  const v = String(raw ?? '').trim();
+  if (!v) return '';
+  if (v.startsWith('data:image/')) return v;
+  if (/^https?:\/\//i.test(v)) return v;
+  // If it's a relative path like /uploads/logo.png, prefix with FRONTEND_URL
+  if (v.startsWith('/')) return joinUrl(frontendBase, v);
+  return joinUrl(frontendBase, `/${v}`);
+}
+
+function buildWelcomeEmailHtml(params: {
+  companyName?: string | null;
+  companyLogo?: string | null;
+  fullName: string;
+  email: string;
+  password: string;
+  roleLabel: string;
+  loginUrl: string;
+}): string {
+  // Keep email strictly Trackla-branded (no tenant/company names).
+  const brandName = 'Trackla';
+
+  const fullName = escapeHtml(params.fullName);
+  const email = escapeHtml(params.email);
+  const password = escapeHtml(params.password);
+  const roleLabel = escapeHtml(params.roleLabel);
+  const loginUrl = String(params.loginUrl || '').trim();
+  const loginUrlHtml = escapeHtml(loginUrl);
+
+  // NOTE: Reference screenshot uses a photo background. To keep emails reliable,
+  // we use a light gradient background (no remote images).
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="x-apple-disable-message-reformatting" />
+  <title>Welcome to ${escapeHtml(brandName)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F4F6F9;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F4F6F9;padding:44px 20px;">
+    <tr>
+      <td align="center">
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;width:100%;">
+          <tr>
+            <td style="background:linear-gradient(180deg,#ffffff 0%, #f3f7ff 55%, #eef6ff 100%);border-radius:18px;overflow:hidden;box-shadow:0 22px 60px rgba(15,23,42,0.15);border:1px solid #E6EEF9;">
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center" style="padding:34px 28px 8px 28px;">
+                    <div style="font-size:46px;font-weight:900;letter-spacing:-0.8px;color:#1A73E8;line-height:1;">${escapeHtml(brandName)}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding:0 28px 18px 28px;">
+                    <div style="font-size:13px;font-weight:600;color:#64748B;letter-spacing:0.06em;"></div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding:8px 34px 0 34px;">
+                    <div style="font-size:28px;font-weight:900;color:#0B1B3D;">Welcome, ${fullName}!</div>
+                    <div style="margin-top:10px;font-size:16px;font-weight:400;color:#475569;line-height:1.7;">
+                      Your account is successfully created. Below are your login details.
+                    </div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding:22px 34px 0 34px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#EAF4FF;border:1px solid #BFD9F2;border-radius:10px;box-shadow:0 10px 24px rgba(15,23,42,0.10);">
+                      <tr>
+                        <td style="padding:18px 20px 10px 20px;">
+                          <div style="font-size:13px;font-weight:800;color:#5B6B7C;letter-spacing:0.08em;text-transform:uppercase;">Account Details</div>
+                          <div style="height:1px;background:#C9DFF2;margin-top:14px;"></div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:10px 20px 18px 20px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                            <tr>
+                              <td style="padding:12px 0;font-size:18px;color:#475569;">User Name:</td>
+                              <td style="padding:12px 0;font-size:18px;font-weight:700;color:#0B1B3D;">${fullName}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding:12px 0;font-size:18px;color:#475569;">Email:</td>
+                              <td style="padding:12px 0;font-size:18px;font-weight:600;">
+                                <a href="mailto:${email}" style="color:#1A73E8;text-decoration:underline;">${email}</a>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding:12px 0;font-size:18px;color:#475569;">Password:</td>
+                              <td style="padding:12px 0;font-size:18px;font-weight:800;color:#0B1B3D;font-family:'Courier New',Courier,monospace;letter-spacing:0.6px;">${password}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding:12px 0;font-size:18px;color:#475569;">Role:</td>
+                              <td style="padding:12px 0;font-size:18px;font-weight:900;color:#0B1B3D;">${roleLabel}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td align="center" style="padding:26px 34px 34px 34px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td align="center" style="border-radius:10px;background:#1A73E8;box-shadow:0 12px 28px rgba(26,115,232,0.25);">
+                          <a href="${loginUrlHtml}" target="_blank" style="display:inline-block;padding:16px 42px;font-size:16px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:10px;">Login to Your Account</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+        </table>
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;width:100%;padding-top:18px;">
+          <tr>
+            <td align="center" style="font-size:12px;color:#94A3B8;line-height:1.6;">
+              &copy; ${year} ${escapeHtml(brandName)}. All rights reserved.<br>
+              If you did not request this account, please ignore this email.
+            </td>
+          </tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>`;
+}
+
 // Add a new user
 router.post("/api/users", async (req, res) => {
   const requestedRole = req.body?.role;
@@ -3453,76 +3681,142 @@ router.post("/api/users", async (req, res) => {
   
   try {
     const { password, name, email, role, status, department } = req.body;
-const db = await connectToDatabase();
+    const db = await connectToDatabase();
+
+    const fullName = String(name ?? '').trim();
+    const emailKey = String(email ?? '').trim().toLowerCase();
+    const roleKey = String(role ?? 'viewer').trim();
+    const statusKey = String(status ?? 'active').trim() || 'active';
+
+    if (!fullName) {
+      return res.status(400).json({ message: 'Name is required' });
+    }
+    if (!emailKey) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    // Auto-generate password when not provided (UI no longer asks for it)
+    const providedPassword = String(password ?? '').trim();
+    const plainPassword = providedPassword || generateSecurePassword(12);
 
     // Reserve global_admin for internal/platform owner use only.
-    if (role === 'global_admin' && !isPlatformOwner(req.user?.email)) {
+    if (roleKey === 'global_admin' && !isPlatformOwner(req.user?.email)) {
       return res.status(403).json({ message: 'Access denied: global_admin role is reserved' });
     }
 
-    if (role === 'global_admin') {
+    if (roleKey === 'global_admin') {
       // Platform-level global admin is NOT tenant-bound
-      const existingPlatformAdmin = await db.collection('login').findOne({ email, role: 'global_admin' });
+      const existingPlatformAdmin = await db.collection('login').findOne({ email: emailKey, role: 'global_admin' });
       if (existingPlatformAdmin) {
         return res.status(400).json({ message: 'Global admin already exists for this email' });
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(plainPassword, 10);
       const result = await db.collection('login').insertOne({
-        fullName: name,
-        email: email,
+        fullName,
+        email: emailKey,
         password: hashedPassword,
         tenantId: null,
         role: 'global_admin',
-        status: status || 'active',
+        status: statusKey,
         department: null,
         createdAt: new Date(),
       });
 
+      // Send welcome email with credentials (non-blocking if email isn't configured)
+      try {
+        const frontendBase =
+          inferFrontendBaseUrl(req) ||
+          (process.env.NODE_ENV !== 'production' ? 'http://localhost:5173' : '');
+        const loginUrl = joinUrl(frontendBase, '/login');
+        const html = buildWelcomeEmailHtml({
+          companyName: 'Trackla',
+          companyLogo: joinUrl(frontendBase, '/assets/logo.png'),
+          fullName,
+          email: emailKey,
+          password: plainPassword,
+          roleLabel: roleToLabel('global_admin'),
+          loginUrl,
+        });
+        sendWelcomeEmailInBackground({
+          to: emailKey,
+          subject: 'Welcome to Trackla - Account Ready',
+          html,
+        });
+      } catch {
+        // non-blocking
+      }
+
       return res.status(201).json({
         _id: result.insertedId,
-        name,
-        email,
+        name: fullName,
+        email: emailKey,
         role: 'global_admin',
-        status: status || 'active',
+        status: statusKey,
         tenantId: null,
       });
     }
     
     // Check if email already exists in login collection for this tenant
-    const existingUser = await db.collection("login").findOne({ email, tenantId });
+    const existingUser = await db.collection("login").findOne({ email: emailKey, tenantId });
     if (existingUser) {
 return res.status(400).json({ message: "Email already exists" });
     }
     
     // Check if name already exists in login collection for this tenant
-    const existingName = await db.collection("login").findOne({ fullName: name, tenantId });
+    const existingName = await db.collection("login").findOne({ fullName: fullName, tenantId });
 if (existingName) {
 return res.status(400).json({ message: "User name already exists" });
     }
     
     // Hash the password before storing
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
     
     // Store in login collection with proper structure
     const result = await db.collection("login").insertOne({
-      fullName: name,
-      email: email,
+      fullName: fullName,
+      email: emailKey,
       password: hashedPassword,
       tenantId: tenantId,
-      role: role || "viewer",
-      status: status || "active",
+      role: roleKey || "viewer",
+      status: statusKey,
       department: department || null,
       createdAt: new Date()
     });
+
+    // Send welcome email with credentials (non-blocking if email isn't configured)
+    try {
+      const companyInfo = await db.collection('companyInfo').findOne({ tenantId });
+      const companyName = String((companyInfo as any)?.companyName || '').trim() || 'Trackla';
+      const companyLogo = String((companyInfo as any)?.companyLogo || '').trim() || null;
+      const frontendBase =
+        inferFrontendBaseUrl(req) ||
+        (process.env.NODE_ENV !== 'production' ? 'http://localhost:5173' : '');
+      const loginUrl = joinUrl(frontendBase, '/login');
+
+      const html = buildWelcomeEmailHtml({
+        companyName,
+        companyLogo,
+        fullName,
+        email: emailKey,
+        password: plainPassword,
+        roleLabel: roleToLabel(roleKey || 'viewer'),
+        loginUrl,
+      });
+
+      const subject = 'Welcome to Trackla - Account Ready';
+      sendWelcomeEmailInBackground({ to: emailKey, subject, html });
+    } catch {
+      // non-blocking
+    }
     
     // Return user without password
     res.status(201).json({
       _id: result.insertedId,
-      name: name,
-      email: email,
-      role: role || "viewer",
-      status: status || "active",
+      name: fullName,
+      email: emailKey,
+      role: roleKey || "viewer",
+      status: statusKey,
       tenantId: tenantId
     });
   } catch (error) {
