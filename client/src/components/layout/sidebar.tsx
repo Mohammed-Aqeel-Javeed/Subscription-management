@@ -182,7 +182,15 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
       <div className="flex flex-col h-full w-16 shrink-0 border-r border-indigo-200/50" style={{background:sidebarBackground}}>
         <div className="flex flex-col items-center gap-1 px-2 pt-3 pb-2 border-b border-indigo-200/50">
           <button onClick={onToggle} className="group h-11 w-11 flex items-center justify-center rounded-xl bg-white/60 hover:bg-white/80 border border-indigo-200/60 shadow-sm transition-all duration-200 hover:scale-105 relative" aria-label="Open Sidebar">
-            <img src="/assets/logo.png" alt="Logo" className="w-9 h-9 object-contain absolute opacity-100 group-hover:opacity-0 transition-opacity duration-150" style={{imageRendering:"crisp-edges"}}/>
+            <img
+              src="/assets/logo.png"
+              alt="Trackla"
+              width={36}
+              height={36}
+              decoding="async"
+              className="w-9 h-9 object-contain absolute opacity-100 group-hover:opacity-0 transition-opacity duration-150"
+              draggable={false}
+            />
             <PanelLeft size={20} className="text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-150"/>
           </button>
         </div>
@@ -218,8 +226,16 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
       <div className="flex flex-col gap-2 px-4 pt-3 pb-3 border-b border-indigo-200/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-0">
-            <img src="/assets/logo.png" alt="Trackla" className="w-20 h-20 object-contain drop-shadow-xl" style={{imageRendering:"crisp-edges"}}/>
-            <h1 className="text-2xl font-bold tracking-tight text-indigo-900">Trackla</h1>
+            <img
+              src="/assets/logo.png"
+              alt="Trackla"
+              width={80}
+              height={80}
+              decoding="async"
+              className="w-20 h-20 object-contain drop-shadow-xl"
+              draggable={false}
+            />
+            <h1 className="text-2xl font-bold tracking-tight text-slate-950">Trackla</h1>
           </div>
           {onToggle&&(
             <button onClick={onToggle} className="h-8 w-8 flex items-center justify-center rounded-lg bg-white/50 hover:bg-white/70 text-indigo-600 border border-indigo-200/60 transition-all duration-200" title="Collapse">

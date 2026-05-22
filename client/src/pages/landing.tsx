@@ -86,7 +86,7 @@ function DashboardMockup() {
       <div className="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200/60 bg-white/70">
           <div className="flex items-center gap-2.5">
-            <img src="/assets/logo.png" alt="Trackla" className="w-7 h-7 object-contain" />
+            <img src="/assets/logo.png" alt="Trackla" width={28} height={28} decoding="async" className="w-7 h-7 object-contain" draggable={false} />
             <span className="text-xs font-semibold text-slate-700">Trackla Analytics</span>
           </div>
           <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-indigo-50 text-indigo-700">
@@ -376,7 +376,7 @@ export default function LandingPage() {
               className="inline-flex items-center gap-4"
               aria-label="Trackla Home"
             >
-              <img src="/assets/logo.png" alt="Trackla" className="w-20 h-20 object-contain" />
+              <img src="/assets/logo.png" alt="Trackla" width={80} height={80} decoding="async" className="w-20 h-20 object-contain" draggable={false} />
               <span className="font-bold text-4xl tracking-[0.03em] text-slate-900 leading-none">Trackla</span>
             </button>
 
@@ -1047,7 +1047,7 @@ export default function LandingPage() {
       <footer className="py-10 px-4 sm:px-6 lg:px-8 border-t border-indigo-100 bg-white">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="inline-flex items-center gap-2">
-            <img src="/assets/logo.png" alt="Trackla" className="w-14 h-14 object-contain" />
+            <img src="/assets/logo.png" alt="Trackla" width={56} height={56} decoding="async" className="w-14 h-14 object-contain" draggable={false} />
             <span className="font-bold text-2xl text-slate-900 tracking-[0.03em] leading-none">Trackla</span>
           </div>
           <div className="flex items-center gap-6">

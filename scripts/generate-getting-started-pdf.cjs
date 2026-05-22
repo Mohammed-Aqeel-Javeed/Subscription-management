@@ -8,8 +8,22 @@
 const fs = require('fs');
 const path = require('path');
 
+function sanitizePdfText(input) {
+  // This generator uses Type1 Helvetica without custom encodings.
+  // Keep text ASCII-ish to avoid "missing glyph" boxes in some viewers.
+  return String(input ?? '')
+    .replace(/\u2022/g, '-') // bullet
+    .replace(/[\u2013\u2014]/g, '-') // en/em dash
+    .replace(/[\u2018\u2019]/g, "'") // smart single quotes
+    .replace(/[\u201C\u201D]/g, '"') // smart double quotes
+    .replace(/\u00A0/g, ' ') // NBSP
+    .replace(/\s+/g, ' ')
+    .trimEnd();
+}
+
 function escapePdfString(input) {
-  return String(input)
+  const safe = sanitizePdfText(input);
+  return safe
     .replace(/\\/g, '\\\\')
     .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)')
@@ -17,7 +31,7 @@ function escapePdfString(input) {
 }
 
 function wrapLine(text, maxChars) {
-  const raw = String(text ?? '').replace(/\s+/g, ' ').trim();
+  const raw = sanitizePdfText(text).replace(/\s+/g, ' ').trim();
   if (!raw) return [''];
   if (raw.length <= maxChars) return [raw];
 
@@ -85,7 +99,7 @@ function clamp(n, min, max) {
 function isLikelySubheading(line) {
   const s = String(line ?? '').trim();
   if (!s) return false;
-  if (s.startsWith('•')) return false;
+  if (s.startsWith('•') || s.startsWith('-') || s.startsWith('*')) return false;
   // Treat short numbered section headers as subheadings (but not long step instructions)
   if (s.match(/^\d+\)\s+/) && s.length <= 40) return true;
   if (s.match(/^\d+[\).]/)) return false;
@@ -121,7 +135,7 @@ function renderStyledBody(lines, options) {
     }
 
     const trimmed = line.trim();
-    const isBullet = trimmed.startsWith('•');
+    const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*');
     const subheading = isLikelySubheading(trimmed);
 
     const useFont = subheading ? '/F2' : '/F1';
@@ -260,7 +274,7 @@ function main() {
   const pages = [];
 
   pages.push({
-    title: 'Trackla — Getting Started Guide',
+    title: 'Trackla - Getting Started Guide',
     lines: wrapLines(
       [
         'Version: May 2026',
@@ -291,7 +305,7 @@ function main() {
 
   // Body content flows continuously across pages (no "one section = one page").
   pages.push({
-    title: 'Trackla — Getting Started Guide',
+    title: 'Trackla - Getting Started Guide',
     lines: wrapLines(
       [
         '1) Trackla at a Glance',

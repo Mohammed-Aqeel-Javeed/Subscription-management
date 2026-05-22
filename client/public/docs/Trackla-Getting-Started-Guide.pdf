@@ -10,7 +10,7 @@ endobj
 << /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R] /Count 5 >>
 endobj
 4 0 obj
-<< /Length 1551 >>
+<< /Length 1541 >>
 stream
 q
 0.94 g
@@ -20,7 +20,7 @@ Q
 BT
 /F2 16 Tf
 54 770 Td
-(Trackla  Getting Started Guide) Tj
+(Trackla - Getting Started Guide) Tj
 ET
 BT
 /F2 12 Tf
@@ -110,22 +110,22 @@ ET
 BT
 /F1 11 Tf
 72 488 Td
-(" Confirm Company Name and LCY \(local currency\).) Tj
+(- Confirm Company Name and LCY \(local currency\).) Tj
 ET
 BT
 /F1 11 Tf
 72 474 Td
-(" Add users and assign roles \(Viewer / Contributor / Admin\).) Tj
+(- Add users and assign roles \(Viewer / Contributor / Admin\).) Tj
 ET
 BT
 /F1 11 Tf
 72 460 Td
-(" Set up Payment Methods and any Custom Fields you need.) Tj
+(- Set up Payment Methods and any Custom Fields you need.) Tj
 ET
 BT
 /F1 11 Tf
 72 446 Td
-(" Add your first subscription and set Next Renewal \(YYYY-MM-DD\).) Tj
+(- Add your first subscription and set Next Renewal \(YYYY-MM-DD\).) Tj
 ET
 q
 0.85 g
@@ -144,7 +144,7 @@ endobj
 << /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
 endobj
 6 0 obj
-<< /Length 4009 >>
+<< /Length 3951 >>
 stream
 q
 0.94 g
@@ -154,7 +154,7 @@ Q
 BT
 /F2 16 Tf
 54 770 Td
-(Trackla  Getting Started Guide) Tj
+(Trackla - Getting Started Guide) Tj
 ET
 BT
 /F2 12 Tf
@@ -174,12 +174,12 @@ ET
 BT
 /F1 11 Tf
 72 686 Td
-(" Dashboard: spend overview, trends, and quick access to what needs attention.) Tj
+(- Dashboard: spend overview, trends, and quick access to what needs attention.) Tj
 ET
 BT
 /F1 11 Tf
 72 672 Td
-(" Subscriptions: create/edit subscriptions, manage renewal dates, reminder policies, and) Tj
+(- Subscriptions: create/edit subscriptions, manage renewal dates, reminder policies, and) Tj
 ET
 BT
 /F1 11 Tf
@@ -189,7 +189,7 @@ ET
 BT
 /F1 11 Tf
 72 644 Td
-(" Notifications: in-app reminders generated from subscription dates and compliance) Tj
+(- Notifications: in-app reminders generated from subscription dates and compliance) Tj
 ET
 BT
 /F1 11 Tf
@@ -199,22 +199,22 @@ ET
 BT
 /F1 11 Tf
 72 616 Td
-(" Reports: analytics and audit reporting across subscriptions and spend.) Tj
+(- Reports: analytics and audit reporting across subscriptions and spend.) Tj
 ET
 BT
 /F1 11 Tf
 72 602 Td
-(" Setup & Configuration: currencies, payment methods, custom fields, and related setup.) Tj
+(- Setup & Configuration: currencies, payment methods, custom fields, and related setup.) Tj
 ET
 BT
 /F1 11 Tf
 72 588 Td
-(" Company Details: company profile, departments, employees, and user management.) Tj
+(- Company Details: company profile, departments, employees, and user management.) Tj
 ET
 BT
 /F1 11 Tf
 72 574 Td
-(" Compliance / Renewals: track policy/filing/licence dates and set reminder schedules.) Tj
+(- Compliance / Renewals: track policy/filing/licence dates and set reminder schedules.) Tj
 ET
 BT
 /F2 12 Tf
@@ -224,7 +224,7 @@ ET
 BT
 /F1 11 Tf
 72 544 Td
-(" Next Renewal: the key date used for reminders and auto-renewal.) Tj
+(- Next Renewal: the key date used for reminders and auto-renewal.) Tj
 ET
 BT
 /F2 12 Tf
@@ -239,12 +239,12 @@ ET
 BT
 /F1 11 Tf
 72 484 Td
-(" Company Name: displayed across the app and in the sidebar company selector.) Tj
+(- Company Name: displayed across the app and in the sidebar company selector.) Tj
 ET
 BT
 /F1 11 Tf
 72 470 Td
-(" LCY \(Local Currency\): used for normalized reporting and LCY Amount calculations.) Tj
+(- LCY \(Local Currency\): used for normalized reporting and LCY Amount calculations.) Tj
 ET
 BT
 /F2 12 Tf
@@ -254,7 +254,7 @@ ET
 BT
 /F1 11 Tf
 72 440 Td
-(" If your user has access to multiple companies, use the company selector in the sidebar to) Tj
+(- If your user has access to multiple companies, use the company selector in the sidebar to) Tj
 ET
 BT
 /F1 11 Tf
@@ -264,7 +264,7 @@ ET
 BT
 /F1 11 Tf
 72 412 Td
-(" Switching changes the active tenant context \(data shown across the app\).) Tj
+(- Switching changes the active tenant context \(data shown across the app\).) Tj
 ET
 BT
 /F2 12 Tf
@@ -274,17 +274,17 @@ ET
 BT
 /F1 11 Tf
 72 382 Td
-(" Super Admin / Global Admin: full access \(may switch across tenants if enabled\).) Tj
+(- Super Admin / Global Admin: full access \(may switch across tenants if enabled\).) Tj
 ET
 BT
 /F1 11 Tf
 72 368 Td
-(" Contributor: can create and update subscriptions and related data based on permissions.) Tj
+(- Contributor: can create and update subscriptions and related data based on permissions.) Tj
 ET
 BT
 /F1 11 Tf
 72 354 Td
-(" Viewer: read-only access to pages and reports.) Tj
+(- Viewer: read-only access to pages and reports.) Tj
 ET
 BT
 /F2 12 Tf
@@ -294,7 +294,7 @@ ET
 BT
 /F1 11 Tf
 72 324 Td
-(" Keep Owner and Owner Email accurate for accountability and audits.) Tj
+(- Keep Owner and Owner Email accurate for accountability and audits.) Tj
 ET
 BT
 /F1 11 Tf
@@ -314,32 +314,32 @@ ET
 BT
 /F1 11 Tf
 72 252 Td
-(" Subscription Name \(Service Name\): the primary label used throughout the app.) Tj
+(- Subscription Name \(Service Name\): the primary label used throughout the app.) Tj
 ET
 BT
 /F1 11 Tf
 72 238 Td
-(" Vendor: the supplier/provider of the subscription.) Tj
+(- Vendor: the supplier/provider of the subscription.) Tj
 ET
 BT
 /F1 11 Tf
 72 224 Td
-(" Website: vendor link for quick access to billing/admin portals.) Tj
+(- Website: vendor link for quick access to billing/admin portals.) Tj
 ET
 BT
 /F1 11 Tf
 72 210 Td
-(" Category: used for grouping and reporting.) Tj
+(- Category: used for grouping and reporting.) Tj
 ET
 BT
 /F1 11 Tf
 72 196 Td
-(" Department\(s\): used for cost allocation and reporting.) Tj
+(- Department\(s\): used for cost allocation and reporting.) Tj
 ET
 BT
 /F1 11 Tf
 72 182 Td
-(" Owner / Owner Email: internal responsibility \(use real owners for audit clarity\).) Tj
+(- Owner / Owner Email: internal responsibility \(use real owners for audit clarity\).) Tj
 ET
 BT
 /F2 12 Tf
@@ -349,32 +349,32 @@ ET
 BT
 /F1 11 Tf
 72 152 Td
-(" Currency: billing currency for the subscription.) Tj
+(- Currency: billing currency for the subscription.) Tj
 ET
 BT
 /F1 11 Tf
 72 138 Td
-(" Amount: unit price for a single license/unit.) Tj
+(- Amount: unit price for a single license/unit.) Tj
 ET
 BT
 /F1 11 Tf
 72 124 Td
-(" Qty: number of units \(licenses/seats\).) Tj
+(- Qty: number of units \(licenses/seats\).) Tj
 ET
 BT
 /F1 11 Tf
 72 110 Td
-(" Total Amount: Amount × Qty \(may be stored/derived depending on workflow\).) Tj
+(- Total Amount: Amount × Qty \(may be stored/derived depending on workflow\).) Tj
 ET
 BT
 /F1 11 Tf
 72 96 Td
-(" LCY Amount: normalized amount in LCY for consolidated reporting.) Tj
+(- LCY Amount: normalized amount in LCY for consolidated reporting.) Tj
 ET
 BT
 /F1 11 Tf
 72 82 Td
-(" Payment Method: how this subscription is paid \(card/bank/etc\).) Tj
+(- Payment Method: how this subscription is paid \(card/bank/etc\).) Tj
 ET
 q
 0.85 g
@@ -393,7 +393,7 @@ endobj
 << /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 6 0 R >>
 endobj
 8 0 obj
-<< /Length 3718 >>
+<< /Length 3678 >>
 stream
 q
 0.94 g
@@ -403,7 +403,7 @@ Q
 BT
 /F2 16 Tf
 54 770 Td
-(Trackla  Getting Started Guide) Tj
+(Trackla - Getting Started Guide) Tj
 ET
 BT
 /F2 12 Tf
@@ -413,17 +413,17 @@ ET
 BT
 /F1 11 Tf
 72 716 Td
-(" Billing Cycle: Monthly / Quarterly / Yearly / Weekly \(affects auto-renew calculations\).) Tj
+(- Billing Cycle: Monthly / Quarterly / Yearly / Weekly \(affects auto-renew calculations\).) Tj
 ET
 BT
 /F1 11 Tf
 72 702 Td
-(" Start Date: current cycle start date.) Tj
+(- Start Date: current cycle start date.) Tj
 ET
 BT
 /F1 11 Tf
 72 688 Td
-(" Next Renewal: current cycle end date \(the date Trackla uses for reminders and) Tj
+(- Next Renewal: current cycle end date \(the date Trackla uses for reminders and) Tj
 ET
 BT
 /F1 11 Tf
@@ -438,12 +438,12 @@ ET
 BT
 /F1 11 Tf
 72 644 Td
-(" Status: Active/Inactive \(ensure Active for reminders and renewal operations\).) Tj
+(- Status: Active/Inactive \(ensure Active for reminders and renewal operations\).) Tj
 ET
 BT
 /F1 11 Tf
 72 630 Td
-(" Auto Renewal: enable only if you want Trackla to renew automatically on the Next Renewal) Tj
+(- Auto Renewal: enable only if you want Trackla to renew automatically on the Next Renewal) Tj
 ET
 BT
 /F1 11 Tf
@@ -453,7 +453,7 @@ ET
 BT
 /F1 11 Tf
 72 602 Td
-(" Notes: store key contract information, renewal terms, or approval context.) Tj
+(- Notes: store key contract information, renewal terms, or approval context.) Tj
 ET
 BT
 /F2 12 Tf
@@ -473,7 +473,7 @@ ET
 BT
 /F1 11 Tf
 72 528 Td
-(" Number of days before Next Renewal that reminders should begin.) Tj
+(- Number of days before Next Renewal that reminders should begin.) Tj
 ET
 BT
 /F2 12 Tf
@@ -483,12 +483,12 @@ ET
 BT
 /F1 11 Tf
 72 498 Td
-(" One time: creates a single reminder at \(Next Renewal - Reminder Days\).) Tj
+(- One time: creates a single reminder at \(Next Renewal - Reminder Days\).) Tj
 ET
 BT
 /F1 11 Tf
 72 484 Td
-(" Two times: creates two reminders at \(Next Renewal - Reminder Days\) and at about half that) Tj
+(- Two times: creates two reminders at \(Next Renewal - Reminder Days\) and at about half that) Tj
 ET
 BT
 /F1 11 Tf
@@ -498,7 +498,7 @@ ET
 BT
 /F1 11 Tf
 72 456 Td
-(" Until Renewal: creates daily reminders from \(Next Renewal - Reminder Days\) through Next) Tj
+(- Until Renewal: creates daily reminders from \(Next Renewal - Reminder Days\) through Next) Tj
 ET
 BT
 /F1 11 Tf
@@ -513,12 +513,12 @@ ET
 BT
 /F1 11 Tf
 72 412 Td
-(" Shows upcoming reminders and alerts created by subscriptions and compliance schedules.) Tj
+(- Shows upcoming reminders and alerts created by subscriptions and compliance schedules.) Tj
 ET
 BT
 /F1 11 Tf
 72 398 Td
-(" Use it as an operational inbox for renewals and follow-ups.) Tj
+(- Use it as an operational inbox for renewals and follow-ups.) Tj
 ET
 BT
 /F1 11 Tf
@@ -533,7 +533,7 @@ ET
 BT
 /F1 11 Tf
 72 340 Td
-(" Auto Renewal triggers when Auto Renewal is enabled AND Next Renewal equals today \(UTC) Tj
+(- Auto Renewal triggers when Auto Renewal is enabled AND Next Renewal equals today \(UTC) Tj
 ET
 BT
 /F1 11 Tf
@@ -543,7 +543,7 @@ ET
 BT
 /F1 11 Tf
 72 312 Td
-(" When triggered, Trackla renews the subscription by setting Start Date to today and) Tj
+(- When triggered, Trackla renews the subscription by setting Start Date to today and) Tj
 ET
 BT
 /F1 11 Tf
@@ -553,7 +553,7 @@ ET
 BT
 /F1 11 Tf
 72 284 Td
-(" A history entry is created with Changed By = System \(Auto-Renewal\).) Tj
+(- A history entry is created with Changed By = System \(Auto-Renewal\).) Tj
 ET
 BT
 /F2 12 Tf
@@ -588,7 +588,7 @@ ET
 BT
 /F1 11 Tf
 54 182 Td
-(6\) Check Subscription History for an Auto Renewed entry and date range change.) Tj
+(6\) Check Subscription History for an "Auto Renewed" entry and date range change.) Tj
 ET
 BT
 /F2 12 Tf
@@ -598,7 +598,7 @@ ET
 BT
 /F1 11 Tf
 72 152 Td
-(" If Next Renewal is not a valid date, auto renewal will not trigger.) Tj
+(- If Next Renewal is not a valid date, auto renewal will not trigger.) Tj
 ET
 BT
 /F2 12 Tf
@@ -618,7 +618,7 @@ ET
 BT
 /F1 11 Tf
 72 78 Td
-(" Use a consistent date format \(YYYY-MM-DD\) for Start Date and Next Renewal.) Tj
+(- Use a consistent date format \(YYYY-MM-DD\) for Start Date and Next Renewal.) Tj
 ET
 q
 0.85 g
@@ -637,7 +637,7 @@ endobj
 << /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 8 0 R >>
 endobj
 10 0 obj
-<< /Length 3488 >>
+<< /Length 3444 >>
 stream
 q
 0.94 g
@@ -647,22 +647,22 @@ Q
 BT
 /F2 16 Tf
 54 770 Td
-(Trackla  Getting Started Guide) Tj
+(Trackla - Getting Started Guide) Tj
 ET
 BT
 /F1 11 Tf
 72 732 Td
-(" Ensure required identity fields \(Subscription Name, Vendor\) are present.) Tj
+(- Ensure required identity fields \(Subscription Name, Vendor\) are present.) Tj
 ET
 BT
 /F1 11 Tf
 72 718 Td
-(" Validate currency codes \(USD, EUR, SGD, etc.\) and Qty values.) Tj
+(- Validate currency codes \(USD, EUR, SGD, etc.\) and Qty values.) Tj
 ET
 BT
 /F1 11 Tf
 72 704 Td
-(" If you import departments, use consistent naming to avoid duplicates in reports.) Tj
+(- If you import departments, use consistent naming to avoid duplicates in reports.) Tj
 ET
 BT
 /F2 12 Tf
@@ -672,12 +672,12 @@ ET
 BT
 /F1 11 Tf
 72 674 Td
-(" Export is useful for audits, reconciliations, and bulk edits.) Tj
+(- Export is useful for audits, reconciliations, and bulk edits.) Tj
 ET
 BT
 /F1 11 Tf
 72 660 Td
-(" After re-importing, review Subscription History to confirm changes were applied as) Tj
+(- After re-importing, review Subscription History to confirm changes were applied as) Tj
 ET
 BT
 /F1 11 Tf
@@ -707,12 +707,12 @@ ET
 BT
 /F1 11 Tf
 72 558 Td
-(" Maintain the list of currencies used for subscription billing.) Tj
+(- Maintain the list of currencies used for subscription billing.) Tj
 ET
 BT
 /F1 11 Tf
 72 544 Td
-(" LCY is your primary reporting currency.) Tj
+(- LCY is your primary reporting currency.) Tj
 ET
 BT
 /F2 12 Tf
@@ -722,12 +722,12 @@ ET
 BT
 /F1 11 Tf
 72 514 Td
-(" Add and manage payment methods \(cards/bank accounts\) used by subscriptions.) Tj
+(- Add and manage payment methods \(cards/bank accounts\) used by subscriptions.) Tj
 ET
 BT
 /F1 11 Tf
 72 500 Td
-(" Keep expiry dates accurate if you track payment expiry alerts.) Tj
+(- Keep expiry dates accurate if you track payment expiry alerts.) Tj
 ET
 BT
 /F2 12 Tf
@@ -737,12 +737,12 @@ ET
 BT
 /F1 11 Tf
 72 470 Td
-(" Use custom fields to capture organization-specific data \(Cost Center, Contract ID, etc.\).) Tj
+(- Use custom fields to capture organization-specific data \(Cost Center, Contract ID, etc.\).) Tj
 ET
 BT
 /F1 11 Tf
 72 456 Td
-(" Keep naming consistent so imports and reports remain clean.) Tj
+(- Keep naming consistent so imports and reports remain clean.) Tj
 ET
 BT
 /F2 12 Tf
@@ -762,7 +762,7 @@ ET
 BT
 /F1 11 Tf
 72 382 Td
-(" Company Name and key profile details for the tenant.) Tj
+(- Company Name and key profile details for the tenant.) Tj
 ET
 BT
 /F2 12 Tf
@@ -772,7 +772,7 @@ ET
 BT
 /F1 11 Tf
 72 352 Td
-(" Define departments for spend allocation and access workflows.) Tj
+(- Define departments for spend allocation and access workflows.) Tj
 ET
 BT
 /F2 12 Tf
@@ -782,7 +782,7 @@ ET
 BT
 /F1 11 Tf
 72 322 Td
-(" Maintain employees for ownership assignments and reporting.) Tj
+(- Maintain employees for ownership assignments and reporting.) Tj
 ET
 BT
 /F2 12 Tf
@@ -792,7 +792,7 @@ ET
 BT
 /F1 11 Tf
 72 292 Td
-(" Add users, set roles, and confirm who has access to the tenant.) Tj
+(- Add users, set roles, and confirm who has access to the tenant.) Tj
 ET
 BT
 /F2 12 Tf
@@ -812,12 +812,12 @@ ET
 BT
 /F1 11 Tf
 72 218 Td
-(" Upcoming renewals and reminder types \(One time / Two times / Daily\).) Tj
+(- Upcoming renewals and reminder types \(One time / Two times / Daily\).) Tj
 ET
 BT
 /F1 11 Tf
 72 204 Td
-(" Compliance-related reminders if you use Compliance / Renewals.) Tj
+(- Compliance-related reminders if you use Compliance / Renewals.) Tj
 ET
 BT
 /F2 12 Tf
@@ -827,7 +827,7 @@ ET
 BT
 /F1 11 Tf
 72 174 Td
-(" Treat Notifications as a daily inbox for renewals and follow-ups.) Tj
+(- Treat Notifications as a daily inbox for renewals and follow-ups.) Tj
 ET
 BT
 /F2 12 Tf
@@ -847,17 +847,17 @@ ET
 BT
 /F1 11 Tf
 72 100 Td
-(" Spend analysis by vendor, category, department, or period.) Tj
+(- Spend analysis by vendor, category, department, or period.) Tj
 ET
 BT
 /F1 11 Tf
 72 86 Td
-(" Trend views to spot growth in recurring spend.) Tj
+(- Trend views to spot growth in recurring spend.) Tj
 ET
 BT
 /F1 11 Tf
 72 72 Td
-(" Audit-history style reports to review who changed what and when.) Tj
+(- Audit-history style reports to review who changed what and when.) Tj
 ET
 q
 0.85 g
@@ -876,7 +876,7 @@ endobj
 << /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 10 0 R >>
 endobj
 12 0 obj
-<< /Length 2408 >>
+<< /Length 2376 >>
 stream
 q
 0.94 g
@@ -886,7 +886,7 @@ Q
 BT
 /F2 16 Tf
 54 770 Td
-(Trackla  Getting Started Guide) Tj
+(Trackla - Getting Started Guide) Tj
 ET
 BT
 /F2 12 Tf
@@ -896,7 +896,7 @@ ET
 BT
 /F1 11 Tf
 72 716 Td
-(" Keep departments and categories consistent for clean reporting.) Tj
+(- Keep departments and categories consistent for clean reporting.) Tj
 ET
 BT
 /F2 12 Tf
@@ -921,12 +921,12 @@ ET
 BT
 /F1 11 Tf
 72 628 Td
-(" Submission/renewal deadlines \(date-only fields\).) Tj
+(- Submission/renewal deadlines \(date-only fields\).) Tj
 ET
 BT
 /F1 11 Tf
 72 614 Td
-(" Reminder policy and reminder days similar to subscriptions.) Tj
+(- Reminder policy and reminder days similar to subscriptions.) Tj
 ET
 BT
 /F2 12 Tf
@@ -936,7 +936,7 @@ ET
 BT
 /F1 11 Tf
 72 584 Td
-(" Notifications are generated so teams never miss important compliance deadlines.) Tj
+(- Notifications are generated so teams never miss important compliance deadlines.) Tj
 ET
 BT
 /F2 12 Tf
@@ -956,17 +956,17 @@ ET
 BT
 /F1 11 Tf
 72 510 Td
-(" Who changed it \(Changed By\).) Tj
+(- Who changed it \(Changed By\).) Tj
 ET
 BT
 /F1 11 Tf
 72 496 Td
-(" What changed \(field-by-field changes\).) Tj
+(- What changed \(field-by-field changes\).) Tj
 ET
 BT
 /F1 11 Tf
 72 482 Td
-(" When it changed \(Updated On\).) Tj
+(- When it changed \(Updated On\).) Tj
 ET
 BT
 /F2 12 Tf
@@ -976,12 +976,12 @@ ET
 BT
 /F1 11 Tf
 72 452 Td
-(" Display as Auto Renewed and show the date range change.) Tj
+(- Display as Auto Renewed and show the date range change.) Tj
 ET
 BT
 /F1 11 Tf
 72 438 Td
-(" If you only see date lines, confirm the record is detected as a renewal and that) Tj
+(- If you only see date lines, confirm the record is detected as a renewal and that) Tj
 ET
 BT
 /F1 11 Tf
@@ -1006,27 +1006,27 @@ ET
 BT
 /F1 11 Tf
 72 350 Td
-(" Confirm the subscription is Active.) Tj
+(- Confirm the subscription is Active.) Tj
 ET
 BT
 /F1 11 Tf
 72 336 Td
-(" Confirm Next Renewal is a valid date in YYYY-MM-DD format.) Tj
+(- Confirm Next Renewal is a valid date in YYYY-MM-DD format.) Tj
 ET
 BT
 /F1 11 Tf
 72 322 Td
-(" Confirm Reminder Policy and Reminder Days are set.) Tj
+(- Confirm Reminder Policy and Reminder Days are set.) Tj
 ET
 BT
 /F1 11 Tf
 72 308 Td
-(" Confirm Auto Renewal is enabled \(for auto-renew behavior\).) Tj
+(- Confirm Auto Renewal is enabled \(for auto-renew behavior\).) Tj
 ET
 BT
 /F1 11 Tf
 72 294 Td
-(" Check Subscription History for changes and whether a renewal was logged.) Tj
+(- Check Subscription History for changes and whether a renewal was logged.) Tj
 ET
 BT
 /F2 12 Tf
@@ -1036,7 +1036,7 @@ ET
 BT
 /F1 11 Tf
 72 264 Td
-(" Use Contact Support \(WhatsApp\) from the Help section in the landing page.) Tj
+(- Use Contact Support \(WhatsApp\) from the Help section in the landing page.) Tj
 ET
 q
 0.85 g
@@ -1064,18 +1064,18 @@ xref
 0000000089 00000 n 
 0000000164 00000 n 
 0000000247 00000 n 
-0000001849 00000 n 
-0000001985 00000 n 
-0000006045 00000 n 
-0000006181 00000 n 
-0000009950 00000 n 
-0000010086 00000 n 
-0000013626 00000 n 
-0000013764 00000 n 
-0000016224 00000 n 
-0000016362 00000 n 
+0000001839 00000 n 
+0000001975 00000 n 
+0000005977 00000 n 
+0000006113 00000 n 
+0000009842 00000 n 
+0000009978 00000 n 
+0000013474 00000 n 
+0000013612 00000 n 
+0000016040 00000 n 
+0000016178 00000 n 
 trailer
 << /Size 15 /Root 14 0 R >>
 startxref
-16412
+16228
 %%EOF

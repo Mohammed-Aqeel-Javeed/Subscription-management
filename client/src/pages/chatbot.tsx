@@ -63,8 +63,8 @@ export default function Chatbot() {
   const applyButtonPosStyle = (pos: { x: number; y: number }) => {
     const el = buttonRef.current;
     if (!el) return;
-    el.style.left = `${pos.x}px`;
-    el.style.top = `${pos.y}px`;
+    // Use transform instead of left/top to avoid layout thrash during drag.
+    el.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
   };
 
   const computeCardPos = (pos: { x: number; y: number }) => {
@@ -498,10 +498,12 @@ export default function Chatbot() {
           className="fixed z-50 h-16 w-16 rounded-full bg-gradient-to-br from-blue-500/95 via-blue-600/95 to-indigo-600/95 backdrop-blur-md shadow-2xl hover:shadow-3xl transition-all duration-300 flex items-center justify-center group hover:scale-105 active:scale-95 border border-white/20 ring-2 ring-blue-400/30"
           aria-label="Open chatbot"
           style={{
-            left: buttonPos.x,
-            top: buttonPos.y,
+            left: 0,
+            top: 0,
+            transform: `translate3d(${buttonPos.x}px, ${buttonPos.y}px, 0)`,
             backdropFilter: "blur(12px)",
             touchAction: "none",
+            willChange: "transform",
           }}
         >
           <Bot className="h-8 w-8 text-white drop-shadow-lg" />
