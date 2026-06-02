@@ -301,7 +301,7 @@ export default function Chatbot() {
 
     // User / Employee / Role management
     if (lowerMessage.includes("user") || lowerMessage.includes("employee") || lowerMessage.includes("role") || lowerMessage.includes("permission")) {
-      return "User Management:\nAvailable in Company Details page:\n• Add employees with email\n• Assign roles: Super Admin, Admin, Viewer, Contributor, Department Editor\n• Manage permissions per role\n• Track who owns what subscription\n• Assign responsible persons\n\nBuilt-in accountability and access control!";
+      return "User Management:\nAvailable in Company Details page:\n• Add employees with email\n• Assign roles: System Admin, Admin, Viewer, Contributor, Department Editor\n• Manage permissions per role\n• Track who owns what subscription\n• Assign responsible persons\n\nBuilt-in accountability and access control!";
     }
 
     // Export / Import

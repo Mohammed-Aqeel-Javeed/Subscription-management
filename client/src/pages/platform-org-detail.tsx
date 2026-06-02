@@ -172,8 +172,8 @@ export default function PlatformOrgDetailPage() {
     const value = String(planRaw || "").trim().toLowerCase();
     if (!value) return "—";
     if (value === "free" || value === "free_plan") return "Free";
-    if (value === "starter") return "Starter";
-    if (value === "professional" || value === "pro") return "Professional";
+    if (value === "starter") return "Trial";
+    if (value === "professional" || value === "pro") return "Basic";
     if (value === "premium") return "Premium";
     if (value === "trial" || value === "trialing") return "Trial";
     return value[0].toUpperCase() + value.slice(1);
@@ -624,8 +624,8 @@ export default function PlatformOrgDetailPage() {
                     <SelectValue placeholder="Select plan" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="starter">Starter</SelectItem>
-                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="starter">Trial</SelectItem>
+                    <SelectItem value="professional">Basic</SelectItem>
                     <SelectItem value="premium" disabled>
                       Premium (Coming soon)
                     </SelectItem>

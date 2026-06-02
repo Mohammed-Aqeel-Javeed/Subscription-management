@@ -749,7 +749,7 @@ export default function LandingPage() {
                 icon: DollarSign,
                 title: "Finance Teams",
                 description:
-                  "Track spend across subscriptions, eliminate waste, and optimize your software costs.",
+                  "Track subscriptions spend across eliminate waste, and optimize your software costs.",
                 color: "bg-indigo-600",
                 bg: "bg-indigo-50",
               },
@@ -793,7 +793,7 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
             <PricingCard
-              name="Starter"
+              name="Trial"
               price="$29"
               period="/mo"
               description="Perfect for small teams getting started."
@@ -805,7 +805,7 @@ export default function LandingPage() {
               onCtaClick={() => void handlePricingClick("starter")}
             />
             <PricingCard
-              name="Professional"
+              name="Basic"
               price="$79"
               period="/mo"
               description="For teams that need full control and analytics."

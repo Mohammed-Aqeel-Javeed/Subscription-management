@@ -21,8 +21,8 @@ function planLabel(plan: string | null | undefined): string {
   if (!plan) return "No Plan";
   switch (plan) {
     case "trial":        return "Free Trial";
-    case "starter":      return "Starter";
-    case "professional": return "Professional";
+    case "starter":      return "Trial";
+    case "professional": return "Basic";
     case "expired":      return "Expired";
     default:             return plan.charAt(0).toUpperCase() + plan.slice(1);
   }
@@ -62,6 +62,7 @@ export default function Profile() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -72,6 +73,7 @@ export default function Profile() {
   const [email, setEmail] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSavingPassword, setIsSavingPassword] = useState(false);
@@ -96,11 +98,6 @@ export default function Profile() {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
     return name.substring(0, 2).toUpperCase();
-  };
-
-  const formatRole = (role: string) => {
-    if (!role) return "Employee";
-    return role.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -202,6 +199,14 @@ export default function Profile() {
 
   const savePassword = async () => {
     try {
+      if (!currentPassword) {
+        toast({
+          title: "Current password required",
+          description: "Please enter your current password",
+          variant: "destructive",
+        });
+        return;
+      }
       if (!newPassword || newPassword.length < 6) {
         toast({ title: "Weak password", description: "New password must be at least 6 characters", variant: "destructive" });
         return;
@@ -215,13 +220,14 @@ export default function Profile() {
       const res = await apiFetch("/api/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newPassword }),
+        body: JSON.stringify({ currentPassword, newPassword }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         throw new Error(data?.message || "Failed to update password");
       }
 
+      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       toast({ title: "Updated", description: "Your password was updated" });
@@ -287,7 +293,7 @@ export default function Profile() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <span className="text-sm font-medium text-white">Active {formatRole(user?.role || "employee")}</span>
+                <span className="text-sm font-medium text-white">Active</span>
               </div>
             </div>
           </div>
@@ -337,14 +343,14 @@ export default function Profile() {
             <div className="space-y-4">
               {/* Full Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">Full Name</label>
+                <label className="block text-gray-700 font-medium text-sm mb-2">Full Name</label>
                 <div className="relative">
                   <Input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     disabled={!isEditingName}
-                    className="bg-gray-50 border-gray-200 text-gray-700 pr-10"
+                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm text-gray-900 pr-10"
                   />
                   <button
                     type="button"
@@ -360,14 +366,14 @@ export default function Profile() {
 
               {/* Email Address */}
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">Email Address</label>
+                <label className="block text-gray-700 font-medium text-sm mb-2">Email Address</label>
                 <div className="relative">
                   <Input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={!isEditingEmail}
-                    className="bg-gray-50 border-gray-200 text-gray-700 pr-10"
+                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm text-gray-900 pr-10"
                   />
                   <button
                     type="button"
@@ -533,7 +539,7 @@ export default function Profile() {
                       className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white py-5 rounded-xl font-medium text-sm shadow-lg"
                     >
                       <Zap className="h-4 w-4 mr-2" />
-                      Upgrade to Professional
+                      Upgrade to Basic
                     </Button>
                     <Button
                       disabled
@@ -573,17 +579,43 @@ export default function Profile() {
             </div>
 
             <div className="space-y-4">
+              {/* Current Password */}
+              <div>
+                <label className="block text-gray-700 font-medium text-sm mb-2">Current Password</label>
+                <div className="relative">
+                  <Input
+                    type={showCurrentPassword ? "text" : "password"}
+                    placeholder=""
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm text-gray-900 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showCurrentPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
               {/* New Password */}
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">New Password</label>
+                <label className="block text-gray-700 font-medium text-sm mb-2">New Password</label>
                 <div className="relative">
                   <Input
                     type={showNewPassword ? "text" : "password"}
-                    placeholder="Enter new password"
+                    placeholder=""
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     autoComplete="new-password"
-                    className="bg-gray-50 border-gray-200 pr-10"
+                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm text-gray-900 pr-10"
                   />
                   <button
                     type="button"
@@ -601,15 +633,15 @@ export default function Profile() {
 
               {/* Confirm New Password */}
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">Confirm New Password</label>
+                <label className="block text-gray-700 font-medium text-sm mb-2">Confirm New Password</label>
                 <div className="relative">
                   <Input
                     type={showConfirmPassword ? "text" : "password"}
-                    placeholder="Re-enter new password"
+                    placeholder=""
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     autoComplete="new-password"
-                    className="bg-gray-50 border-gray-200 pr-10"
+                    className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm text-gray-900 pr-10"
                   />
                   <button
                     type="button"

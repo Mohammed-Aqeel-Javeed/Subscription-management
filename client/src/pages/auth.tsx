@@ -963,7 +963,10 @@ export default function AuthPage() {
                       marginTop: 6,
                       borderRadius: 999,
                       border: "1px solid #e5e7eb",
-                      fontSize: 15,
+                      fontSize: 16,
+                      fontWeight: 500,
+                      lineHeight: "20px",
+                      color: "#111827",
                       background: "#f9fafb",
                       outline: "none",
                     }}
@@ -985,7 +988,10 @@ export default function AuthPage() {
                         padding: "10px 40px 10px 12px",
                         borderRadius: 999,
                         border: "1px solid #e5e7eb",
-                        fontSize: 15,
+                        fontSize: 16,
+                        fontWeight: 500,
+                        lineHeight: "20px",
+                        color: "#111827",
                         background: "#f9fafb",
                         outline: "none",
                       }}

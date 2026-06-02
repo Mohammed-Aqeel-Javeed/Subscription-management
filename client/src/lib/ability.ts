@@ -17,12 +17,12 @@ export function defineAbilityFor(user: User) {
 
   switch (user.role) {
     case 'global_admin':
-      // Global Admin: Platform-level full access (treated as super-admin in the UI)
+      // Global Admin: Platform-level full access (treated as system admin in the UI)
       can('manage', 'all');
       break;
 
     case 'super_admin':
-      // Super Admin: Full system access
+      // System Admin: Full system access
       can('manage', 'all');
       break;
 

@@ -308,7 +308,7 @@
   - Name (required)
   - Email (required, validated)
   - Role (dropdown):
-    - Super Admin: Full access + user management
+    - System Admin: Full access + user management
     - Admin: Full access except users
     - Viewer: Read-only all
     - Contributor: Create/manage own items
@@ -612,7 +612,7 @@
 
 **Role-Based Access**
 - Global Admin (Platform Owner): Platform-only access (no tenant operational data by default)
-- Super Admin: Everything
+- System Admin: Everything
 - Admin: All except user management
 - Viewer: Read-only
 - Contributor: Own items only
@@ -623,7 +623,7 @@
 - Global Admin is a *platform* role:
   - Can access the Platform Admin dashboard (platform-level KPIs, tenant directory, platform activity)
   - Cannot access tenant dashboards, subscriptions, compliance, calendars, analytics, or notifications unless an explicit impersonation feature is added
-- Tenant roles (Super Admin/Admin/Viewer/Contributor/Department roles) apply *inside a single company/tenant only*
+- Tenant roles (System Admin/Admin/Viewer/Contributor/Department roles) apply *inside a single company/tenant only*
 
 **Data Security**
 - Encrypted connections

@@ -61,6 +61,17 @@ export default function Dashboard() {
     return params.toString();
   }, [dateRangeMonths, categoryFilter]);
 
+  const currentYear = new Date().getFullYear();
+  const currentMonthNumber = new Date().getMonth() + 1; // 1-12
+
+  const ytdQueryString = useMemo(() => {
+    const params = new URLSearchParams();
+    // /api/analytics/trends uses "last N months"; using N=currentMonth gives Jan->current month.
+    params.set("months", String(currentMonthNumber));
+    if (categoryFilter !== "all") params.set("category", categoryFilter);
+    return params.toString();
+  }, [currentMonthNumber, categoryFilter]);
+
   // Get greeting based on time of day
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -139,6 +150,23 @@ export default function Dashboard() {
     staleTime: 2 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
+
+  // Ensure YTD is truly Jan->current month, even if the chart range is shorter (e.g. last 3 months).
+  const { data: ytdTrends } = useQuery<SpendingTrend[]>({
+    queryKey: ["/api/analytics/trends", dashboardScopeKey, "ytd", currentYear, currentMonthNumber, categoryFilter],
+    enabled: !isGlobalAdminNoTenant && dateRangeMonths < currentMonthNumber,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const res = await apiFetch(`/api/analytics/trends?${ytdQueryString}`);
+      if (!res.ok) {
+        const text = (await res.text().catch(() => '')) || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
+      return res.json();
+    },
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
   const { data: categories, isLoading: categoriesLoading } = useQuery<CategoryBreakdown[]>({
     queryKey: ["/api/analytics/categories", dashboardScopeKey, dateRangeMonths, categoryFilter],
     enabled: !isGlobalAdminNoTenant,
@@ -200,8 +228,11 @@ export default function Dashboard() {
     const avgMonthly = amounts.reduce((a, b) => a + b, 0) / Math.max(amounts.length, 1);
     const peakMonth = Math.max(...amounts);
 
-    const currentYear = new Date().getFullYear();
-    const ytdTotal = points
+    const ytdSource = dateRangeMonths >= currentMonthNumber
+      ? points
+      : (Array.isArray(ytdTrends) ? ytdTrends : points);
+
+    const ytdTotal = ytdSource
       .filter((p) => String(p.month).startsWith(String(currentYear)))
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
@@ -213,7 +244,7 @@ export default function Dashboard() {
     }
 
     return { percentChange, avgMonthly, peakMonth, ytdTotal };
-  }, [trends]);
+  }, [trends, ytdTrends, currentYear, currentMonthNumber, dateRangeMonths]);
 
   const formatCompactMoney = (value: number) => {
     const n = Number(value) || 0;
@@ -361,10 +392,34 @@ export default function Dashboard() {
       || (subscriptionStartDate ? subscriptionStartDate >= rangeStartDate : false);
   });
 
+  const parseMoneyNumber = (value: unknown) => {
+    if (value === null || value === undefined) return 0;
+    const raw = String(value).trim();
+    if (!raw) return 0;
+    const n = Number(raw.replace(/,/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const getBestSubAmountForSpend = (sub: Subscription) => {
+    // Prefer LCY (computed server-side from Total Amount Incl. Tax when possible).
+    const lcy = parseMoneyNumber((sub as any)?.lcyAmount);
+    if (lcy) return lcy;
+
+    // Best-effort fallback (may be non-LCY if exchange rate is missing).
+    const totalIncl = parseMoneyNumber((sub as any)?.totalAmountInclTax);
+    if (totalIncl) return totalIncl;
+
+    const totalExcl = parseMoneyNumber((sub as any)?.totalAmount);
+    const tax = parseMoneyNumber((sub as any)?.taxAmount);
+    if (totalExcl || tax) return totalExcl + tax;
+
+    return parseMoneyNumber((sub as any)?.amount);
+  };
+
   // Calculate filtered metrics
   const calculateMonthlySpend = () => {
     return filteredSubscriptions.reduce((total, sub) => {
-      const amount = parseFloat(String((sub as any)?.lcyAmount ?? sub.amount)) || 0;
+      const amount = getBestSubAmountForSpend(sub);
       const cycle = norm(sub.billingCycle);
       switch(cycle) {
         case "monthly": return total + amount;
@@ -378,7 +433,7 @@ export default function Dashboard() {
 
   const calculateYearlySpend = () => {
     return filteredSubscriptions.reduce((total, sub) => {
-      const amount = parseFloat(String((sub as any)?.lcyAmount ?? sub.amount)) || 0;
+      const amount = getBestSubAmountForSpend(sub);
       const cycle = norm(sub.billingCycle);
       switch(cycle) {
         case "monthly": return total + (amount * 12);

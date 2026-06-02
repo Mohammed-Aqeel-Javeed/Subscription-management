@@ -10,14 +10,27 @@ import { useSidebarSlot } from "@/context/SidebarSlotContext";
 import { findPlatformSection, platformNavSections } from "@/lib/platform-nav";
 import AddCompanyModal from "../modals/add-company-modal";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Company = { tenantId: string; companyName: string; isActive: boolean };
 
-function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
+function CompanySwitcherDialog({ onClose, plan }: { onClose: () => void; plan?: string | null }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [addCompanyOpen, setAddCompanyOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const normalizedPlan = String(plan ?? '').trim().toLowerCase();
+  const isAddCompanyBlocked = normalizedPlan === 'starter' || normalizedPlan === 'professional';
 
   const { data: companies = [], isLoading } = useQuery<Company[]>({
     queryKey: ["/api/user/companies"],
@@ -56,7 +69,7 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 border border-gray-100" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2"><Shuffle size={16} className="text-indigo-500"/><span className="text-base font-semibold text-gray-900 tracking-tight">Switch Company</span></div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg transition-colors">
+          <button onClick={onClose} className="text-red-500 hover:text-red-600 p-1 rounded-lg transition-colors" aria-label="Close">
             <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
@@ -79,7 +92,14 @@ function CompanySwitcherDialog({ onClose }: { onClose: () => void }) {
             ))}
           </div>
           <div className="pt-2 border-t border-gray-100">
-            <button onClick={()=>setAddCompanyOpen(true)}
+            <button
+              onClick={() => {
+                if (isAddCompanyBlocked) {
+                  toast({ title: "Your plan has no feature", variant: "destructive" });
+                  return;
+                }
+                setAddCompanyOpen(true);
+              }}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white text-sm font-semibold rounded-xl transition-all shadow-sm hover:shadow-md">
               <Building2 className="h-4 w-4"/><span>Add Company</span>
             </button>
@@ -118,6 +138,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(() => location.pathname.startsWith("/configuration"));
   const [companyOpen, setCompanyOpen] = useState(() => location.pathname.startsWith("/company-details"));
   const [platformOpen, setPlatformOpen] = useState<Record<string,boolean>>(() =>
@@ -169,6 +190,8 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
     navigate("/landing",{replace:true});
   };
 
+  const openLogoutConfirm = () => setLogoutConfirmOpen(true);
+
   const itemBase = "flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-semibold tracking-tight transition-all duration-200 w-full";
   const itemActive = "bg-indigo-600 text-white shadow-md";
   const itemHover = "text-indigo-800 hover:bg-white/60 hover:text-indigo-900 hover:shadow-sm";
@@ -180,6 +203,26 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   if (!isOpen) {
     return (
       <div className="flex flex-col h-full w-16 shrink-0 border-r border-indigo-200/50" style={{background:sidebarBackground}}>
+        <AlertDialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Log out?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You can stay signed in or log out now.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Stay</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleLogout}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Logout
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <div className="flex flex-col items-center gap-1 px-2 pt-3 pb-2 border-b border-indigo-200/50">
           <button onClick={onToggle} className="group h-11 w-11 flex items-center justify-center rounded-xl bg-white/60 hover:bg-white/80 border border-indigo-200/60 shadow-sm transition-all duration-200 hover:scale-105 relative" aria-label="Open Sidebar">
             <img
@@ -210,7 +253,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           </ul>
         </nav>
         <div className="p-2 border-t border-indigo-200/50">
-          <button onClick={handleLogout} className="flex items-center justify-center w-9 h-9 mx-auto rounded-lg text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200" title="Logout">
+          <button onClick={openLogoutConfirm} className="flex items-center justify-center w-9 h-9 mx-auto rounded-lg text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200" title="Logout">
             <LogOut size={16}/>
           </button>
         </div>
@@ -221,6 +264,26 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   // ── EXPANDED ──
   return (
     <div className="flex flex-col h-full w-72 shrink-0 border-r border-indigo-200/50" style={{background:sidebarBackground}}>
+
+      <AlertDialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Log out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You can stay signed in or log out now.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Logout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Header */}
       <div className="flex flex-col gap-2 px-4 pt-3 pb-3 border-b border-indigo-200/50">
@@ -253,7 +316,9 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
         )}
       </div>
 
-      {showSwitcher&&!isGlobalAdmin&&<CompanySwitcherDialog onClose={()=>setShowSwitcher(false)}/>}
+      {showSwitcher && !isGlobalAdmin && (
+        <CompanySwitcherDialog onClose={() => setShowSwitcher(false)} plan={currentUser?.plan} />
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-3 overflow-y-auto overscroll-contain custom-scrollbar">
@@ -387,7 +452,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
 
       {/* Logout */}
       <div className={`px-3 py-3 border-t ${isGlobalAdmin?"border-indigo-200/60":"border-indigo-200/50"}`}>
-        <button onClick={handleLogout}
+        <button onClick={openLogoutConfirm}
           className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-[13.5px] font-semibold text-indigo-500 hover:text-red-600 hover:bg-red-50/70 transition-all duration-200 group">
           <LogOut size={16} className="transition-transform duration-200 group-hover:rotate-12 flex-shrink-0"/>
           <span>Logout</span>

@@ -142,8 +142,8 @@ function formatCompanyName(raw: unknown) {
 const formatPlanLabel = (plan: unknown) => {
   const normalized = String(plan ?? "").trim().toLowerCase();
   if (!normalized) return "Free Plan";
-  if (normalized === "professional" || normalized === "pro") return "Professional";
-  if (normalized === "starter") return "Starter";
+  if (normalized === "professional" || normalized === "pro") return "Basic";
+  if (normalized === "starter") return "Trial";
   if (normalized === "trial") return "Trial";
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 };

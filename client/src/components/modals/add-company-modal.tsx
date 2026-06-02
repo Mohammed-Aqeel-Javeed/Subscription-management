@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Building2, Eye, EyeOff } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Building2, Eye, EyeOff, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import ReactCountryFlag from "react-country-flag";
@@ -35,6 +35,24 @@ export default function AddCompanyModal({ open, onOpenChange, onSuccess }: AddCo
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  const currencyPickerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showCurrencyDropdown) return;
+
+    const handlePointerDown = (ev: PointerEvent) => {
+      const root = currencyPickerRef.current;
+      const target = ev.target as Node | null;
+      if (!root || !target) return;
+      if (!root.contains(target)) {
+        setShowCurrencyDropdown(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [showCurrencyDropdown]);
 
   const handleCurrencyChange = (value: string) => {
     const upperValue = value.toUpperCase();
@@ -102,6 +120,7 @@ export default function AddCompanyModal({ open, onOpenChange, onSuccess }: AddCo
         description: setAsDefault 
           ? `Company "${companyName}" added and set as default! Page will reload...`
           : `Company "${companyName}" added successfully! You can add more or proceed to login.`,
+        variant: "success",
       });
 
       // Reset form
@@ -139,12 +158,20 @@ export default function AddCompanyModal({ open, onOpenChange, onSuccess }: AddCo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] bg-white border-gray-200">
+      <DialogContent className="sm:max-w-[500px] bg-white border-gray-200" showClose={false}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl text-gray-900">
-            <Building2 className="h-5 w-5 text-blue-600" />
-            Add New Company
-          </DialogTitle>
+          <div className="flex items-center justify-between gap-3">
+            <DialogTitle className="flex items-center gap-2 text-xl text-gray-900">
+              <Building2 className="h-5 w-5 text-blue-600" />
+              Add New Company
+            </DialogTitle>
+            <DialogClose
+              className="h-10 w-10 inline-flex items-center justify-center rounded-lg border border-red-200 bg-white text-red-500 shadow-sm transition-colors hover:bg-red-50 hover:text-red-600"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </DialogClose>
+          </div>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
@@ -236,7 +263,7 @@ export default function AddCompanyModal({ open, onOpenChange, onSuccess }: AddCo
           </div>
 
           {/* LCY (Currency) */}
-          <div style={{ marginBottom: 10, position: "relative" }}>
+          <div ref={currencyPickerRef} style={{ marginBottom: 10, position: "relative" }}>
             <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
               LCY
             </label>
@@ -245,12 +272,11 @@ export default function AddCompanyModal({ open, onOpenChange, onSuccess }: AddCo
               value={defaultCurrency}
               onChange={(e) => handleCurrencyChange(e.target.value)}
               onFocus={() => {
-                if (defaultCurrency && filteredCurrencies.length > 0) {
-                  setShowCurrencyDropdown(true);
+                // Show dropdown on focus for discoverability.
+                if (!defaultCurrency) {
+                  setFilteredCurrencies(currencyList);
                 }
-              }}
-              onBlur={() => {
-                setTimeout(() => setShowCurrencyDropdown(false), 200);
+                setShowCurrencyDropdown(true);
               }}
               required
               autoComplete="off"
@@ -269,6 +295,7 @@ export default function AddCompanyModal({ open, onOpenChange, onSuccess }: AddCo
             {/* Currency Dropdown with Flags */}
             {showCurrencyDropdown && filteredCurrencies.length > 0 && (
               <div
+                className="custom-scrollbar"
                 style={{
                   position: "absolute",
                   zIndex: 50,
@@ -287,6 +314,10 @@ export default function AddCompanyModal({ open, onOpenChange, onSuccess }: AddCo
                     key={curr.code}
                     type="button"
                     onClick={() => handleCurrencySelect(curr)}
+                    onMouseDown={(e) => {
+                      // Prevent input blur before click selection.
+                      e.preventDefault();
+                    }}
                     style={{
                       width: "100%",
                       padding: "8px 14px",

@@ -21,7 +21,7 @@ const PRO_FEATURES = [
 ];
 
 const ENTERPRISE_FEATURES = [
-  "Everything in Professional",
+  "Everything in Basic",
   "Custom integrations",
   "Dedicated account manager",
   "SLA guarantee",
@@ -115,7 +115,7 @@ export default function UpgradePage() {
             alignItems: "stretch",
           }}
         >
-          {/* ── Starter ── */}
+          {/* ── Trial ── */}
           <div
             style={{
               background: "#ffffff",
@@ -129,7 +129,7 @@ export default function UpgradePage() {
           >
             <div>
               <h2 style={{ fontSize: 22, fontWeight: 700, color: "#111827", marginBottom: 4 }}>
-                Starter
+                Trial
               </h2>
               <p style={{ color: "#6b7280", fontSize: 14, marginBottom: 20 }}>
                 Perfect for small teams
@@ -176,11 +176,11 @@ export default function UpgradePage() {
                 transition: "background 0.15s",
               }}
             >
-              {loading === "starter" ? "Redirecting to Stripe…" : "Choose Starter"}
+              {loading === "starter" ? "Redirecting to Stripe…" : "Choose Trial"}
             </button>
           </div>
 
-          {/* ── Professional (featured) ── */}
+          {/* ── Basic (featured) ── */}
           <div
             style={{
               background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
@@ -215,7 +215,7 @@ export default function UpgradePage() {
 
             <div>
               <h2 style={{ fontSize: 22, fontWeight: 700, color: "#ffffff", marginBottom: 4 }}>
-                Professional
+                Basic
               </h2>
               <p style={{ color: "#c7d2fe", fontSize: 14, marginBottom: 20 }}>
                 For growing teams
@@ -262,7 +262,7 @@ export default function UpgradePage() {
                 transition: "background 0.15s",
               }}
             >
-              {loading === "professional" ? "Redirecting to Stripe…" : "Choose Professional"}
+              {loading === "professional" ? "Redirecting to Stripe…" : "Choose Basic"}
             </button>
           </div>
 

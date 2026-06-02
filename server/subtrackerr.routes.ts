@@ -72,6 +72,97 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 
 const router = Router();
 
+async function checkCombinedRecordLimit(db: any, tenantId: string, fallbackEmail: unknown) {
+  const normalizeEmail = (value: unknown) => String(value ?? '').trim().toLowerCase();
+
+  const normalizePlanKey = (value: unknown) => {
+    const v = String(value ?? '').trim().toLowerCase();
+    if (v === 'pro') return 'professional';
+    return v;
+  };
+
+  const planPriority = (plan: unknown) => {
+    const normalized = normalizePlanKey(plan);
+    if (normalized === 'premium') return 5;
+    if (normalized === 'professional') return 4;
+    if (normalized === 'starter') return 3;
+    if (normalized === 'trial') return 2;
+    if (normalized === 'free') return 1;
+    return 0;
+  };
+
+  const bestPlan = (a: unknown, b: unknown) => (planPriority(b) > planPriority(a) ? b : a);
+
+  const planToRecordLimit = (plan: unknown) => {
+    const normalized = normalizePlanKey(plan);
+    if (normalized === 'starter' || normalized === 'trial') {
+      return { label: 'Trial', maxTotal: 50 };
+    }
+    if (normalized === 'professional') {
+      return { label: 'Basic', maxTotal: 100 };
+    }
+    return { label: 'Unlimited', maxTotal: null as number | null };
+  };
+
+  const superAdminDoc = await db.collection('login').findOne(
+    {
+      tenantId,
+      role: 'super_admin',
+      email: { $type: 'string', $ne: '' },
+    },
+    { projection: { email: 1 } }
+  );
+
+  const subscriptionEmail = normalizeEmail((superAdminDoc as any)?.email) || normalizeEmail(fallbackEmail) || '';
+
+  const groupTenantIdsRaw = subscriptionEmail
+    ? await db.collection('login').distinct('tenantId', {
+        email: subscriptionEmail,
+        role: { $ne: 'global_admin' },
+        tenantId: { $ne: null },
+      })
+    : [tenantId];
+
+  const groupTenantIds = Array.from(
+    new Set(
+      [...groupTenantIdsRaw, tenantId]
+        .map((t: any) => (t == null ? '' : String(t)).trim())
+        .filter(Boolean)
+    )
+  );
+
+  const planDocs = subscriptionEmail
+    ? await db
+        .collection('login')
+        .find({ email: subscriptionEmail, role: { $ne: 'global_admin' } }, { projection: { plan: 1 } })
+        .toArray()
+    : await db
+        .collection('login')
+        .find({ tenantId, role: { $ne: 'global_admin' } }, { projection: { plan: 1 } })
+        .toArray();
+
+  const derivedPlan = planDocs.reduce((acc: any, d: any) => bestPlan(acc, (d as any)?.plan), 'starter');
+  const limits = planToRecordLimit(derivedPlan);
+  if (!limits.maxTotal) return { allowed: true as const };
+
+  const scopeFilter = { tenantId: { $in: groupTenantIds } };
+  const [subscriptionCount, complianceCount, renewalCount] = await Promise.all([
+    db.collection('subscriptions').countDocuments({ ...scopeFilter, isDraft: { $ne: true } }),
+    db.collection('compliance').countDocuments(scopeFilter),
+    db.collection('licenses').countDocuments(scopeFilter),
+  ]);
+
+  const total = Number(subscriptionCount || 0) + Number(complianceCount || 0) + Number(renewalCount || 0);
+  if (total >= limits.maxTotal) {
+    return {
+      allowed: false as const,
+      message: `Plan limit reached: ${limits.label} allows up to ${limits.maxTotal} total records.`,
+    };
+  }
+
+  return { allowed: true as const };
+}
+
 // --- Secure deep-link token API ---
 // Avoids exposing raw record IDs in URLs (e.g. ?open=123). Tokens are:
 // - Encrypted server-side (AES-256-GCM)
@@ -1279,6 +1370,11 @@ router.post("/api/compliance/insert", async (req, res) => {
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const recordLimit = await checkCombinedRecordLimit(db, tenantId, req.user?.email);
+    if (!recordLimit.allowed) {
+      return res.status(403).json({ message: recordLimit.message });
     }
     // Normalize date fields before inserting so reminder generation works immediately
     const normalizedSubmissionDeadline = normalizeDateString(req.body.submissionDeadline || req.body.filingSubmissionDeadline);
@@ -2543,6 +2639,11 @@ router.post("/api/subscriptions", async (req, res) => {
       });
     }
 
+    const recordLimit = await checkCombinedRecordLimit(db, tenantId, req.user?.email);
+    if (!recordLimit.allowed) {
+      return res.status(403).json({ message: recordLimit.message });
+    }
+
     // Prepare subscription document with timestamps and tenantId
     const subscription = {
       ...req.body,
@@ -3444,7 +3545,7 @@ function isPlatformOwner(email?: string | null): boolean {
 
 function roleToLabel(role: unknown): string {
   const v = String(role ?? '').trim().toLowerCase();
-  if (v === 'super_admin') return 'Super Admin';
+  if (v === 'super_admin') return 'System Admin';
   if (v === 'admin') return 'Admin';
   if (v === 'contributor') return 'Contributor';
   if (v === 'department_editor') return 'Department Editor';
@@ -3718,6 +3819,99 @@ router.post("/api/users", async (req, res) => {
       return res.status(403).json({ message: 'Access denied: global_admin role is reserved' });
     }
 
+    // Enforce plan-based user limits across the entire subscription group.
+    // Trial (Starter): 3 users total. Basic (Professional): 5 users total.
+    if (!isCreatingGlobalAdmin) {
+      const normalizeEmail = (value: unknown) => String(value ?? '').trim().toLowerCase();
+
+      const normalizePlanKey = (value: unknown) => {
+        const v = String(value ?? '').trim().toLowerCase();
+        if (v === 'pro') return 'professional';
+        return v;
+      };
+
+      const planPriority = (plan: unknown) => {
+        const normalized = normalizePlanKey(plan);
+        if (normalized === 'premium') return 5;
+        if (normalized === 'professional') return 4;
+        if (normalized === 'starter') return 3;
+        if (normalized === 'trial') return 2;
+        if (normalized === 'free') return 1;
+        return 0;
+      };
+
+      const bestPlan = (a: unknown, b: unknown) => (planPriority(b) > planPriority(a) ? b : a);
+
+      const planToMaxUsers = (plan: unknown) => {
+        const normalized = normalizePlanKey(plan);
+        if (normalized === 'professional' || normalized === 'premium') {
+          return { key: 'professional', label: 'Basic', maxUsers: 5 };
+        }
+        return { key: 'starter', label: 'Trial', maxUsers: 3 };
+      };
+
+      const superAdminDoc = await db.collection('login').findOne(
+        {
+          tenantId,
+          role: 'super_admin',
+          email: { $type: 'string', $ne: '' },
+        },
+        { projection: { email: 1 } }
+      );
+
+      const subscriptionEmail =
+        normalizeEmail((superAdminDoc as any)?.email) ||
+        normalizeEmail(req.user?.email) ||
+        '';
+
+      const groupTenantIdsRaw = subscriptionEmail
+        ? await db.collection('login').distinct('tenantId', {
+            email: subscriptionEmail,
+            role: { $ne: 'global_admin' },
+            tenantId: { $ne: null },
+          })
+        : [tenantId];
+
+      const groupTenantIds = Array.from(
+        new Set(
+          [...groupTenantIdsRaw, tenantId]
+            .map((t: any) => (t == null ? '' : String(t)).trim())
+            .filter(Boolean)
+        )
+      );
+
+      const planDocs = subscriptionEmail
+        ? await db
+            .collection('login')
+            .find({ email: subscriptionEmail, role: { $ne: 'global_admin' } }, { projection: { plan: 1 } })
+            .toArray()
+        : await db
+            .collection('login')
+            .find({ tenantId, role: { $ne: 'global_admin' } }, { projection: { plan: 1 } })
+            .toArray();
+
+      const derivedPlan = planDocs.reduce((acc: any, d: any) => bestPlan(acc, (d as any)?.plan), 'starter');
+      const limits = planToMaxUsers(derivedPlan);
+
+      const currentEmailsRaw = await db.collection('login').distinct('email', {
+        tenantId: { $in: groupTenantIds },
+        role: { $ne: 'global_admin' },
+        email: { $type: 'string', $ne: '' },
+      });
+
+      const currentEmailSet = new Set(
+        (currentEmailsRaw as any[]).map((e) => normalizeEmail(e)).filter(Boolean)
+      );
+
+      const isNewDistinctUser = !currentEmailSet.has(emailKey);
+      if (isNewDistinctUser && currentEmailSet.size >= limits.maxUsers) {
+        return res.status(403).json({
+          message: `Plan limit reached: ${limits.label} allows up to ${limits.maxUsers} users.`,
+        });
+      }
+
+    }
+
     if (roleKey === 'global_admin') {
       // Platform-level global admin is NOT tenant-bound
       const existingPlatformAdmin = await db.collection('login').findOne({ email: emailKey, role: 'global_admin' });
@@ -3861,6 +4055,9 @@ router.put("/api/users/:_id", async (req, res) => {
 
     // If the target user is a global_admin, only platform owner can modify.
     const existing = await collection.findOne({ _id: objectId, tenantId });
+    if (!existing) {
+      return res.status(404).json({ message: "User not found" });
+    }
     if (existing?.role === 'global_admin' && !isPlatformOwner(req.user?.email)) {
       return res.status(403).json({ message: 'Access denied: global_admin user is protected' });
     }
@@ -3909,32 +4106,139 @@ router.put("/api/users/:_id", async (req, res) => {
     
     const filter = { _id: objectId, tenantId };
 
+    // Enforce subscription-group restrictions when changing user email/role.
+    // - Max distinct users per plan (Starter=3, Professional/Premium=5) across the company group
+    // (System Admin uniqueness restriction removed)
+    {
+      const normalizeEmail = (value: unknown) => String(value ?? '').trim().toLowerCase();
+      const normalizePlanKey = (value: unknown) => {
+        const v = String(value ?? '').trim().toLowerCase();
+        if (v === 'pro') return 'professional';
+        return v;
+      };
+
+      const planPriority = (plan: unknown) => {
+        const normalized = normalizePlanKey(plan);
+        if (normalized === 'premium') return 5;
+        if (normalized === 'professional') return 4;
+        if (normalized === 'starter') return 3;
+        if (normalized === 'trial') return 2;
+        if (normalized === 'free') return 1;
+        return 0;
+      };
+
+      const bestPlan = (a: unknown, b: unknown) => (planPriority(b) > planPriority(a) ? b : a);
+
+      const planToMaxUsers = (plan: unknown) => {
+        const normalized = normalizePlanKey(plan);
+        if (normalized === 'professional' || normalized === 'premium') {
+          return { key: 'professional', label: 'Basic', maxUsers: 5 };
+        }
+        return { key: 'starter', label: 'Trial', maxUsers: 3 };
+      };
+
+      const superAdminDoc = await collection.findOne(
+        {
+          tenantId,
+          role: 'super_admin',
+          email: { $type: 'string', $ne: '' },
+        },
+        { projection: { email: 1 } }
+      );
+
+      const subscriptionEmail =
+        normalizeEmail((superAdminDoc as any)?.email) ||
+        normalizeEmail(req.user?.email) ||
+        normalizeEmail(existing?.email) ||
+        '';
+
+      const groupTenantIdsRaw = subscriptionEmail
+        ? await collection.distinct('tenantId', {
+            email: subscriptionEmail,
+            role: { $ne: 'global_admin' },
+            tenantId: { $ne: null },
+          })
+        : [tenantId];
+
+      const groupTenantIds = Array.from(
+        new Set(
+          [...groupTenantIdsRaw, tenantId]
+            .map((t: any) => (t == null ? '' : String(t)).trim())
+            .filter(Boolean)
+        )
+      );
+
+      // Plan user limit: only enforce when the update could increase distinct user emails.
+      if (email) {
+        const nextEmailKey = normalizeEmail(email);
+        const currentEmailsRaw = await collection.distinct('email', {
+          tenantId: { $in: groupTenantIds },
+          role: { $ne: 'global_admin' },
+          email: { $type: 'string', $ne: '' },
+        });
+        const currentEmailSet = new Set(
+          (currentEmailsRaw as any[]).map((e) => normalizeEmail(e)).filter(Boolean)
+        );
+
+        const oldEmailKey = normalizeEmail(existing?.email);
+        const changingToNewEmail = nextEmailKey && nextEmailKey !== oldEmailKey;
+
+        if (changingToNewEmail && !currentEmailSet.has(nextEmailKey)) {
+          const planDocs = subscriptionEmail
+            ? await collection
+                .find({ email: subscriptionEmail, role: { $ne: 'global_admin' } }, { projection: { plan: 1 } })
+                .toArray()
+            : await collection
+                .find({ tenantId, role: { $ne: 'global_admin' } }, { projection: { plan: 1 } })
+                .toArray();
+
+          const derivedPlan = planDocs.reduce((acc: any, d: any) => bestPlan(acc, (d as any)?.plan), 'starter');
+          const limits = planToMaxUsers(derivedPlan);
+
+          // If the old email exists in multiple docs, changing just one doc would increase distinct count.
+          const oldEmailDocCount = oldEmailKey
+            ? await collection.countDocuments({
+                tenantId: { $in: groupTenantIds },
+                role: { $ne: 'global_admin' },
+                email: oldEmailKey,
+              })
+            : 0;
+
+          const wouldIncreaseDistinct = oldEmailDocCount > 1;
+          if (wouldIncreaseDistinct && currentEmailSet.size >= limits.maxUsers) {
+            return res.status(403).json({
+              message: `Plan limit reached: ${limits.label} allows up to ${limits.maxUsers} users.`,
+            });
+          }
+        }
+      }
+
+    }
+
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ message: "No valid fields to update" });
     }
 
-    const result = await collection.findOneAndUpdate(
-      filter,
-      { $set: updateData },
-      { returnDocument: "after" }
-    );
-
-    const updated = result?.value;
-    if (updated) {
-      return res.status(200).json({
-        id: updated._id?.toString?.() ?? String(updated._id),
-        name: updated.fullName,
-        email: updated.email,
-        role: updated.role,
-        status: updated.status,
-        department: updated.department ?? null,
-        tenantId: updated.tenantId,
-      });
+    const updateResult = await collection.updateOne(filter, { $set: updateData });
+    if (!updateResult.matchedCount) {
+      return res.status(404).json({ message: "User not found" });
     }
 
-    {
-      res.status(404).json({ message: "User not found" });
+    // Fetch by _id (tenantId might change if platform owner promotes to global_admin)
+    const updated = await collection.findOne({ _id: objectId });
+    if (!updated) {
+      return res.status(404).json({ message: "User not found" });
     }
+
+    return res.status(200).json({
+      id: (updated as any)._id?.toString?.() ?? String((updated as any)._id),
+      name: (updated as any).fullName,
+      email: (updated as any).email,
+      role: (updated as any).role,
+      status: (updated as any).status,
+      department: (updated as any).department ?? null,
+      tenantId: (updated as any).tenantId,
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to update user", error });
   }
@@ -4733,6 +5037,11 @@ router.post("/api/licenses", async (req, res) => {
     
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+
+    const recordLimit = await checkCombinedRecordLimit(db, tenantId, (req.user as any)?.email);
+    if (!recordLimit.allowed) {
+      return res.status(403).json({ message: recordLimit.message });
     }
 
     const actorLabel = String((req.user as any)?.name || (req.user as any)?.email || userId || '').trim() || 'User';

@@ -38,6 +38,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PlanLimitModal } from "@/components/modals/plan-limit-modal";
+import { getPlanLimitErrorInfo } from "@/lib/plan-limit";
 // Removed unused insertSubscriptionSchema import
 import type { InsertSubscription, Subscription } from "@shared/schema";
 import ReactCountryFlag from "react-country-flag";
@@ -852,6 +854,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Prevent duplicate *active subscription* creation on slow networks / retries.
   const createIdempotencyKeyRef = useRef<string | null>(null);
 
+  const [planLimitOpen, setPlanLimitOpen] = useState(false);
+  const [planLimitMessage, setPlanLimitMessage] = useState("");
+
   // Track the maximum text length seen per field during this modal session.
   // This prevents fields from shrinking when text is cleared.
   const fieldMaxLenRef = useRef<Record<string, number>>({});
@@ -907,7 +912,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         // Get logged-in user information from window.user
         const loggedInUser = (window as any).user;
         
-        // First try to get name directly from window.user (works for all roles: admin, super admin, etc.)
+        // First try to get name directly from window.user (works for all roles: admin, system admin, etc.)
         if (loggedInUser?.name) {
           setCurrentUserName(loggedInUser.name);
           return;
@@ -2462,6 +2467,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       }
       
       console.error("Mutation error:", error);
+
+      const planLimit = getPlanLimitErrorInfo(error);
+      if (planLimit) {
+        setPlanLimitMessage(planLimit.message);
+        setPlanLimitOpen(true);
+        return;
+      }
+
       toast({
         title: "Error",
         description: error?.response?.data?.message || error.message || `Failed to ${isEditing ? 'update' : 'create'} subscription`,
@@ -2612,6 +2625,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       }
       
       console.error("Draft save error:", error);
+
+      const planLimit = getPlanLimitErrorInfo(error);
+      if (planLimit) {
+        setPlanLimitMessage(planLimit.message);
+        setPlanLimitOpen(true);
+        return;
+      }
+
       toast({
         title: "Error",
         description: error?.message || `Failed to save draft`,
@@ -3570,6 +3591,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   return (
     <>
       <style>{animationStyles}</style>
+      <PlanLimitModal open={planLimitOpen} onOpenChange={setPlanLimitOpen} message={planLimitMessage} />
       <Dialog
         open={open}
         onOpenChange={(v) => {

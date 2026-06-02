@@ -409,10 +409,10 @@ function formatPlanLabel(plan: unknown) {
   const normalized = String(plan ?? "").trim();
   const lower = normalized.toLowerCase();
   if (!lower || lower === "free" || lower === "free_plan") return "Free";
-  if (lower === "pro" || lower === "professional") return "Professional";
+  if (lower === "pro" || lower === "professional") return "Basic";
   if (lower === "premium") return "Premium";
   if (lower === "trial" || lower === "trialing") return "Trial";
-  if (lower === "starter") return "Starter";
+  if (lower === "starter") return "Trial";
   return lower
     .replace(/_/g, " ")
     .split(/\s+/)
@@ -2985,7 +2985,7 @@ export default function PlatformSectionPage() {
         const roleBadge = (raw: unknown) => {
           const role = String(raw || "viewer").trim().toLowerCase();
           const base = "border";
-          if (role === "super_admin") return <Badge variant="secondary" className={`${base} bg-red-50 text-red-700 border-red-200`}>Super Admin</Badge>;
+          if (role === "super_admin") return <Badge variant="secondary" className={`${base} bg-red-50 text-red-700 border-red-200`}>System Admin</Badge>;
           if (role === "admin") return <Badge variant="secondary" className={`${base} bg-amber-50 text-amber-700 border-amber-200`}>Admin</Badge>;
           if (role === "viewer") return <Badge variant="secondary" className={`${base} bg-blue-50 text-blue-700 border-blue-200`}>Viewer</Badge>;
           if (role === "contributor") return <Badge variant="secondary" className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>Contributor</Badge>;
@@ -3101,7 +3101,7 @@ export default function PlatformSectionPage() {
                                 <DropdownMenuContent align="start" className="w-56">
                                 {(
                                   [
-                                    { value: "super_admin", label: "Super Admin" },
+                                    { value: "super_admin", label: "System Admin" },
                                     { value: "admin", label: "Admin" },
                                     { value: "contributor", label: "Contributor" },
                                     { value: "viewer", label: "Viewer" },
@@ -4739,8 +4739,8 @@ export default function PlatformSectionPage() {
                       }}
                       className="w-full rounded-lg border border-indigo-200/50 bg-white px-3 py-2 text-sm text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-300"
                     >
-                      <option value="starter">Starter</option>
-                      <option value="professional">Professional</option>
+                      <option value="starter">Trial</option>
+                      <option value="professional">Basic</option>
                       <option value="premium">Premium</option>
                       <option value="free">Free</option>
                     </select>

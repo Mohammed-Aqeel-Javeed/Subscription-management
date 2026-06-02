@@ -1571,17 +1571,13 @@ function UserManagementTab() {
       form.reset();
       setEditingUser(undefined);
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
-        title: "Success",
-        description: "User updated successfully",
+        title: "Error",
+        description: error?.message || "Failed to update user",
         duration: 1000,
-        variant: "success",
+        variant: "destructive",
       });
-      setModalOpen(false);
-      form.reset();
-      setEditingUser(undefined);
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
     },
   });
 
@@ -1704,7 +1700,7 @@ function UserManagementTab() {
         return (
           <Badge className="bg-gradient-to-r from-red-500 to-orange-500 text-white flex items-center gap-1">
             <Shield className="w-3 h-3" />
-            Super Admin
+            System Admin
           </Badge>
         );
       case "admin":
@@ -1796,9 +1792,6 @@ function UserManagementTab() {
             <h3 className="text-2xl font-semibold text-gray-900 tracking-tight">User Management</h3>
             {/* Description removed as requested */}
           </div>
-          <Badge className="bg-indigo-100 text-indigo-800 h-8 px-3 text-sm font-medium">
-            {filteredUsers.length} {filteredUsers.length === 1 ? 'User' : 'Users'}
-          </Badge>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative">
@@ -1931,7 +1924,7 @@ function UserManagementTab() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="super_admin">Super Admin</SelectItem>
+                              <SelectItem value="super_admin">System Admin</SelectItem>
                               <SelectItem value="admin">Admin</SelectItem>
                               <SelectItem value="viewer">Viewer</SelectItem>
                               <SelectItem value="contributor">Contributor</SelectItem>

@@ -10,8 +10,36 @@ function normalizeToken(value: string) {
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let message = res.statusText || "Request failed";
+    try {
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const data = (await res.json().catch(() => null)) as any;
+        const maybeMessage = typeof data?.message === "string" ? data.message : "";
+        if (maybeMessage.trim()) message = maybeMessage.trim();
+        else if (typeof data?.error === "string" && data.error.trim()) message = data.error.trim();
+        else if (typeof data === "string" && data.trim()) message = data.trim();
+        else message = "Request failed";
+      } else {
+        const text = ((await res.text().catch(() => "")) || "").trim();
+        if (text) {
+          // Some endpoints return JSON but without correct content-type.
+          try {
+            const parsed = JSON.parse(text);
+            const maybeMessage = typeof (parsed as any)?.message === "string" ? (parsed as any).message : "";
+            message = maybeMessage.trim() || text;
+          } catch {
+            message = text;
+          }
+        }
+      }
+    } catch {
+      // ignore, keep default message
+    }
+
+    const err: any = new Error(message);
+    err.status = res.status;
+    throw err;
   }
 }
 
@@ -88,8 +116,11 @@ export const queryClient = new QueryClient({
       staleTime: 2 * 60 * 1000, // 2 minutes default - queries stay fresh
       gcTime: 10 * 60 * 1000, // 10 minutes garbage collection
       retry: (failureCount, error) => {
+        const status = Number((error as any)?.status);
+        if (status === 401 || status === 403) return false;
+
         const msg = (error as any)?.message ? String((error as any).message) : "";
-        if (/^(401|403)\b/.test(msg) || msg === "Unauthorized") return false;
+        if (msg === "Unauthorized") return false;
         return failureCount < 2;
       },
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10_000),

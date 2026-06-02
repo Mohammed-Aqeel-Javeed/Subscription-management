@@ -139,8 +139,31 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
+function inferToastVariant(props: Toast): ToastProps["variant"] | undefined {
+  if (props.variant) return props.variant;
+
+  const title = typeof props.title === "string" ? props.title : "";
+  const description = typeof props.description === "string" ? props.description : "";
+  const text = `${title} ${description}`.trim().toLowerCase();
+  if (!text) return undefined;
+
+  // Error / reject variants
+  if (/(error|failed|reject|rejected|unauthori[sz]ed|incorrect|invalid)/i.test(text)) {
+    return "destructive";
+  }
+
+  // Success variants
+  if (/(success|updated|saved|created|uploaded|deleted)/i.test(text)) {
+    return "success";
+  }
+
+  return undefined;
+}
+
 function toast({ ...props }: Toast) {
   const id = genId()
+
+  const inferredVariant = inferToastVariant(props)
 
   const update = (props: ToasterToast) =>
     dispatch({
@@ -153,6 +176,7 @@ function toast({ ...props }: Toast) {
     type: "ADD_TOAST",
     toast: {
       ...props,
+      ...(inferredVariant ? { variant: inferredVariant } : {}),
       id,
       open: true,
       onOpenChange: (open: boolean) => {

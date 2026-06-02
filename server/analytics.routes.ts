@@ -129,6 +129,17 @@ const computeSubscriptionAmountLcy = (args: {
   return Number(totalForLcy.toFixed(2));
 };
 
+const toMonthlyEquivalent = (amountLcy: number, billingCycleRaw: unknown) => {
+  const amount = Number(amountLcy);
+  if (!Number.isFinite(amount)) return 0;
+
+  const billingCycle = String(billingCycleRaw || "monthly").trim().toLowerCase();
+  if (billingCycle === "yearly" || billingCycle === "annual") return amount / 12;
+  if (billingCycle === "quarterly") return amount / 3;
+  if (billingCycle === "weekly") return amount * 4;
+  return amount;
+};
+
 const buildSubscriptionScopeFilter = (user: any, tenantId: string) => {
   const userRole = user?.role;
   const userId = user?.userId || user?.id;
@@ -309,6 +320,7 @@ router.get("/api/analytics/trends", async (req, res) => {
           totalAmount: 1,
           totalAmountInclTax: 1,
           currency: 1,
+          billingCycle: 1,
           status: 1,
           startDate: 1,
           nextRenewal: 1,
@@ -340,7 +352,8 @@ router.get("/api/analytics/trends", async (req, res) => {
           currency: (sub as any)?.currency != null ? decrypt((sub as any).currency) : (sub as any)?.currency,
         };
 
-        const amount = computeSubscriptionAmountLcy({ sub: subForCalc, localCurrency, exchangeRateByCode }) ?? 0;
+        const amountLcy = computeSubscriptionAmountLcy({ sub: subForCalc, localCurrency, exchangeRateByCode }) ?? 0;
+        const monthlyAmount = toMonthlyEquivalent(amountLcy, (sub as any)?.billingCycle);
 
         const startDate = parseDateSafe(sub.startDate);
         const renewalDate = parseDateSafe(sub.nextRenewal);
@@ -350,7 +363,7 @@ router.get("/api/analytics/trends", async (req, res) => {
         if (startDate && startDate > monthData.monthEnd) return;
         if (renewalDate && renewalDate < monthData.monthStart) return;
         
-        monthlyTotal += amount;
+        monthlyTotal += monthlyAmount;
       });
       
       return { month: monthData.monthStr, amount: Number(monthlyTotal.toFixed(2)) };
@@ -387,14 +400,16 @@ router.get("/api/analytics/categories", async (req, res) => {
     const categoryParam = categoryParamRaw && normToken(categoryParamRaw) !== "all" ? categoryParamRaw : "";
     const categoryParamNorm = normToken(categoryParam);
 
-    const rangeStartDate = monthsClamped
-      ? (() => {
-          const d = new Date();
-          d.setMonth(d.getMonth() - monthsClamped);
-          d.setHours(0, 0, 0, 0);
-          return d;
-        })()
-      : null;
+    const monthsWindow = monthsClamped ?? 6;
+
+    const monthsArray = Array.from({ length: monthsWindow }, (_, i) => {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      return {
+        monthStart: new Date(date.getFullYear(), date.getMonth(), 1),
+        monthEnd: new Date(date.getFullYear(), date.getMonth() + 1, 0),
+      };
+    }).reverse();
     
     // OPTIMIZED: Only fetch category and amount
     const subscriptions = await collection.find(
@@ -408,6 +423,8 @@ router.get("/api/analytics/categories", async (req, res) => {
           totalAmount: 1,
           totalAmountInclTax: 1,
           currency: 1,
+          status: 1,
+          billingCycle: 1,
           startDate: 1,
           nextRenewal: 1,
         },
@@ -417,40 +434,43 @@ router.get("/api/analytics/categories", async (req, res) => {
     // Group by category and sum amounts (after decryption)
     const categoryMap = new Map<string, number>();
     
-    subscriptions.forEach(sub => {
-      if (categoryParamNorm) {
-        const subCategory = normToken(sub.category || "Other");
-        if (subCategory !== categoryParamNorm) return;
-      }
+    // Aggregate monthly-equivalent spend by category across the selected month window
+    for (const monthData of monthsArray) {
+      for (const sub of subscriptions) {
+        if ((sub as any)?.status !== "Active") continue;
 
-      if (rangeStartDate) {
-        const nextRenewal = parseDateSafe(sub.nextRenewal);
-        const subscriptionStartDate = parseDateSafe(sub.startDate);
-
-        // If dates are missing/invalid, don't exclude the record.
-        if (nextRenewal || subscriptionStartDate) {
-          const isInRange = (nextRenewal ? nextRenewal >= rangeStartDate : false)
-            || (subscriptionStartDate ? subscriptionStartDate >= rangeStartDate : false);
-          if (!isInRange) return;
+        if (categoryParamNorm) {
+          const subCategory = normToken((sub as any)?.category || "Other");
+          if (subCategory !== categoryParamNorm) continue;
         }
+
+        const startDate = parseDateSafe((sub as any)?.startDate);
+        const renewalDate = parseDateSafe((sub as any)?.nextRenewal);
+
+        // If dates are missing/invalid, keep behavior aligned with trends
+        if (startDate && startDate > monthData.monthEnd) continue;
+        if (renewalDate && renewalDate < monthData.monthStart) continue;
+
+        const category = (sub as any)?.category || "Other";
+        const subForCalc = {
+          amount: (sub as any)?.amount ? decrypt((sub as any).amount) : (sub as any)?.amount,
+          qty: (sub as any)?.qty,
+          taxAmount: (sub as any)?.taxAmount != null ? decrypt((sub as any).taxAmount) : (sub as any)?.taxAmount,
+          totalAmount: (sub as any)?.totalAmount != null ? decrypt((sub as any).totalAmount) : (sub as any)?.totalAmount,
+          totalAmountInclTax:
+            (sub as any)?.totalAmountInclTax != null
+              ? decrypt((sub as any).totalAmountInclTax)
+              : (sub as any)?.totalAmountInclTax,
+          currency: (sub as any)?.currency != null ? decrypt((sub as any).currency) : (sub as any)?.currency,
+        };
+
+        const amountLcy = computeSubscriptionAmountLcy({ sub: subForCalc, localCurrency, exchangeRateByCode }) ?? 0;
+        const monthlyAmount = toMonthlyEquivalent(amountLcy, (sub as any)?.billingCycle);
+        if (!monthlyAmount) continue;
+
+        categoryMap.set(category, (categoryMap.get(category) || 0) + monthlyAmount);
       }
-
-      const category = sub.category || "Other";
-      // Decrypt fields needed for LCY calc
-      const subForCalc = {
-        amount: sub.amount ? decrypt(sub.amount) : sub.amount,
-        qty: (sub as any)?.qty,
-        taxAmount: (sub as any)?.taxAmount != null ? decrypt((sub as any).taxAmount) : (sub as any)?.taxAmount,
-        totalAmount: (sub as any)?.totalAmount != null ? decrypt((sub as any).totalAmount) : (sub as any)?.totalAmount,
-        totalAmountInclTax:
-          (sub as any)?.totalAmountInclTax != null ? decrypt((sub as any).totalAmountInclTax) : (sub as any)?.totalAmountInclTax,
-        currency: (sub as any)?.currency != null ? decrypt((sub as any).currency) : (sub as any)?.currency,
-      };
-
-      const amount = computeSubscriptionAmountLcy({ sub: subForCalc, localCurrency, exchangeRateByCode }) ?? 0;
-      
-      categoryMap.set(category, (categoryMap.get(category) || 0) + amount);
-    });
+    }
     
     // Convert to array format
     const categories = Array.from(categoryMap.entries()).map(([category, amount]) => ({

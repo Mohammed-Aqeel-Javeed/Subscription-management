@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from "react";
-import { Bell, MoreVertical } from "lucide-react";
+import { Bell, MoreVertical, HelpCircle, LogOut, User as UserIcon } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -134,21 +134,6 @@ export default function Header() {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
     return name.substring(0, 2).toUpperCase();
-  };
-
-  const getUserRole = () => {
-    if (!user) return "";
-    return user.role || "USER";
-  };
-
-  const formatRole = (role: string) => {
-    if (!role) return "";
-    return role
-      .replace(/[-_]+/g, " ")
-      .split(" ")
-      .filter(Boolean)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-      .join(" ");
   };
 
   const getUserName = () => {
@@ -450,9 +435,6 @@ export default function Header() {
               <div className="text-sm font-semibold text-gray-900 max-w-[180px] truncate">
                 {getUserName()}
               </div>
-              <div className="text-xs text-gray-500 max-w-[180px] truncate">
-                {formatRole(getUserRole())}
-              </div>
             </div>
           </div>
 
@@ -467,76 +449,70 @@ export default function Header() {
 
           {/* Profile Dropdown Menu */}
           {showProfileMenu && (
-            <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden z-50">
-              {/* Account Section Header */}
-              <div className="px-4 py-3 border-b border-gray-200">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Account</h3>
-              </div>
-
+            <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden z-50">
               {/* User Info */}
-              <div className="px-4 py-3 border-b border-gray-200">
+              <div className="px-5 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                    {getInitials(getUserName())}
+                  <div className="h-10 w-10 rounded-full overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center">
+                    {user?.profileImage ? (
+                      <img
+                        src={user.profileImage}
+                        alt="Profile"
+                        className="h-full w-full object-cover"
+                        width={40}
+                        height={40}
+                        loading="eager"
+                        decoding="async"
+                      />
+                    ) : (
+                      <span className="text-sm font-semibold text-gray-700">{getInitials(getUserName())}</span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-gray-900 truncate">
-                      {getUserName()}
-                    </div>
-                    <div className="text-xs text-gray-500 truncate">
-                      {user?.email || ""}
-                    </div>
+                    <div className="text-sm font-semibold text-gray-900 truncate">{getUserName()}</div>
+                    <div className="text-xs text-gray-500 truncate">{user?.email || ""}</div>
                   </div>
                 </div>
               </div>
 
-              {/* Menu */}
-              <div className="border-b border-gray-200">
+              <div className="p-2">
                 <button
                   type="button"
                   onClick={() => {
                     navigate("/profile");
                     setShowProfileMenu(false);
                   }}
-                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left hover:bg-gray-50 transition-colors"
                 >
-                  Profile
+                  <span className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <UserIcon className="h-5 w-5 text-blue-600" />
+                  </span>
+                  <span className="text-sm font-normal text-gray-900">My Profile</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigate("/configuration");
-                    setShowProfileMenu(false);
-                  }}
-                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Settings
-                </button>
-              </div>
-
-              {/* Additional Options */}
-              <div className="border-b border-gray-200">
                 <button
                   type="button"
                   onClick={() => {
                     window.dispatchEvent(new Event("open-chatbot"));
                     setShowProfileMenu(false);
                   }}
-                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left hover:bg-gray-50 transition-colors"
                 >
-                  Help
+                  <span className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                    <HelpCircle className="h-5 w-5 text-emerald-600" />
+                  </span>
+                  <span className="text-sm font-normal text-gray-900">Help &amp; Support</span>
                 </button>
-              </div>
 
-              {/* Logout */}
-              <div className="p-2">
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 rounded transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left hover:bg-red-50 transition-colors"
                 >
-                  Log out
+                  <span className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+                    <LogOut className="h-5 w-5 text-red-600" />
+                  </span>
+                  <span className="text-sm font-normal text-red-600">Sign Out</span>
                 </button>
               </div>
             </div>

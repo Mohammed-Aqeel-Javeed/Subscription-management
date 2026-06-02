@@ -329,7 +329,7 @@ function main() {
         '• If your user has access to multiple companies, use the company selector in the sidebar to switch.',
         '• Switching changes the active tenant context (data shown across the app).',
         'User Management (roles)',
-        '• Super Admin / Global Admin: full access (may switch across tenants if enabled).',
+        '• System Admin / Global Admin: full access (may switch across tenants if enabled).',
         '• Contributor: can create and update subscriptions and related data based on permissions.',
         '• Viewer: read-only access to pages and reports.',
         'Best practice',

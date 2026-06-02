@@ -701,7 +701,7 @@ export default function SignupPage() {
 
                 <div style={{ marginBottom: 10, position: "relative" }}>
                   <label style={{ fontWeight: 500, fontSize: 13, color: "#374151" }}>
-                    LCY
+                    Currency
                   </label>
                   <input
                     type="text"

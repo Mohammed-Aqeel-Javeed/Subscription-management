@@ -2438,6 +2438,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const baseEmailQuery = { email: { $regex: emailRegex } } as const;
       const withPasswordQuery = { password: { $exists: true, $ne: "" } } as const;
 
+      const verifyPasswordAgainstUser = async (candidate: any, collectionName = "login"): Promise<boolean> => {
+        if (!candidate?.password) return false;
+        const storedPasswordRaw = String(candidate.password);
+        const looksLikeBcrypt = storedPasswordRaw.startsWith("$2");
+
+        if (looksLikeBcrypt) {
+          return await bcrypt.compare(password, storedPasswordRaw);
+        }
+
+        // Backward-compat: legacy plaintext or encrypted values.
+        let legacyPlain = storedPasswordRaw;
+        try {
+          legacyPlain = decrypt(storedPasswordRaw);
+        } catch {
+          legacyPlain = storedPasswordRaw;
+        }
+
+        const ok = password === legacyPlain;
+        if (ok) {
+          try {
+            const upgradedHash = await bcrypt.hash(password, 10);
+            await db.collection(collectionName).updateOne({ _id: candidate._id }, { $set: { password: upgradedHash } });
+            candidate.password = upgradedHash;
+          } catch (e) {
+            console.warn("[Login] Password hash migration failed:", e);
+          }
+        }
+        return ok;
+      };
+
+      const pickMatchingTenantUser = async (seedUser: any | null) => {
+        // Only for tenant-bound login records (global_admin handled separately above).
+        const candidates = await db
+          .collection("login")
+          .find({ ...baseEmailQuery, role: { $ne: "global_admin" }, ...withPasswordQuery })
+          .limit(20)
+          .toArray();
+
+        if (!candidates.length) return { user: seedUser, matchedDifferent: false };
+
+        const seedId = seedUser?._id ? String(seedUser._id) : "";
+        const ordered = [
+          ...candidates.filter((c: any) => seedId && String(c._id) === seedId),
+          ...candidates.filter((c: any) => c?.isDefaultCompany && (!seedId || String(c._id) !== seedId)),
+          ...candidates.filter((c: any) => !c?.isDefaultCompany && (!seedId || String(c._id) !== seedId)),
+        ];
+
+        for (const candidate of ordered) {
+          try {
+            const ok = await verifyPasswordAgainstUser(candidate, "login");
+            if (ok) {
+              return { user: candidate, matchedDifferent: seedId && String(candidate._id) !== seedId };
+            }
+          } catch {
+            // ignore candidate-level failures; treat as non-match
+          }
+        }
+
+        return { user: seedUser || ordered[0] || null, matchedDifferent: false };
+      };
+
       // Prefer platform-level global_admin record if present
       let user =
         (await db
@@ -2456,6 +2517,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           (await db.collection("login").findOne({ ...baseEmailQuery }));
       }
       let isNewUserSystem = false;
+
+      // If multiple company-bound accounts share the same email, try to authenticate against the
+      // matching tenant record by password (so each company account can log in independently).
+      if (user && String((user as any)?.role || "").toLowerCase() !== "global_admin") {
+        const picked = await pickMatchingTenantUser(user);
+        if (picked?.user) user = picked.user;
+      }
       
       // If not found in login collection, try the 'users' collection (RBAC users with passwords)
       if (!user) {
@@ -2562,36 +2630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // All passwords are now hashed with bcrypt
       let isPasswordValid = false;
       if (user.password) {
-        const storedPasswordRaw = String(user.password);
-        const looksLikeBcrypt = storedPasswordRaw.startsWith("$2");
-
-        if (looksLikeBcrypt) {
-          isPasswordValid = await bcrypt.compare(password, storedPasswordRaw);
-        } else {
-          // Backward-compat: some legacy records stored plaintext or encrypted passwords.
-          // Never throw here; a failure should behave like an auth mismatch, not a 500.
-          let legacyPlain = storedPasswordRaw;
-          try {
-            legacyPlain = decrypt(storedPasswordRaw);
-          } catch {
-            legacyPlain = storedPasswordRaw;
-          }
-          isPasswordValid = password === legacyPlain;
-
-          // If legacy auth succeeds, migrate to bcrypt.
-          if (isPasswordValid) {
-            try {
-              const upgradedHash = await bcrypt.hash(password, 10);
-              await db.collection(userCollectionName).updateOne(
-                { _id: user._id },
-                { $set: { password: upgradedHash } }
-              );
-            } catch (e) {
-              // Do not block login on migration failure.
-              console.warn("[Login] Password hash migration failed:", e);
-            }
-          }
-        }
+        isPasswordValid = await verifyPasswordAgainstUser(user, userCollectionName);
       }
       
       if (!isPasswordValid) {
@@ -6276,100 +6315,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         companyList.sort((a, b) => a.companyName.localeCompare(b.companyName));
       } else {
-        // Non-admins can switch ONLY between companies where the same email exists in multiple tenant records.
-        const tokenEmail = normalizeEmail((user as any)?.email);
+        // For now, non-global-admin users are restricted to their active company only.
+        // This keeps the Switch Company UI intact but prevents switching across tenants.
         const dbUser = await db
           .collection("login")
           .findOne(
             { _id: new ObjectId(user.userId) },
-            { projection: { email: 1, tenantId: 1 } }
+            { projection: { tenantId: 1 } }
           );
 
-        const emailKey = tokenEmail || normalizeEmail((dbUser as any)?.email);
-        const emailRegex = makeEmailRegex(emailKey);
-
-        const activeTenantId = (user as any)?.tenantId || (dbUser as any)?.tenantId;
-        const activeTenant = String(((user as any)?.actingTenantId ?? activeTenantId) ?? "").trim();
-
-        if (!emailRegex) {
-          // Fall back to the active tenant only.
-          const tid = String(activeTenantId || "").trim();
-          if (!tid) return res.status(200).json([]);
-          const companyInfo = await db
-            .collection("companyInfo")
-            .findOne({ tenantId: tid }, { projection: { tenantId: 1, companyName: 1 } });
-          const loginCompany = await db
-            .collection("login")
-            .findOne({ tenantId: tid, companyName: { $exists: true, $ne: null } }, { projection: { tenantId: 1, companyName: 1 } });
-          const name =
-            String((companyInfo as any)?.companyName || "").trim() ||
-            String((loginCompany as any)?.companyName || "").trim() ||
-            "Unnamed Company";
-          companyList = [{ tenantId: tid, companyName: name, isActive: tid === activeTenant }];
-          return res.status(200).json(companyList);
+        const activeTenantId = String(((user as any)?.actingTenantId ?? (user as any)?.tenantId ?? (dbUser as any)?.tenantId) ?? "").trim();
+        if (!activeTenantId) {
+          return res.status(200).json([]);
         }
 
-        const tenantIdsRaw = await db.collection("login").distinct("tenantId", {
-          email: { $regex: emailRegex },
-          tenantId: { $ne: null },
-        });
-
-        const tenantIds = Array.from(
-          new Set(
-            (tenantIdsRaw as any[])
-              .map((t: any) => (t == null ? "" : String(t)))
-              .map((t) => t.trim())
-              .filter((t) => {
-                if (!t) return false;
-                const lower = t.toLowerCase();
-                if (lower === "null" || lower === "undefined") return false;
-                return true;
-              })
-          )
-        );
-
-        if (!tenantIds.length) {
-          // Fall back to the active tenant only.
-          const tid = String(activeTenantId || "").trim();
-          if (!tid) return res.status(200).json([]);
-          companyList = [{ tenantId: tid, companyName: "Unnamed Company", isActive: tid === activeTenant }];
-          return res.status(200).json(companyList);
-        }
-
-        const [companyInfoList, loginNameAgg] = await Promise.all([
-          db
-            .collection("companyInfo")
-            .find({ tenantId: { $in: tenantIds } }, { projection: { tenantId: 1, companyName: 1 } })
-            .toArray(),
+        const [companyInfo, loginCompany] = await Promise.all([
+          db.collection("companyInfo").findOne({ tenantId: activeTenantId }, { projection: { companyName: 1 } }),
           db
             .collection("login")
-            .aggregate([
-              {
-                $match: {
-                  tenantId: { $in: tenantIds },
-                  email: { $regex: emailRegex },
-                  companyName: { $exists: true, $ne: null },
-                },
-              },
-              { $group: { _id: "$tenantId", companyName: { $max: "$companyName" } } },
-            ])
-            .toArray(),
+            .findOne(
+              { tenantId: activeTenantId, companyName: { $exists: true, $ne: null } },
+              { projection: { companyName: 1 } }
+            ),
         ]);
 
-        const companyInfoMap = new Map(
-          (companyInfoList as any[]).map((ci: any) => [String(ci.tenantId), String(ci.companyName || "").trim()])
-        );
-        const loginNameMap = new Map(
-          (loginNameAgg as any[]).map((row: any) => [String(row._id), String(row.companyName || "").trim()])
-        );
+        const name =
+          String((companyInfo as any)?.companyName || "").trim() ||
+          String((loginCompany as any)?.companyName || "").trim() ||
+          "Unnamed Company";
 
-        companyList = tenantIds
-          .map((tid) => ({
-            tenantId: tid,
-            companyName: companyInfoMap.get(tid) || loginNameMap.get(tid) || "Unnamed Company",
-            isActive: tid === activeTenant,
-          }))
-          .sort((a, b) => a.companyName.localeCompare(b.companyName));
+        companyList = [{ tenantId: activeTenantId, companyName: name, isActive: true }];
       }
       
       res.setHeader("X-Company-Count", String(companyList.length));
@@ -6511,7 +6486,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const db = await connectToDatabase();
-      const dbUser = await db.collection("login").findOne({ email: email });
+      const emailKey = String(email).trim().toLowerCase();
+      const dbUser = await db.collection("login").findOne({ email: emailKey });
       
       if (!dbUser) {
         return res.status(404).json({ message: "Invalid email or password" });
@@ -6521,6 +6497,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isPasswordValid = await bcrypt.compare(password, dbUser.password);
       if (!isPasswordValid) {
         return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      const normalizePlanKey = (value: unknown) => {
+        const v = String(value ?? "").trim().toLowerCase();
+        if (v === "pro") return "professional";
+        return v;
+      };
+
+      const planPriority = (plan: unknown) => {
+        const normalized = normalizePlanKey(plan);
+        if (normalized === "premium") return 5;
+        if (normalized === "professional") return 4;
+        if (normalized === "starter") return 3;
+        if (normalized === "trial") return 2;
+        if (normalized === "free") return 1;
+        return 0;
+      };
+
+      const bestPlan = (a: unknown, b: unknown) => (planPriority(b) > planPriority(a) ? b : a);
+
+      const planLimits = (plan: unknown) => {
+        const normalized = normalizePlanKey(plan);
+        if (normalized === "premium") {
+          return { key: "premium", label: "Premium", maxCompanies: 5 };
+        }
+        if (normalized === "professional") {
+          // Basic (renamed from Professional) currently cannot add companies
+          return { key: "professional", label: "Basic", maxCompanies: 1 };
+        }
+        // Trial (renamed from Starter) currently cannot add companies
+        return { key: "starter", label: "Trial", maxCompanies: 1 };
+      };
+
+      let derivedPlanForNewTenant: string | null = null;
+
+      // Prefer a record that has an avatar, so the new tenant inherits it.
+      const dbUserWithProfileImage = await db.collection("login").findOne({
+        email: emailKey,
+        profileImage: { $type: "string", $ne: "" },
+      });
+
+      // Enforce plan-based company limits per account (email) in multi-company mode.
+      // Global admins are not tenant-scoped and should not be limited here.
+      if (String((dbUser as any)?.role || "").trim().toLowerCase() !== "global_admin") {
+        const existingLoginDocs = await db
+          .collection("login")
+          .find(
+            { email: emailKey, role: { $ne: "global_admin" } },
+            { projection: { tenantId: 1, plan: 1 } }
+          )
+          .toArray();
+
+        const existingTenantIds = Array.from(
+          new Set(
+            (existingLoginDocs as any[])
+              .map((d: any) => (d?.tenantId == null ? "" : String(d.tenantId)))
+              .map((t) => t.trim())
+              .filter(Boolean)
+          )
+        );
+
+        const derivedPlan = existingLoginDocs.reduce((acc: any, d: any) => bestPlan(acc, d?.plan), "starter");
+        const limits = planLimits(derivedPlan);
+
+        // Explicitly block multi-company on Trial/Basic.
+        if (limits.key === "starter" || limits.key === "professional") {
+          return res.status(403).json({ message: "Your plan has no feature" });
+        }
+
+        if (existingTenantIds.length >= limits.maxCompanies) {
+          return res.status(403).json({
+            message: `Plan limit reached: ${limits.label} allows up to ${limits.maxCompanies} companies.`,
+          });
+        }
+
+        // Use the derived plan for the new tenant record so plan info is consistent.
+        derivedPlanForNewTenant = normalizePlanKey(derivedPlan) || "starter";
       }
 
       // Enforce unique company name (case/punctuation/spacing-insensitive).
@@ -6555,7 +6608,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenantId = `tenant-${new ObjectId().toHexString()}`;
       const now = new Date();
 
-      const emailKey = String(email).trim().toLowerCase();
       const fullName = String((dbUser as any)?.fullName || (dbUser as any)?.name || "").trim();
 
       const newLoginDoc: any = {
@@ -6563,6 +6615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: (dbUser as any).password,
         fullName: fullName || null,
         name: (dbUser as any)?.name || null,
+        profileImage: (dbUserWithProfileImage as any)?.profileImage || (dbUser as any)?.profileImage || null,
         tenantId,
         companyName: String(companyName).trim(),
         defaultCurrency: String(defaultCurrency).trim().toUpperCase(),
@@ -6571,6 +6624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdAt: now,
         lastLogin: null,
         isDefaultCompany: Boolean(setAsDefault),
+        plan: String(derivedPlanForNewTenant || (dbUser as any)?.plan || "starter").trim().toLowerCase(),
       };
 
       if (setAsDefault) {
@@ -6596,6 +6650,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
           { upsert: true }
         );
+      } catch {
+        // non-blocking
+      }
+
+      // Seed default currency into Configuration → Currency list for this tenant.
+      // Keep this best-effort and idempotent; do not break add-company if seeding fails.
+      try {
+        const code = String(defaultCurrency || "").trim().toUpperCase();
+        if (code) {
+          const currencyMeta: Record<string, { name: string; symbol: string; isoNumber?: string }> = {
+            USD: { name: "United States Dollar", symbol: "$", isoNumber: "840" },
+            EUR: { name: "Euro", symbol: "€", isoNumber: "978" },
+            GBP: { name: "British Pound Sterling", symbol: "£", isoNumber: "826" },
+            INR: { name: "Indian Rupee", symbol: "₹", isoNumber: "356" },
+            JPY: { name: "Japanese Yen", symbol: "¥", isoNumber: "392" },
+            CNY: { name: "Chinese Yuan", symbol: "¥", isoNumber: "156" },
+            AUD: { name: "Australian Dollar", symbol: "A$", isoNumber: "036" },
+            CAD: { name: "Canadian Dollar", symbol: "C$", isoNumber: "124" },
+            AED: { name: "UAE Dirham", symbol: "د.إ", isoNumber: "784" },
+            SAR: { name: "Saudi Riyal", symbol: "ر.س", isoNumber: "682" },
+          };
+
+          const meta = currencyMeta[code] || { name: code, symbol: code };
+          const created = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+
+          await db.collection("currencies").updateOne(
+            { tenantId, code },
+            {
+              $setOnInsert: {
+                tenantId,
+                code,
+                name: meta.name,
+                symbol: meta.symbol,
+                isoNumber: meta.isoNumber || "",
+                exchangeRate: 1,
+                visible: true,
+                created,
+                createdAt: now,
+              },
+            },
+            { upsert: true }
+          );
+        }
       } catch {
         // non-blocking
       }

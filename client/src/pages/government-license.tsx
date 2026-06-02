@@ -19,10 +19,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "../hooks/use-toast";
+import { PlanLimitModal } from "@/components/modals/plan-limit-modal";
+import { getPlanLimitErrorInfo } from "@/lib/plan-limit";
 import { z } from "zod";
 import { API_BASE_URL } from "@/lib/config";
 import { Badge } from "../components/ui/badge";
 import { Checkbox } from "../components/ui/checkbox";
+import { Progress } from "../components/ui/progress";
 import { useUser } from "@/context/UserContext";
 import {
   AlertDialog,
@@ -1061,6 +1064,9 @@ export default function GovernmentLicense() {
   const modalUrlRestoreRef = useRef<string | null>(null);
   const { user } = useUser();
 
+  const [planLimitOpen, setPlanLimitOpen] = useState(false);
+  const [planLimitMessage, setPlanLimitMessage] = useState("");
+
   const setSecureUrlForLicenseEdit = async (licenseId: string) => {
     const id = String(licenseId ?? '').trim();
     if (!id) return;
@@ -1137,6 +1143,10 @@ export default function GovernmentLicense() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ processed: number; total: number } | null>(null);
+
+  const [selectedLicenseIds, setSelectedLicenseIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
 
   const issuingAuthorityPhoneInputRef = useRef<HTMLInputElement>(null);
 
@@ -2624,7 +2634,23 @@ export default function GovernmentLicense() {
         body: JSON.stringify(data),
       });
       
-      if (!res.ok) throw new Error("Failed to save license");
+      if (!res.ok) {
+        const raw = await res.text().catch(() => "");
+        let message = "Failed to save license";
+        try {
+          const parsed = raw ? JSON.parse(raw) : null;
+          if (parsed && typeof parsed === 'object' && typeof (parsed as any).message === 'string') {
+            message = (parsed as any).message;
+          } else if (raw) {
+            message = raw;
+          }
+        } catch {
+          if (raw) message = raw;
+        }
+        const err: any = new Error(message);
+        err.status = res.status;
+        throw err;
+      }
       const result = await res.json();
       
       // Log the action with comprehensive details
@@ -2832,6 +2858,12 @@ export default function GovernmentLicense() {
       form.reset();
     },
     onError: (error: any) => {
+      const planLimit = getPlanLimitErrorInfo(error);
+      if (planLimit) {
+        setPlanLimitMessage(planLimit.message);
+        setPlanLimitOpen(true);
+        return;
+      }
       toast({
         title: "Error",
         description: error.message || "Failed to save license",
@@ -3108,7 +3140,11 @@ export default function GovernmentLicense() {
       return;
     }
 
-    let success = 0; let failed = 0;
+    setImportProgress({ processed: 0, total: rows.length });
+
+    let success = 0;
+    let failed = 0;
+    let processed = 0;
     for (const row of rows) {
       try {
         const payload: any = {
@@ -3148,6 +3184,9 @@ export default function GovernmentLicense() {
         success++;
       } catch {
         failed++;
+      } finally {
+        processed++;
+        setImportProgress((prev) => (prev ? { ...prev, processed } : { processed, total: rows.length }));
       }
     }
 
@@ -3169,9 +3208,11 @@ export default function GovernmentLicense() {
     const clearFile = () => {
       e.target.value = '';
       setIsImporting(false);
+      setImportProgress(null);
     };
 
     setIsImporting(true);
+    setImportProgress({ processed: 0, total: 0 });
 
     try {
       if (file.name.toLowerCase().endsWith('.xlsx')) {
@@ -3339,6 +3380,109 @@ export default function GovernmentLicense() {
       return 0;
     });
   })();
+
+  const visibleLicenseIds = useMemo(() => {
+    return (Array.isArray(sortedLicenses) ? sortedLicenses : [])
+      .map((l: any) => String(l?.id ?? l?._id ?? '').trim())
+      .filter(Boolean);
+  }, [sortedLicenses]);
+
+  const selectedVisibleCount = useMemo(() => {
+    if (!visibleLicenseIds.length || !selectedLicenseIds.size) return 0;
+    let count = 0;
+    for (const id of visibleLicenseIds) {
+      if (selectedLicenseIds.has(id)) count++;
+    }
+    return count;
+  }, [visibleLicenseIds, selectedLicenseIds]);
+
+  const allVisibleSelected = visibleLicenseIds.length > 0 && selectedVisibleCount === visibleLicenseIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < visibleLicenseIds.length;
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedLicenseIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        visibleLicenseIds.forEach((id) => next.add(id));
+      } else {
+        visibleLicenseIds.forEach((id) => next.delete(id));
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectOne = (id: string, checked: boolean) => {
+    setSelectedLicenseIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      let success = 0;
+      let failed = 0;
+
+      for (const id of ids) {
+        try {
+          const license = (Array.isArray(licenses) ? licenses : []).find((l: any) => String(l?.id ?? '') === String(id));
+          const licenseName = license?.licenseName || 'Unknown License';
+
+          const res = await fetch(`${API_BASE_URL}/api/licenses/${id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+          if (!res.ok) throw new Error('Failed to delete license');
+          await res.json().catch(() => null);
+
+          try {
+            await fetch(`${API_BASE_URL}/api/logs`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                licenseId: id,
+                licenseName,
+                action: 'Deleted',
+                changes: `Deleted license: ${licenseName}`,
+              }),
+            });
+          } catch {
+            // ignore logging errors
+          }
+
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+
+      return { success, failed };
+    },
+    onSuccess: ({ success, failed }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/license"] });
+
+      setSelectedLicenseIds(new Set());
+      setBulkDeleteConfirmOpen(false);
+
+      toast({
+        title: failed > 0 ? 'Bulk delete finished with errors' : 'Deleted',
+        description: failed > 0 ? `Deleted ${success}. Failed ${failed}.` : `Deleted ${success} renewal(s).`,
+        variant: 'destructive',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to bulk delete renewals',
+        variant: 'destructive',
+      });
+    },
+  });
 
   // Keep form status in sync with expiry date (unless user explicitly cancelled)
   useEffect(() => {
@@ -4015,14 +4159,36 @@ export default function GovernmentLicense() {
   // (summary cards removed)
 
   return (
-    <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
+    <>
+      <PlanLimitModal open={planLimitOpen} onOpenChange={setPlanLimitOpen} message={planLimitMessage} />
+      <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
       {isImporting && (
         <div className="fixed inset-0 z-[12000] flex items-center justify-center bg-white/50 backdrop-blur-sm">
-          <div
-            className="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"
-            role="status"
-            aria-label="Importing"
-          />
+          <div className="w-[360px] max-w-[90vw] rounded-xl border border-gray-200 bg-white shadow-lg p-6">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-900">Importing…</div>
+              <div className="text-sm text-gray-600">
+                {importProgress && importProgress.total > 0
+                  ? `${Math.round((importProgress.processed / importProgress.total) * 100)}%`
+                  : '0%'}
+              </div>
+            </div>
+            <div className="mt-3">
+              <Progress
+                className="h-2"
+                value={
+                  importProgress && importProgress.total > 0
+                    ? (importProgress.processed / importProgress.total) * 100
+                    : 0
+                }
+              />
+              <div className="mt-2 text-xs text-gray-500">
+                {importProgress && importProgress.total > 0
+                  ? `${importProgress.processed} / ${importProgress.total} processed`
+                  : 'Preparing import…'}
+              </div>
+            </div>
+          </div>
         </div>
       )}
       <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
@@ -4084,6 +4250,17 @@ export default function GovernmentLicense() {
               </motion.div>
             </Can>
 
+            {selectedLicenseIds.size > 0 && (
+              <Button
+                type="button"
+                onClick={() => setBulkDeleteConfirmOpen(true)}
+                className="h-10 rounded-lg bg-red-600 text-white hover:bg-red-700 border-0 font-semibold shadow-md hover:shadow-lg transition-all duration-200"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Selected ({selectedLicenseIds.size})
+              </Button>
+            )}
+
             <Button
               variant="outline"
               onClick={() => navigate('/renewal-log')}
@@ -4124,6 +4301,29 @@ export default function GovernmentLicense() {
             </Select>
           </div>
         </div>
+
+        <AlertDialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+          <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete selected renewals?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will delete {selectedLicenseIds.size} renewal(s). This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="bg-white border border-gray-200 hover:bg-gray-50">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-red-600 text-white hover:bg-red-700"
+                onClick={() => {
+                  const ids = Array.from(selectedLicenseIds);
+                  bulkDeleteMutation.mutate(ids);
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* ── Search + Filter Bar ── */}
         <div className="mb-4 shrink-0">
@@ -4171,26 +4371,18 @@ export default function GovernmentLicense() {
                   <p className="text-rose-500 font-medium text-lg">Failed to load licenses</p>
                   <p className="text-slate-500 mt-2">Please try again later</p>
                 </div>
-              ) : sortedLicenses.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <div className="bg-slate-100 rounded-full p-5 mb-5">
-                    <Shield className="w-12 h-12 text-slate-400" />
-                  </div>
-                  <h3 className="text-xl font-medium text-slate-800 mb-2">
-                    {searchTerm || activeFilterCount > 0 ? "No matching renewals found" : "No renewals found"}
-                  </h3>
-                  <p className="text-slate-600 max-w-md text-center">
-                    {searchTerm || activeFilterCount > 0 
-                      ? "Try adjusting your search or filter criteria" 
-                      : "Get started by adding your first renewal"
-                    }
-                  </p>
-                  {/* Add First License button removed as requested */}
-                </div>
               ) : (
                 <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" className="w-full table-fixed">
                 <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                     <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-2 text-center text-xs font-bold text-white uppercase tracking-wide w-[48px]">
+                        <Checkbox
+                          aria-label="Select all visible renewals"
+                          checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                          onCheckedChange={(v) => toggleSelectAllVisible(!!v)}
+                          className="border-white data-[state=checked]:bg-white data-[state=checked]:text-indigo-700"
+                        />
+                      </TableHead>
                       <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[210px]">
                         <button
                           onClick={() => handleSort('licenseName')}
@@ -4233,6 +4425,25 @@ export default function GovernmentLicense() {
                     </TableRow>
                   </TableHeader>
                     <TableBody>
+                      {sortedLicenses.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-20">
+                            <div className="flex flex-col items-center justify-center">
+                              <div className="bg-slate-100 rounded-full p-5 mb-5">
+                                <Shield className="w-12 h-12 text-slate-400" />
+                              </div>
+                              <h3 className="text-xl font-medium text-slate-800 mb-2">
+                                {searchTerm || activeFilterCount > 0 ? "No matching renewals found" : "No renewals found"}
+                              </h3>
+                              <p className="text-slate-600 max-w-md text-center">
+                                {searchTerm || activeFilterCount > 0
+                                  ? "Try adjusting your search or filter criteria"
+                                  : "Get started by adding your first renewal"}
+                              </p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
                       <AnimatePresence>
                         {sortedLicenses.map((license, index) => (
                         <motion.tr 
@@ -4243,6 +4454,19 @@ export default function GovernmentLicense() {
                             exit={{ opacity: 0 }}
                             transition={{ delay: 0.04 * index }}
                           >
+                            <TableCell className="px-2 py-3 w-[48px] text-center">
+                              {(() => {
+                                const rowId = String((license as any)?.id ?? (license as any)?._id ?? '').trim();
+                                if (!rowId) return null;
+                                return (
+                                  <Checkbox
+                                    aria-label={`Select ${String(license.licenseName || 'renewal')}`}
+                                    checked={selectedLicenseIds.has(rowId)}
+                                    onCheckedChange={(v) => toggleSelectOne(rowId, !!v)}
+                                  />
+                                );
+                              })()}
+                            </TableCell>
                             <TableCell className="px-4 py-3 w-[210px] min-w-0 text-left">
                               <button
                                 type="button"
@@ -4353,6 +4577,7 @@ export default function GovernmentLicense() {
                           </motion.tr>
                         ))}
                       </AnimatePresence>
+                      )}
                     </TableBody>
                 </Table>
               )}
@@ -6911,7 +7136,16 @@ export default function GovernmentLicense() {
               <AlertDialogAction
                 className="bg-red-600 hover:bg-red-700 text-white"
                 onClick={() => {
-                  if (licenseToDelete?.id) deleteMutation.mutate(licenseToDelete.id);
+                  if (licenseToDelete?.id) {
+                    const id = String(licenseToDelete.id);
+                    setSelectedLicenseIds((prev) => {
+                      if (!prev.size) return prev;
+                      const next = new Set(prev);
+                      next.delete(id);
+                      return next;
+                    });
+                    deleteMutation.mutate(id);
+                  }
                   setDeleteConfirmOpen(false);
                   setLicenseToDelete(null);
                 }}
@@ -6923,6 +7157,7 @@ export default function GovernmentLicense() {
         </AlertDialog>
 
       </div>
-    </div>
+      </div>
+    </>
   );
 }

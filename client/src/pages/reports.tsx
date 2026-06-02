@@ -262,11 +262,9 @@ function ReportCard({ item, onOpen }: { item: ReportItem; onOpen: (id: string) =
 // ─── Section heading ──────────────────────────────────────────────────────────
 function SectionHeader({
   title,
-  count,
   type,
 }: {
   title: string;
-  count: number;
   type: keyof typeof sectionStyle;
 }) {
   const s = sectionStyle[type];
@@ -276,9 +274,6 @@ function SectionHeader({
         <span className={`w-2.5 h-2.5 rounded-full ${s.dot}`} />
         <h3 className="text-base font-bold text-gray-800">{title}</h3>
       </div>
-      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${s.badge}`}>
-        {count} {count === 1 ? "report" : "reports"}
-      </span>
     </div>
   );
 }
@@ -391,7 +386,7 @@ export default function Reports() {
         {/* Subscription */}
         {shouldShowCategory("subscription") && (
           <section>
-            <SectionHeader title="Subscription Reports" count={subscriptionReports.length} type="subscription" />
+            <SectionHeader title="Subscription Reports" type="subscription" />
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
               {subscriptionReports.map((item) => (
                 <ReportCard key={item.id} item={item} onOpen={openReport} />
@@ -403,7 +398,7 @@ export default function Reports() {
         {/* Compliance */}
         {shouldShowCategory("compliance") && (
           <section>
-            <SectionHeader title="Compliance Reports" count={complianceReports.length} type="compliance" />
+            <SectionHeader title="Compliance Reports" type="compliance" />
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
               {complianceReports.map((item) => (
                 <ReportCard key={item.id} item={item} onOpen={openReport} />
@@ -415,7 +410,7 @@ export default function Reports() {
         {/* Renewal */}
         {shouldShowCategory("renewal") && (
           <section>
-            <SectionHeader title="Renewal Reports" count={renewalReports.length} type="renewal" />
+            <SectionHeader title="Renewal Reports" type="renewal" />
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
               {renewalReports.map((item) => (
                 <ReportCard key={item.id} item={item} onOpen={openReport} />

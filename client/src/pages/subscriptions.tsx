@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
@@ -199,6 +200,10 @@ export default function Subscriptions() {
   const queryClient = useQueryClient();
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ processed: number; total: number } | null>(null);
+
+  const [selectedSubscriptionIds, setSelectedSubscriptionIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   
   const { data: subscriptions, isLoading } = useQuery<SubscriptionWithExtras[]>({
     queryKey: ["/api/subscriptions"],
@@ -369,6 +374,13 @@ export default function Subscriptions() {
             ? old.filter((sub) => String(sub._id ?? sub.id ?? "") !== deletedId)
             : old
         );
+
+        setSelectedSubscriptionIds((prev) => {
+          if (!prev.size) return prev;
+          const next = new Set(prev);
+          next.delete(deletedId);
+          return next;
+        });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
@@ -390,6 +402,73 @@ export default function Subscriptions() {
       toast({
         title: "Error",
         description: error.message || "Failed to delete subscription",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      let success = 0;
+      let failed = 0;
+
+      for (const id of ids) {
+        try {
+          const res = await apiRequest("DELETE", `/api/subscriptions/${id}`);
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json().catch(() => null);
+          if (data && data.message && String(data.message).toLowerCase().includes("deleted")) {
+            success++;
+          } else {
+            // treat as success if server returned OK, even without message
+            success++;
+          }
+        } catch {
+          failed++;
+        }
+      }
+
+      return { success, failed };
+    },
+    onSuccess: ({ success, failed }, ids) => {
+      const deleted = new Set(ids.map((x) => String(x)));
+      queryClient.setQueryData(["/api/subscriptions"], (old: SubscriptionWithExtras[] | undefined) =>
+        Array.isArray(old)
+          ? old.filter((sub) => !deleted.has(String(sub._id ?? sub.id ?? "")))
+          : old
+      );
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+
+      setSelectedSubscriptionIds(new Set());
+      setBulkDeleteConfirmOpen(false);
+
+      if (failed > 0) {
+        toast({
+          title: "Bulk delete finished with errors",
+          description: `Deleted ${success}. Failed ${failed}.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Deleted",
+          description: `Deleted ${success} subscription(s).`,
+          variant: "destructive",
+        });
+      }
+
+      try {
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent('subscription-deleted', { detail: { ids } }));
+        }
+      } catch {
+        // ignore
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to bulk delete subscriptions",
         variant: "destructive",
       });
     },
@@ -897,6 +976,7 @@ export default function Subscriptions() {
     if (!file) return;
 
     setIsImporting(true);
+    setImportProgress({ processed: 0, total: 0 });
 
     const normalizeServiceName = (value: unknown) => String(value ?? '').trim().replace(/\s+/g, ' ');
     const existingServiceNames = new Set(
@@ -994,17 +1074,22 @@ export default function Subscriptions() {
         return candidates.every((v) => String(v ?? '').trim() === '');
       };
 
+      const processableRows = rows.filter((row) => !isEffectivelyEmptyRow(row as any));
+      if (!processableRows.length) {
+        toast({ title: 'Empty file', description: 'No filled rows found in file', variant: 'destructive' });
+        return;
+      }
+
+      setImportProgress({ processed: 0, total: processableRows.length });
+
       let success = 0;
       let failed = 0;
       const seenInFile = new Set<string>();
       const errorSamples: string[] = [];
 
-      for (const row of rows) {
+      let processed = 0;
+      for (const row of processableRows) {
         try {
-          // The template contains hundreds of pre-formatted/validated blank rows.
-          // Ignore rows where the user hasn't entered any values.
-          if (isEffectivelyEmptyRow(row)) continue;
-
           const normalizedName = normalizeServiceName(
             getValue(row, ['Service Name', 'ServiceName', 'serviceName'])
           );
@@ -1087,6 +1172,10 @@ export default function Subscriptions() {
         } catch {
           failed++;
           if (errorSamples.length < 5) errorSamples.push('Failed to import a row');
+        } finally {
+          processed++;
+          // Update progress (kept simple; avoids additional deps)
+          setImportProgress((prev) => (prev ? { ...prev, processed } : { processed, total: processableRows.length }));
         }
       }
 
@@ -1119,6 +1208,7 @@ export default function Subscriptions() {
         toast({ title: 'Import error', description: 'Failed to read XLSX file', variant: 'destructive' });
       } finally {
         setIsImporting(false);
+        setImportProgress(null);
         e.target.value = '';
       }
       return;
@@ -1133,12 +1223,14 @@ export default function Subscriptions() {
           await processRows(rows);
         } finally {
           setIsImporting(false);
+          setImportProgress(null);
           e.target.value = '';
         }
       },
       error: () => {
         toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive' });
         setIsImporting(false);
+        setImportProgress(null);
         e.target.value = '';
       },
     });
@@ -1273,6 +1365,45 @@ export default function Subscriptions() {
     
     return 0;
   }) : [];
+
+  const visibleSubscriptionIds = React.useMemo(() => {
+    return (Array.isArray(filteredSubscriptions) ? filteredSubscriptions : [])
+      .map((s) => String((s as any)?._id ?? (s as any)?.id ?? '').trim())
+      .filter(Boolean);
+  }, [filteredSubscriptions]);
+
+  const selectedVisibleCount = React.useMemo(() => {
+    if (!visibleSubscriptionIds.length || !selectedSubscriptionIds.size) return 0;
+    let count = 0;
+    for (const id of visibleSubscriptionIds) {
+      if (selectedSubscriptionIds.has(id)) count++;
+    }
+    return count;
+  }, [visibleSubscriptionIds, selectedSubscriptionIds]);
+
+  const allVisibleSelected = visibleSubscriptionIds.length > 0 && selectedVisibleCount === visibleSubscriptionIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < visibleSubscriptionIds.length;
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedSubscriptionIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        visibleSubscriptionIds.forEach((id) => next.add(id));
+      } else {
+        visibleSubscriptionIds.forEach((id) => next.delete(id));
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectOne = (id: string, checked: boolean) => {
+    setSelectedSubscriptionIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
 
   // Category badge sizing: use the longest category label (clamped) so all category badges are the same width.
   // Use `width` (not `minWidth`) so it can shrink to fit the column and won't get clipped.
@@ -1748,11 +1879,31 @@ export default function Subscriptions() {
     <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
       {isImporting && (
         <div className="fixed inset-0 z-[12000] flex items-center justify-center bg-white/50 backdrop-blur-sm">
-          <div
-            className="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"
-            role="status"
-            aria-label="Importing"
-          />
+          <div className="w-[360px] max-w-[90vw] rounded-xl border border-gray-200 bg-white shadow-lg p-6">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-900">Importing…</div>
+              <div className="text-sm text-gray-600">
+                {importProgress && importProgress.total > 0
+                  ? `${Math.round((importProgress.processed / importProgress.total) * 100)}%`
+                  : '0%'}
+              </div>
+            </div>
+            <div className="mt-3">
+              <Progress
+                className="h-2"
+                value={
+                  importProgress && importProgress.total > 0
+                    ? (importProgress.processed / importProgress.total) * 100
+                    : 0
+                }
+              />
+              <div className="mt-2 text-xs text-gray-500">
+                {importProgress && importProgress.total > 0
+                  ? `${importProgress.processed} / ${importProgress.total} processed`
+                  : 'Preparing import…'}
+              </div>
+            </div>
+          </div>
         </div>
       )}
       <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
@@ -1816,6 +1967,17 @@ export default function Subscriptions() {
                 </Button>
               </motion.div>
             </Can>
+
+            {selectedSubscriptionIds.size > 0 && (
+              <Button
+                type="button"
+                onClick={() => setBulkDeleteConfirmOpen(true)}
+                className="h-10 rounded-lg bg-red-600 text-white hover:bg-red-700 border-0 font-semibold shadow-md hover:shadow-lg transition-all duration-200"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Selected ({selectedSubscriptionIds.size})
+              </Button>
+            )}
             
             {/* History button - second */}
             <Button
@@ -1893,6 +2055,29 @@ export default function Subscriptions() {
               </SelectContent>
             </Select>
           </div>
+
+          <AlertDialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+            <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete selected subscriptions?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will delete {selectedSubscriptionIds.size} subscription(s). This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="bg-white border border-gray-200 hover:bg-gray-50">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-600 text-white hover:bg-red-700"
+                  onClick={() => {
+                    const ids = Array.from(selectedSubscriptionIds);
+                    bulkDeleteMutation.mutate(ids);
+                  }}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         {/* Search + Filter - hidden when modal is open */}
@@ -1928,6 +2113,14 @@ export default function Subscriptions() {
             <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" className="table-fixed">
               <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                 <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-2 text-center text-xs font-bold text-white uppercase tracking-wide w-[48px]">
+                    <Checkbox
+                      aria-label="Select all visible subscriptions"
+                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                      onCheckedChange={(v) => toggleSelectAllVisible(!!v)}
+                      className="border-white data-[state=checked]:bg-white data-[state=checked]:text-indigo-700"
+                    />
+                  </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[300px]">
                     <button 
                       onClick={() => handleSort("serviceName")}
@@ -1996,6 +2189,19 @@ export default function Subscriptions() {
                       exit={{ opacity: 0 }}
                       transition={{ delay: 0.04 * index }}
                     >
+                      <TableCell className="px-2 py-3 w-[48px] text-center">
+                        {(() => {
+                          const rowId = String((subscription as any)?._id ?? (subscription as any)?.id ?? '').trim();
+                          if (!rowId) return null;
+                          return (
+                            <Checkbox
+                              aria-label={`Select ${subscription.serviceName}`}
+                              checked={selectedSubscriptionIds.has(rowId)}
+                              onCheckedChange={(v) => toggleSelectOne(rowId, !!v)}
+                            />
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell className="px-3 py-3 font-medium text-gray-800 w-[300px] max-w-[300px] overflow-hidden text-left">
                         <div>
                           <button

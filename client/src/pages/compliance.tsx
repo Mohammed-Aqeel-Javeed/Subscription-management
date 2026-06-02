@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { PlanLimitModal } from "@/components/modals/plan-limit-modal";
+import { getPlanLimitErrorInfo } from "@/lib/plan-limit";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Can } from "@/components/Can";
@@ -18,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { useSidebarSlot } from "@/context/SidebarSlotContext";
 import {
   AlertDialog,
@@ -708,7 +711,11 @@ export default function Compliance() {
 
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ processed: number; total: number } | null>(null);
   const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
+
+  const [selectedComplianceIds, setSelectedComplianceIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(() => {
     const sp = new URLSearchParams(location.search);
     return Boolean(sp.get('openToken') || sp.get('open') || sp.get('create') === '1');
@@ -1327,7 +1334,7 @@ export default function Compliance() {
         // Get logged-in user information from window.user
         const loggedInUser = (window as any).user;
         
-        // First try to get name directly from window.user (works for all roles: admin, super admin, etc.)
+        // First try to get name directly from window.user (works for all roles: admin, system admin, etc.)
         if (loggedInUser?.name) {
           setCurrentUserName(loggedInUser.name);
           return;
@@ -1435,6 +1442,9 @@ export default function Compliance() {
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const [planLimitOpen, setPlanLimitOpen] = useState(false);
+  const [planLimitMessage, setPlanLimitMessage] = useState("");
 
   // Add Compliance Category from dropdown (+ New)
   const [addComplianceCategoryOpen, setAddComplianceCategoryOpen] = useState(false);
@@ -2540,6 +2550,13 @@ export default function Compliance() {
         description: "Compliance item deleted successfully",
         variant: "destructive",
       });
+
+      setSelectedComplianceIds((prev) => {
+        if (!prev.size) return prev;
+        const next = new Set(prev);
+        next.delete(String(deletedId));
+        return next;
+      });
     },
     onError: (error: any) => {
       toast({
@@ -2548,6 +2565,53 @@ export default function Compliance() {
         variant: "destructive",
       });
     }
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      let success = 0;
+      let failed = 0;
+
+      for (const id of ids) {
+        try {
+          const res = await apiRequest("DELETE", `/api/compliance/${id}`);
+          if (!res.ok) throw new Error(await res.text());
+          success++;
+        } catch {
+          failed++;
+        }
+      }
+
+      return { success, failed };
+    },
+    onSuccess: ({ success, failed }, ids) => {
+      const deleted = new Set(ids.map((x) => String(x)));
+      queryClient.setQueryData(["compliance"], (oldData: ComplianceItem[]) =>
+        Array.isArray(oldData) ? oldData.filter((item: any) => !deleted.has(String(item?._id ?? item?.id ?? ''))) : []
+      );
+      queryClient.setQueryData(["/api/compliance/list"], (oldData: ComplianceItem[]) =>
+        Array.isArray(oldData) ? oldData.filter((item: any) => !deleted.has(String(item?._id ?? item?.id ?? ''))) : []
+      );
+      queryClient.invalidateQueries({ queryKey: ["compliance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/compliance/list"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/compliance"] });
+
+      setSelectedComplianceIds(new Set());
+      setBulkDeleteConfirmOpen(false);
+
+      toast({
+        title: failed > 0 ? "Bulk delete finished with errors" : "Deleted",
+        description: failed > 0 ? `Deleted ${success}. Failed ${failed}.` : `Deleted ${success} compliance item(s).`,
+        variant: "destructive",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to bulk delete compliance items",
+        variant: "destructive",
+      });
+    },
   });
   
   const confirmDelete = () => {
@@ -2926,7 +2990,11 @@ export default function Compliance() {
       return;
     }
 
-    let success = 0; let failed = 0;
+    setImportProgress({ processed: 0, total: rows.length });
+
+    let success = 0;
+    let failed = 0;
+    let processed = 0;
     for (const row of rows) {
       try {
         const payload: any = {
@@ -2953,6 +3021,9 @@ export default function Compliance() {
         success++;
       } catch {
         failed++;
+      } finally {
+        processed++;
+        setImportProgress((prev) => (prev ? { ...prev, processed } : { processed, total: rows.length }));
       }
     }
     queryClient.invalidateQueries({ queryKey: ['compliance'] });
@@ -2974,6 +3045,7 @@ export default function Compliance() {
     };
 
     setIsImporting(true);
+    setImportProgress({ processed: 0, total: 0 });
 
     try {
       if (file.name.toLowerCase().endsWith('.xlsx')) {
@@ -3006,6 +3078,7 @@ export default function Compliance() {
 
         await importRows(parsedRows, clearFile);
         setIsImporting(false);
+        setImportProgress(null);
         return;
       }
 
@@ -3018,18 +3091,21 @@ export default function Compliance() {
             await importRows(rows, clearFile);
           } finally {
             setIsImporting(false);
+            setImportProgress(null);
           }
         },
         error: () => {
           toast({ title: 'Import error', description: 'Failed to parse file', variant: 'destructive'});
           clearFile();
           setIsImporting(false);
+          setImportProgress(null);
         }
       });
     } catch {
       toast({ title: 'Import error', description: 'Failed to import file', variant: 'destructive'});
       clearFile();
       setIsImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -3229,15 +3305,76 @@ export default function Compliance() {
     }
   }
   
+  const visibleComplianceIds = useMemo(() => {
+    return (Array.isArray(filteredItems) ? filteredItems : [])
+      .map((it: any) => String(it?._id ?? it?.id ?? '').trim())
+      .filter(Boolean);
+  }, [filteredItems]);
+
+  const selectedVisibleCount = useMemo(() => {
+    if (!visibleComplianceIds.length || !selectedComplianceIds.size) return 0;
+    let count = 0;
+    for (const id of visibleComplianceIds) {
+      if (selectedComplianceIds.has(id)) count++;
+    }
+    return count;
+  }, [visibleComplianceIds, selectedComplianceIds]);
+
+  const allVisibleSelected = visibleComplianceIds.length > 0 && selectedVisibleCount === visibleComplianceIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < visibleComplianceIds.length;
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedComplianceIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        visibleComplianceIds.forEach((id) => next.add(id));
+      } else {
+        visibleComplianceIds.forEach((id) => next.delete(id));
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectOne = (id: string, checked: boolean) => {
+    setSelectedComplianceIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
   return (
-    <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
+    <>
+      <PlanLimitModal open={planLimitOpen} onOpenChange={setPlanLimitOpen} message={planLimitMessage} />
+      <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
       {isImporting && (
         <div className="fixed inset-0 z-[12000] flex items-center justify-center bg-white/50 backdrop-blur-sm">
-          <div
-            className="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"
-            role="status"
-            aria-label="Importing"
-          />
+          <div className="w-[360px] max-w-[90vw] rounded-xl border border-gray-200 bg-white shadow-lg p-6">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-900">Importing…</div>
+              <div className="text-sm text-gray-600">
+                {importProgress && importProgress.total > 0
+                  ? `${Math.round((importProgress.processed / importProgress.total) * 100)}%`
+                  : '0%'}
+              </div>
+            </div>
+            <div className="mt-3">
+              <Progress
+                className="h-2"
+                value={
+                  importProgress && importProgress.total > 0
+                    ? (importProgress.processed / importProgress.total) * 100
+                    : 0
+                }
+              />
+              <div className="mt-2 text-xs text-gray-500">
+                {importProgress && importProgress.total > 0
+                  ? `${importProgress.processed} / ${importProgress.total} processed`
+                  : 'Preparing import…'}
+              </div>
+            </div>
+          </div>
         </div>
       )}
       <div className="h-full w-full px-6 py-8 flex flex-col min-h-0">
@@ -3343,6 +3480,17 @@ export default function Compliance() {
                 </motion.div>
               </Can>
 
+              {selectedComplianceIds.size > 0 && (
+                <Button
+                  type="button"
+                  onClick={() => setBulkDeleteConfirmOpen(true)}
+                  className="h-10 rounded-lg bg-red-600 text-white hover:bg-red-700 border-0 font-semibold shadow-md hover:shadow-lg transition-all duration-200"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Selected ({selectedComplianceIds.size})
+                </Button>
+              )}
+
               {/* Audit Log button - second */}
               <Button
                 variant="outline"
@@ -3389,6 +3537,29 @@ export default function Compliance() {
             </div>
           </div>
 
+          <AlertDialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+            <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete selected compliance items?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will delete {selectedComplianceIds.size} compliance item(s). This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="bg-white border border-gray-200 hover:bg-gray-50">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-600 text-white hover:bg-red-700"
+                  onClick={() => {
+                    const ids = Array.from(selectedComplianceIds);
+                    bulkDeleteMutation.mutate(ids);
+                  }}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
         {/* ── Search + Filter Bar ── */}
         <div className="mb-4 shrink-0">
             <div className="flex flex-wrap items-center gap-3">
@@ -3419,6 +3590,14 @@ export default function Compliance() {
             <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" className="w-full table-fixed">
               <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                 <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-2 text-center text-xs font-bold text-white uppercase tracking-wide w-[48px]">
+                    <Checkbox
+                      aria-label="Select all visible compliance items"
+                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                      onCheckedChange={(v) => toggleSelectAllVisible(!!v)}
+                      className="border-white data-[state=checked]:bg-white data-[state=checked]:text-indigo-700"
+                    />
+                  </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[260px]">
                     <button
                       onClick={() => handleSort("policy")}
@@ -3476,14 +3655,14 @@ export default function Compliance() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i} className="border-b border-gray-200">
-                      <TableCell colSpan={7} className="px-6 py-4">
+                      <TableCell colSpan={8} className="px-6 py-4">
                         <Skeleton className="h-10 w-full" />
                       </TableCell>
                     </TableRow>
                   ))
                 ) : filteredItems.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                       <div className="flex flex-col items-center justify-center">
                         <AlertCircle className="h-10 w-10 text-gray-300 mb-2" />
                         <p className="text-lg font-medium text-gray-600">No compliance records found</p>
@@ -3507,6 +3686,19 @@ export default function Compliance() {
                       exit={{ opacity: 0 }}
                       transition={{ delay: 0.04 * index }}
                     >
+                      <TableCell className="px-2 py-3 w-[48px] text-center">
+                        {(() => {
+                          const rowId = String((item as any)?._id ?? (item as any)?.id ?? '').trim();
+                          if (!rowId) return null;
+                          return (
+                            <Checkbox
+                              aria-label={`Select ${String(item.policy || 'compliance item')}`}
+                              checked={selectedComplianceIds.has(rowId)}
+                              onCheckedChange={(v) => toggleSelectOne(rowId, !!v)}
+                            />
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell className="px-3 py-3 font-medium text-gray-800 w-[260px] min-w-0 overflow-hidden text-left">
                         <button
                           onClick={() => {
@@ -5350,11 +5542,17 @@ export default function Compliance() {
                   setModalOpen(false);
                   setEditIndex(null);
                   } catch (error: any) {
-                    toast({
-                      title: "Error",
-                      description: error?.message || "Failed to save compliance",
-                      variant: "destructive",
-                    });
+                    const planLimit = getPlanLimitErrorInfo(error);
+                    if (planLimit) {
+                      setPlanLimitMessage(planLimit.message);
+                      setPlanLimitOpen(true);
+                    } else {
+                      toast({
+                        title: "Error",
+                        description: error?.message || "Failed to save compliance",
+                        variant: "destructive",
+                      });
+                    }
                   } finally {
                     if (isSubmissionAction) {
                       setIsSubmittingComplianceSubmission(false);
@@ -6672,6 +6870,7 @@ export default function Compliance() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </>
   );
 }
