@@ -1,6 +1,6 @@
 ﻿import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
@@ -159,6 +159,8 @@ function formatCost(lic: License): string {
 
 export default function UpcomingRenewalsReport() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
 
   const { data: licenses = [], isLoading } = useQuery<License[]>({
     queryKey: ["/api/licenses"],
@@ -213,7 +215,7 @@ export default function UpcomingRenewalsReport() {
 
         <Button
           type="button"
-          onClick={() => navigate("/reports")}
+          onClick={() => navigate(tabParam ? `/reports?tab=${tabParam}` : "/reports")}
           className="bg-gradient-to-br from-indigo-500 to-blue-600 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
         >
           <ArrowLeft />

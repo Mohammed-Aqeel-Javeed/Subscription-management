@@ -126,6 +126,8 @@ function prettyFieldLabel(key: string) {
       return "Owner";
     case "ownerEmail":
       return "Owner Email";
+    case "users":
+      return "Users";
     case "paymentMethod":
       return "Payment Method";
     case "website":
@@ -156,9 +158,11 @@ function prettyFieldLabel(key: string) {
       return "Draft";
     case "startDate":
       return "Start Date";
+    case "firstPurchaseDate":
+      return "First Purchase Date";
     case "currentCycleStart":
     case "CurrentCycleStart":
-      return "CurrentCycleStart";
+      return "Current Cycle Start";
     case "nextRenewal":
       return "End Date";
     case "endDate":
@@ -182,7 +186,7 @@ function prettyFieldLabel(key: string) {
   }
 }
 
-function getHistoryKeysToCompare(record: HistoryRecord) {
+function getHistoryKeysToCompare(record: HistoryRecord, isNamedHistory?: boolean) {
   const newData = record.updatedFields || {};
 
   // Keep a stable, human-friendly ordering for common fields.
@@ -195,6 +199,7 @@ function getHistoryKeysToCompare(record: HistoryRecord) {
     "department",
     "ownerName",
     "owner",
+    "users",
     "paymentMethod",
     "billingCycle",
     "paymentFrequency",
@@ -221,7 +226,6 @@ function getHistoryKeysToCompare(record: HistoryRecord) {
   const excludedKeys = new Set([
     "_id",
     "ownerEmail",
-    "users",
     "id",
     "subscriptionId",
     "tenantId",
@@ -237,6 +241,8 @@ function getHistoryKeysToCompare(record: HistoryRecord) {
     "isDraft", // Exclude draft status from history display
   ]);
 
+  const allowedInNamedHistory = new Set(["owner", "ownerName", "amount", "users"]);
+
   const ordered = [...preferredOrder, ...Object.keys(newData)];
   const unique: string[] = [];
   const seen = new Set<string>();
@@ -244,6 +250,10 @@ function getHistoryKeysToCompare(record: HistoryRecord) {
     if (!k) continue;
     if (excludedKeys.has(k)) continue;
     if (!(k in newData)) continue;
+    
+    // When viewing named history, restrict shown fields to Owner, Amount, Users
+    if (isNamedHistory && !allowedInNamedHistory.has(k)) continue;
+    
     if (seen.has(k)) continue;
     seen.add(k);
     unique.push(k);
@@ -362,24 +372,25 @@ function truncateText(value: string | undefined | null, maxChars: number) {
   return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars)).trimEnd()}...` : text;
 }
 
-function truncateMultiline(value: string | undefined | null, maxCharsPerLine: number) {
-  const text = String(value ?? '');
-  if (!text) return '';
-  const lines = text.split('\n');
-  return lines.map((l) => truncateText(l, maxCharsPerLine)).join('\n');
-}
-
-function hasActualChanges(record: HistoryRecord): boolean {
+function hasActualChanges(record: HistoryRecord, isNamedHistory?: boolean): boolean {
   const action = String(record.action || "").toLowerCase();
+  
+  // If named history restrict out renewals completely
+  if (isNamedHistory && (action === "renewed" || inferDisplayAction(record) === "renewed")) {
+    return false;
+  }
   
   // Always show create and delete actions
   if (action === "create" || action === "created" || action === "delete" || action === "deleted") {
-    return true;
+    // If user strictly requested only Owner, Amount, Users: we could hide these but creates are usually needed.
+    // However, if we hide them, they won't see "Subscription created" in the Named History view.
+    // Let's hide it if `isNamedHistory` is true to match strict requirements. 
+    return !isNamedHistory;
   }
 
   const oldData = record.data || {};
   const newData = record.updatedFields || {};
-  const fieldsToCompare = getHistoryKeysToCompare(record);
+  const fieldsToCompare = getHistoryKeysToCompare(record, isNamedHistory);
 
   const numericFields = new Set([
     "amount",
@@ -420,22 +431,28 @@ function hasActualChanges(record: HistoryRecord): boolean {
   return false;
 }
 
-function buildChangesText(record: HistoryRecord) {
+function buildChangesText(record: HistoryRecord, isNamedHistory?: boolean) {
   const action = String(record.action || "").toLowerCase();
   const oldData = record.data || {};
   const newData = record.updatedFields || {};
 
+  const looksLikeJsonArrayString = (value: unknown) => {
+    if (typeof value !== 'string') return false;
+    const s = value.trim();
+    return s.startsWith('[') && s.endsWith(']');
+  };
+
   const reason = record.changeReason ? `Reason: ${record.changeReason}` : "";
 
   if (action === "create" || action === "created") {
-    return ["Created subscription", reason].filter(Boolean).join("\n");
+    return isNamedHistory ? "" : ["Subscription created", reason].filter(Boolean).join("\n");
   }
 
   if (action === "delete" || action === "deleted") {
-    return ["Subscription Deleted", reason].filter(Boolean).join("\n");
+    return isNamedHistory ? "" : ["Subscription deleted", reason].filter(Boolean).join("\n");
   }
 
-  const fieldsToCompare = getHistoryKeysToCompare(record);
+  const fieldsToCompare = getHistoryKeysToCompare(record, isNamedHistory);
 
   const numericFields = new Set([
     "amount",
@@ -462,8 +479,7 @@ function buildChangesText(record: HistoryRecord) {
     const afterStart = (newData as any)?.currentCycleStart ?? (newData as any)?.CurrentCycleStart ?? (newData as any)?.startDate;
     const afterEnd = (newData as any)?.nextRenewal ?? (newData as any)?.endDate;
 
-    const summary = `${isAutoRenewal ? "Auto Renewed" : "Renewed"}: ${formatDateDdMmYyyy(beforeStart)} → ${formatDateDdMmYyyy(afterStart)} | ${formatDateDdMmYyyy(beforeEnd)} → ${formatDateDdMmYyyy(afterEnd)}`;
-    // Keep the reason line if present.
+    const summary = `${isAutoRenewal ? "Auto-renewed" : "Renewed"}: ${formatDateDdMmYyyy(beforeStart)} → ${formatDateDdMmYyyy(afterStart)} | End date: ${formatDateDdMmYyyy(beforeEnd)} → ${formatDateDdMmYyyy(afterEnd)}`;
     return [summary, reason].filter(Boolean).join("\n");
   }
 
@@ -477,6 +493,16 @@ function buildChangesText(record: HistoryRecord) {
     
     const before = oldData[key];
     const after = newData[key];
+
+    // Avoid showing both Departments and Department fields
+    const keyLowerPre = String(key).toLowerCase();
+    if (keyLowerPre === 'department') {
+      const hasDepartmentsKey = Object.prototype.hasOwnProperty.call(newData, 'departments') || Object.prototype.hasOwnProperty.call(oldData, 'departments');
+      const departmentLooksArray = looksLikeJsonArrayString(before) || looksLikeJsonArrayString(after);
+      if (hasDepartmentsKey && departmentLooksArray) {
+        continue;
+      }
+    }
 
     const isDateField = dateFields.has(key);
     const isNotesField = key === "notes";
@@ -503,7 +529,6 @@ function buildChangesText(record: HistoryRecord) {
           const afterRounded = Math.round(afterNum * 100) / 100;
           return beforeRounded !== afterRounded;
         }
-        // If we can't parse as numbers, fall back to text comparison.
         return beforeText !== afterText;
       }
       return beforeText !== afterText;
@@ -511,7 +536,7 @@ function buildChangesText(record: HistoryRecord) {
 
     if (!hasChanged) continue;
 
-    // Hide notes/documents changes in the UI; show a generic message instead.
+    // Hide notes/documents changes in the UI
     if (isSuppressedField) {
       suppressedChange = true;
       continue;
@@ -525,14 +550,13 @@ function buildChangesText(record: HistoryRecord) {
         const afterRounded = Math.round(afterNum * 100) / 100;
         if (beforeRounded === afterRounded) continue;
       } else {
-        // If we can't parse as numbers, fall back to text comparison.
         if (beforeText === afterText) continue;
       }
     } else {
       if (beforeText === afterText) continue;
     }
     
-    // Ensure truncation for display (extra safety for long values)
+    // Ensure truncation for display
     if (!isDateField && beforeText.length > 30) {
       beforeText = beforeText.substring(0, 27) + "...";
     }
@@ -663,27 +687,51 @@ export default function SubscriptionHistory() {
 
   const queryClient = useQueryClient();
 
+  const pageSize = 50;
+  const [page, setPage] = useState(1);
+  const [expandedChangeRows, setExpandedChangeRows] = useState<Record<string, boolean>>({});
+
   const effectiveSubscriptionId = resolvedSubscriptionId;
   const endpoint = effectiveSubscriptionId ? `/api/history/${effectiveSubscriptionId}` : `/api/history/list`;
   const queryKey = effectiveSubscriptionId
-    ? ["/api/history", "subscription", effectiveSubscriptionId]
-    : ["/api/history", "list"];
+    ? ["/api/history", "subscription", effectiveSubscriptionId, page, pageSize]
+    : ["/api/history", "list", page, pageSize];
 
-  const { data: history = [], isLoading, refetch } = useQuery<HistoryRecord[]>({
+  type HistoryPageResponse = {
+    items: HistoryRecord[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+
+  const { data: historyPage, isLoading, isFetching, refetch } = useQuery<HistoryPageResponse>({
     queryKey,
     staleTime: 0,
     refetchOnMount: "always",
     queryFn: async () => {
       try {
-        const res = await apiRequest("GET", `${endpoint}?limit=2000`);
-        const json = await res.json().catch(() => []);
-        return Array.isArray(json) ? json : [];
+        const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize) }).toString();
+        const res = await apiRequest("GET", `${endpoint}?${qs}`);
+        const json = await res.json().catch(() => null);
+        if (json && typeof json === 'object' && Array.isArray((json as any).items)) {
+          return json as HistoryPageResponse;
+        }
+        const items = Array.isArray(json) ? (json as HistoryRecord[]) : [];
+        return { items, total: items.length, page: 1, pageSize: items.length, totalPages: 1 };
       } catch (e) {
         console.error("Failed to load history:", e);
-        return [];
+        return { items: [], total: 0, page: 1, pageSize, totalPages: 1 };
       }
     },
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [effectiveSubscriptionId]);
+
+  const historyItems = historyPage?.items ?? [];
+  const totalPages = historyPage?.totalPages ?? 1;
 
   const { data: subscriptions = [] } = useQuery<Subscription[]>({
     queryKey: ["/api/subscriptions"],
@@ -737,10 +785,11 @@ export default function SubscriptionHistory() {
   }, [queryClient, refetch]);
 
   const sortedHistory = useMemo(() => {
-    const items = Array.isArray(history) ? [...history] : [];
+    const items = Array.isArray(historyItems) ? [...historyItems] : [];
+    const isNamed = Boolean(effectiveSubscriptionId);
     
     // Filter out records that have no actual changes
-    const filtered = items.filter(hasActualChanges);
+    const filtered = items.filter(item => hasActualChanges(item, isNamed));
     
     filtered.sort((a, b) => {
       const aStamp = a.loggedAt || a.timestamp;
@@ -753,7 +802,7 @@ export default function SubscriptionHistory() {
       return String(b._id || "").localeCompare(String(a._id || ""));
     });
     return filtered;
-  }, [history]);
+  }, [historyItems]);
 
   const firstName =
     (sortedHistory?.[0]?.updatedFields?.serviceName as string) ||
@@ -762,7 +811,7 @@ export default function SubscriptionHistory() {
 
   const headerName = subscriptionNameParam || firstName;
   const isNamedHistory = Boolean(effectiveSubscriptionId);
-  const headerTitle = isNamedHistory ? `${headerName} History Log` : "Subscription History Log";
+  const headerTitle = isNamedHistory ? `${headerName} History Log` : "Audit Trail";
   const displayedHeaderName = isNamedHistory ? (truncateText(String(headerName), 45) || String(headerName)) : "";
 
   return (
@@ -772,6 +821,16 @@ export default function SubscriptionHistory() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-4">
+              {isNamedHistory && (
+                <Button
+                  onClick={handleBackToSubscriptions}
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-full bg-blue-500/20 hover:bg-blue-500/30 backdrop-blur-sm border border-blue-300/50 shadow-sm transition-all duration-200 hover:scale-105"
+                >
+                  <ArrowLeft className="h-5 w-5 text-blue-600" />
+                </Button>
+              )}
               <div className="h-12 w-12 flex items-center justify-center">
                 <History className="h-7 w-7 text-indigo-600" />
               </div>
@@ -792,32 +851,26 @@ export default function SubscriptionHistory() {
                 {tokenError ? <p className="text-sm text-red-600 mt-1">{tokenError}</p> : null}
               </div>
             </div>
-
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={handleBackToSubscriptions}
-                variant="outline"
-                className="flex items-center gap-2 bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Subscriptions
-              </Button>
-            </div>
           </div>
         </div>
 
         {/* Log Table */}
         <Card className="flex-1 overflow-hidden flex flex-col border-slate-200 shadow-lg bg-white">
           <div className="flex-1 overflow-auto relative">
-            {isLoading ? (
+            {isLoading && !historyPage ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
                   <p className="text-slate-600">Loading logs...</p>
                 </div>
               </div>
-            ) : history && history.length > 0 ? (
+            ) : sortedHistory.length > 0 ? (
               <div className="h-full overflow-auto">
+                {isFetching && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-blue-100 z-50">
+                    <div className="h-full bg-blue-600 animate-pulse"></div>
+                  </div>
+                )}
                 <table className="w-full table-fixed border-collapse">
                   <thead className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                     <tr className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
@@ -825,8 +878,8 @@ export default function SubscriptionHistory() {
                         <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">Subscription Name</th>
                       )}
                       <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[180px]">Changed By</th>
-                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[400px]">Changes</th>
-                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[140px]">Updated On</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[500px]">Change Summary</th>
+                      <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[180px]">Updated On</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
@@ -846,8 +899,14 @@ export default function SubscriptionHistory() {
                         item?.data?.ownerName ||
                         item?.data?.owner ||
                         "System";
-                      const changesText = buildChangesText(item);
-                      const displayChanges = truncateMultiline(changesText, 90);
+                      const changesText = buildChangesText(item, isNamedHistory);
+                      const rowKey = String(item._id || `${stampToShow ?? ""}-${index}`);
+                      const fullChanges = String(changesText ?? "").trim();
+                      const changeLines = fullChanges.split(/\r?\n/).filter((l) => l.trim() !== "");
+                      const firstLine = changeLines[0] ?? "";
+                      const summary = truncateText(firstLine, 160);
+                      const hasMore = changeLines.length > 1 || summary !== firstLine;
+                      const isExpanded = Boolean(expandedChangeRows[rowKey]);
 
                       return (
                         <tr
@@ -864,15 +923,31 @@ export default function SubscriptionHistory() {
                           <td className="px-4 py-3 text-sm text-gray-800 w-[180px] max-w-[180px]">
                             <div className="truncate" title={changedBy}>{changedBy}</div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-700 w-[400px] max-w-[400px]">
-                              <div className="whitespace-pre-wrap break-words leading-relaxed" title={changesText || "No changes recorded"}>
-                                {displayChanges || "No changes recorded"}
+                          <td className="px-4 py-3 text-sm text-gray-700 w-[500px] max-w-[500px]">
+                            <div className="flex items-start gap-2">
+                              <div className="whitespace-pre-wrap break-words leading-relaxed flex-1 min-w-0" title={fullChanges || "No changes recorded"}>
+                                {(isExpanded ? fullChanges : summary) || "No changes recorded"}
+                              </div>
+                              {hasMore && (
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-indigo-600 hover:text-indigo-700 whitespace-nowrap flex-shrink-0"
+                                  onClick={() =>
+                                    setExpandedChangeRows((prev) => ({
+                                      ...prev,
+                                      [rowKey]: !Boolean(prev[rowKey]),
+                                    }))
+                                  }
+                                >
+                                  {isExpanded ? "Show Less" : "Show More"}
+                                </button>
+                              )}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">
-                            <div className="flex flex-col">
+                          <td className="px-4 py-3 text-sm text-gray-500 w-[180px] min-w-[180px]">
+                            <div className="whitespace-nowrap">
                               <span className="font-medium">{timestamp.date}</span>
-                              {timestamp.time && <span className="text-xs text-gray-400">{timestamp.time}</span>}
+                              {timestamp.time && <span className="text-xs text-gray-400 ml-2">{timestamp.time}</span>}
                             </div>
                           </td>
                         </tr>
@@ -901,6 +976,47 @@ export default function SubscriptionHistory() {
               </div>
             )}
           </div>
+
+          {totalPages > 1 ? (
+            <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+              <div className="text-sm text-slate-600">
+                Page {page} of {totalPages}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                >
+                  Previous
+                </Button>
+                {[1, 2, 3]
+                  .filter((p) => p <= totalPages)
+                  .map((p) => (
+                    <Button
+                      key={p}
+                      type="button"
+                      variant={p === page ? "default" : "outline"}
+                      className="h-9 w-10 px-0"
+                      onClick={() => setPage(p)}
+                    >
+                      {p}
+                    </Button>
+                  ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </Card>
       </div>
     </div>

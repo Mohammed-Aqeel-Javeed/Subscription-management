@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
-  BarChart3,
   Clock,
   CheckCircle2,
   CalendarClock,
@@ -529,26 +528,6 @@ export default function CalendarPage() {
     return filteredTasks.filter((t) => t.date >= monthStart && t.date <= monthEnd);
   }, [filteredTasks, monthStart, monthEnd]);
 
-  const monthSummary = React.useMemo(() => {
-    const today = startOfDay(new Date());
-    const total = monthTasks.length;
-
-    let safe = 0;
-    let dueSoon = 0;
-    let critical = 0;
-    let overdue = 0;
-
-    monthTasks.forEach((t) => {
-      const diff = daysBetween(t.date, today);
-      if (diff < 0) overdue += 1;
-      else if (diff <= 2) critical += 1;
-      else if (diff <= 7) dueSoon += 1;
-      else safe += 1;
-    });
-
-    return { total, safe, dueSoon, critical, overdue };
-  }, [monthTasks]);
-
   const upcoming = React.useMemo(() => {
     const today = startOfDay(new Date());
     const horizon = endOfDay(new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000));
@@ -943,8 +922,9 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8">
-          <div>
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Left side: Controls + Calendar */}
+          <div className="flex-1">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1">
                 <button
@@ -1052,7 +1032,7 @@ export default function CalendarPage() {
                   <div className="bg-white">
                     <div className="grid grid-cols-7 border-b border-slate-200">
                       {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((d) => (
-                        <div key={d} className="px-3 py-3 text-xs font-semibold text-slate-500">
+                        <div key={d} className="px-3 py-2.5 text-xs font-semibold text-slate-500">
                           {d}
                         </div>
                       ))}
@@ -1068,12 +1048,12 @@ export default function CalendarPage() {
                         return (
                           <div
                             key={key}
-                            className={`min-h-[120px] border-b border-r border-slate-200 p-2 ${
+                            className={`min-h-[100px] border-b border-r border-slate-200 p-1.5 ${
                               !inMonth ? "bg-slate-50" : "bg-white"
                             }`}
                           >
                             <div
-                              className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-sm font-semibold ${
+                              className={`inline-flex h-6 w-6 items-center justify-center rounded-lg text-xs font-semibold ${
                                 isToday && inMonth
                                   ? "bg-purple-600 text-white"
                                   : inMonth
@@ -1083,26 +1063,26 @@ export default function CalendarPage() {
                             >
                               {cell.date.getDate()}
                             </div>
-                            <div className="mt-1 space-y-1">
+                            <div className="mt-0.5 space-y-0.5">
                               {list.slice(0, 2).map((t) => (
                                 <button
                                   key={t.id}
                                   type="button"
-                                  className={`flex w-full items-center gap-1 text-left text-xs px-2 py-1 rounded-full ${getTaskPillClass(t.category)}`}
+                                  className={`flex w-full items-center gap-1 text-left text-[10px] px-1.5 py-0.5 rounded-full ${getTaskPillClass(t.category)}`}
                                   title={t.title}
                                   onClick={() => openDetails(t)}
                                 >
-                                  <span className={`h-1.5 w-1.5 rounded-full ${getUpcomingAccentClass(t.category)}`} />
+                                  <span className={`h-1 w-1 rounded-full ${getUpcomingAccentClass(t.category)}`} />
                                   <span className="min-w-0 flex-1 truncate">{t.title}</span>
                                 </button>
                               ))}
                               {list.length > 2 && (
                                 <button
                                   type="button"
-                                  className="text-[11px] text-slate-500 hover:text-slate-700"
+                                  className="text-[10px] text-slate-500 hover:text-slate-700 pl-1"
                                   onClick={() => openDayList(cell.date, list)}
                                 >
-                                  +{list.length - 2} more
+                                  +{list.length - 2}
                                 </button>
                               )}
                             </div>
@@ -1146,54 +1126,9 @@ export default function CalendarPage() {
             </Card>
           </div>
 
-          <div className="space-y-6">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold text-slate-900 flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4 text-slate-600" />
-                    Month Summary
-                  </span>
-                  <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full">
-                    {cursor.toLocaleString("en-US", { month: "short", year: "numeric" })}
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <span className="h-2 w-2 rounded-full bg-purple-500" /> Total items
-                  </div>
-                  <div className="font-semibold text-slate-900">{monthSummary.total}</div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" /> Safe (&gt;7 days)
-                  </div>
-                  <div className="font-semibold text-emerald-600">{monthSummary.safe}</div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <span className="h-2 w-2 rounded-full bg-amber-500" /> Due Soon (3-7d)
-                  </div>
-                  <div className="font-semibold text-amber-600">{monthSummary.dueSoon}</div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <span className="h-2 w-2 rounded-full bg-red-500" /> Critical (0-2d)
-                  </div>
-                  <div className="font-semibold text-red-600">{monthSummary.critical}</div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 text-slate-700">
-                    <span className="h-2 w-2 rounded-full bg-red-800" /> Overdue
-                  </div>
-                  <div className="font-semibold text-red-800">{monthSummary.overdue}</div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
+          {/* Right side: Upcoming only */}
+          <div className="w-full lg:w-[320px]">
+            <Card className="h-full">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-semibold text-slate-900 flex items-center justify-between">
                   <span className="flex items-center gap-2">
@@ -1205,7 +1140,7 @@ export default function CalendarPage() {
                   </span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-2.5">
                 {isLoading ? (
                   <div className="space-y-2">
                     <Skeleton className="h-14 w-full" />
@@ -1214,33 +1149,33 @@ export default function CalendarPage() {
                 ) : upcoming.length === 0 ? (
                   <div className="text-sm text-slate-500">No upcoming tasks in the next 30 days.</div>
                 ) : (
-                  upcoming.slice(0, 4).map((t) => {
+                  upcoming.slice(0, 5).map((t) => {
                     const today = startOfDay(new Date());
                     const diff = daysBetween(t.date, today);
                     const rightText = diff === 0 ? "Today" : `${diff}d`;
 
                     return (
-                      <div key={t.id} className="flex items-stretch gap-3">
-                        <div className={`w-1.5 rounded-full ${getUpcomingAccentClass(t.category)}`} />
-                        <div className="flex-1 min-w-0 border border-slate-200 rounded-xl p-3 bg-white">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
+                      <div key={t.id} className="flex items-stretch gap-2">
+                        <div className={`w-1 rounded-full ${getUpcomingAccentClass(t.category)}`} />
+                        <div className="flex-1 min-w-0 border border-slate-200 rounded-lg p-2.5 bg-white hover:bg-slate-50 cursor-pointer" onClick={() => openDetails(t)}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
                               <div className="text-sm font-semibold text-slate-900 truncate" title={t.title}>
                                 {t.title}
                               </div>
-                              <div className="mt-1 flex items-center gap-2">
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${getTaskPillClass(t.category)}`}>
+                              <div className="mt-1 flex items-center gap-1.5">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${getTaskPillClass(t.category)}`}>
                                   {t.category === "subscriptions"
-                                    ? "Subscriptions"
+                                    ? "Subscription"
                                     : t.category === "compliance"
                                       ? "Compliance"
-                                      : "Renewals"}
+                                      : "Renewal"}
                                 </span>
-                                {t.statusText ? <span className="text-xs text-slate-500">{t.statusText}</span> : null}
+                                {t.statusText && <span className="text-[10px] text-slate-500 truncate">{t.statusText}</span>}
                               </div>
                             </div>
-                            <div className="text-right whitespace-nowrap">
-                              <div className="text-xs text-slate-500">{formatShortMonthDay(t.date)}</div>
+                            <div className="text-right whitespace-nowrap shrink-0">
+                              <div className="text-[10px] text-slate-500">{formatShortMonthDay(t.date)}</div>
                               <div className={`text-xs font-semibold ${diff === 0 ? "text-red-600" : "text-slate-700"}`}>{rightText}</div>
                             </div>
                           </div>

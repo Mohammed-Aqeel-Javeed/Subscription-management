@@ -1309,10 +1309,38 @@ export default function Subscriptions() {
   }).sort((a, b) => {
     // Apply sorting if a field is selected
     if (!sortField) {
-      // Default: Sort by latest saved first (using createdAt or updatedAt if available)
+      // Default: Show Active subscriptions first (sorted by amount), then Cancelled, then Draft
+      const getStatusPriority = (sub: any) => {
+        const status = String(sub?.status ?? '').toLowerCase();
+        if (status === 'active') return 1;
+        if (status === 'cancelled') return 2;
+        if (status === 'draft') return 3;
+        return 4; // Any other status
+      };
+
+      const aPriority = getStatusPriority(a);
+      const bPriority = getStatusPriority(b);
+      
+      // First sort by status priority
+      if (aPriority !== bPriority) return aPriority - bPriority;
+
+      // Within the same status, sort by highest amount first
+      const parseAmount = (sub: any) => {
+        const raw = sub?.lcyAmount ?? sub?.totalAmount ?? sub?.amount;
+        if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0;
+        const s = String(raw ?? '').replace(/,/g, '').trim();
+        const n = s ? Number(s) : 0;
+        return Number.isFinite(n) ? n : 0;
+      };
+
+      const aAmt = parseAmount(a);
+      const bAmt = parseAmount(b);
+      if (bAmt !== aAmt) return bAmt - aAmt;
+
+      // Tie-breaker: latest saved first
       const aTime = new Date((a as any).updatedAt || (a as any).createdAt || 0).getTime();
       const bTime = new Date((b as any).updatedAt || (b as any).createdAt || 0).getTime();
-      return bTime - aTime; // Descending (newest first)
+      return bTime - aTime;
     }
     
     if (sortField === "serviceName") {
@@ -1978,48 +2006,6 @@ export default function Subscriptions() {
                 Delete Selected ({selectedSubscriptionIds.size})
               </Button>
             )}
-            
-            {/* History button - second */}
-            <Button
-              variant="outline"
-              onMouseEnter={() => {
-                queryClient.prefetchQuery({
-                  queryKey: ["history", "list", 200],
-                  queryFn: async () => {
-                    const res = await fetch(`/api/history/list?limit=200`, {
-                      method: "GET",
-                      credentials: "include",
-                      headers: { "Content-Type": "application/json" },
-                    });
-                    if (!res.ok) return [];
-                    const json = await res.json();
-                    return Array.isArray(json) ? json : [];
-                  },
-                  staleTime: 5 * 60 * 1000,
-                });
-              }}
-              onFocus={() => {
-                queryClient.prefetchQuery({
-                  queryKey: ["history", "list", 200],
-                  queryFn: async () => {
-                    const res = await fetch(`/api/history/list?limit=200`, {
-                      method: "GET",
-                      credentials: "include",
-                      headers: { "Content-Type": "application/json" },
-                    });
-                    if (!res.ok) return [];
-                    const json = await res.json();
-                    return Array.isArray(json) ? json : [];
-                  },
-                  staleTime: 5 * 60 * 1000,
-                });
-              }}
-              onClick={() => navigate('/subscription-history')}
-              className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-            >
-              <Calendar className="h-4 w-4 mr-2" />
-              History
-            </Button>
             
             {/* Data Management Dropdown - third */}
             <Select

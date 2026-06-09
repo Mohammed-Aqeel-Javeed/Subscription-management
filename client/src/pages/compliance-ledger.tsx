@@ -160,6 +160,10 @@ export default function ComplianceLedger() {
   const [ledgerItems, setLedgerItems] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
 
+  const pageSize = 25;
+  const [page, setPage] = React.useState(1);
+  const [totalPages, setTotalPages] = React.useState(1);
+
   const idParam = sanitizeId(searchParams.get("id"));
   const openToken = sanitizeToken(searchParams.get("openToken"));
   const complianceNameParam = sanitizeName(searchParams.get("name"));
@@ -216,6 +220,10 @@ export default function ComplianceLedger() {
 
   const complianceId = resolvedComplianceId;
   const isFilteredById = Boolean(complianceId);
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [complianceId]);
 
   type ColumnDef = {
     id: string;
@@ -284,7 +292,7 @@ export default function ComplianceLedger() {
       },
       {
         id: "submissionDate",
-        label: "Submission Date",
+        label: "LAST SUBMITTED DATE",
         defaultVisible: true,
         renderCell: (item) => (
           <div className="flex items-center text-gray-700">
@@ -355,14 +363,27 @@ export default function ComplianceLedger() {
   const fetchLedger = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/ledger/list");
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      if (complianceId) params.set('complianceId', complianceId);
+      const res = await fetch(`/api/ledger/list?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch ledger data");
-      const data = await res.json();
-      // Filter ledger items by compliance id if present
-      let filteredData = data;
-      if (complianceId) {
-        filteredData = data.filter((item: any) => item.complianceId === complianceId || item._id === complianceId);
+      const json = await res.json();
+
+      const pageItems: any[] = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
+      const serverTotalPages = typeof json?.totalPages === 'number' ? json.totalPages : 1;
+      const serverPage = typeof json?.page === 'number' ? json.page : 1;
+      setTotalPages(serverTotalPages > 0 ? serverTotalPages : 1);
+      setPage((prev) => {
+        if (serverPage && serverPage !== prev) return serverPage;
+        return prev;
+      });
+
+      // Backward-compat safety: if server returned an array, filter client-side.
+      let filteredData = pageItems;
+      if (complianceId && Array.isArray(json)) {
+        filteredData = pageItems.filter((item: any) => item.complianceId === complianceId || item._id === complianceId);
       }
+
       const sortedData = [...(Array.isArray(filteredData) ? filteredData : [])].sort((a: any, b: any) => {
         const diff = ledgerSortMs(b) - ledgerSortMs(a);
         if (diff !== 0) return diff;
@@ -371,6 +392,7 @@ export default function ComplianceLedger() {
       setLedgerItems(sortedData);
     } catch {
       setLedgerItems([]);
+      setTotalPages(1);
     }
     setLoading(false);
   };
@@ -382,7 +404,7 @@ export default function ComplianceLedger() {
       return;
     }
     fetchLedger();
-  }, [complianceId, isResolvingToken]);
+  }, [complianceId, isResolvingToken, page]);
   
   const displayedLedgerItems = isResolvingToken ? [] : ledgerItems;
 
@@ -403,7 +425,7 @@ export default function ComplianceLedger() {
   const derivedName = displayedLedgerItems?.[0]?.filingName || displayedLedgerItems?.[0]?.policy;
   const headerName = complianceNameParam || derivedName;
   const isNamedHistory = Boolean(isFilteredById && headerName);
-  const headerTitle = isNamedHistory ? `${headerName} History Log` : "Compliance History Log";
+  const headerTitle = isNamedHistory ? `${headerName} History Log` : "Audit Trail";
   const displayedHeaderName = isNamedHistory ? (truncateText(String(headerName), 45) || String(headerName)) : "";
 
   return (
@@ -469,20 +491,12 @@ export default function ComplianceLedger() {
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button
-                onClick={handleBackToCompliance}
-                variant="outline"
-                className="flex items-center gap-2 bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Compliance
-              </Button>
             </div>
           </div>
         </div>
 
         <Card className="shadow-lg border-0 overflow-hidden bg-white/80 backdrop-blur-sm flex-1 min-h-0">
-          <CardContent className="p-0 h-full">
+          <CardContent className="p-0 h-full flex flex-col">
             <Table containerClassName="flex-1 min-h-0 h-full overflow-auto" className="w-full table-fixed">
               <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                 <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
@@ -538,6 +552,47 @@ export default function ComplianceLedger() {
                   )}
               </TableBody>
             </Table>
+
+            {totalPages > 1 ? (
+              <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  Page {page} of {totalPages}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                  >
+                    Previous
+                  </Button>
+                  {[1, 2, 3]
+                    .filter((p) => p <= totalPages)
+                    .map((p) => (
+                      <Button
+                        key={p}
+                        type="button"
+                        variant={p === page ? 'default' : 'outline'}
+                        className="h-9 w-10 px-0"
+                        onClick={() => setPage(p)}
+                      >
+                        {p}
+                      </Button>
+                    ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>

@@ -436,87 +436,13 @@ export default function Chatbot() {
 
   return (
     <>
-      {/* Floating Chat Button */}
-      {!isOpen && buttonPos && (
-        <button
-          ref={buttonRef}
-          onPointerDown={(e) => {
-            if (!buttonPos) return;
-            e.preventDefault();
-            const target = e.currentTarget;
-            try {
-              target.setPointerCapture(e.pointerId);
-            } catch {
-              // ignore
-            }
-            dragStateRef.current = {
-              pointerId: e.pointerId,
-              offsetX: e.clientX - buttonPos.x,
-              offsetY: e.clientY - buttonPos.y,
-              moved: false,
-              startX: e.clientX,
-              startY: e.clientY,
-            };
-          }}
-          onPointerMove={(e) => {
-            const drag = dragStateRef.current;
-            if (!drag || e.pointerId !== drag.pointerId) return;
-
-            const next = clampButtonPos({ x: e.clientX - drag.offsetX, y: e.clientY - drag.offsetY });
-            const dx = e.clientX - drag.startX;
-            const dy = e.clientY - drag.startY;
-            if (Math.hypot(dx, dy) > 3) drag.moved = true;
-
-            buttonPosRef.current = next;
-            if (rafRef.current == null) {
-              rafRef.current = window.requestAnimationFrame(() => {
-                rafRef.current = null;
-                const pos = buttonPosRef.current;
-                if (pos) applyButtonPosStyle(pos);
-              });
-            }
-          }}
-          onPointerUp={(e) => {
-            const drag = dragStateRef.current;
-            if (!drag || e.pointerId !== drag.pointerId) return;
-            dragStateRef.current = null;
-
-            const currentPos = buttonPosRef.current;
-            if (currentPos) {
-              applyButtonPosStyle(currentPos);
-              setButtonPos(currentPos);
-              try {
-                localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(currentPos));
-              } catch {
-                // ignore
-              }
-            }
-
-            // Click behavior when there was no drag movement
-            if (!drag.moved) setIsOpen(true);
-          }}
-          className="fixed z-50 h-16 w-16 rounded-full bg-gradient-to-br from-blue-500/95 via-blue-600/95 to-indigo-600/95 backdrop-blur-md shadow-2xl hover:shadow-3xl transition-all duration-300 flex items-center justify-center group hover:scale-105 active:scale-95 border border-white/20 ring-2 ring-blue-400/30"
-          aria-label="Open chatbot"
-          style={{
-            left: 0,
-            top: 0,
-            transform: `translate3d(${buttonPos.x}px, ${buttonPos.y}px, 0)`,
-            backdropFilter: "blur(12px)",
-            touchAction: "none",
-            willChange: "transform",
-          }}
-        >
-          <Bot className="h-8 w-8 text-white drop-shadow-lg" />
-          <span className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white animate-pulse shadow-lg"></span>
-        </button>
-      )}
-
-      {/* Chat Window */}
+      {/* Chat Window - No floating button, only opens when triggered by Help & Support */}
       {isOpen && (
         <Card
           className="fixed z-50 w-96 h-[500px] shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl bg-white/90 border border-blue-200/30"
           style={{
-            ...(buttonPos ? computeCardPos(buttonPos) : {}),
+            bottom: '24px',
+            right: '24px',
             backdropFilter: "blur(20px)",
           }}
         >

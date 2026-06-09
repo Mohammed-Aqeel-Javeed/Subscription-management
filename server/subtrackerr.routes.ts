@@ -866,19 +866,55 @@ router.get("/api/history/list", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
+    const pageSchema = z
+      .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(100000))
+      .optional();
+    const pageSizeSchema = z
+      .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(200))
+      .optional();
     const limitSchema = z
       .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(2000))
       .optional();
-    const parsedLimit = limitSchema.safeParse(req.query.limit);
-    const limit = parsedLimit.success ? parsedLimit.data ?? 200 : 200;
 
-    // Sort by timestamp and _id for consistent ordering
-    const items = await collection
-      .find({ tenantId })
-      .project({ tenantId: 1, subscriptionId: 1, subscriptionName: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
-      .sort({ loggedAt: -1, timestamp: -1, _id: -1 })
-      .limit(limit)
-      .toArray();
+    const parsedPage = pageSchema.safeParse(req.query.page);
+    const parsedPageSize = pageSizeSchema.safeParse(req.query.pageSize);
+    const wantsPaging = parsedPage.success || parsedPageSize.success;
+
+    const baseFilter = { tenantId };
+
+    let items: any[] = [];
+    let pagingMeta: { total: number; page: number; pageSize: number; totalPages: number } | null = null;
+
+    if (wantsPaging) {
+      const page = parsedPage.success ? parsedPage.data ?? 1 : 1;
+      const pageSize = parsedPageSize.success ? parsedPageSize.data ?? 50 : 50;
+
+      const total = await collection.countDocuments(baseFilter);
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const safePage = Math.min(Math.max(1, page), totalPages);
+      const skip = (safePage - 1) * pageSize;
+
+      items = await collection
+        .find(baseFilter)
+        .project({ tenantId: 1, subscriptionId: 1, subscriptionName: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
+        .sort({ loggedAt: -1, timestamp: -1, _id: -1 })
+        .skip(skip)
+        .limit(pageSize)
+        .toArray();
+
+      pagingMeta = { total, page: safePage, pageSize, totalPages };
+    } else {
+      const parsedLimit = limitSchema.safeParse(req.query.limit);
+      const limit = parsedLimit.success ? parsedLimit.data ?? 200 : 200;
+
+      // Sort by timestamp and _id for consistent ordering
+      items = await collection
+        .find(baseFilter)
+        .project({ tenantId: 1, subscriptionId: 1, subscriptionName: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
+        .sort({ loggedAt: -1, timestamp: -1, _id: -1 })
+        .limit(limit)
+        .toArray();
+    }
 
     // Import decryption function
     const { decrypt } = await import("./encryption.service.js");
@@ -932,6 +968,10 @@ router.get("/api/history/list", async (req, res) => {
     });
 
     console.log(`[PERF] /api/history/list: ${items.length} records in ${Date.now() - startTime}ms`);
+    if (pagingMeta) {
+      res.status(200).json({ items: processed, ...pagingMeta });
+      return;
+    }
     res.status(200).json(processed);
   } catch (error: unknown) {
     console.error("History list error:", error);
@@ -973,19 +1013,54 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
       { subscriptionId: subObjId, tenantId } :
       { subscriptionId: subscriptionId, tenantId };
 
+    const pageSchema = z
+      .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(100000))
+      .optional();
+    const pageSizeSchema = z
+      .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(200))
+      .optional();
     const limitSchema = z
       .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(2000))
       .optional();
-    const parsedLimit = limitSchema.safeParse(req.query.limit);
-    const limit = parsedLimit.success ? parsedLimit.data ?? 200 : 200;
 
-    // Sort by timestamp descending (newest first)
-    const items = await collection
-      .find(filter)
-      .project({ tenantId: 1, subscriptionId: 1, subscriptionName: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
-      .sort({ loggedAt: -1, timestamp: -1, _id: -1 })
-      .limit(limit)
-      .toArray();
+    const parsedPage = pageSchema.safeParse(req.query.page);
+    const parsedPageSize = pageSizeSchema.safeParse(req.query.pageSize);
+    const wantsPaging = parsedPage.success || parsedPageSize.success;
+
+    let items: any[] = [];
+    let pagingMeta: { total: number; page: number; pageSize: number; totalPages: number } | null = null;
+
+    if (wantsPaging) {
+      const page = parsedPage.success ? parsedPage.data ?? 1 : 1;
+      const pageSize = parsedPageSize.success ? parsedPageSize.data ?? 50 : 50;
+
+      const total = await collection.countDocuments(filter);
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const safePage = Math.min(Math.max(1, page), totalPages);
+      const skip = (safePage - 1) * pageSize;
+
+      // Sort by timestamp descending (newest first)
+      items = await collection
+        .find(filter)
+        .project({ tenantId: 1, subscriptionId: 1, subscriptionName: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
+        .sort({ loggedAt: -1, timestamp: -1, _id: -1 })
+        .skip(skip)
+        .limit(pageSize)
+        .toArray();
+
+      pagingMeta = { total, page: safePage, pageSize, totalPages };
+    } else {
+      const parsedLimit = limitSchema.safeParse(req.query.limit);
+      const limit = parsedLimit.success ? parsedLimit.data ?? 200 : 200;
+
+      // Sort by timestamp descending (newest first)
+      items = await collection
+        .find(filter)
+        .project({ tenantId: 1, subscriptionId: 1, subscriptionName: 1, action: 1, timestamp: 1, loggedAt: 1, data: 1, updatedFields: 1, changedBy: 1, changeReason: 1 })
+        .sort({ loggedAt: -1, timestamp: -1, _id: -1 })
+        .limit(limit)
+        .toArray();
+    }
     
     // Import decryption function
     const { decrypt } = await import("./encryption.service.js");
@@ -1037,6 +1112,10 @@ router.get("/api/history/:subscriptionId", async (req, res) => {
     });
 
     console.log(`[PERF] /api/history/${subscriptionId}: ${items.length} records in ${Date.now() - startTime}ms`);
+    if (pagingMeta) {
+      res.status(200).json({ items: processedItems, ...pagingMeta });
+      return;
+    }
     res.status(200).json(processedItems);
   } catch (error: unknown) {
     console.error("History fetch error:", error);
@@ -1168,8 +1247,70 @@ router.get("/api/ledger/list", async (req, res) => {
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
-    const items = await collection.find({ tenantId }).toArray();
-    res.status(200).json(items);
+    const pageSchema = z
+      .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(100000))
+      .optional();
+    const pageSizeSchema = z
+      .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(200))
+      .optional();
+
+    const parsedPage = pageSchema.safeParse(req.query.page);
+    const parsedPageSize = pageSizeSchema.safeParse(req.query.pageSize);
+    const wantsPaging = parsedPage.success || parsedPageSize.success;
+
+    const complianceIdRaw = typeof req.query.complianceId === 'string' ? req.query.complianceId.trim() : '';
+
+    const filter: any = { tenantId };
+    if (complianceIdRaw) {
+      const orConditions: any[] = [{ complianceId: complianceIdRaw }];
+      try {
+        orConditions.push({ _id: new ObjectId(complianceIdRaw) });
+      } catch {
+        // ignore invalid ObjectId strings
+      }
+      filter.$or = orConditions;
+    }
+
+    if (!wantsPaging) {
+      const items = await collection.find(filter).toArray();
+      res.status(200).json(items);
+      return;
+    }
+
+    const page = parsedPage.success ? parsedPage.data ?? 1 : 1;
+    const pageSize = parsedPageSize.success ? parsedPageSize.data ?? 25 : 25;
+
+    const total = await collection.countDocuments(filter);
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const safePage = Math.min(Math.max(1, page), totalPages);
+    const skip = (safePage - 1) * pageSize;
+
+    // Sort by filingSubmissionDate || createdAt || updatedAt (desc), then _id (desc)
+    const pipeline: any[] = [
+      { $match: filter },
+      {
+        $addFields: {
+          __sortKey: {
+            $ifNull: [
+              { $convert: { input: '$filingSubmissionDate', to: 'date', onError: null, onNull: null } },
+              {
+                $ifNull: [
+                  { $convert: { input: '$createdAt', to: 'date', onError: null, onNull: null } },
+                  { $convert: { input: '$updatedAt', to: 'date', onError: null, onNull: null } },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      { $sort: { __sortKey: -1, _id: -1 } },
+      { $skip: skip },
+      { $limit: pageSize },
+      { $project: { __sortKey: 0 } },
+    ];
+
+    const items = await collection.aggregate(pipeline).toArray();
+    res.status(200).json({ items, total, page: safePage, pageSize, totalPages });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch ledger data", error });
   }
@@ -5519,11 +5660,46 @@ router.get("/api/logs", async (req, res) => {
       return res.status(401).json({ message: "Missing tenantId in user context" });
     }
 
-    const logs = await collection
-      .find({ tenantId })
-      .sort({ timestamp: -1 })
-      .limit(100)
-      .toArray();
+    const pageSchema = z
+      .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(100000))
+      .optional();
+    const pageSizeSchema = z
+      .preprocess((v: unknown) => (v === undefined ? undefined : Number(v)), z.number().int().min(1).max(200))
+      .optional();
+
+    const parsedPage = pageSchema.safeParse(req.query.page);
+    const parsedPageSize = pageSizeSchema.safeParse(req.query.pageSize);
+    const wantsPaging = parsedPage.success || parsedPageSize.success;
+
+    const licenseId = typeof req.query.licenseId === 'string' ? req.query.licenseId.trim() : '';
+    const filter: any = { tenantId, ...(licenseId ? { licenseId } : {}) };
+
+    let logs: any[] = [];
+    let pagingMeta: { total: number; page: number; pageSize: number; totalPages: number } | null = null;
+
+    if (wantsPaging) {
+      const page = parsedPage.success ? parsedPage.data ?? 1 : 1;
+      const pageSize = parsedPageSize.success ? parsedPageSize.data ?? 25 : 25;
+      const total = await collection.countDocuments(filter);
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const safePage = Math.min(Math.max(1, page), totalPages);
+      const skip = (safePage - 1) * pageSize;
+
+      logs = await collection
+        .find(filter)
+        .sort({ timestamp: -1, _id: -1 })
+        .skip(skip)
+        .limit(pageSize)
+        .toArray();
+
+      pagingMeta = { total, page: safePage, pageSize, totalPages };
+    } else {
+      logs = await collection
+        .find(filter)
+        .sort({ timestamp: -1, _id: -1 })
+        .limit(100)
+        .toArray();
+    }
 
     const normalizeEmail = (v: any) => String(v || '').trim().toLowerCase();
     const candidateEmails = Array.from(
@@ -5587,6 +5763,10 @@ router.get("/api/logs", async (req, res) => {
       });
     }
 
+    if (pagingMeta) {
+      res.status(200).json({ items: logsWithDisplayNames, ...pagingMeta });
+      return;
+    }
     res.status(200).json(logsWithDisplayNames);
   } catch (error: unknown) {
     console.error("Error fetching logs:", error);
@@ -5918,6 +6098,36 @@ router.put("/api/subscriptions/:id/users", async (req, res) => {
       return res.status(404).json({ message: "Subscription not found or access denied" });
     }
 
+    const oldUsers = Array.isArray((oldDoc as any)?.users) ? (oldDoc as any).users : [];
+
+    const canonicalizeUserForCompare = (user: any) => {
+      if (!user) return '';
+      if (typeof user === 'string') return user.trim().toLowerCase();
+      const idValue = user._id ?? user.id ?? user.userId;
+      if (idValue != null) return String(idValue).trim().toLowerCase();
+      const emailValue = user.email ?? user.userEmail;
+      if (emailValue != null) return String(emailValue).trim().toLowerCase();
+      try {
+        return JSON.stringify(user);
+      } catch {
+        return String(user);
+      }
+    };
+
+    const normalizeUsersForCompare = (arr: any[]) =>
+      arr.map(canonicalizeUserForCompare).filter(Boolean).sort();
+
+    const oldNormalized = normalizeUsersForCompare(oldUsers);
+    const newNormalized = normalizeUsersForCompare(users);
+    const hasUserChanges =
+      oldNormalized.length !== newNormalized.length ||
+      oldNormalized.some((v, idx) => v !== newNormalized[idx]);
+
+    // When there are no changes, don't update and don't write history.
+    if (!hasUserChanges) {
+      return res.status(200).json({ message: "No user changes detected" });
+    }
+
     // Update the subscription with the new users
     const result = await collection.updateOne(
       { _id: subscriptionId, tenantId },
@@ -5936,14 +6146,16 @@ router.put("/api/subscriptions/:id/users", async (req, res) => {
     // Create history record
     const { decrypt } = await import("./encryption.service.js");
     const subscriptionName = oldDoc?.serviceName ? decrypt(oldDoc.serviceName) : (oldDoc as any)?.name ? String((oldDoc as any).name) : "";
+    const now = new Date();
     await historyCollection.insertOne({
       subscriptionId,
       tenantId,
       action: "update",
-      timestamp: new Date(),
+      timestamp: now,
+      loggedAt: now,
       subscriptionName: subscriptionName ? String(subscriptionName).trim() : undefined,
       changedBy: await resolveHistoryChangedBy(db, req.user),
-      data: { serviceName: subscriptionName || undefined },
+      data: { serviceName: subscriptionName || undefined, users: oldUsers },
       updatedFields: { users },
       serviceName: oldDoc.serviceName || oldDoc.name || "Unknown Service"
     });

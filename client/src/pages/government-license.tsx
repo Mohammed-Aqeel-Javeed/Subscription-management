@@ -4261,15 +4261,6 @@ export default function GovernmentLicense() {
               </Button>
             )}
 
-            <Button
-              variant="outline"
-              onClick={() => navigate('/renewal-log')}
-              className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-            >
-              <Calendar className="h-4 w-4 mr-2" />
-              History
-            </Button>
-
             <Select
               key={dataManagementSelectKey}
               onValueChange={(value) => {
@@ -4650,63 +4641,6 @@ export default function GovernmentLicense() {
                     Renewal Submit
                   </Button>
                 )}
-                {/* History Button (hide during Renewal Submit view; keep only Log there) */}
-                {editingLicense?.id && !showSubmissionDetails && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[92px] flex items-center gap-2 border-indigo-200 shadow-sm"
-                    onClick={() => {
-                      const licenseId = editingLicense.id;
-                      const name = String(form.getValues('licenseName') || editingLicense?.licenseName || '').trim();
-                      
-                      const mintDeeplinkToken = async (id: string) => {
-                        const res = await fetch('/api/deeplink/token', {
-                          method: 'POST',
-                          credentials: 'include',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ entityType: 'license', id: String(id) }),
-                        });
-                        if (!res.ok) throw new Error('Failed to create deeplink token');
-                        const data = (await res.json()) as { token?: string };
-                        if (!data?.token) throw new Error('Invalid deeplink token response');
-                        return String(data.token);
-                      };
-
-                      void (async () => {
-                        try {
-                          const token = await mintDeeplinkToken(String(licenseId));
-                          const qs = new URLSearchParams({
-                            openToken: token,
-                            name,
-                          }).toString();
-                          navigate(`/renewal-log?${qs}`, {
-                            state: {
-                              returnOpenLicenseId: licenseId,
-                              returnPath: location.pathname,
-                            },
-                          });
-                        } catch {
-                          const qs = new URLSearchParams({
-                            id: String(licenseId),
-                            name,
-                          }).toString();
-                          navigate(`/renewal-log?${qs}`, {
-                            state: {
-                              returnOpenLicenseId: licenseId,
-                              returnPath: location.pathname,
-                            },
-                          });
-                        }
-                      })();
-                    }}
-                    title="History"
-                  >
-                    <History className="h-4 w-4" />
-                    History
-                  </Button>
-                )}
-
                 {/* Log Button (only in Renewal Submit view) */}
                 {showSubmissionDetails && editingLicense?.id && (
                   <Button

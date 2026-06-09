@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ReportItem = {
@@ -223,8 +223,8 @@ const sectionStyle = {
   },
 };
 
-// ─── Report Card ──────────────────────────────────────────────────────────────
-function ReportCard({ item, onOpen }: { item: ReportItem; onOpen: (id: string) => void }) {
+// ─── Report Row ───────────────────────────────────────────────────────────────
+function ReportRow({ item, onOpen }: { item: ReportItem; onOpen: (id: string) => void }) {
   const meta = reportMeta[item.id] ?? {
     icon: <IconChart />,
     description: "View detailed analytics report.",
@@ -236,101 +236,92 @@ function ReportCard({ item, onOpen }: { item: ReportItem; onOpen: (id: string) =
     <button
       type="button"
       onClick={() => onOpen(item.id)}
-      className="group w-full text-left bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      className="w-full flex items-center p-5 bg-white hover:bg-slate-50/50 transition-colors text-left group focus-visible:outline-none focus-visible:bg-slate-50"
     >
-      {/* top gradient stripe */}
-      <div className={`h-1 w-full bg-gradient-to-r ${meta.gradient}`} />
+      <div className={`flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-xl ${meta.iconBg} transition-transform duration-200 group-hover:scale-105 mr-5`}>
+        {meta.icon}
+      </div>
 
-      <div className="p-5 flex items-center gap-4">
-        {/* icon circle */}
-        <div className={`flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-xl ${meta.iconBg} transition-transform duration-200 group-hover:scale-110`}>
-          {meta.icon}
+      <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <div className="inline-flex items-center gap-1 max-w-full">
+          <span className="relative font-semibold text-[15px] text-slate-800 group-hover:text-indigo-600 transition-colors duration-200 truncate leading-snug">
+            {item.label}
+            <span className="absolute bottom-0 left-0 h-[2px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+          </span>
+          <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
         </div>
+        <p className="text-[13px] text-slate-500 mt-1">{meta.description}</p>
+      </div>
 
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900 leading-snug truncate">{item.label}</p>
-        </div>
-
-        <div className="flex-shrink-0 self-center text-gray-400 group-hover:text-indigo-600 transition-colors duration-200">
-          <IconArrow />
-        </div>
+      <div className="flex-shrink-0 ml-4 text-slate-300 group-hover:text-indigo-500 transition-colors duration-200">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5 transform group-hover:translate-x-0.5 transition-transform">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
       </div>
     </button>
   );
 }
 
-// ─── Section heading ──────────────────────────────────────────────────────────
-function SectionHeader({
-  title,
-  type,
+// ─── Filter Tabs ──────────────────────────────────────────────────────────────
+function FilterTabs({
+  activeCategory,
+  onCategoryChange,
 }: {
-  title: string;
-  type: keyof typeof sectionStyle;
+  activeCategory: ReportCategory;
+  onCategoryChange: (c: ReportCategory) => void;
 }) {
-  const s = sectionStyle[type];
+  const tabs: { id: ReportCategory; label: string }[] = [
+    { id: "all", label: "All Reports" },
+    { id: "subscription", label: "Subscription" },
+    { id: "compliance", label: "Compliance" },
+    { id: "renewal", label: "Renewal" },
+  ];
+
   return (
-    <div className={`flex items-center justify-between px-6 py-4 rounded-2xl bg-gradient-to-r ${s.headerGrad} border ${s.border} mb-6`}>
-      <div className="flex items-center gap-3">
-        <span className={`w-2.5 h-2.5 rounded-full ${s.dot}`} />
-        <h3 className="text-base font-bold text-gray-800">{title}</h3>
-      </div>
+    <div className="inline-flex items-center bg-slate-50 border border-slate-100 rounded-xl p-1.5 shadow-sm">
+      {tabs.map((tab) => {
+        const active = activeCategory === tab.id;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onCategoryChange(tab.id)}
+            className={`px-6 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 cursor-pointer ${
+              active
+                ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
+            }`}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
     </div>
-  );
-}
-
-// ─── Filter Pill ──────────────────────────────────────────────────────────────
-function FilterPill({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
-        active
-          ? "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-200 scale-105"
-          : "bg-white text-gray-600 border border-gray-200 hover:border-indigo-300 hover:text-indigo-600 hover:shadow-sm"
-      }`}
-    >
-      {label}
-    </button>
   );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Reports() {
   const navigate = useNavigate();
-  const [activeCategory, setActiveCategory] = React.useState<ReportCategory>("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialCategory = (searchParams.get("tab") as ReportCategory) || "all";
+  const [activeCategory, setActiveCategory] = React.useState<ReportCategory>(initialCategory);
 
-  const subscriptionReports: ReportItem[] = Array.from({ length: 5 }).map((_, idx) => ({
-    id: `sub-${idx}`,
-    label:
-      idx === 0
-        ? "Upcoming Renewal"
-        : idx === 1
-          ? "Spending Analysis"
-          : idx === 2
-            ? "Card Wise"
-          : `Report ${idx + 1}`,
-  }));
+  const handleCategoryChange = (cat: ReportCategory) => {
+    setActiveCategory(cat);
+    setSearchParams(cat === "all" ? {} : { tab: cat }, { replace: true });
+  };
 
-  const complianceReports: ReportItem[] = Array.from({ length: 5 }).map((_, idx) => ({
-    id: `comp-${idx}`,
-    label:
-      idx === 0
-        ? "Upcoming Filing"
-        : idx === 1
-          ? "Compliance Spend & Audit History"
-          : idx === 2
-            ? "Departmental Compliance Scorecard"
-          : `Report ${idx + 1}`,
-  }));
+  const subscriptionReports: ReportItem[] = [
+    { id: "sub-0", label: "Upcoming Renewal" },
+    { id: "sub-1", label: "Spending Analysis" },
+    { id: "sub-2", label: "Card Wise" },
+  ];
+
+  const complianceReports: ReportItem[] = [
+    { id: "comp-0", label: "Upcoming Filing" },
+    { id: "comp-1", label: "Compliance Spend & Audit" },
+    { id: "comp-2", label: "Departmental Compliance Scorecard" },
+  ];
 
   const renewalReports: ReportItem[] = [
     { id: "ren-0", label: "Department-wise Renewals Report" },
@@ -341,83 +332,43 @@ export default function Reports() {
   ];
 
   const openReport = (id: string) => {
-    if (id === "sub-0") { navigate("/reports/upcoming-renewal"); return; }
-    if (id === "sub-1") { navigate("/reports/spending-analysis"); return; }
-    if (id === "sub-2") { navigate("/reports/card-wise"); return; }
-    if (id === "comp-0") { navigate("/reports/upcoming-filings"); return; }
-    if (id === "comp-1") { navigate("/reports/compliance-spend"); return; }
-    if (id === "comp-2") { navigate("/reports/departmental-scorecard"); return; }
-    if (id === "ren-0") { navigate("/reports/department-wise-renewals"); return; }
-    if (id === "ren-1") { navigate("/reports/renewal-lead-time-analysis"); return; }
-    if (id === "ren-2") { navigate("/reports/renewal-responsibility"); return; }
-    if (id === "ren-3") { navigate("/reports/expired-renewals"); return; }
-    if (id === "ren-4") { navigate("/reports/upcoming-renewals"); return; }
-    // Keep other reports clickable for now.
+    const tabParam = activeCategory !== "all" ? `?tab=${activeCategory}` : "";
+    if (id === "sub-0") { navigate("/reports/upcoming-renewal" + tabParam); return; }
+    if (id === "sub-1") { navigate("/reports/spending-analysis" + tabParam); return; }
+    if (id === "sub-2") { navigate("/reports/card-wise" + tabParam); return; }
+    if (id === "comp-0") { navigate("/reports/upcoming-filings" + tabParam); return; }
+    if (id === "comp-1") { navigate("/reports/compliance-spend" + tabParam); return; }
+    if (id === "comp-2") { navigate("/reports/departmental-scorecard" + tabParam); return; }
+    if (id === "ren-0") { navigate("/reports/department-wise-renewals" + tabParam); return; }
+    if (id === "ren-1") { navigate("/reports/renewal-lead-time-analysis" + tabParam); return; }
+    if (id === "ren-2") { navigate("/reports/renewal-responsibility" + tabParam); return; }
+    if (id === "ren-3") { navigate("/reports/expired-renewals" + tabParam); return; }
+    if (id === "ren-4") { navigate("/reports/upcoming-renewals" + tabParam); return; }
     console.log("Open report", id);
   };
 
   const shouldShowCategory = (category: ReportCategory) =>
     activeCategory === "all" || activeCategory === category;
 
+  const visibleReports = [
+    ...(shouldShowCategory("subscription") ? subscriptionReports : []),
+    ...(shouldShowCategory("compliance") ? complianceReports : []),
+    ...(shouldShowCategory("renewal") ? renewalReports : []),
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50/60 p-6 lg:p-10">
-      {/* ── Page header ── */}
-      <div className="mb-8">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Reports</h1>
-          </div>
-
-
-        </div>
-
-        {/* ── Filter pills ── */}
-        <div className="mt-6 flex gap-3 flex-wrap">
-          <FilterPill label="All" active={activeCategory === "all"} onClick={() => setActiveCategory("all")} />
-          <FilterPill label="Subscription" active={activeCategory === "subscription"} onClick={() => setActiveCategory("subscription")} />
-          <FilterPill label="Compliance" active={activeCategory === "compliance"} onClick={() => setActiveCategory("compliance")} />
-          <FilterPill label="Renewal" active={activeCategory === "renewal"} onClick={() => setActiveCategory("renewal")} />
-        </div>
+    <div className="min-h-screen bg-transparent p-6 lg:p-10 font-['Inter']">
+      <div className="mb-10">
+        <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight mb-6">Reports</h1>
+        <FilterTabs activeCategory={activeCategory} onCategoryChange={handleCategoryChange} />
       </div>
 
-      {/* ── Report sections ── */}
-      <div className="space-y-12">
-        {/* Subscription */}
-        {shouldShowCategory("subscription") && (
-          <section>
-            <SectionHeader title="Subscription Reports" type="subscription" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-              {subscriptionReports.map((item) => (
-                <ReportCard key={item.id} item={item} onOpen={openReport} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Compliance */}
-        {shouldShowCategory("compliance") && (
-          <section>
-            <SectionHeader title="Compliance Reports" type="compliance" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-              {complianceReports.map((item) => (
-                <ReportCard key={item.id} item={item} onOpen={openReport} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Renewal */}
-        {shouldShowCategory("renewal") && (
-          <section>
-            <SectionHeader title="Renewal Reports" type="renewal" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-              {renewalReports.map((item) => (
-                <ReportCard key={item.id} item={item} onOpen={openReport} />
-              ))}
-            </div>
-          </section>
-        )}
+      <div className="max-w-6xl">
+        <div className="bg-white border border-slate-100 rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] overflow-hidden divide-y divide-slate-50/80">
+          {visibleReports.map((item) => (
+            <ReportRow key={item.id} item={item} onOpen={openReport} />
+          ))}
+        </div>
       </div>
     </div>
   );

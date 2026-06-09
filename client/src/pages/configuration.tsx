@@ -3164,7 +3164,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
 
                                           {/* Exchange rate */}
                                           <td className="py-3.5 px-5 text-left">
-                                            {isUpdateMode ? (
+                                            {isUpdateMode && currency.code !== companyInfo.defaultCurrency ? (
                                               <Input
                                                 type="number"
                                                 step="0.0001"

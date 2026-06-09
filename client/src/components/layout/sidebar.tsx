@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Layers, Settings, FileBarChart, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft, ChevronDown } from "lucide-react";
+import { BarChart3, Layers, Settings, FileBarChart, BellRing, Building2, ShieldCheck, Award, LogOut, Shuffle, Check, PanelLeft, ChevronDown, History } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/api";
 import { UnifiedImportExport } from "../unified-import-export";
@@ -115,10 +115,11 @@ const navItems = [
   { path: "/subscriptions", label: "Subscriptions", icon: Layers },
   { path: "/compliance", label: "Compliance", icon: Award },
   { path: "/government-license", label: "Renewals", icon: ShieldCheck },
-  { path: "/notifications", label: "Notifications", icon: BellRing },
   { path: "/configuration", label: "Setup & Configuration", icon: Settings },
   { path: "/company-details", label: "Company Details", icon: Building2 },
+  { path: "/notifications", label: "Notifications", icon: BellRing },
   { path: "/reports", label: "Reports", icon: FileBarChart },
+  { path: "/subscription-history", label: "Logs", icon: History },
 ];
 const configSubItems = [
   { path: "/configuration/currency", label: "Currency" },
@@ -133,6 +134,12 @@ const companySubItems = [
   { path: "/company-details/users", label: "User Management", requiresUserRead: true },
 ] as const;
 
+const logsSubItems = [
+  { path: "/subscription-history", label: "Subscription Logs" },
+  { path: "/compliance-ledger", label: "Compliance Logs" },
+  { path: "/renewal-log", label: "Renewal Logs" },
+];
+
 export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean; onToggle?: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -141,6 +148,11 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(() => location.pathname.startsWith("/configuration"));
   const [companyOpen, setCompanyOpen] = useState(() => location.pathname.startsWith("/company-details"));
+  const isLogsPath =
+    location.pathname === "/subscription-history" ||
+    location.pathname === "/compliance-ledger" ||
+    location.pathname === "/renewal-log";
+  const [logsOpen, setLogsOpen] = useState(() => isLogsPath);
   const [platformOpen, setPlatformOpen] = useState<Record<string,boolean>>(() =>
     Object.fromEntries(platformNavSections.map(s=>[s.id, location.pathname===s.path||location.pathname.startsWith(`${s.path}/`)]))
   );
@@ -149,6 +161,13 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   useEffect(() => {
     if (location.pathname.startsWith("/configuration")) setConfigOpen(true);
     if (location.pathname.startsWith("/company-details")) setCompanyOpen(true);
+    if (
+      location.pathname === "/subscription-history" ||
+      location.pathname === "/compliance-ledger" ||
+      location.pathname === "/renewal-log"
+    ) {
+      setLogsOpen(true);
+    }
     const active = findPlatformSection(location.pathname);
     if (active) setPlatformOpen(c => c[active.id] ? c : {...c,[active.id]:true});
   }, [location.pathname]);
@@ -241,7 +260,13 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
           <ul className="space-y-1">
             {(isGlobalAdmin?platformNavSections:navItems).map(item=>{
               const Icon=item.icon;
-              const isActive=location.pathname===item.path||(item.path==="/configuration"&&location.pathname.startsWith("/configuration/"))||(item.path==="/company-details"&&location.pathname.startsWith("/company-details/"))||(isGlobalAdmin&&findPlatformSection(location.pathname)?.path===item.path);
+              const isLogsItem = item.label === "Logs";
+              const isActive=
+                (isLogsItem && isLogsPath) ||
+                location.pathname===item.path||
+                (item.path==="/configuration"&&location.pathname.startsWith("/configuration/"))||
+                (item.path==="/company-details"&&location.pathname.startsWith("/company-details/"))||
+                (isGlobalAdmin&&findPlatformSection(location.pathname)?.path===item.path);
               return (
                 <li key={item.path}>
                   <Link to={item.path} title={item.label} className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${isActive?"bg-indigo-600 shadow-md":"hover:bg-white/50"}`}>
@@ -369,10 +394,11 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                   const Icon=item.icon;
                   const isConfigRoute=item.path==="/configuration";
                   const isCompanyRoute=item.path==="/company-details";
-                  const isActive=location.pathname===item.path||(isConfigRoute&&location.pathname.startsWith("/configuration/"))||(isCompanyRoute&&location.pathname.startsWith("/company-details/"));
-                  const hasSubMenu=isConfigRoute||isCompanyRoute;
-                  const subOpen=isConfigRoute?configOpen:companyOpen;
-                  const subItems=isConfigRoute?configSubItems:companySubItems;
+                  const isLogsRoute=item.label==="Logs";
+                  const isActive=(isLogsRoute&&isLogsPath)||location.pathname===item.path||(isConfigRoute&&location.pathname.startsWith("/configuration/"))||(isCompanyRoute&&location.pathname.startsWith("/company-details/"));
+                  const hasSubMenu=isConfigRoute||isCompanyRoute||isLogsRoute;
+                  const subOpen=isConfigRoute?configOpen:isCompanyRoute?companyOpen:logsOpen;
+                  const subItems=isConfigRoute?configSubItems:isCompanyRoute?companySubItems:logsSubItems;
 
                   const rowEl=(
                     <motion.li key={item.path} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} transition={{delay:idx*0.04,duration:0.18}}>
@@ -396,6 +422,15 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
                                     navigate("/company-details/company");
                                   }
                                   setCompanyOpen(v => !v);
+                                  return;
+                                }
+
+                                if (isLogsRoute) {
+                                  if (!isLogsPath) {
+                                    navigate("/subscription-history");
+                                  }
+                                  setLogsOpen(v => !v);
+                                  return;
                                 }
                               }}>
                               <Icon size={17} className="flex-shrink-0"/>

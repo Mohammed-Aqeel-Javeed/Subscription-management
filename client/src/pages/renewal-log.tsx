@@ -149,34 +149,48 @@ export default function RenewalLog() {
   const licenseId = resolvedLicenseId;
   const showAllLogs = !licenseId && !openToken;
 
+  const pageSize = 25;
+  const [page, setPage] = useState(1);
+  const [expandedChangeRows, setExpandedChangeRows] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setPage(1);
+  }, [licenseId, showAllLogs]);
+
+  type LogsPageResponse = {
+    items: any[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+
   // Fetch logs
-  const { data: logs = [], isLoading } = useQuery({
-    queryKey: ["/api/logs"],
+  const { data: logsPage, isLoading, isFetching } = useQuery<LogsPageResponse>({
+    queryKey: ["/api/logs", licenseId || 'all', page, pageSize],
     enabled: !isResolvingToken && (Boolean(licenseId) || showAllLogs),
     queryFn: async () => {
-      const res = await fetch(`${API_BASE_URL}/api/logs`, {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      if (licenseId) params.set('licenseId', licenseId);
+      const res = await fetch(`${API_BASE_URL}/api/logs?${params.toString()}`, {
         credentials: "include",
       });
-      if (!res.ok) return [];
-      return res.json();
+      if (!res.ok) return { items: [], total: 0, page: 1, pageSize, totalPages: 1 };
+      const json = await res.json().catch(() => null);
+      if (json && typeof json === 'object' && Array.isArray((json as any).items)) {
+        return json as LogsPageResponse;
+      }
+      const items = Array.isArray(json) ? json : [];
+      return { items, total: items.length, page: 1, pageSize: items.length, totalPages: 1 };
     },
   });
 
+  const logs = logsPage?.items ?? [];
+  const totalPages = logsPage?.totalPages ?? 1;
+
   // Filter logs by license ID if provided
   // Try to match by licenseId first (new logs), fallback to licenseName (old logs)
-  const filteredLogs = licenseId 
-    ? logs.filter((log: any) => {
-        // First try to match by licenseId (for new logs)
-        if (log.licenseId) {
-          return log.licenseId === licenseId;
-        }
-        // If no licenseId in log, we can't filter by ID
-        // This means old logs won't show when filtering by ID
-        return false;
-      })
-    : showAllLogs
-      ? logs
-      : [];
+  const filteredLogs = licenseId ? logs : showAllLogs ? logs : [];
 
   const formatTimestamp = (timestamp: string) => {
     if (!timestamp) return { date: '-', time: '' };
@@ -287,7 +301,7 @@ export default function RenewalLog() {
                   const isNamedHistory = Boolean(licenseId && displayName);
                   const title = isSubmissionView
                     ? (isNamedHistory ? `${displayName} Submission Log` : 'Renewal Submission Log')
-                    : (isNamedHistory ? `${displayName} History Log` : 'Renewal History Log');
+                    : (isNamedHistory ? `${displayName} History Log` : 'Audit Trail');
                   const displayedHeaderName = isNamedHistory ? (truncateText(String(displayName), 45) || String(displayName)) : '';
                   return (
                     <h1
@@ -308,24 +322,13 @@ export default function RenewalLog() {
                 {tokenError ? <p className="text-sm text-red-600 mt-1">{tokenError}</p> : null}
               </div>
             </div>
-            
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={handleBackToRenewals}
-                variant="outline"
-                className="flex items-center gap-2 bg-gradient-to-br from-indigo-500/90 to-blue-600/90 hover:from-indigo-600/90 hover:to-blue-700/90 text-white hover:text-white focus:text-white active:text-white shadow-lg hover:shadow-xl border border-white/20 backdrop-blur-md transition-all"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Renewals
-              </Button>
-            </div>
           </div>
         </div>
 
         {/* Log Table */}
         <Card className="flex-1 overflow-hidden flex flex-col border-slate-200 shadow-lg bg-white">
           <div className="flex-1 overflow-auto relative">
-            {isLoading ? (
+            {isLoading && !logsPage ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -334,6 +337,11 @@ export default function RenewalLog() {
               </div>
             ) : filteredLogs && filteredLogs.length > 0 ? (
               <div className="h-full overflow-auto">
+                {isFetching && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-blue-100 z-50">
+                    <div className="h-full bg-blue-600 animate-pulse"></div>
+                  </div>
+                )}
                 <table className="w-full table-fixed border-collapse">
                   <thead className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                     <tr className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
@@ -392,19 +400,31 @@ export default function RenewalLog() {
                     // History-view: show changes (filtered) like before
                     let changesText = log.changes || 'No changes recorded';
                     if (!isSubmissionView && String(changesText || '').includes('\n')) {
-                      const lines = String(changesText)
+                      const rawLines = String(changesText)
                         .split('\n')
-                        .filter((line: string) => {
-                          if (!line.includes('Not Set →')) return true;
-                          if (
-                            line.includes('Cancellation Reason:') ||
-                            line.includes('Rejection Reason:') ||
-                            line.includes('Amendment/Appeal Reason:')
-                          ) {
-                            return true;
-                          }
-                          return false;
-                        });
+                        .map((l) => l.trim())
+                        .filter(Boolean);
+
+                      const hasDepartmentsLine = rawLines.some((l) => /^Departments\s*:/i.test(l));
+
+                      const lines = rawLines.filter((line: string) => {
+                        if (/^Department\s*:/i.test(line)) {
+                          const afterColon = line.slice(line.indexOf(':') + 1).trim();
+                          const isJsonArrayLike = afterColon.startsWith('[');
+                          if (hasDepartmentsLine || isJsonArrayLike) return false;
+                        }
+
+                        if (!line.includes('Not Set →')) return true;
+                        if (
+                          line.includes('Cancellation Reason:') ||
+                          line.includes('Rejection Reason:') ||
+                          line.includes('Amendment/Appeal Reason:')
+                        ) {
+                          return true;
+                        }
+                        return false;
+                      });
+
                       changesText = lines.length > 0 ? lines.join('\n') : changesText;
                     }
 
@@ -433,9 +453,9 @@ export default function RenewalLog() {
                             <td className="text-sm text-slate-700 align-top py-3 px-4">{submittedBy || '-'}</td>
                             <td className="text-sm text-slate-700 align-top py-3 px-4">{formatAmount(amount)}</td>
                             <td className="text-sm text-slate-500 align-top py-3 px-4">
-                              <div className="flex flex-col">
+                              <div className="whitespace-nowrap">
                                 <span className="font-medium">{timestamp.date}</span>
-                                {timestamp.time && <span className="text-xs text-slate-400">{timestamp.time}</span>}
+                                {timestamp.time && <span className="text-xs text-slate-400 ml-2">{timestamp.time}</span>}
                               </div>
                             </td>
                           </>
@@ -452,14 +472,42 @@ export default function RenewalLog() {
                               {String((log as any).userDisplayName || log.user || 'System')}
                             </td>
                             <td className="text-sm text-slate-600 align-top py-3 px-4">
-                              <div className="whitespace-pre-line leading-relaxed" title={String(changesText || 'No changes recorded')}>
-                                {truncateMultiline(String(changesText || 'No changes recorded'), 90)}
-                              </div>
+                              {(() => {
+                                const rowKey = String((log as any)?._id || `${timestamp.date}-${timestamp.time || ''}-${index}`);
+                                const fullChanges = String(changesText || 'No changes recorded').trim();
+                                const changeLines = fullChanges.split(/\r?\n/).filter((l) => l.trim() !== "");
+                                const firstLine = changeLines[0] ?? "";
+                                const summary = truncateText(firstLine, 160);
+                                const hasMore = changeLines.length > 1 || summary !== firstLine;
+                                const isExpanded = Boolean(expandedChangeRows[rowKey]);
+
+                                return (
+                                  <div className="flex items-start gap-2">
+                                    <div className="whitespace-pre-wrap leading-relaxed flex-1 min-w-0" title={fullChanges}>
+                                      {(isExpanded ? fullChanges : summary) || 'No changes recorded'}
+                                    </div>
+                                    {hasMore && (
+                                      <button
+                                        type="button"
+                                        className="text-xs font-medium text-indigo-600 hover:text-indigo-700 whitespace-nowrap flex-shrink-0"
+                                        onClick={() =>
+                                          setExpandedChangeRows((prev) => ({
+                                            ...prev,
+                                            [rowKey]: !Boolean(prev[rowKey]),
+                                          }))
+                                        }
+                                      >
+                                        {isExpanded ? 'Show Less' : 'Show More'}
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="text-sm text-slate-500 align-top py-3 px-4">
-                              <div className="flex flex-col">
+                              <div className="whitespace-nowrap">
                                 <span className="font-medium">{timestamp.date}</span>
-                                {timestamp.time && <span className="text-xs text-slate-400">{timestamp.time}</span>}
+                                {timestamp.time && <span className="text-xs text-slate-400 ml-2">{timestamp.time}</span>}
                               </div>
                             </td>
                           </>
@@ -490,6 +538,47 @@ export default function RenewalLog() {
               </div>
             )}
           </div>
+
+          {totalPages > 1 ? (
+            <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+              <div className="text-sm text-slate-600">
+                Page {page} of {totalPages}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                >
+                  Previous
+                </Button>
+                {[1, 2, 3]
+                  .filter((p) => p <= totalPages)
+                  .map((p) => (
+                    <Button
+                      key={p}
+                      type="button"
+                      variant={p === page ? "default" : "outline"}
+                      className="h-9 w-10 px-0"
+                      onClick={() => setPage(p)}
+                    >
+                      {p}
+                    </Button>
+                  ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </Card>
       </div>
     </div>

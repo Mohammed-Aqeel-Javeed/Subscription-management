@@ -74,7 +74,6 @@ function App() {
 
 function AppWithSidebar() {
   const hideSidebarPaths = ["/", "/login", "/signup", "/auth", "/landing", "/s", "/upgrade", "/payment-success"];
-  const hideChatbotPaths = ["/", "/login", "/signup", "/auth", "/landing", "/s", "/upgrade", "/payment-success", "/dashboard", "/notifications", "/reports", "/reports/upcoming-renewal", "/reports/spending-analysis", "/reports/card-wise", "/reports/upcoming-filings", "/reports/compliance-spend", "/reports/departmental-scorecard", "/reports/department-wise-renewals", "/reports/renewal-lead-time-analysis", "/reports/renewal-responsibility", "/reports/expired-renewals", "/reports/upcoming-renewals"];
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -82,7 +81,6 @@ function AppWithSidebar() {
 
   const isSecureLinkRoute = location.pathname.startsWith('/s/');
   const shouldHideSidebar = isSecureLinkRoute || hideSidebarPaths.includes(location.pathname);
-  const shouldHideChatbot = isSecureLinkRoute || hideChatbotPaths.includes(location.pathname);
 
   // Plan expiry gate — covers both trial expiry and cancelled paid subscriptions
   const { user: currentUser } = useUser();
@@ -97,9 +95,6 @@ function AppWithSidebar() {
     currentUser?.role !== "global_admin" &&
     (isTrialExpired || isPlanExpired);
   const showTrialOverlay = isPlanLocked && !overlayExcluded.includes(location.pathname);
-
-  // Determine if chatbot should be shown
-  const showChatbot = !shouldHideChatbot;
 
   // Note: sessionStorage is already tab-scoped and cleared automatically when the tab closes.
   // Do not clear it on beforeunload; that also runs on reload/redirect and breaks auth.
@@ -296,8 +291,8 @@ function AppWithSidebar() {
             </Routes>
           </div>
         </main>
-        {/* Chatbot - shown on all pages except dashboard, notifications, reports, and auth pages */}
-        {showChatbot && <Chatbot />}
+        {/* Chatbot - Only shows modal when triggered by Help & Support */}
+        <Chatbot />
       </div>
     </SidebarSlotProvider>
   );

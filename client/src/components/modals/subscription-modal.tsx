@@ -58,7 +58,7 @@ type SubscriptionModalData = Partial<Subscription> & {
   name?: string;
 };
 import { z } from "zod";
-import { X, History, RefreshCw, Maximize2, Minimize2, AlertCircle, ChevronDown, MoreVertical } from "lucide-react";
+import { X, RefreshCw, Maximize2, Minimize2, AlertCircle, ChevronDown, MoreVertical } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { RiFilePdf2Fill, RiFileWord2Fill, RiFileExcel2Fill, RiFileTextFill, RiFileImageFill } from "react-icons/ri";
 // Define the Category interface
@@ -1017,7 +1017,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Initial Date state
   const [initialDate, setInitialDate] = useState<string>('');
   
-  // Track the current subscription ObjectId for History button
+  // Track the current subscription ObjectId for in-modal actions
   // removed currentSubscriptionId (unused)
 
   useEffect(() => {
@@ -1307,7 +1307,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const [isRenewing, setIsRenewing] = useState(false);
   const [lcyAmount, setLcyAmount] = useState<string>('');
   const [totalAmount, setTotalAmount] = useState<string>(''); // excl tax
-  const [taxAmount, setTaxAmount] = useState<string>('0');
+  const [taxAmount, setTaxAmount] = useState<string>('');
   const [totalAmountInclTax, setTotalAmountInclTax] = useState<string>('');
   const [originalTotalAmount, setOriginalTotalAmount] = useState<number>(0);
   const [effectiveDate, setEffectiveDate] = useState<string>('');
@@ -1966,7 +1966,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       setServiceNameError("");
       setLcyAmount('');
       setTotalAmount('');
-      setTaxAmount('0');
+      setTaxAmount('');
       setTotalAmountInclTax('');
       lastDocumentSubscriptionIdRef.current = null;
       setDocuments([]);
@@ -2060,9 +2060,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       
       // Set taxAmount and totalAmountInclTax state
       const rawTaxAmt = Number((subscription as any)?.taxAmount);
-      const taxAmtValue = Number.isFinite(rawTaxAmt)
-        ? (rawTaxAmt === 0 ? "0" : rawTaxAmt.toFixed(2))
-        : "0";
+      const taxAmtValue = Number.isFinite(rawTaxAmt) && rawTaxAmt > 0
+        ? rawTaxAmt.toFixed(2)
+        : "";
       const totalInclTaxValue = (subscription as any)?.totalAmountInclTax !== undefined && (subscription as any)?.totalAmountInclTax !== null ? Number((subscription as any).totalAmountInclTax).toFixed(2) : "";
       setTaxAmount(taxAmtValue);
       setTotalAmountInclTax(totalInclTaxValue);
@@ -2169,7 +2169,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
       // Reset LCY amount for new subscriptions
       setLcyAmount('');
-      setTaxAmount('0');
+      setTaxAmount('');
       setTotalAmountInclTax('');
     }
   }, [subscription, form, companyInfo?.defaultCurrency, currencies]);
@@ -2251,6 +2251,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     // Only set qty to 1 if serviceName is not empty and qty is currently empty
     if (serviceName && serviceName.trim() !== '' && (!currentQty || currentQty === '')) {
       form.setValue('qty', 1, { shouldDirty: false });
+      // Also set tax amount to 0 when qty becomes 1
+      setTaxAmount('0');
     }
   }, [form.watch('serviceName'), form]);
 
@@ -3766,6 +3768,66 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <Button
                 type="button"
                 variant="outline"
+                disabled={!subscription?._id && !subscription?.id}
+                className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] border-indigo-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:!bg-white"
+                onClick={() => {
+                  const subscriptionId = subscription?._id || subscription?.id;
+                  const serviceName = subscription?.serviceName || subscription?.name || 'Subscription';
+                  
+                  // Check if subscription has been saved
+                  if (!subscriptionId) {
+                    setSaveDraftRequiredDialog({show: true});
+                    return;
+                  }
+
+                  const mintDeeplinkToken = async (id: string) => {
+                    const res = await fetch('/api/deeplink/token', {
+                      method: 'POST',
+                      credentials: 'include',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ entityType: 'subscription', id }),
+                    });
+                    if (!res.ok) throw new Error('Failed to create deeplink token');
+                    const data = (await res.json()) as { token?: string };
+                    if (!data?.token) throw new Error('Invalid deeplink token response');
+                    return String(data.token);
+                  };
+
+                  void (async () => {
+                    try {
+                      const token = await mintDeeplinkToken(String(subscriptionId));
+                      const qs = new URLSearchParams({
+                        openToken: token,
+                        name: String(serviceName),
+                      }).toString();
+                      navigate(`/subscription-history?${qs}`, {
+                        state: {
+                          ...(location.state as any),
+                          returnOpenSubscriptionId: subscriptionId,
+                          returnPath: location.pathname,
+                        },
+                      });
+                    } catch {
+                      const qs = new URLSearchParams({
+                        id: String(subscriptionId),
+                        name: String(serviceName),
+                      }).toString();
+                      navigate(`/subscription-history?${qs}`, {
+                        state: {
+                          ...(location.state as any),
+                          returnOpenSubscriptionId: subscriptionId,
+                          returnPath: location.pathname,
+                        },
+                      });
+                    }
+                  })();
+                }}
+              >
+                History
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
                 className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
                 onClick={() => setShowDocumentDialog(true)}
               >
@@ -3773,65 +3835,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
                 Upload
-              </Button>
-              {/* Updated History Button - Always visible but disabled when adding new subscription */}
-              <Button
-                type="button"
-                variant="outline"
-                className={`bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm ${!isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onClick={() => {
-                  const historyId = (subscription as any)?._id || (subscription as any)?.id;
-                  if (isEditing && historyId) {
-                    const currentServiceName = form.getValues("serviceName") || subscription?.serviceName || "";
-                    
-                    const mintDeeplinkToken = async (id: string) => {
-                      const res = await fetch('/api/deeplink/token', {
-                        method: 'POST',
-                        credentials: 'include',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ entityType: 'subscription', id: String(id) }),
-                      });
-                      if (!res.ok) throw new Error('Failed to create deeplink token');
-                      const data = (await res.json()) as { token?: string };
-                      if (!data?.token) throw new Error('Invalid deeplink token response');
-                      return String(data.token);
-                    };
-
-                    void (async () => {
-                      try {
-                        const token = await mintDeeplinkToken(String(historyId));
-                        const qs = new URLSearchParams({
-                          openToken: token,
-                          name: String(currentServiceName),
-                        }).toString();
-                        navigate(`/subscription-history?${qs}`, {
-                          state: {
-                            ...(location.state as any),
-                            returnOpenSubscriptionId: historyId,
-                            returnPath: location.pathname,
-                          },
-                        });
-                      } catch {
-                        const qs = new URLSearchParams({
-                          id: String(historyId),
-                          name: String(currentServiceName),
-                        }).toString();
-                        navigate(`/subscription-history?${qs}`, {
-                          state: {
-                            ...(location.state as any),
-                            returnOpenSubscriptionId: historyId,
-                            returnPath: location.pathname,
-                          },
-                        });
-                      }
-                    })();
-                  }
-                }}
-                disabled={!isEditing}
-                title={!isEditing ? "History is available only for existing subscriptions" : undefined}
-              >
-                <History className="h-4 w-4" />
-                History
               </Button>
               <Button
                 type="button"

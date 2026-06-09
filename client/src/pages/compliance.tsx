@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, ExternalLink, Maximize2, Minimize2, ShieldCheck, Upload, Download, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Check, MoreVertical } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, Maximize2, Minimize2, ShieldCheck, Upload, Download, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Check, MoreVertical } from "lucide-react";
 import { RiFileExcel2Fill, RiFileImageFill, RiFilePdf2Fill, RiFileTextFill, RiFileWord2Fill } from "react-icons/ri";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -3491,18 +3491,6 @@ export default function Compliance() {
                 </Button>
               )}
 
-              {/* Audit Log button - second */}
-              <Button
-                variant="outline"
-                onClick={() => {
-                  navigate('/compliance-ledger');
-                }}
-                className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-              >
-                <Calendar className="h-4 w-4 mr-2" />
-                History
-              </Button>
-
               <Select
                 key={dataManagementSelectKey}
                 onValueChange={(value) => {
@@ -3637,9 +3625,9 @@ export default function Compliance() {
                   <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[160px]">
                     <button
                       onClick={() => handleSort("filingSubmissionDate")}
-                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
+                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer whitespace-nowrap"
                     >
-                      SUBMITTED DATE
+                      LAST SUBMITTED DATE
                       {getSortIcon("filingSubmissionDate")}
                     </button>
                   </TableHead>
@@ -3825,7 +3813,7 @@ export default function Compliance() {
                                 filingRecurringFrequency: currentItem.recurringFrequency || "",
                                 filingRemarks: currentItem.remarks || "",
                                 submissionNotes: "",
-                                filingSubmissionDate: "",
+                                filingSubmissionDate: new Date().toISOString().split('T')[0],
                                 reminderDays: currentItem.reminderDays !== undefined && currentItem.reminderDays !== null ? String(currentItem.reminderDays) : "7",
                                 reminderPolicy: currentItem.reminderPolicy || "One time",
                                 submittedBy: currentItem.submittedBy || "",
@@ -4084,48 +4072,6 @@ export default function Compliance() {
                   >
                     <FileText className="h-4 w-4 mr-1" />
                     Submission
-                  </Button>
-                )}
-                {editIndex !== null && complianceItems[editIndex]?._id && (
-                  <Button
-                    type="button"
-                    variant="default"
-                    className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 flex items-center gap-2 shadow-md transition-all duration-300 rounded-xl"
-                    onClick={() => {
-                      const currentName =
-                        (complianceItems[editIndex] as any)?.policy ||
-                        (complianceItems[editIndex] as any)?.filingName ||
-                        "";
-                      const id = String(complianceItems[editIndex]._id);
-                      void (async () => {
-                        try {
-                          const res = await fetch('/api/deeplink/token', {
-                            method: 'POST',
-                            credentials: 'include',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ entityType: 'compliance', id }),
-                          });
-                          if (!res.ok) throw new Error('Failed to create deeplink token');
-                          const data = (await res.json()) as { token?: string };
-                          if (!data?.token) throw new Error('Invalid deeplink token response');
-                          const qs = new URLSearchParams({
-                            openToken: String(data.token),
-                            name: String(currentName),
-                          }).toString();
-                          navigate(`/compliance-ledger?${qs}`);
-                        } catch {
-                          const qs = new URLSearchParams({
-                            id,
-                            name: String(currentName),
-                          }).toString();
-                          navigate(`/compliance-ledger?${qs}`);
-                        }
-                      })();
-                    }}
-                    title="History"
-                  >
-                    <ExternalLink size={16} />
-                    History
                   </Button>
                 )}
                 <Button
@@ -5522,19 +5468,35 @@ export default function Compliance() {
                       });
                     }
                   }
-                  setForm((prev) => ({
-                    ...prev,
-                    filingStartDate: hasSubmissionDate && hasSubmittedBy ? newStartDate : prev.filingStartDate,
-                    filingEndDate: hasSubmissionDate && hasSubmittedBy ? newEndDate : prev.filingEndDate,
-                    filingSubmissionDeadline: hasSubmissionDate && hasSubmittedBy ? newSubmissionDeadline : prev.filingSubmissionDeadline,
+                  
+                  // Prepare the updated form state after submission
+                  const updatedForm = {
+                    ...form,
+                    filingStartDate: hasSubmissionDate && hasSubmittedBy ? newStartDate : form.filingStartDate,
+                    filingEndDate: hasSubmissionDate && hasSubmittedBy ? newEndDate : form.filingEndDate,
+                    filingSubmissionDeadline: hasSubmissionDate && hasSubmittedBy ? newSubmissionDeadline : form.filingSubmissionDeadline,
                     filingSubmissionStatus: "Pending",
                     filingSubmissionDate: "",
                     submissionNotes: "",
                     amount: "",
                     paymentDate: ""
-                  }));
+                  };
+                  
+                  setForm(updatedForm);
                   setDynamicFieldValues({});
                   setSubmissionDocuments([]);
+                  
+                  // Update baseline snapshot AFTER form reset to prevent exit confirmation when ledger is created
+                  if (hasSubmissionDate && hasSubmittedBy) {
+                    initialComplianceSnapshotRef.current = buildComplianceSnapshot({
+                      form: updatedForm,
+                      selectedDepartments,
+                      dynamicFieldValues: {},
+                      notes,
+                      submissionDocuments: [],
+                    });
+                  }
+                  
                   if (showSubmissionDetails) {
                     setShowSubmissionDetails(false);
                     return;

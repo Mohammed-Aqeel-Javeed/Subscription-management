@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
-import { Download } from "lucide-react";
+import { Download, ArrowLeft } from "lucide-react";
 import Papa from 'papaparse';
 
 // Dummy fallback for company name
@@ -482,34 +482,6 @@ export default function SubscriptionUserPage() {
     }
   };
 
-  // Cancel handler
-  const handleCancel = () => {
-    const state = (location.state || {}) as {
-      returnOpenSubscriptionId?: string;
-      returnPath?: string;
-    };
-
-    const idToOpen = state.returnOpenSubscriptionId || subscriptionId;
-    const returnPath = typeof state.returnPath === 'string' && state.returnPath.startsWith('/') ? state.returnPath : "/subscriptions";
-
-    // Navigate back to subscriptions and re-open the subscription modal.
-    if (!idToOpen) {
-      navigate(returnPath, { replace: true, state: location.state });
-      return;
-    }
-
-    void (async () => {
-      try {
-        const token = await mintDeeplinkToken(String(idToOpen));
-        const qs = new URLSearchParams({ openToken: token }).toString();
-        navigate(`${returnPath}?${qs}`, { replace: true, state: location.state });
-      } catch {
-        const qs = new URLSearchParams({ open: String(idToOpen) }).toString();
-        navigate(`${returnPath}?${qs}`, { replace: true, state: location.state });
-      }
-    })();
-  };
-
   const itemVariants = {
     hidden: { y: 20, opacity: 0 },
     visible: {
@@ -541,7 +513,25 @@ export default function SubscriptionUserPage() {
           className="mb-4"
         >
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-            <div className="text-center md:text-left">
+            <div className="text-center md:text-left flex items-center gap-3">
+              <Button
+                onClick={() => {
+                  const returnId = (location.state as any)?.returnOpenSubscriptionId;
+                  const returnPath = (location.state as any)?.returnPath;
+                  if (returnId && returnPath) {
+                    // Navigate back to the modal using query parameter
+                    navigate(`${returnPath}?open=${returnId}`);
+                  } else {
+                    // Default to subscriptions list
+                    navigate("/subscriptions");
+                  }
+                }}
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 rounded-full bg-blue-500/20 hover:bg-blue-500/30 backdrop-blur-sm border border-blue-300/50 shadow-sm transition-all duration-200 hover:scale-105"
+              >
+                <ArrowLeft className="h-5 w-5 text-blue-600" />
+              </Button>
               <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
                 Manage Subscription Users
               </h1>
@@ -556,17 +546,17 @@ export default function SubscriptionUserPage() {
           </div>
         </motion.div>
 
-        <div className={`grid gap-6 ${showTeamMembers ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+        <div className={`grid gap-6 ${showTeamMembers ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'} flex-1 overflow-hidden`}>
           {/* Users in Subscription Panel (always visible on left) */}
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="w-full bg-white rounded-2xl shadow-xl overflow-hidden"
+            className="w-full bg-white rounded-xl border border-gray-200 shadow-md overflow-hidden flex flex-col h-full"
           >
-            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-gray-900 flex flex-nowrap items-center gap-2 min-w-0">
+            <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50 flex-shrink-0">
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-xl font-bold text-gray-900 flex flex-nowrap items-center gap-2 min-w-0">
                   <span className="whitespace-nowrap">Users in</span>
                   <span className="text-indigo-600 truncate max-w-xs">{subscriptionName}</span>
                 </h2>
@@ -577,7 +567,7 @@ export default function SubscriptionUserPage() {
                     placeholder="Search users..."
                     value={searchRight}
                     onChange={(e) => setSearchRight(e.target.value)}
-                    className="pl-10 h-11 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm"
+                    className="pl-10 h-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm"
                   />
                   <svg 
                     className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" 
@@ -597,7 +587,7 @@ export default function SubscriptionUserPage() {
                 {!showTeamMembers ? (
                   <Button
                     onClick={() => setShowTeamMembers(true)}
-                    className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 h-11 px-5 whitespace-nowrap"
+                    className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 h-10 px-4 whitespace-nowrap"
                   >
                     <svg 
                       className="w-4 h-4 mr-2" 
@@ -618,7 +608,7 @@ export default function SubscriptionUserPage() {
                 ) : (
                   <Button
                     onClick={handleRemoveAll}
-                    className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed h-11 px-5 whitespace-nowrap"
+                    className="bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed h-10 px-4 whitespace-nowrap"
                     disabled={selectedUsers.length === 0}
                   >
                     Remove All
@@ -627,7 +617,7 @@ export default function SubscriptionUserPage() {
               </div>
             </div>
             
-            <div className="overflow-hidden max-h-[350px] overflow-y-auto">
+            <div className="overflow-hidden flex-1 overflow-y-auto">
               {filteredSelectedUsers.length > 0 ? (
                 <div className="w-full">
                   <table className="w-full table-fixed">
@@ -705,11 +695,11 @@ export default function SubscriptionUserPage() {
           {/* Team Members Panel (conditionally shown on right) */}
           {showTeamMembers && (
             <div 
-              className="w-full bg-white rounded-2xl shadow-xl overflow-hidden"
+              className="w-full bg-white rounded-xl border border-gray-200 shadow-md overflow-hidden flex flex-col h-full"
               >
-                <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-emerald-50 to-green-50">
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-bold text-gray-900">
+                <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-emerald-50 to-green-50 flex-shrink-0">
+                  <div className="flex justify-between items-center mb-3">
+                    <h2 className="text-xl font-bold text-gray-900">
                       {COMPANY_NAME}'s Team Members
                     </h2>
                     <Button
@@ -740,7 +730,7 @@ export default function SubscriptionUserPage() {
                         placeholder=""
                         value={searchLeft}
                         onChange={(e) => setSearchLeft(e.target.value)}
-                        className="pl-10 h-11 border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 rounded-lg shadow-sm"
+                        className="pl-10 h-10 border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 rounded-lg shadow-sm"
                       />
                       <svg 
                         className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" 
@@ -759,7 +749,7 @@ export default function SubscriptionUserPage() {
                     </div>
                     <Button
                       onClick={handleAddAll}
-                      className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed h-11 px-6"
+                      className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-semibold shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed h-10 px-4"
                       disabled={availableEmployees.length === 0}
                     >
                       Add All
@@ -767,7 +757,7 @@ export default function SubscriptionUserPage() {
                   </div>
                 </div>
                 
-                <div className="overflow-hidden max-h-[350px] overflow-y-auto scrollbar-hide">
+                <div className="overflow-hidden flex-1 overflow-y-auto scrollbar-hide">
                   {employeesLoading ? (
                     <div className="flex justify-center items-center h-64">
                       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
@@ -852,20 +842,7 @@ export default function SubscriptionUserPage() {
             )}
         </div>
 
-        {/* Bottom button */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.6 }}
-          className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 mt-4 px-2 mr-20"
-        >
-          <Button
-            className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-6 sm:px-8 py-3 text-base sm:text-lg font-semibold rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105"
-            onClick={handleCancel}
-          >
-            Back
-          </Button>
-        </motion.div>
+
       </div>
     </div>
   );
