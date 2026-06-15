@@ -105,6 +105,7 @@ interface License {
   renewalAmount?: number;
   renewalStatusReason?: string;
   renewalNotes?: string;
+  isDraft?: boolean; // Draft status flag
   renewalStatusLog?: any[];
   renewalAttachments?: RenewalAttachment[] | string[];
   createdAt?: string;
@@ -496,6 +497,7 @@ const licenseSchema = z
   }, z.number().optional()),
   renewalStatusReason: z.string().optional(),
   renewalNotes: z.string().optional(),
+  isDraft: z.boolean().optional(), // Draft status flag
   renewalAttachments: z
     .array(
       z.object({
@@ -932,6 +934,7 @@ function MultiSelectDepartmentsDropdown(props: {
 }) {
   const { selectedDepartments, onDepartmentChange, onRemoveDepartment, departments, departmentsLoading, onAddNew } = props;
   const [deptOpen, setDeptOpen] = useState(false);
+  const [deptSearch, setDeptSearch] = useState('');
   const deptDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -940,6 +943,7 @@ function MultiSelectDepartmentsDropdown(props: {
     function handleClickOutside(event: MouseEvent) {
       if (deptDropdownRef.current && !deptDropdownRef.current.contains(event.target as Node)) {
         setDeptOpen(false);
+        setDeptSearch('');
       }
     }
     
@@ -947,6 +951,7 @@ function MultiSelectDepartmentsDropdown(props: {
     const dialogEl = deptDropdownRef.current?.closest('[role="dialog"]') as HTMLElement | null;
     function handleDialogScroll() {
       setDeptOpen(false);
+      setDeptSearch('');
     }
     
     document.addEventListener('mousedown', handleClickOutside);
@@ -957,6 +962,26 @@ function MultiSelectDepartmentsDropdown(props: {
       dialogEl?.removeEventListener('scroll', handleDialogScroll);
     };
   }, [deptOpen]);
+
+  // Filter and sort departments
+  const searchLower = deptSearch.trim().toLowerCase();
+  const filteredDepts = Array.isArray(departments) && departments.length > 0
+    ? departments
+        .filter(dept => {
+          if (!dept.visible) return false;
+          if (!searchLower) return true;
+          return dept.name.toLowerCase().includes(searchLower);
+        })
+        .sort((a, b) => {
+          if (searchLower) {
+            const aStarts = a.name.toLowerCase().startsWith(searchLower);
+            const bStarts = b.name.toLowerCase().startsWith(searchLower);
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+          }
+          return a.name.localeCompare(b.name);
+        })
+    : [];
 
   return (
     <div className="relative" ref={deptDropdownRef}>
@@ -1004,6 +1029,20 @@ function MultiSelectDepartmentsDropdown(props: {
       )}
       {deptOpen && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+          {/* Search bar inside dropdown */}
+          <div className="p-2 border-b border-gray-200">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                type="text"
+                placeholder="Search departments..."
+                value={deptSearch}
+                onChange={(e) => setDeptSearch(e.target.value)}
+                className="pl-9 h-9 text-sm"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
           <div className="max-h-60 overflow-auto custom-scrollbar">
             <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
               <Checkbox
@@ -1019,28 +1058,25 @@ function MultiSelectDepartmentsDropdown(props: {
                 Company Level
               </label>
             </div>
-            {Array.isArray(departments) && departments.length > 0
-              ? departments
-                  .filter(dept => dept.visible)
-                  .map(dept => (
-                    <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
-                      <Checkbox
-                        id={`dept-${dept.name}`}
-                        checked={selectedDepartments.includes(dept.name)}
-                        onCheckedChange={(checked: boolean) => onDepartmentChange(dept.name, checked)}
-                        disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
-                      />
-                      <label
-                        htmlFor={`dept-${dept.name}`}
-                        className="text-sm font-medium cursor-pointer flex-1 ml-2"
-                      >
-                        {dept.name}
-                      </label>
-                    </div>
-                  ))
-              : null}
-            {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
-              <div className="dropdown-item disabled text-gray-400">No departments found</div>
+            {filteredDepts.length > 0 ? (
+              filteredDepts.map(dept => (
+                <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
+                  <Checkbox
+                    id={`dept-${dept.name}`}
+                    checked={selectedDepartments.includes(dept.name)}
+                    onCheckedChange={(checked: boolean) => onDepartmentChange(dept.name, checked)}
+                    disabled={departmentsLoading || selectedDepartments.includes('Company Level')}
+                  />
+                  <label
+                    htmlFor={`dept-${dept.name}`}
+                    className="text-sm font-medium cursor-pointer flex-1 ml-2"
+                  >
+                    {dept.name}
+                  </label>
+                </div>
+              ))
+            ) : (
+              <div className="px-2 py-2 text-sm text-slate-500">No departments found</div>
             )}
           </div>
           <div
@@ -1135,6 +1171,10 @@ export default function GovernmentLicense() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedRenewalStatuses, setSelectedRenewalStatuses] = useState<string[]>([]);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { setActive: setSidebarSlotActive, setReplaceNav: setSidebarReplaceNav } = useSidebarSlot();
   const [sidebarSlotEl, setSidebarSlotEl] = useState<HTMLElement | null>(null);
@@ -2801,12 +2841,21 @@ export default function GovernmentLicense() {
           ...(logApprovedIssueDate ? { approvedIssueDate: logApprovedIssueDate } : {}),
         };
         
-        await fetch(`${API_BASE_URL}/api/logs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(logData),
-        });
+        const isDraftBefore = editingLicense?.isDraft === true || String(editingLicense?.status).trim() === 'Draft' || String((editingLicense as any)?.remarks || '').includes('[DRAFT]');
+        const isDraftAfter = data.isDraft === true;
+
+        if (!(isDraftBefore && isDraftAfter) && !isDraftAfter) {
+          if (isDraftBefore && !isDraftAfter) {
+            logData.action = 'Created';
+            logData.changes = `Created new license: ${data.licenseName || 'Unnamed'}`;
+          }
+          await fetch(`${API_BASE_URL}/api/logs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(logData),
+          });
+        }
       } catch (logError) {
         console.error('Failed to log action:', logError);
       }
@@ -2887,20 +2936,22 @@ export default function GovernmentLicense() {
       const result = await res.json();
       
       // Log the deletion
-      try {
-        await fetch(`${API_BASE_URL}/api/logs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            licenseId: id, // Include license ID for filtering
-            licenseName,
-            action: 'Deleted',
-            changes: `Deleted license: ${licenseName}`,
-          }),
-        });
-      } catch (logError) {
-        console.error('Failed to log deletion:', logError);
+      if (license && !license.isDraft) {
+        try {
+          await fetch(`${API_BASE_URL}/api/logs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              licenseId: id, // Include license ID for filtering
+              licenseName,
+              action: 'Deleted',
+              changes: `Deleted license: ${licenseName}`,
+            }),
+          });
+        } catch (logError) {
+          console.error('Failed to log deletion:', logError);
+        }
       }
       
       return result;
@@ -3381,6 +3432,18 @@ export default function GovernmentLicense() {
     });
   })();
 
+  // Pagination calculations
+  const totalFiltered = sortedLicenses.length;
+  const totalPages = Math.ceil(totalFiltered / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedLicenses = sortedLicenses.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedStatuses, selectedRenewalStatuses]);
+
   const visibleLicenseIds = useMemo(() => {
     return (Array.isArray(sortedLicenses) ? sortedLicenses : [])
       .map((l: any) => String(l?.id ?? l?._id ?? '').trim())
@@ -3437,20 +3500,22 @@ export default function GovernmentLicense() {
           if (!res.ok) throw new Error('Failed to delete license');
           await res.json().catch(() => null);
 
-          try {
-            await fetch(`${API_BASE_URL}/api/logs`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({
-                licenseId: id,
-                licenseName,
-                action: 'Deleted',
-                changes: `Deleted license: ${licenseName}`,
-              }),
-            });
-          } catch {
-            // ignore logging errors
+          if (license && !license.isDraft) {
+            try {
+              await fetch(`${API_BASE_URL}/api/logs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  licenseId: id,
+                  licenseName,
+                  action: 'Deleted',
+                  changes: `Deleted license: ${licenseName}`,
+                }),
+              });
+            } catch {
+              // ignore logging errors
+            }
           }
 
           success++;
@@ -3510,6 +3575,7 @@ export default function GovernmentLicense() {
       currency: currency || undefined,
       lcyAmount: lcyAmountValue,
       renewalNotes: renewalNotes.length > 0 ? JSON.stringify(renewalNotes) : undefined,
+      isDraft: false, // Clear draft status when saving normally
     };
     form.setValue('status', derivedStatus);
     licenseMutation.mutate(payload);
@@ -4245,7 +4311,7 @@ export default function GovernmentLicense() {
                   className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  New Renewal
+                  Renewal
                 </Button>
               </motion.div>
             </Can>
@@ -4343,7 +4409,7 @@ export default function GovernmentLicense() {
         {/* Main Content */}
         <div className="min-w-0 flex-1 min-h-0">
           <Card className="bg-white border border-gray-200  shadow-md overflow-hidden h-full flex flex-col min-h-0">
-            <CardContent className="p-0 flex flex-col min-h-0">
+            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20">
                   <motion.div
@@ -4416,7 +4482,7 @@ export default function GovernmentLicense() {
                     </TableRow>
                   </TableHeader>
                     <TableBody>
-                      {sortedLicenses.length === 0 ? (
+                      {paginatedLicenses.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={8} className="py-20">
                             <div className="flex flex-col items-center justify-center">
@@ -4436,14 +4502,14 @@ export default function GovernmentLicense() {
                         </TableRow>
                       ) : (
                       <AnimatePresence>
-                        {sortedLicenses.map((license, index) => (
+                        {paginatedLicenses.map((license, index) => (
                         <motion.tr 
                             key={license.id}
                             className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0 }}
-                            transition={{ delay: 0.04 * index }}
+                            transition={{ duration: 0.15 }}
                           >
                             <TableCell className="px-2 py-3 w-[48px] text-center">
                               {(() => {
@@ -4488,13 +4554,20 @@ export default function GovernmentLicense() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                title="Renewal Submit"
+                                disabled={license.isDraft}
+                                title={license.isDraft ? "Complete draft before submission" : "Renewal Submit"}
                                 onClick={() => {
+                                  if (license.isDraft) return;
                                   handleEdit(license);
                                   setSubmissionOpenedFromTable(true);
                                   setShowSubmissionDetails(true);
                                 }}
-                                className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800 font-semibold text-xs px-4 py-1.5 rounded-lg transition-all shadow-sm"
+                                className={`font-semibold text-xs px-4 py-1.5 rounded-lg transition-all shadow-sm
+                                  ${license.isDraft
+                                    ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800'
+                                  }
+                                `}
                               >
                                 Renewal Submit
                               </Button>
@@ -4504,14 +4577,19 @@ export default function GovernmentLicense() {
                             </TableCell>
                                 <TableCell className="px-3 py-3.5 w-[100px] text-left">
                               {(() => {
+                                const isDraft = license.isDraft;
                                 const derived = getDerivedStatus({ endDate: license.endDate, status: license.status });
+                                const displayStatus = isDraft ? 'Draft' : derived;
+                                const statusClass = isDraft 
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : getStatusClassName(derived);
                                 return (
                                       <span
-                                        className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border ${getStatusClassName(derived)}`}
+                                        className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border ${statusClass}`}
                                         style={{ width: `calc(${statusPillWidthCh}ch + 1.5rem)`, maxWidth: '100%' }}
                                       >
-                                        <span className="truncate whitespace-nowrap" title={derived}>
-                                          {derived}
+                                        <span className="truncate whitespace-nowrap" title={displayStatus}>
+                                          {displayStatus}
                                         </span>
                                   </span>
                                 );
@@ -4573,6 +4651,105 @@ export default function GovernmentLicense() {
                 </Table>
               )}
             </CardContent>
+            
+            {/* Gmail-style Pagination */}
+            {filteredLicenses.length > 0 && (
+              <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-4 text-sm text-slate-700">
+                  <div>
+                    {paginatedLicenses.length > 0 ? (
+                      <>
+                        <span className="font-medium">{startIndex + 1}</span>
+                        <span>–</span>
+                        <span className="font-medium">{Math.min(endIndex, filteredLicenses.length)}</span>
+                        <span> of </span>
+                        <span className="font-medium">{filteredLicenses.length}</span>
+                      </>
+                    ) : (
+                      <span>0 of 0</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                    <span className="text-xs text-slate-500">Rows per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    >
+                      {[10, 25, 50, 100].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="h-8 px-3 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {(() => {
+                        const pages: number[] = [];
+                        const maxPagesToShow = 5;
+
+                        if (totalPages <= maxPagesToShow) {
+                          for (let i = 1; i <= totalPages; i++) {
+                            pages.push(i);
+                          }
+                        } else {
+                          let startPage = Math.max(1, currentPage - 2);
+                          let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+
+                          if (endPage - startPage < maxPagesToShow - 1) {
+                            startPage = Math.max(1, endPage - maxPagesToShow + 1);
+                          }
+
+                          for (let i = startPage; i <= endPage; i++) {
+                            pages.push(i);
+                          }
+                        }
+
+                        return pages.map(pageNum => (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? "default" : "ghost"}
+                            size="sm"
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={
+                              currentPage === pageNum
+                                ? "h-8 w-8 p-0 bg-blue-600 text-white hover:bg-blue-700"
+                                : "h-8 w-8 p-0 text-gray-700 hover:bg-gray-100"
+                            }
+                          >
+                            {pageNum}
+                          </Button>
+                        ));
+                      })()}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className="h-8 px-3 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         </div>
 
@@ -4612,7 +4789,12 @@ export default function GovernmentLicense() {
                         ? 'Opening renewal...'
                         : 'New Renewal'}
                 </DialogTitle>
-                {(() => {
+                {/* Status Badge - Show Draft or derived status */}
+                {editingLicense?.isDraft ? (
+                  <span className="ml-4 shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-semibold shadow-sm tracking-wide bg-amber-100 text-amber-800 border border-amber-200">
+                    Draft
+                  </span>
+                ) : (() => {
                   const derived = getDerivedStatus({ endDate: expiryDateValue, status: statusValue });
                   const cls =
                     derived === 'Active'
@@ -4626,17 +4808,30 @@ export default function GovernmentLicense() {
                 })()}
               </div>
               <div className="flex gap-4 items-center mr-4">
-                {/* Submission Toggle Button */}
+                {/* Submission Toggle Button - Disabled for new records and drafts */}
                 {!showSubmissionDetails && renewalFreqValue !== 'One-time' && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={!editingLicense || editingLicense.isDraft}
                     onClick={() => {
                       setSubmissionOpenedFromTable(false);
                       setShowSubmissionDetails(!showSubmissionDetails);
                     }}
-                    className="relative overflow-hidden px-3 py-1 text-sm rounded-lg font-semibold transition-all duration-300 bg-gradient-to-r from-emerald-500/70 to-green-600/70 text-white border border-emerald-300/60 hover:from-emerald-500 hover:to-green-600 hover:shadow-[0_8px_16px_rgba(16,185,129,0.25)]"
+                    className={`relative overflow-hidden px-3 py-1 text-sm rounded-lg font-semibold transition-all duration-300
+                      ${!editingLicense || editingLicense.isDraft
+                        ? 'bg-gray-300 text-gray-500 border-gray-300 cursor-not-allowed opacity-60'
+                        : 'bg-gradient-to-r from-emerald-500/70 to-green-600/70 text-white border border-emerald-300/60 hover:from-emerald-500 hover:to-green-600 hover:shadow-[0_8px_16px_rgba(16,185,129,0.25)]'
+                      }
+                    `}
+                    title={
+                      !editingLicense
+                        ? "Save renewal first before submission"
+                        : editingLicense.isDraft
+                          ? "Complete draft before submission"
+                          : "Open renewal submission form"
+                    }
                   >
                     Renewal Submit
                   </Button>
@@ -5767,6 +5962,60 @@ export default function GovernmentLicense() {
                     Exit
                   </Button>
                   <Button 
+                    type="button" 
+                    variant="outline" 
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold px-6 py-3 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      const currentValues = form.getValues();
+                      
+                      // Basic validation for required fields (only license name)
+                      if (!currentValues.licenseName?.trim()) {
+                        toast({
+                          title: "Validation Error",
+                          description: "License name is required to save as draft",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      
+                      // Save with "Draft" indicator
+                      const lcyAmountValue = lcyAmount ? parseFloat(lcyAmount) : undefined;
+                      const derivedStatus = getDerivedStatus({ 
+                        endDate: String(currentValues.endDate || ''), 
+                        status: '' 
+                      });
+                      
+                      const remarksValue = String(currentValues.remarks || '');
+                      const payload: LicenseFormData = {
+                        ...currentValues,
+                        status: derivedStatus,
+                        departments: selectedDepartments,
+                        department: JSON.stringify(selectedDepartments),
+                        currency: currency || undefined,
+                        lcyAmount: lcyAmountValue,
+                        renewalNotes: renewalNotes.length > 0 ? JSON.stringify(renewalNotes) : undefined,
+                        // Add a draft indicator in remarks if it doesn't exist
+                        remarks: remarksValue.includes('[DRAFT]') 
+                          ? remarksValue 
+                          : `[DRAFT] ${remarksValue}`.trim(),
+                        isDraft: true, // Mark as draft
+                      };
+                      
+                      licenseMutation.mutate(payload, {
+                        onSuccess: () => {
+                          toast({
+                            title: "Success",
+                            description: "License saved as draft",
+                            duration: 2000,
+                          });
+                        },
+                      });
+                    }}
+                    disabled={licenseMutation.isPending}
+                  >
+                    {licenseMutation.isPending ? 'Saving Draft...' : 'Save as Draft'}
+                  </Button>
+                  <Button 
                     type="submit" 
                     className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold px-8 py-3 shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-blue-700 rounded-lg transition-all duration-200 tracking-tight"
                     disabled={licenseMutation.isPending}
@@ -5797,7 +6046,7 @@ export default function GovernmentLicense() {
                   <div className="flex items-start justify-between">
                     <div>
                       <DialogTitle className="text-lg font-semibold text-gray-900">Documents</DialogTitle>
-                      
+                      <p className="text-xs text-gray-500 mt-1">Max 10MB • PDF, DOC, DOCX, XLS, XLSX, PNG, JPG</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button

@@ -689,6 +689,10 @@ export default function Compliance() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { setActive: setSidebarSlotActive, setReplaceNav: setSidebarReplaceNav } = useSidebarSlot();
@@ -958,6 +962,7 @@ export default function Compliance() {
 
   const [ownerDeptOpen, setOwnerDeptOpen] = useState(false);
   const [ownerDeptSearch, setOwnerDeptSearch] = useState('');
+  const [departmentSearch, setDepartmentSearch] = useState('');
   const ownerDeptDropdownRef = useRef<HTMLDivElement>(null);
 
   // Payment Method dropdown + modal (matching subscription modal logic)
@@ -3305,6 +3310,18 @@ export default function Compliance() {
     }
   }
   
+  // Pagination calculations
+  const totalFiltered = filteredItems.length;
+  const totalPages = Math.ceil(totalFiltered / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedItems = filteredItems.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategories, selectedStatuses]);
+  
   const visibleComplianceIds = useMemo(() => {
     return (Array.isArray(filteredItems) ? filteredItems : [])
       .map((it: any) => String(it?._id ?? it?.id ?? '').trim())
@@ -3475,7 +3492,7 @@ export default function Compliance() {
                     className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    New Compliance
+                    Compliance
                   </Button>
                 </motion.div>
               </Can>
@@ -3574,7 +3591,7 @@ export default function Compliance() {
         {/* Main Content */}
         <div className="min-w-0 flex-1 min-h-0">
           <Card className="bg-white border border-gray-200 shadow-md overflow-hidden h-full flex flex-col min-h-0">
-            <CardContent className="p-0 flex flex-col min-h-0">
+            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
             <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" className="w-full table-fixed">
               <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                 <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
@@ -3660,7 +3677,7 @@ export default function Compliance() {
                   </TableRow>
                 ) : (
                   <AnimatePresence>
-                  {filteredItems.map((item: ComplianceItem, index: number) => {
+                  {paginatedItems.map((item: ComplianceItem, index: number) => {
                     const rowKey = item._id || item.id;
                     const isDraft = item.isDraft || item.status === "Draft";
                     const statusInfo = getComplianceStatus(item.endDate || "", item.submissionDeadline || "");
@@ -3672,7 +3689,7 @@ export default function Compliance() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      transition={{ delay: 0.04 * index }}
+                      transition={{ duration: 0.15 }}
                     >
                       <TableCell className="px-2 py-3 w-[48px] text-center">
                         {(() => {
@@ -3786,8 +3803,10 @@ export default function Compliance() {
                           <Button
                             variant="outline"
                             size="sm"
-                            title="Submit now"
+                            disabled={isDraft}
+                            title={isDraft ? "Complete draft before submission" : "Submit now"}
                             onClick={() => {
+                              if (isDraft) return;
                               const index = (complianceItems as ComplianceItem[]).findIndex(
                                 (ci: ComplianceItem) => (ci._id || ci.id) === (item._id || item.id)
                               );
@@ -3839,7 +3858,12 @@ export default function Compliance() {
                                 submissionDocuments: nextDocs,
                               });
                             }}
-                            className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800 font-semibold text-xs px-4 py-1.5 rounded-lg transition-all shadow-sm"
+                            className={`font-semibold text-xs px-4 py-1.5 rounded-lg transition-all shadow-sm
+                              ${isDraft 
+                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' 
+                                : 'bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800'
+                              }
+                            `}
                           >
                             Submit now
                           </Button>
@@ -3970,6 +3994,90 @@ export default function Compliance() {
               </TableBody>
             </Table>
             </CardContent>
+            
+            {/* Gmail-style Pagination */}
+            {totalFiltered > 0 && (
+              <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-4 text-sm text-slate-700">
+                  <div>
+                    {(() => {
+                      const start = totalFiltered === 0 ? 0 : startIndex + 1;
+                      const end = Math.min(endIndex, totalFiltered);
+                      return `${start}–${end} of ${totalFiltered}`;
+                    })()}
+                  </div>
+                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                    <span className="text-xs text-slate-500">Rows per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    >
+                      {[10, 25, 50, 100].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage <= 1}
+                    >
+                      Previous
+                    </Button>
+                    {(() => {
+                      const buttons: number[] = [];
+                      const maxButtons = 5;
+                      let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+                      let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+                      
+                      if (endPage - startPage < maxButtons - 1) {
+                        startPage = Math.max(1, endPage - maxButtons + 1);
+                      }
+                      
+                      for (let i = startPage; i <= endPage; i++) {
+                        buttons.push(i);
+                      }
+                      
+                      return buttons.map((p) => (
+                        <Button
+                          key={p}
+                          type="button"
+                          variant={p === currentPage ? "default" : "ghost"}
+                          className={`h-9 w-9 px-0 text-sm ${
+                            p === currentPage 
+                              ? "bg-blue-600 text-white hover:bg-blue-700" 
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                          onClick={() => setCurrentPage(p)}
+                        >
+                          {p}
+                        </Button>
+                      ));
+                    })()}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         </div>
       </div>
@@ -4009,66 +4117,79 @@ export default function Compliance() {
           <DialogHeader className={`sticky top-0 z-50 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white ${isFullscreen ? 'p-4 md:p-5' : 'p-5'} flex flex-row items-center`}>
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <FileText className="h-6 w-6 shrink-0" />
-              <DialogTitle
-                className="text-xl font-bold tracking-tight text-white flex-1 min-w-0 truncate max-w-xs"
-                title={
-                  showSubmissionDetails
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <DialogTitle
+                  className="text-xl font-bold tracking-tight text-white min-w-0 truncate"
+                  title={
+                    showSubmissionDetails
+                      ? "Submission"
+                      : editIndex !== null
+                        ? form.filingName || "Edit Compliance"
+                        : "Compliance"
+                  }
+                >
+                  {showSubmissionDetails
                     ? "Submission"
                     : editIndex !== null
                       ? form.filingName || "Edit Compliance"
-                      : "Compliance"
-                }
-              >
-                {showSubmissionDetails
-                  ? "Submission"
-                  : editIndex !== null
-                    ? form.filingName || "Edit Compliance"
-                    : "Compliance"}
-              </DialogTitle>
+                      : "Compliance"}
+                </DialogTitle>
 
-              {/* Dynamic Status Badge - hidden when in Submission view */}
-              {!showSubmissionDetails && (() => {
-                const isDraft = editIndex !== null && (complianceItems[editIndex]?.isDraft || complianceItems[editIndex]?.status === "Draft");
-                if (isDraft) {
+                {/* Dynamic Status Badge - beside name, hidden when in Submission view */}
+                {!showSubmissionDetails && (() => {
+                  const isDraft = editIndex !== null && (complianceItems[editIndex]?.isDraft || complianceItems[editIndex]?.status === "Draft");
+                  if (isDraft) {
+                    return (
+                      <span className="shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-xs font-semibold text-amber-800 bg-amber-100 border border-amber-200 transition-all duration-300">
+                        Draft
+                      </span>
+                    );
+                  }
+
+                  const statusInfo = getComplianceStatus(form.filingEndDate, form.filingSubmissionDeadline);
+                  const isLate = statusInfo.status === "Late";
                   return (
-                    <span className="shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium text-amber-800 bg-amber-100 transition-all duration-300">
-                      Draft
+                    <span
+                      className={`shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-xs font-semibold ${statusInfo.color} ${statusInfo.bgColor} ${
+                        isLate ? 'animate-bounce relative' : ''
+                      } transition-all duration-300`}
+                    >
+                      {isLate && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+                      )}
+                      {statusInfo.status}
                     </span>
                   );
-                }
-
-                const statusInfo = getComplianceStatus(form.filingEndDate, form.filingSubmissionDeadline);
-                const isLate = statusInfo.status === "Late";
-                return (
-                  <span
-                    className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium ${statusInfo.color} ${statusInfo.bgColor} ${
-                      isLate ? 'animate-bounce relative' : ''
-                    } transition-all duration-300`}
-                  >
-                    {isLate && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
-                    )}
-                    {statusInfo.status}
-                  </span>
-                );
-              })()}
+                })()}
+              </div>
             </div>
 
             {/* Right side controls */}
             <div className="flex items-center gap-3 pr-1 shrink-0">
-                {/* Submission Toggle Button - highlighted in green theme, now on right */}
+                {/* Submission Toggle Button - Disabled for new records and drafts */}
                 {!showSubmissionDetails && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={editIndex === null || complianceItems[editIndex]?.isDraft}
                     onClick={() => {
                       setSubmissionOpenedFromTable(false);
                       setShowSubmissionDetails(!showSubmissionDetails);
                     }}
                     className={`relative overflow-hidden px-3 py-1 text-sm rounded-lg font-semibold transition-all duration-300
-                      bg-gradient-to-r from-emerald-500/70 to-green-600/70 text-white border border-emerald-300/60 hover:from-emerald-500 hover:to-green-600 hover:shadow-[0_8px_16px_rgba(16,185,129,0.25)]
+                      ${editIndex === null || complianceItems[editIndex]?.isDraft 
+                        ? 'bg-gray-300 text-gray-500 border-gray-300 cursor-not-allowed opacity-60' 
+                        : 'bg-gradient-to-r from-emerald-500/70 to-green-600/70 text-white border border-emerald-300/60 hover:from-emerald-500 hover:to-green-600 hover:shadow-[0_8px_16px_rgba(16,185,129,0.25)]'
+                      }
                     `}
+                    title={
+                      editIndex === null 
+                        ? "Save compliance first before submission" 
+                        : complianceItems[editIndex]?.isDraft 
+                          ? "Complete draft before submission" 
+                          : "Open submission form"
+                    }
                   >
                     <FileText className="h-4 w-4 mr-1" />
                     Submission
@@ -4618,6 +4739,20 @@ export default function Compliance() {
                 )}
                 {departmentSelectOpen && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                    {/* Search bar inside dropdown */}
+                    <div className="p-2 border-b border-gray-200">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <Input
+                          type="text"
+                          placeholder="Search departments..."
+                          value={departmentSearch}
+                          onChange={(e) => setDepartmentSearch(e.target.value)}
+                          className="pl-9 h-9 text-sm"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    </div>
                     <div className="max-h-60 overflow-auto custom-scrollbar">
                       <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
                         <Checkbox
@@ -4635,7 +4770,22 @@ export default function Compliance() {
                       </div>
                       {Array.isArray(departments) && departments.length > 0 ? (
                         departments
-                          .filter(dept => dept.visible)
+                          .filter(dept => {
+                            if (!dept.visible) return false;
+                            const searchLower = departmentSearch.trim().toLowerCase();
+                            if (!searchLower) return true;
+                            return dept.name.toLowerCase().includes(searchLower);
+                          })
+                          .sort((a, b) => {
+                            const searchLower = departmentSearch.trim().toLowerCase();
+                            if (searchLower) {
+                              const aStarts = a.name.toLowerCase().startsWith(searchLower);
+                              const bStarts = b.name.toLowerCase().startsWith(searchLower);
+                              if (aStarts && !bStarts) return -1;
+                              if (!aStarts && bStarts) return 1;
+                            }
+                            return a.name.localeCompare(b.name);
+                          })
                           .map(dept => (
                             <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
                               <Checkbox
@@ -5124,6 +5274,16 @@ export default function Compliance() {
                 className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
                 disabled={isSavingCompliance}
                 onClick={async () => {
+                  // For draft saves, only validate filing name (minimal validation)
+                  if (!form.filingName?.trim()) {
+                    toast({
+                      title: "Validation Error",
+                      description: "Filing name is required to save as draft",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
                   // Check for filing name validation errors
                   if (filingNameError) {
                     toast({
@@ -5139,20 +5299,7 @@ export default function Compliance() {
                     return;
                   }
                   
-                  // Validate required fields
-                  if (!validateRequiredFields()) {
-                    return;
-                  }
-                  
-                  // Validate dates before saving draft
-                  if (!validateDateLogic()) {
-                    toast({
-                      title: "Validation Error",
-                      description: "Please fix the date validation errors before saving",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
+                  // Skip other validations for draft saves
                   
                   // Save as draft logic - save the compliance item with current form data
                   let saveData = {
@@ -6419,6 +6566,7 @@ export default function Compliance() {
             <div className="flex items-start justify-between">
               <div>
                 <DialogTitle className="text-lg font-semibold text-gray-900">Documents</DialogTitle>
+                <p className="text-xs text-gray-500 mt-1">Max 10MB • PDF, DOC, DOCX, XLS, XLSX, PNG, JPG</p>
               </div>
               <div className="flex items-center gap-2">
                 <Button

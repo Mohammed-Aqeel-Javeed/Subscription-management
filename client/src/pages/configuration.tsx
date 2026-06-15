@@ -12,6 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ChevronDown, Check } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Settings, CreditCard, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X, MoreVertical, BadgeDollarSign, WalletCards, Layers, LayoutGrid, Pencil } from "lucide-react";
@@ -620,6 +621,12 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
   const [paymentDataManagementSelectKey, setPaymentDataManagementSelectKey] = useState(0);
   const [paymentImportConfirmOpen, setPaymentImportConfirmOpen] = useState(false);
 
+  // Currency Search and Pagination State
+  const [currencySearchQuery, setCurrencySearchQuery] = useState("");
+  const [currencyCurrentPage, setCurrencyCurrentPage] = useState(1);
+  const [currencyItemsPerPage, setCurrencyItemsPerPage] = useState(10);
+  const [selectedCurrencyCodes, setSelectedCurrencyCodes] = useState<Set<string>>(new Set());
+
   /**
    * EXCEL IMPORT/EXPORT FUNCTIONALITY
    * 
@@ -1034,19 +1041,19 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
         'Currency Code': 'USD',
         'Description': 'United States Dollar',
         'Symbol': '$',
-        'Exchange Rate': '1.00'
+        'Exchange Rate': '1.000'
       },
       {
         'Currency Code': 'EUR',
         'Description': 'Euro',
         'Symbol': '€',
-        'Exchange Rate': '0.85'
+        'Exchange Rate': '0.850'
       },
       {
         'Currency Code': 'GBP',
         'Description': 'British Pound Sterling',
         'Symbol': '£',
-        'Exchange Rate': '0.73'
+        'Exchange Rate': '0.730'
       }
     ];
     
@@ -1109,7 +1116,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
       'Currency Code': currency.code,
       'Description': currency.name,
       'Symbol': currency.symbol,
-      'Exchange Rate': currency.exchangeRate || ''
+      'Exchange Rate': currency.exchangeRate ? parseFloat(currency.exchangeRate).toFixed(3) : '1.000'
     }));
     const ws = XLSX.utils.json_to_sheet(currencyExportData);
     ws['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 10 }, { wch: 15 }];
@@ -1149,7 +1156,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
               code: currencyCode,
               name: row['Description'],
               symbol: row['Symbol'],
-              exchangeRate: row['Exchange Rate'] || '1.00'
+              exchangeRate: row['Exchange Rate'] ? parseFloat(row['Exchange Rate']).toFixed(3) : '1.000'
             };
             
             const res = await fetch(`${API_BASE_URL}/api/currencies`, {
@@ -1325,13 +1332,57 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
     refetchOnMount: true,
   });
   
-  // Combine currencies with their latest rates
+  // Combine currencies with their latest rates and sort A-Z automatically
   const currencies = Array.isArray(currenciesData) 
     ? currenciesData.map(currency => ({
         ...currency,
         latestRate: exchangeRatesMap[currency.code]?.rate || '-'
-      }))
+      })).sort((a, b) => a.code.localeCompare(b.code))
     : [];
+
+  const filteredCurrenciesList = currencies.filter((c: any) => {
+    if (!currencySearchQuery) return true;
+    const q = currencySearchQuery.toLowerCase();
+    return (c.name || '').toLowerCase().includes(q) || (c.code || '').toLowerCase().includes(q);
+  }).sort((a: any, b: any) => {
+    if (!currencySearchQuery) return 0;
+    const q = currencySearchQuery.toLowerCase();
+    const aNameIdx = (a.name || '').toLowerCase().indexOf(q);
+    const bNameIdx = (b.name || '').toLowerCase().indexOf(q);
+    const aCodeIdx = (a.code || '').toLowerCase().indexOf(q);
+    const bCodeIdx = (b.code || '').toLowerCase().indexOf(q);
+    
+    const aBest = Math.min(aNameIdx === -1 ? Infinity : aNameIdx, aCodeIdx === -1 ? Infinity : aCodeIdx);
+    const bBest = Math.min(bNameIdx === -1 ? Infinity : bNameIdx, bCodeIdx === -1 ? Infinity : bCodeIdx);
+    
+    if (aBest !== bBest) return aBest - bBest;
+    return a.code.localeCompare(b.code);
+  });
+  
+  const totalCurrencyFiltered = filteredCurrenciesList.length;
+  const currencyTotalPages = Math.ceil(totalCurrencyFiltered / currencyItemsPerPage);
+  const currencyStartIndex = (currencyCurrentPage - 1) * currencyItemsPerPage;
+  const currencyEndIndex = currencyStartIndex + currencyItemsPerPage;
+  const paginatedCurrencies = filteredCurrenciesList.slice(currencyStartIndex, currencyEndIndex);
+
+  const currencyAllVisibleSelected = paginatedCurrencies.length > 0 && paginatedCurrencies.every((c: any) => selectedCurrencyCodes.has(c.code));
+  const currencySomeVisibleSelected = paginatedCurrencies.some((c: any) => selectedCurrencyCodes.has(c.code));
+
+  const toggleSelectAllVisibleCurrencies = (checked: boolean) => {
+    const newSet = new Set(selectedCurrencyCodes);
+    paginatedCurrencies.forEach((c: any) => {
+      if (checked) newSet.add(c.code);
+      else newSet.delete(c.code);
+    });
+    setSelectedCurrencyCodes(newSet);
+  };
+
+  const toggleSelectOneCurrency = (code: string, checked: boolean) => {
+    const newSet = new Set(selectedCurrencyCodes);
+    if (checked) newSet.add(code);
+    else newSet.delete(code);
+    setSelectedCurrencyCodes(newSet);
+  };
 
   // Handle secure-link openToken for Configuration edit modals
   useEffect(() => {
@@ -1525,6 +1576,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
             symbol: newCurrency.symbol.trim(),
             isoNumber: newCurrency.isoNumber.trim(),
             exchangeRate,
+            lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
           }),
         });
         
@@ -1547,6 +1599,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
             title: isEditMode ? "Currency Updated" : "Currency Added",
             description: `${newCurrency.name} currency has been ${isEditMode ? 'updated' : 'added'} successfully`,
             variant: "success",
+            duration: 1500,
           });
           return true;
         } else {
@@ -1555,6 +1608,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
             title: "Error",
             description: error.message || `Failed to ${isEditMode ? 'update' : 'add'} currency`,
             variant: "destructive",
+            duration: 1500,
           });
           return false;
         }
@@ -1563,6 +1617,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
           title: "Error",
           description: `Failed to ${isEditMode ? 'update' : 'add'} currency`,
           variant: "destructive",
+          duration: 1500,
         });
         return false;
       }
@@ -1571,6 +1626,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
         title: "Validation Error",
         description: "Please fill all required fields and ensure currency code is unique",
         variant: "destructive",
+        duration: 2000,
       });
       return false;
     }
@@ -1590,6 +1646,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
           title: "Currency Deleted",
           description: `Currency with code ${code} has been deleted.`,
           variant: "destructive",
+          duration: 1500,
         });
       } else {
         const error = await res.json();
@@ -1597,6 +1654,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
           title: "Error",
           description: error.message || "Failed to delete currency",
           variant: "destructive",
+          duration: 1500,
         });
       }
     } catch (error) {
@@ -1604,6 +1662,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
         title: "Error",
         description: "Failed to delete currency",
         variant: "destructive",
+        duration: 1500,
       });
     }
   };
@@ -1612,6 +1671,46 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
   const [currencyDeleteOpen, setCurrencyDeleteOpen] = useState(false);
   const [currencyToDelete, setCurrencyToDelete] = useState<{ code: string; name?: string; inUseCount: number } | null>(null);
   const [openCurrencyActionsMenuForCode, setOpenCurrencyActionsMenuForCode] = useState<string | null>(null);
+
+  const [currencyBulkDeleteConfirmOpen, setCurrencyBulkDeleteConfirmOpen] = useState(false);
+  const deleteSelectedCurrencies = async () => {
+    try {
+      const codes = Array.from(selectedCurrencyCodes);
+      let successCount = 0;
+      for (const code of codes) {
+        const inUseCount = getCurrencySubscriptions(code).length;
+        if (inUseCount > 0) continue; // Skip currencies in use
+        const res = await fetch(`${API_BASE_URL}/api/currencies/${code}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
+        if (res.ok) successCount++;
+      }
+      await fetchCurrencies(); // Refresh the list
+      if (successCount > 0) {
+        toast({
+          title: "Currencies Deleted",
+          description: `Successfully deleted ${successCount} currencies.`,
+          variant: "destructive",
+        });
+        setSelectedCurrencyCodes(new Set());
+      } else if (codes.length > 0) {
+        toast({
+          title: "Delete Failed",
+          description: "No currencies were deleted. They may be currently in use.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete currencies",
+        variant: "destructive",
+      });
+    } finally {
+      setCurrencyBulkDeleteConfirmOpen(false);
+    }
+  };
 
   // Update currency rates handler
   const updateCurrencyRates = async () => {
@@ -2426,6 +2525,12 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
     lastFourDigits: '',
   });
 
+  // Capitalize the first letter of a string (preserve rest as typed)
+  const capitalizeFirst = (s: string) => {
+    if (!s) return s;
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+
   // Handler for adding a new payment method (POST to backend)
   function handleAddPaymentMethod(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -2690,32 +2795,31 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                     >
                       <Card className="p-0 bg-transparent border-0 shadow-none h-full flex flex-col">
                         {/* ── Currency Section Header ── */}
-                        <div className="sticky top-0 z-10 bg-gray-50 pb-4 mb-4">
-                          <div className="flex flex-wrap justify-between items-center gap-4">
+                        <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-200 shrink-0 gap-3 min-w-0">
 
                             {/* Left: icon + title + local currency chip */}
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center justify-center w-11 h-11 rounded-2xl bg-indigo-600">
+                            <div className="flex items-center gap-3 min-w-0 shrink-0">
+                              <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-indigo-600 shrink-0">
                                 <DollarSign className="w-5 h-5 text-white" />
                               </div>
-                              <h2 className="text-2xl font-extrabold text-gray-900 leading-tight tracking-tight">Currency Management</h2>
+                              <h2 className="text-xl font-extrabold text-gray-900 leading-tight tracking-tight whitespace-nowrap">Currency Management</h2>
 
-                              {/* Local Currency chip — no border, soft background */}
+                              {/* Local Currency chip */}
                               {companyInfo.defaultCurrency && (
-                                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50">
+                                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-indigo-50/70 shrink-0">
                                   {getCountryCodeForCurrency(companyInfo.defaultCurrency) && (
                                     <ReactCountryFlag
                                       svg
                                       countryCode={getCountryCodeForCurrency(companyInfo.defaultCurrency)!}
-                                      style={{ width: '1.4rem', height: '1.4rem', borderRadius: '4px' }}
+                                      style={{ width: '1.8rem', height: '1.3rem', borderRadius: '2px', objectFit: 'cover' }}
                                     />
                                   )}
-                                  <div className="leading-none">
-                                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Local Currency</p>
-                                    <p className="text-sm font-bold text-indigo-700 mt-0.5">
+                                  <div className="leading-tight flex flex-col justify-center">
+                                    <p className="text-[11px] font-bold text-indigo-400 uppercase tracking-[0.1em] mb-0.5">Local Currency</p>
+                                    <p className="text-base font-extrabold text-indigo-700 flex items-baseline gap-1.5">
                                       {companyInfo.defaultCurrency}
                                       {currencies.find(c => c.code === companyInfo.defaultCurrency)?.symbol && (
-                                        <span className="ml-1 text-indigo-400 font-medium text-xs">
+                                        <span className="text-indigo-400 font-bold text-sm">
                                           ({currencies.find(c => c.code === companyInfo.defaultCurrency)?.symbol})
                                         </span>
                                       )}
@@ -2725,8 +2829,8 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                               )}
                             </div>
 
-                            {/* Right: controls */}
-                            <div className="flex items-center gap-3 flex-wrap">
+                            {/* Right: all controls inline, no wrap */}
+                            <div className="flex items-center gap-2 shrink-0">
                               {/* Data Management Dropdown */}
                               <input
                                 ref={currencyFileInputRef}
@@ -2746,7 +2850,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                   setCurrencyDataManagementSelectKey((k) => k + 1);
                                 }}
                               >
-                                <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
+                                <SelectTrigger className="w-36 h-9 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md transition-all duration-200 text-sm">
                                   <SelectValue placeholder="Import/Export" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -2767,50 +2871,78 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
 
                               {/* Action Buttons */}
                               {isUpdateMode ? (
-                                <div className="flex gap-2">
+                                <>
                                   <Button
                                     variant="outline"
                                     onClick={cancelUpdateMode}
                                     disabled={isUpdatingCurrencyRates}
-                                    className="h-10 px-5 rounded-xl border-0 bg-gray-100 text-gray-700 hover:bg-gray-200 font-semibold text-sm shadow-none"
+                                    className="h-9 px-4 rounded-lg border-0 bg-gray-100 text-gray-700 hover:bg-gray-200 font-semibold text-sm"
                                   >
                                     Cancel
                                   </Button>
                                   <Button
                                     onClick={updateCurrencyRates}
                                     disabled={isUpdatingCurrencyRates}
-                                    className="h-10 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-200 disabled:opacity-60 disabled:pointer-events-none text-sm border-0"
+                                    className="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md disabled:opacity-60 disabled:pointer-events-none text-sm border-0"
                                   >
                                     {isUpdatingCurrencyRates ? "Saving..." : "Save Changes"}
                                   </Button>
-                                </div>
+                                </>
                               ) : (
-                                <div className="flex gap-2">
+                                <>
+                                  {selectedCurrencyCodes.size > 0 && (
+                                    <Button
+                                      type="button"
+                                      onClick={() => setCurrencyBulkDeleteConfirmOpen(true)}
+                                      className="h-9 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md transition-all duration-200 border-0 text-sm whitespace-nowrap"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-1.5" />
+                                      Delete ({selectedCurrencyCodes.size})
+                                    </Button>
+                                  )}
                                   <Button
                                     variant="outline"
                                     onClick={enterUpdateMode}
                                     disabled={currencies.length === 0}
-                                    className="h-10 px-5 rounded-xl border-0 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-sm shadow-none"
+                                    className="h-9 px-4 rounded-lg border-0 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-sm whitespace-nowrap"
                                   >
-                                    <Edit className="w-4 h-4 mr-2" />
+                                    <Edit className="w-4 h-4 mr-1.5" />
                                     Update Rates
                                   </Button>
                                   <Button
-                                    className="h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md shadow-indigo-200 text-sm border-0"
+                                    className="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md text-sm border-0 whitespace-nowrap"
                                     onClick={() => {
                                       setIsEditMode(false);
                                       setAddCurrencyOpen(true);
                                     }}
                                   >
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    New Currency
+                                    <Plus className="w-4 h-4 mr-1.5" />
+                                    Currency
                                   </Button>
-                                </div>
+                                </>
                               )}
                             </div>
                           </div>
-                        </div>
                         
+                        {/* Search Bar for Currency */}
+
+                        <div className="mb-4 shrink-0">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                              <Input
+                                placeholder="Search currencies..."
+                                value={currencySearchQuery}
+                                onChange={(e) => {
+                                  setCurrencySearchQuery(e.target.value);
+                                  setCurrencyCurrentPage(1); // Reset to page 1 on search
+                                }}
+                                className="pl-10 w-72 border-gray-200 bg-white text-gray-900 placeholder-gray-400 h-10 text-sm rounded-lg shadow-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
                         <Dialog open={addCurrencyOpen} onOpenChange={(open) => {
                           if (open) {
                             currencySnapshotRef.current = JSON.stringify(newCurrency);
@@ -3073,26 +3205,85 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                           </DialogContent>
                         </Dialog>
 
+                        {/* Currency Bulk Delete Confirmation Dialog */}
+                        <Dialog
+                          open={currencyBulkDeleteConfirmOpen}
+                          onOpenChange={setCurrencyBulkDeleteConfirmOpen}
+                        >
+                          <DialogContent className="max-w-md border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+                            <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
+                              <DialogHeader>
+                                <div className="flex items-center gap-3">
+                                  <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                    <Trash2 className="h-5 w-5 text-white" />
+                                  </div>
+                                  <div>
+                                    <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                                      Delete Currencies
+                                    </DialogTitle>
+                                    <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+                                  </div>
+                                </div>
+                              </DialogHeader>
+                            </div>
+
+                            <div className="px-6 py-5">
+                              <p className="text-gray-700 text-sm leading-relaxed mb-4">
+                                Are you sure you want to delete <span className="font-semibold text-gray-900">{selectedCurrencyCodes.size}</span> selected currencies?
+                              </p>
+                              <p className="text-gray-600 text-xs leading-relaxed">
+                                Currencies that are currently used in subscriptions will be skipped and not deleted.
+                              </p>
+                            </div>
+
+                            <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setCurrencyBulkDeleteConfirmOpen(false)}
+                                className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                onClick={deleteSelectedCurrencies}
+                                className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+                              >
+                                Delete Selected
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+
                         {currenciesLoading ? (
                           <div className="flex flex-col items-center justify-center py-20 gap-4">
                             <div className="w-10 h-10 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin" />
                             <p className="text-sm text-gray-400 font-medium">Loading currencies…</p>
                           </div>
                         ) : (
-                          <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-md bg-white flex flex-col" style={{ height: 'calc(100vh - 220px)' }}>
+                          <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-md bg-white flex flex-col mb-6" style={{ height: 'calc(100vh - 260px)' }}>
                             <div className="flex-1 overflow-y-auto">
                               <table className="min-w-full">
                                 {/* ── Table header ── */}
                                 <thead className="sticky top-0 z-20">
                                   <tr className="bg-blue-600">
-                                    <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Currency</th>
-                                    <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">
-                                      Exch. Rate / 1 LCY
-                                      {isUpdateMode && <span className="ml-2 text-xs font-semibold bg-white/25 text-white px-2 py-0.5 rounded-full normal-case">Editable</span>}
+                                    <th className="sticky top-0 z-20 bg-blue-600 py-3 px-4 text-center text-xs font-bold text-white uppercase tracking-wide w-[48px]">
+                                      <Checkbox
+                                        aria-label="Select all visible currencies"
+                                        checked={currencyAllVisibleSelected ? true : currencySomeVisibleSelected ? "indeterminate" : false}
+                                        onCheckedChange={(v) => toggleSelectAllVisibleCurrencies(!!v)}
+                                        className="border-white data-[state=checked]:bg-white data-[state=checked]:text-indigo-700"
+                                      />
                                     </th>
-                                    <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Created</th>
-                                    <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Last Updated</th>
-                                    <th className="py-4 px-5 text-left text-sm font-bold text-white uppercase tracking-wide bg-blue-600">Actions</th>
+                                    <th className="py-3 px-4 text-left text-xs font-bold text-white uppercase tracking-wide bg-blue-600">Currency</th>
+                                    <th className="py-3 px-4 text-left text-xs font-bold text-white uppercase tracking-wide bg-blue-600">
+                                      Exch. Rate / 1 LCY
+                                      {isUpdateMode && <span className="ml-2 text-[10px] font-semibold bg-white/25 text-white px-2 py-0.5 rounded-full normal-case">Editable</span>}
+                                    </th>
+                                    <th className="py-3 px-4 text-left text-xs font-bold text-white uppercase tracking-wide bg-blue-600">Created</th>
+                                    <th className="py-3 px-4 text-left text-xs font-bold text-white uppercase tracking-wide bg-blue-600">Last Updated</th>
+                                    <th className="py-3 px-4 text-left text-xs font-bold text-white uppercase tracking-wide bg-blue-600">Actions</th>
                                   </tr>
                                 </thead>
 
@@ -3111,137 +3302,164 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                       </td>
                                     </tr>
                                   ) : (
-                                    [...currencies].reverse().map((currency, index) => {
-                                      const flagCode = getCountryCodeForCurrency(String(currency.code || '').toUpperCase());
-                                      return (
-                                        <tr
-                                          key={currency.code}
-                                          className={`group transition-colors duration-150 ${
-                                            index % 2 === 0 ? 'bg-white hover:bg-indigo-50/40' : 'bg-slate-50/60 hover:bg-indigo-50/40'
-                                          }`}
-                                        >
-                                          {/* Currency name + flag */}
-                                          <td className="py-3.5 px-5">
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setNewCurrency({
-                                                  name: currency.name || '',
-                                                  code: currency.code || '',
-                                                  symbol: currency.symbol || '',
-                                                  isoNumber: '', // Not used
-                                                  exchangeRate: currency.exchangeRate || '',
-                                                  visible: currency.visible,
-                                                  created: currency.created || ''
-                                                });
-                                                setIsEditMode(true);
-                                                setAddCurrencyOpen(true);
-                                                const code = String(currency.code || '').toUpperCase().trim();
-                                                if (code) void setSecureUrlForConfigEditModal('currency', 'currency', code);
-                                              }}
-                                              title={`${currency.symbol || ''} ${currency.name || ''} (${currency.code || ''})`.trim()}
-                                              className="group inline-flex items-center gap-3 text-left w-full"
-                                            >
-                                              <div className="flex-shrink-0 w-8 h-8 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
-                                                {flagCode ? (
-                                                  <ReactCountryFlag svg countryCode={flagCode} style={{ width: '2rem', height: '1.5rem', objectFit: 'cover' }} />
-                                                ) : (
-                                                  <span className="text-xs font-bold text-gray-500">{(currency.code || '').slice(0, 2)}</span>
-                                                )}
-                                              </div>
-                                              <div className="min-w-0">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                  <span className="relative font-semibold text-sm text-gray-800 group-hover:text-indigo-700 transition-colors duration-200 truncate">
-                                                    {currency.name || currency.code}
-                                                    <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
-                                                  </span>
-                                                  <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
-                                                </div>
-                                                <p className="text-xs text-gray-400">{currency.symbol} · {currency.code}</p>
-                                              </div>
-                                            </button>
-                                          </td>
+                                    (() => {
+                                      // Calculate max exchange rate width for consistent badge sizing
+                                      const maxRateLength = Math.max(
+                                        ...currencies.map(c => {
+                                          const rate = c.exchangeRate ? parseFloat(c.exchangeRate).toFixed(4) : '0.0000';
+                                          return rate.length;
+                                        })
+                                      );
+                                      const rateWidth = `${maxRateLength * 0.6 + 2}rem`; // Approximate character width
 
-                                          {/* Exchange rate */}
-                                          <td className="py-3.5 px-5 text-left">
-                                            {isUpdateMode && currency.code !== companyInfo.defaultCurrency ? (
-                                              <Input
-                                                type="number"
-                                                step="0.0001"
-                                                min="0"
-                                                value={editingRates[currency.code] || ''}
-                                                onChange={(e) => handleRateChange(currency.code, e.target.value)}
-                                                className="w-28 h-8 text-sm border-blue-300 focus:border-blue-500 focus:ring-blue-500 text-right rounded-lg"
-                                                placeholder="Rate"
+                                      return paginatedCurrencies.map((currency: any, index: number) => {
+                                        const flagCode = getCountryCodeForCurrency(String(currency.code || '').toUpperCase());
+                                        return (
+                                          <tr
+                                            key={currency.code}
+                                            className={`group transition-colors duration-150 ${
+                                              index % 2 === 0 ? 'bg-white hover:bg-indigo-50/40' : 'bg-slate-50/60 hover:bg-indigo-50/40'
+                                            }`}
+                                          >
+                                            <td className="px-4 py-2 w-[48px] text-center">
+                                              <Checkbox
+                                                aria-label={`Select ${currency.code}`}
+                                                checked={selectedCurrencyCodes.has(currency.code)}
+                                                onCheckedChange={(v) => toggleSelectOneCurrency(currency.code, !!v)}
                                               />
-                                            ) : (
-                                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold tabular-nums">
-                                                {currency.exchangeRate ? parseFloat(currency.exchangeRate).toFixed(2) : '—'}
-                                              </span>
-                                            )}
-                                          </td>
+                                            </td>
+                                            {/* Currency name + flag */}
+                                            <td className="py-2 px-4">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setNewCurrency({
+                                                    name: currency.name || '',
+                                                    code: currency.code || '',
+                                                    symbol: currency.symbol || '',
+                                                    isoNumber: '', // Not used
+                                                    exchangeRate: currency.exchangeRate || '',
+                                                    visible: currency.visible,
+                                                    created: currency.created || ''
+                                                  });
+                                                  setIsEditMode(true);
+                                                  setAddCurrencyOpen(true);
+                                                  const code = String(currency.code || '').toUpperCase().trim();
+                                                  if (code) void setSecureUrlForConfigEditModal('currency', 'currency', code);
+                                                }}
+                                                title={`${currency.symbol || ''} ${currency.name || ''} (${currency.code || ''})`.trim()}
+                                                className="group inline-flex items-center gap-3 text-left w-full"
+                                              >
+                                                <div className="flex-shrink-0 w-7 h-7 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                                                  {flagCode ? (
+                                                    <ReactCountryFlag svg countryCode={flagCode} style={{ width: '1.75rem', height: '1.25rem', objectFit: 'cover' }} />
+                                                  ) : (
+                                                    <span className="text-[10px] font-bold text-gray-500">{(currency.code || '').slice(0, 2)}</span>
+                                                  )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                  <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="relative font-semibold text-[13px] text-gray-800 group-hover:text-indigo-700 transition-colors duration-200 truncate">
+                                                      {currency.name || currency.code}
+                                                      <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                                                    </span>
+                                                    <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                                                  </div>
+                                                  <p className="text-[11px] text-gray-400 mt-0.5">{currency.symbol} · {currency.code}</p>
+                                                </div>
+                                              </button>
+                                            </td>
 
-                                          {/* Created */}
-                                          <td className="py-3.5 px-5 text-sm text-gray-500">
-                                            {currency.created || '—'}
-                                          </td>
-
-                                          {/* Last updated */}
-                                          <td className="py-3.5 px-5">
-                                            {currency.lastUpdated ? (
-                                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                                {currency.lastUpdated}
-                                              </span>
-                                            ) : (
-                                              <span className="text-gray-300 text-sm">—</span>
-                                            )}
-                                          </td>
-
-                                          {/* Actions */}
-                                          <td className="py-3.5 px-5">
-                                            {!isUpdateMode && (() => {
-                                              const rowCode = String(currency.code || '').toUpperCase().trim();
-                                              if (!rowCode) return null;
-                                              const isOpen = openCurrencyActionsMenuForCode === rowCode;
-                                              const isAnotherRowOpen = !!openCurrencyActionsMenuForCode && openCurrencyActionsMenuForCode !== rowCode;
-                                              return (
-                                                <DropdownMenu
-                                                  open={isOpen}
-                                                  onOpenChange={(open) => setOpenCurrencyActionsMenuForCode(open ? rowCode : null)}
+                                            {/* Exchange rate */}
+                                            <td className="py-2 px-4 text-left">
+                                              {isUpdateMode && currency.code !== companyInfo.defaultCurrency ? (
+                                                <Input
+                                                  type="number"
+                                                  step="0.001"
+                                                  min="0"
+                                                  value={editingRates[currency.code] || ''}
+                                                  onChange={(e) => handleRateChange(currency.code, e.target.value)}
+                                                  className="w-28 h-8 text-sm border-blue-300 focus:border-blue-500 focus:ring-blue-500 text-right rounded-lg"
+                                                  placeholder="Rate"
+                                                />
+                                              ) : (
+                                                <span 
+                                                  className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold tabular-nums"
+                                                  style={{ minWidth: rateWidth }}
                                                 >
-                                                  <DropdownMenuTrigger asChild>
-                                                    <Button
-                                                      variant="ghost"
-                                                      size="sm"
-                                                      className={`h-8 w-8 p-0 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
-                                                        isAnotherRowOpen ? 'invisible' : ''
-                                                      }`}
-                                                    >
-                                                      <MoreVertical className="h-4 w-4" />
-                                                    </Button>
-                                                  </DropdownMenuTrigger>
-                                                  <DropdownMenuContent
-                                                    align="end"
-                                                    className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg rounded-xl"
+                                                  {currency.exchangeRate ? parseFloat(currency.exchangeRate).toFixed(4) : '—'}
+                                                </span>
+                                              )}
+                                            </td>
+
+                                            {/* Created */}
+                                            <td className="py-2 px-4">
+                                              {currency.created ? (
+                                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                                  {currency.created}
+                                                </span>
+                                              ) : (
+                                                <span className="text-gray-300 text-xs">—</span>
+                                              )}
+                                            </td>
+
+                                            {/* Last updated */}
+                                            <td className="py-2 px-4">
+                                              {currency.lastUpdated ? (
+                                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                  {currency.lastUpdated}
+                                                </span>
+                                              ) : (
+                                                <span className="text-gray-300 text-xs">—</span>
+                                              )}
+                                            </td>
+
+                                            {/* Actions */}
+                                            <td className="py-2 px-4">
+                                              {!isUpdateMode && (() => {
+                                                const rowCode = String(currency.code || '').toUpperCase().trim();
+                                                if (!rowCode) return null;
+                                                const isOpen = openCurrencyActionsMenuForCode === rowCode;
+                                                const isAnotherRowOpen = !!openCurrencyActionsMenuForCode && openCurrencyActionsMenuForCode !== rowCode;
+                                                return (
+                                                  <DropdownMenu
+                                                    open={isOpen}
+                                                    onOpenChange={(open) => setOpenCurrencyActionsMenuForCode(open ? rowCode : null)}
                                                   >
-                                                    <DropdownMenuItem
-                                                      onClick={() => {
-                                                        setNewCurrency({
-                                                          name: currency.name || '',
-                                                          code: currency.code || '',
-                                                          symbol: currency.symbol || '',
-                                                          isoNumber: '', // Not used
-                                                          exchangeRate: currency.exchangeRate || '',
-                                                          visible: currency.visible,
-                                                          created: currency.created || ''
-                                                        });
-                                                        setIsEditMode(true);
-                                                        setAddCurrencyOpen(true);
-                                                        const code = String(currency.code || '').toUpperCase().trim();
-                                                        if (code) void setSecureUrlForConfigEditModal('currency', 'currency', code);
-                                                      }}
-                                                      className="cursor-pointer"
+                                                    <DropdownMenuTrigger asChild>
+                                                      <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className={`h-8 w-8 p-0 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
+                                                          isAnotherRowOpen ? 'invisible' : ''
+                                                        }`}
+                                                      >
+                                                        <MoreVertical className="h-4 w-4" />
+                                                      </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent
+                                                      align="end"
+                                                      className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg rounded-xl"
+                                                    >
+                                                      <DropdownMenuItem
+                                                        onClick={() => {
+                                                          setNewCurrency({
+                                                            name: currency.name || '',
+                                                            code: currency.code || '',
+                                                            symbol: currency.symbol || '',
+                                                            isoNumber: '', // Not used
+                                                            exchangeRate: currency.exchangeRate || '',
+                                                            visible: currency.visible,
+                                                            created: currency.created || ''
+                                                          });
+                                                          setIsEditMode(true);
+                                                          setAddCurrencyOpen(true);
+                                                          const code = String(currency.code || '').toUpperCase().trim();
+                                                          if (code) void setSecureUrlForConfigEditModal('currency', 'currency', code);
+                                                        }}
+                                                        className="cursor-pointer"
                                                     >
                                                       <Edit className="h-4 w-4 mr-2" />
                                                       Edit
@@ -3264,11 +3482,92 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                           </td>
                                         </tr>
                                       );
-                                    })
+                                    });
+                                    })()
                                   )}
                                 </tbody>
                               </table>
                             </div>
+                            
+                            {/* Pagination Controls */}
+                            {totalCurrencyFiltered > 0 && (
+                              <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+                                <div className="flex items-center gap-4 text-sm text-slate-700">
+                                  <div>
+                                    {totalCurrencyFiltered === 0 ? 0 : currencyStartIndex + 1}–{Math.min(currencyEndIndex, totalCurrencyFiltered)} of {totalCurrencyFiltered}
+                                  </div>
+                                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                                    <span className="text-xs text-slate-500">Rows per page:</span>
+                                    <select
+                                      value={currencyItemsPerPage}
+                                      onChange={(e) => {
+                                        setCurrencyItemsPerPage(Number(e.target.value));
+                                        setCurrencyCurrentPage(1);
+                                      }}
+                                      className="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                    >
+                                      {[10, 25, 50, 100].map((size) => (
+                                        <option key={size} value={size}>
+                                          {size}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                                {currencyTotalPages > 1 && (
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                                      onClick={() => setCurrencyCurrentPage((p) => Math.max(1, p - 1))}
+                                      disabled={currencyCurrentPage <= 1}
+                                    >
+                                      Previous
+                                    </Button>
+                                    {(() => {
+                                      const buttons: number[] = [];
+                                      const maxButtons = 5;
+                                      let startPage = Math.max(1, currencyCurrentPage - Math.floor(maxButtons / 2));
+                                      let endPage = Math.min(currencyTotalPages, startPage + maxButtons - 1);
+                                      
+                                      if (endPage - startPage < maxButtons - 1) {
+                                        startPage = Math.max(1, endPage - maxButtons + 1);
+                                      }
+                                      
+                                      for (let i = startPage; i <= endPage; i++) {
+                                        buttons.push(i);
+                                      }
+                                      
+                                      return buttons.map((p) => (
+                                        <Button
+                                          key={p}
+                                          type="button"
+                                          variant={p === currencyCurrentPage ? "default" : "ghost"}
+                                          className={`h-9 w-9 px-0 text-sm ${
+                                            p === currencyCurrentPage 
+                                              ? "bg-blue-600 text-white hover:bg-blue-700" 
+                                              : "text-slate-600 hover:bg-slate-100"
+                                          }`}
+                                          onClick={() => setCurrencyCurrentPage(p)}
+                                        >
+                                          {p}
+                                        </Button>
+                                      ));
+                                    })()}
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                                      onClick={() => setCurrencyCurrentPage((p) => Math.min(currencyTotalPages, p + 1))}
+                                      disabled={currencyCurrentPage >= currencyTotalPages}
+                                    >
+                                      Next
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </Card>
@@ -3295,19 +3594,19 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                             'Currency Code': 'USD',
                             'Description': 'United States Dollar',
                             'Symbol': '$',
-                            'Exchange Rate': '1.00'
+                            'Exchange Rate': '1.000'
                           },
                           {
                             'Currency Code': 'EUR',
                             'Description': 'Euro',
                             'Symbol': '€',
-                            'Exchange Rate': '0.85'
+                            'Exchange Rate': '0.850'
                           },
                           {
                             'Currency Code': 'GBP',
                             'Description': 'British Pound Sterling',
                             'Symbol': '£',
-                            'Exchange Rate': '0.73'
+                            'Exchange Rate': '0.730'
                           }
                         ];
                         const ws = XLSX.utils.json_to_sheet(templateData);
@@ -3431,7 +3730,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                             className="h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md shadow-indigo-200 text-sm border-0"
                           >
                             <Plus className="w-4 h-4 mr-2" />
-                            New Payment Method
+                            Payment Method
                           </Button>
                         </div>
                       </div>
@@ -3803,7 +4102,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                               <Input 
                                 required 
                                 value={paymentForm.title} 
-                                onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))}
+                                onChange={e => setPaymentForm(f => ({ ...f, title: capitalizeFirst(e.target.value) }))}
                                 onBlur={() => {
                                   // Check for duplicate name when user leaves the field (excluding current one being edited)
                                   if (paymentForm.title.trim()) {
@@ -4033,7 +4332,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                               </Label>
                               <Input 
                                 value={paymentForm.financialInstitution} 
-                                onChange={e => setPaymentForm(f => ({ ...f, financialInstitution: e.target.value }))}
+                                onChange={e => setPaymentForm(f => ({ ...f, financialInstitution: capitalizeFirst(e.target.value) }))}
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>
@@ -4359,7 +4658,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                               <Input 
                                 required 
                                 value={paymentForm.title} 
-                                onChange={e => setPaymentForm(f => ({ ...f, title: e.target.value }))}
+                                onChange={e => setPaymentForm(f => ({ ...f, title: capitalizeFirst(e.target.value) }))}
                                 onBlur={() => {
                                   // Check for duplicate name when user leaves the field
                                   if (paymentForm.title.trim()) {
@@ -4588,7 +4887,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                               </Label>
                               <Input 
                                 value={paymentForm.financialInstitution} 
-                                onChange={e => setPaymentForm(f => ({ ...f, financialInstitution: e.target.value }))}
+                                onChange={e => setPaymentForm(f => ({ ...f, financialInstitution: capitalizeFirst(e.target.value) }))}
                                 className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                               />
                             </div>

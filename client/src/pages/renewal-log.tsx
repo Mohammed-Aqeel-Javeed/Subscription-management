@@ -1,9 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { History, ArrowLeft } from "lucide-react";
+import { History } from "lucide-react";
 import { API_BASE_URL } from "@/lib/config";
 
 function sanitizeId(raw: string | null) {
@@ -32,12 +32,7 @@ function truncateText(value: string | undefined | null, maxChars: number) {
   return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars)).trimEnd()}...` : text;
 }
 
-function truncateMultiline(value: string | undefined | null, maxCharsPerLine: number) {
-  const text = String(value ?? '');
-  if (!text) return '';
-  const lines = text.split('\n');
-  return lines.map((l) => truncateText(l, maxCharsPerLine)).join('\n');
-}
+
 
 export default function RenewalLog() {
   const location = useLocation();
@@ -57,40 +52,7 @@ export default function RenewalLog() {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isResolvingToken, setIsResolvingToken] = useState(() => Boolean(openToken && !idParam));
 
-  // Function to mint deeplink token
-  const mintDeeplinkToken = async (id: string) => {
-    const res = await fetch('/api/deeplink/token', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entityType: 'license', id: String(id) }),
-    });
-    if (!res.ok) throw new Error('Failed to create deeplink token');
-    const data = (await res.json()) as { token?: string };
-    if (!data?.token) throw new Error('Invalid deeplink token response');
-    return String(data.token);
-  };
 
-  // Handle back navigation to government-license with modal reopened
-  const handleBackToRenewals = () => {
-    const idToOpen = resolvedLicenseId || idParam;
-    
-    if (!idToOpen) {
-      navigate("/government-license", { replace: true });
-      return;
-    }
-
-    void (async () => {
-      try {
-        const token = await mintDeeplinkToken(String(idToOpen));
-        const qs = new URLSearchParams({ openToken: token }).toString();
-        navigate(`/government-license?${qs}`, { replace: true });
-      } catch {
-        const qs = new URLSearchParams({ open: String(idToOpen) }).toString();
-        navigate(`/government-license?${qs}`, { replace: true });
-      }
-    })();
-  };
 
   useEffect(() => {
     if (idParam) {
@@ -149,7 +111,8 @@ export default function RenewalLog() {
   const licenseId = resolvedLicenseId;
   const showAllLogs = !licenseId && !openToken;
 
-  const pageSize = 25;
+  const queryClient = useQueryClient();
+  const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(1);
   const [expandedChangeRows, setExpandedChangeRows] = useState<Record<string, boolean>>({});
 
@@ -169,6 +132,11 @@ export default function RenewalLog() {
   const { data: logsPage, isLoading, isFetching } = useQuery<LogsPageResponse>({
     queryKey: ["/api/logs", licenseId || 'all', page, pageSize],
     enabled: !isResolvingToken && (Boolean(licenseId) || showAllLogs),
+    staleTime: 0,
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (licenseId) params.set('licenseId', licenseId);
@@ -187,6 +155,56 @@ export default function RenewalLog() {
 
   const logs = logsPage?.items ?? [];
   const totalPages = logsPage?.totalPages ?? 1;
+  const totalItems = logsPage?.total ?? 0;
+
+  // Prefetch adjacent pages for instant navigation
+  useEffect(() => {
+    if (!queryClient || isResolvingToken || (!licenseId && !showAllLogs)) return;
+    
+    // Prefetch next page
+    if (page < totalPages) {
+      const nextPage = page + 1;
+      queryClient.prefetchQuery({
+        queryKey: ["/api/logs", licenseId || 'all', nextPage, pageSize],
+        queryFn: async () => {
+          const params = new URLSearchParams({ page: String(nextPage), pageSize: String(pageSize) });
+          if (licenseId) params.set('licenseId', licenseId);
+          const res = await fetch(`${API_BASE_URL}/api/logs?${params.toString()}`, {
+            credentials: "include",
+          });
+          if (!res.ok) return { items: [], total: 0, page: nextPage, pageSize, totalPages: 1 };
+          const json = await res.json().catch(() => null);
+          if (json && typeof json === 'object' && Array.isArray((json as any).items)) {
+            return json as LogsPageResponse;
+          }
+          return { items: [], total: 0, page: nextPage, pageSize, totalPages: 1 };
+        },
+        staleTime: 0,
+      });
+    }
+
+    // Prefetch previous page
+    if (page > 1) {
+      const prevPage = page - 1;
+      queryClient.prefetchQuery({
+        queryKey: ["/api/logs", licenseId || 'all', prevPage, pageSize],
+        queryFn: async () => {
+          const params = new URLSearchParams({ page: String(prevPage), pageSize: String(pageSize) });
+          if (licenseId) params.set('licenseId', licenseId);
+          const res = await fetch(`${API_BASE_URL}/api/logs?${params.toString()}`, {
+            credentials: "include",
+          });
+          if (!res.ok) return { items: [], total: 0, page: prevPage, pageSize, totalPages: 1 };
+          const json = await res.json().catch(() => null);
+          if (json && typeof json === 'object' && Array.isArray((json as any).items)) {
+            return json as LogsPageResponse;
+          }
+          return { items: [], total: 0, page: prevPage, pageSize, totalPages: 1 };
+        },
+        staleTime: 0,
+      });
+    }
+  }, [page, totalPages, licenseId, showAllLogs, isResolvingToken, pageSize, queryClient]);
 
   // Filter logs by license ID if provided
   // Try to match by licenseId first (new logs), fallback to licenseName (old logs)
@@ -455,7 +473,8 @@ export default function RenewalLog() {
                             <td className="text-sm text-slate-500 align-top py-3 px-4">
                               <div className="whitespace-nowrap">
                                 <span className="font-medium">{timestamp.date}</span>
-                                {timestamp.time && <span className="text-xs text-slate-400 ml-2">{timestamp.time}</span>}
+                                {" "}
+                                {timestamp.time && <span className="text-xs text-slate-400">{timestamp.time}</span>}
                               </div>
                             </td>
                           </>
@@ -507,7 +526,8 @@ export default function RenewalLog() {
                             <td className="text-sm text-slate-500 align-top py-3 px-4">
                               <div className="whitespace-nowrap">
                                 <span className="font-medium">{timestamp.date}</span>
-                                {timestamp.time && <span className="text-xs text-slate-400 ml-2">{timestamp.time}</span>}
+                                {" "}
+                                {timestamp.time && <span className="text-xs text-slate-400">{timestamp.time}</span>}
                               </div>
                             </td>
                           </>
@@ -539,44 +559,86 @@ export default function RenewalLog() {
             )}
           </div>
 
-          {totalPages > 1 ? (
+          {totalItems > 0 ? (
             <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
-              <div className="text-sm text-slate-600">
-                Page {page} of {totalPages}
+              <div className="flex items-center gap-4 text-sm text-slate-700">
+                <div>
+                  {(() => {
+                    const start = (page - 1) * pageSize + 1;
+                    const end = Math.min(page * pageSize, totalItems);
+                    return `${start}–${end} of ${totalItems}`;
+                  })()}
+                </div>
+                <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                  <span className="text-xs text-slate-500">Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setPage(1);
+                    }}
+                    className="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  >
+                    {[10, 25, 50, 100].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                >
-                  Previous
-                </Button>
-                {[1, 2, 3]
-                  .filter((p) => p <= totalPages)
-                  .map((p) => (
-                    <Button
-                      key={p}
-                      type="button"
-                      variant={p === page ? "default" : "outline"}
-                      className="h-9 w-10 px-0"
-                      onClick={() => setPage(p)}
-                    >
-                      {p}
-                    </Button>
-                  ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages}
-                >
-                  Next
-                </Button>
-              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                  >
+                    Previous
+                  </Button>
+                  {(() => {
+                    const buttons: number[] = [];
+                    const maxButtons = 5;
+                    let startPage = Math.max(1, page - Math.floor(maxButtons / 2));
+                    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+                    
+                    if (endPage - startPage < maxButtons - 1) {
+                      startPage = Math.max(1, endPage - maxButtons + 1);
+                    }
+                    
+                    for (let i = startPage; i <= endPage; i++) {
+                      buttons.push(i);
+                    }
+                    
+                    return buttons.map((p) => (
+                      <Button
+                        key={p}
+                        type="button"
+                        variant={p === page ? "default" : "ghost"}
+                        className={`h-9 w-9 px-0 text-sm ${
+                          p === page 
+                            ? "bg-blue-600 text-white hover:bg-blue-700" 
+                            : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                        onClick={() => setPage(p)}
+                      >
+                        {p}
+                      </Button>
+                    ));
+                  })()}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
             </div>
           ) : null}
         </Card>

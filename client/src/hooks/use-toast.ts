@@ -5,14 +5,15 @@ import type {
   ToastProps,
 } from "@/components/ui/toast"
 
-const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_LIMIT = 5
+const TOAST_REMOVE_DELAY = 300
 
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  duration?: number
 }
 
 const actionTypes = {
@@ -147,14 +148,24 @@ function inferToastVariant(props: Toast): ToastProps["variant"] | undefined {
   const text = `${title} ${description}`.trim().toLowerCase();
   if (!text) return undefined;
 
-  // Error / reject variants
-  if (/(error|failed|reject|rejected|unauthori[sz]ed|incorrect|invalid)/i.test(text)) {
+  // Error / destructive variants
+  if (/(error|failed|fail|reject|rejected|unauthori[sz]ed|incorrect|invalid|denied|forbidden)/i.test(text)) {
     return "destructive";
   }
 
+  // Warning variants
+  if (/(warn|warning|caution|attention|incomplete|missing|required|limit)/i.test(text)) {
+    return "warning";
+  }
+
   // Success variants
-  if (/(success|updated|saved|created|uploaded|deleted)/i.test(text)) {
+  if (/(success|updated|saved|created|uploaded|deleted|done|complete|activated|approved)/i.test(text)) {
     return "success";
+  }
+
+  // Info variants
+  if (/(info|note|notice|tip|hint|reminder)/i.test(text)) {
+    return "info";
   }
 
   return undefined;

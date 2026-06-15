@@ -28,6 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { calculateSubscriptionStatus, getStatusBadgeClass, getStatusPriority } from "@/lib/subscription-status";
 import { Plus, Edit, Trash2, Search, Layers, AlertCircle, Calendar, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, MoreVertical } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Papa from 'papaparse';
@@ -81,6 +82,10 @@ export default function Subscriptions() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { setActive: setSidebarSlotActive, setReplaceNav: setSidebarReplaceNav } = useSidebarSlot();
   const [sidebarSlotEl, setSidebarSlotEl] = React.useState<HTMLElement | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   React.useEffect(() => {
     const el = document.getElementById("page-sidebar-slot") as HTMLElement | null;
@@ -1251,9 +1256,16 @@ export default function Subscriptions() {
   const filteredSubscriptions = Array.isArray(subscriptions) ? subscriptions.filter(sub => {
     const q = searchTerm.trim().toLowerCase();
     const ownerVal = String((sub as any)?.owner || (sub as any)?.ownerEmail || '').trim();
+    // Calculate the dynamic status based on expiry date and reminder days
+    const calculatedStatus = calculateSubscriptionStatus(
+      (sub as any).nextRenewal,
+      (sub as any).reminderDays,
+      sub.status
+    );
+    
     const effectiveStatus = (String(sub.billingCycle || '').toLowerCase() === 'trial')
       ? 'Trial'
-      : String(sub.status || '');
+      : calculatedStatus; // Use calculated status instead of raw status
 
     const matchesSearch = !q ||
       (sub.serviceName || '').toLowerCase().includes(q) ||
@@ -1309,17 +1321,12 @@ export default function Subscriptions() {
   }).sort((a, b) => {
     // Apply sorting if a field is selected
     if (!sortField) {
-      // Default: Show Active subscriptions first (sorted by amount), then Cancelled, then Draft
-      const getStatusPriority = (sub: any) => {
-        const status = String(sub?.status ?? '').toLowerCase();
-        if (status === 'active') return 1;
-        if (status === 'cancelled') return 2;
-        if (status === 'draft') return 3;
-        return 4; // Any other status
-      };
-
-      const aPriority = getStatusPriority(a);
-      const bPriority = getStatusPriority(b);
+      // Default: Sort by status priority (Active → Expiring Soon → Expired → Cancelled → Draft), then by amount
+      const aStatus = calculateSubscriptionStatus(a.nextRenewal, a.reminderDays, a.status);
+      const bStatus = calculateSubscriptionStatus(b.nextRenewal, b.reminderDays, b.status);
+      
+      const aPriority = getStatusPriority(aStatus);
+      const bPriority = getStatusPriority(bStatus);
       
       // First sort by status priority
       if (aPriority !== bPriority) return aPriority - bPriority;
@@ -1384,15 +1391,29 @@ export default function Subscriptions() {
     }
     
     if (sortField === "status") {
-      const aVal = (a.status || "").toLowerCase();
-      const bVal = (b.status || "").toLowerCase();
+      const aStatus = calculateSubscriptionStatus(a.nextRenewal, a.reminderDays, a.status);
+      const bStatus = calculateSubscriptionStatus(b.nextRenewal, b.reminderDays, b.status);
+      const aPriority = getStatusPriority(aStatus);
+      const bPriority = getStatusPriority(bStatus);
       return sortDirection === "asc" 
-        ? aVal.localeCompare(bVal)
-        : bVal.localeCompare(aVal);
+        ? aPriority - bPriority
+        : bPriority - aPriority;
     }
     
     return 0;
   }) : [];
+
+  // Pagination calculations
+  const totalFiltered = filteredSubscriptions.length;
+  const totalPages = Math.ceil(totalFiltered / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedSubscriptions = filteredSubscriptions.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategories, selectedVendors, selectedStatuses, selectedBillingCycles, selectedDepartments, selectedOwners, selectedPaymentMethods, selectedReminderPolicies]);
 
   const visibleSubscriptionIds = React.useMemo(() => {
     return (Array.isArray(filteredSubscriptions) ? filteredSubscriptions : [])
@@ -1563,9 +1584,31 @@ export default function Subscriptions() {
           const checked = selected.includes(opt);
           const id = `${sectionId}-${opt}`.replace(/\s+/g, '-').toLowerCase();
           return (
-            <div key={opt} className="flex items-center gap-2 px-2 py-2 hover:bg-slate-100 rounded-md">
-              <Checkbox id={id} checked={checked} onCheckedChange={() => onChange(toggleSelected(selected, opt))} />
-              <label htmlFor={id} className="text-sm cursor-pointer select-none flex-1 truncate">
+            <div 
+              key={opt} 
+              className="flex items-center gap-2 px-2 py-2 hover:bg-slate-100 rounded-md"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onChange(toggleSelected(selected, opt));
+              }}
+            >
+              <Checkbox 
+                id={id} 
+                checked={checked} 
+                onCheckedChange={() => {
+                  onChange(toggleSelected(selected, opt));
+                }} 
+              />
+              <label 
+                htmlFor={id} 
+                className="text-sm cursor-pointer select-none flex-1 truncate"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onChange(toggleSelected(selected, opt));
+                }}
+              >
                 {opt}
               </label>
             </div>
@@ -1991,7 +2034,7 @@ export default function Subscriptions() {
                   className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  New Subscription
+                  Subscription
                 </Button>
               </motion.div>
             </Can>
@@ -2095,7 +2138,7 @@ export default function Subscriptions() {
         {/* Main Content */}
         <div className="min-w-0 flex-1 min-h-0">
           <Card className="bg-white border border-gray-200 shadow-md overflow-hidden h-full flex flex-col min-h-0">
-            <CardContent className="p-0 flex flex-col min-h-0">
+            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
             <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" className="table-fixed">
               <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                 <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
@@ -2164,16 +2207,16 @@ export default function Subscriptions() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredSubscriptions && filteredSubscriptions.length > 0 ? (
+                {paginatedSubscriptions && paginatedSubscriptions.length > 0 ? (
                   <AnimatePresence>
-                  {filteredSubscriptions.map((subscription, index) => (
+                  {paginatedSubscriptions.map((subscription, index) => (
                     <motion.tr
                       key={subscription._id || subscription.id}
                       className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      transition={{ delay: 0.04 * index }}
+                      transition={{ duration: 0.15 }}
                     >
                       <TableCell className="px-2 py-3 w-[48px] text-center">
                         {(() => {
@@ -2325,25 +2368,30 @@ export default function Subscriptions() {
                         </div>
                       </TableCell>
                       <TableCell className="px-2 py-3 w-[110px] text-left">
-                        <span
-                          className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border ${
-                            subscription.billingCycle === 'Trial'
-                              ? 'bg-purple-50 text-purple-700 border-purple-200'
-                              : subscription.status === 'Active'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : subscription.status === 'Cancelled'
-                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                  : 'bg-slate-50 text-slate-700 border-slate-200'
-                          }`}
-                          style={{ width: `calc(${statusPillWidthCh}ch + 1.5rem)`, maxWidth: '100%' }}
-                        >
-                          <span
-                            className="truncate whitespace-nowrap"
-                            title={subscription.billingCycle === 'Trial' ? 'Trial' : subscription.status}
-                          >
-                            {subscription.billingCycle === 'Trial' ? 'Trial' : subscription.status}
-                          </span>
-                        </span>
+                        {(() => {
+                          const calculatedStatus = calculateSubscriptionStatus(
+                            subscription.nextRenewal,
+                            subscription.reminderDays,
+                            subscription.status
+                          );
+                          return (
+                            <span
+                              className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border ${
+                                subscription.billingCycle === 'Trial'
+                                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                  : getStatusBadgeClass(calculatedStatus)
+                              }`}
+                              style={{ width: `calc(${statusPillWidthCh}ch + 1.5rem)`, maxWidth: '100%' }}
+                            >
+                              <span
+                                className="truncate whitespace-nowrap"
+                                title={subscription.billingCycle === 'Trial' ? 'Trial' : calculatedStatus}
+                              >
+                                {subscription.billingCycle === 'Trial' ? 'Trial' : calculatedStatus}
+                              </span>
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="px-1 pr-2 py-3 text-right w-[60px]">
                         {(() => {
@@ -2414,6 +2462,90 @@ export default function Subscriptions() {
               </TableBody>
             </Table>
             </CardContent>
+            
+            {/* Gmail-style Pagination */}
+            {totalFiltered > 0 && (
+              <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-4 text-sm text-slate-700">
+                  <div>
+                    {(() => {
+                      const start = totalFiltered === 0 ? 0 : startIndex + 1;
+                      const end = Math.min(endIndex, totalFiltered);
+                      return `${start}–${end} of ${totalFiltered}`;
+                    })()}
+                  </div>
+                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                    <span className="text-xs text-slate-500">Rows per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    >
+                      {[10, 25, 50, 100].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage <= 1}
+                    >
+                      Previous
+                    </Button>
+                    {(() => {
+                      const buttons: number[] = [];
+                      const maxButtons = 5;
+                      let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+                      let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+                      
+                      if (endPage - startPage < maxButtons - 1) {
+                        startPage = Math.max(1, endPage - maxButtons + 1);
+                      }
+                      
+                      for (let i = startPage; i <= endPage; i++) {
+                        buttons.push(i);
+                      }
+                      
+                      return buttons.map((p) => (
+                        <Button
+                          key={p}
+                          type="button"
+                          variant={p === currentPage ? "default" : "ghost"}
+                          className={`h-9 w-9 px-0 text-sm ${
+                            p === currentPage 
+                              ? "bg-blue-600 text-white hover:bg-blue-700" 
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                          onClick={() => setCurrentPage(p)}
+                        >
+                          {p}
+                        </Button>
+                      ));
+                    })()}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         </div>
           </>

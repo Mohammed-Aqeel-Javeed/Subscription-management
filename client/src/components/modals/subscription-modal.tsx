@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "@/lib/config";
+import { calculateSubscriptionStatus, getStatusModalBadgeClass } from "@/lib/subscription-status";
 // Type for dynamic subscription fields
 interface SubscriptionField {
   name: string;
@@ -31,7 +32,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Check } from "lucide-react";
+import { Check, Search } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -1008,8 +1009,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // Fullscreen toggle state
   const [isFullscreen, setIsFullscreen] = useState(false);
   
-  // Status state (Active/Cancel)
-  const [status, setStatus] = useState<'Active' | 'Cancelled' | 'Draft'>('Draft');
+  // Status state (Active/Cancelled/Expired/Expiring Soon)
+  const [status, setStatus] = useState<'Active' | 'Cancelled' | 'Draft' | 'Expired' | 'Expiring Soon'>('Draft');
   
   // Auto Renewal toggle state
   const [autoRenewal, setAutoRenewal] = useState<boolean>(false);
@@ -1200,8 +1201,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     
     const normalizedName = name.toLowerCase().trim();
     
-    // If editing, check if the name is the same as the original subscription name
-    if (subscription?.serviceName) {
+    // If editing a non-draft subscription, check if the name is the same as the original subscription name
+    if (subscription?.serviceName && subscription?.status !== 'Draft') {
       const originalName = subscription.serviceName.toLowerCase().trim();
       if (normalizedName === originalName) {
         // Same as original, no error
@@ -1832,53 +1833,51 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     return Boolean(form.formState.isDirty || notesDirty);
   };
   
-  // Predefined vendor list
+  // Predefined vendor list - sorted alphabetically
   const VENDOR_LIST = [
-    "Microsoft Corporation", "Amazon Web Services, Inc.", "Google LLC", "Salesforce, Inc.", "Adobe Inc.",
-    "Oracle Corporation", "SAP SE", "International Business Machines Corporation (IBM)", "ServiceNow, Inc.",
-    "Atlassian Corporation", "Zoom Video Communications, Inc.", "Slack Technologies, LLC (Salesforce)",
-    "Dropbox, Inc.", "Box, Inc.", "DocuSign, Inc.", "HubSpot, Inc.", "Canva Pty Ltd", "Shopify Inc.",
-    "Snowflake Inc.", "Twilio Inc.", "VMware, Inc. (Broadcom)", "Cisco Systems, Inc.", "Dell Technologies Inc.",
-    "Hewlett Packard Enterprise Company", "Citrix Systems, Inc.", "Palo Alto Networks, Inc.",
-    "CrowdStrike Holdings, Inc.", "Fortinet, Inc.", "Zscaler, Inc.", "Cloudflare, Inc.", "Okta, Inc.",
-    "Tenable Holdings, Inc.", "Rapid7, Inc.", "Splunk Inc.", "Proofpoint, Inc.", "CyberArk Software Ltd.",
-    "Trend Micro Incorporated", "McAfee, LLC", "Sophos Ltd.", "SentinelOne, Inc.",
-    "Check Point Software Technologies Ltd.", "Mandiant (Google)", "Rubrik, Inc.", "Veeam Software",
-    "Commvault Systems, Inc.", "Intuit Inc.", "Stripe, Inc.", "PayPal Holdings, Inc.", "Block, Inc. (Square)",
-    "Xero Limited", "The Sage Group plc", "Fiserv, Inc.", "Fidelity National Information Services, Inc. (FIS)",
-    "Bill.com Holdings, Inc.", "Expensify, Inc.", "Coupa Software Inc.", "Brex Inc.", "Ramp Business Corporation",
-    "Adyen N.V.", "Plaid Inc.", "Automatic Data Processing, Inc. (ADP)", "Workday, Inc.", "Paychex, Inc.",
-    "Paycom Software, Inc.", "Ceridian HCM Holding Inc. (Dayforce)", "UKG Inc. (Ultimate Kronos Group)",
-    "BambooHR LLC", "Rippling People Center Inc.", "Gusto, Inc.", "Deel, Inc.", "Robert Half International Inc.",
-    "Cornerstone OnDemand, Inc.", "Leidos Holdings, Inc.", "Northrop Grumman Corporation",
-    "General Dynamics Corporation", "Raytheon Technologies Corporation (RTX)", "Booz Allen Hamilton Holding Corporation",
-    "Science Applications International Corporation (SAIC)", "CACI International Inc", "Palantir Technologies Inc.",
-    "Tyler Technologies, Inc.", "Carahsoft Technology Corp.", "Crayon Group Holding ASA (Acquirer of Rhipe)",
-    "Ingram Micro Inc.", "Pax8, Inc.", "TD SYNNEX Corporation", "Arrow Electronics, Inc. (Arrow ECS)",
-    "Dicker Data Limited", "Sherweb Inc.", "AppDirect, Inc.", "Insight Enterprises, Inc.", "SoftwareOne AG",
-    "CDW Corporation", "SHI International Corp.", "Zendesk, Inc.", "Freshworks Inc.", "Intercom, Inc.",
-    "Qualtrics, LLC", "SurveyMonkey (Momentive Global Inc.)", "Hootsuite Inc.", "Sprout Social, Inc.",
-    "Semrush Holdings, Inc.", "Ahrefs Pte. Ltd.", "Moz, Inc.", "Braze, Inc.", "Klaviyo, Inc.",
-    "ActiveCampaign, LLC", "Constant Contact, Inc.", "Mailchimp (Intuit Inc.)", "Typeform SL",
-    "Drift.com, Inc.", "Pipedrive Inc.", "Zoho Corporation Pvt. Ltd.", "Yotpo Ltd.", "Trustpilot Group plc",
-    "G2.com, Inc.", "Cision Ltd.", "Meltwater B.V.", "Sprinklr, Inc.", "Datadog, Inc.", "New Relic, Inc.",
-    "Dynatrace, Inc.", "PagerDuty, Inc.", "HashiCorp, Inc.", "JFrog Ltd.", "DigitalOcean Holdings, Inc.",
-    "Akamai Technologies, Inc.", "F5, Inc.", "Juniper Networks, Inc.", "Arista Networks, Inc.", "NetApp, Inc.",
-    "Pure Storage, Inc.", "Red Hat, Inc. (IBM)", "SUSE S.A.", "Canonical Ltd. (Ubuntu)", "Docker, Inc.",
-    "Elastic N.V.", "MongoDB, Inc.", "Redis, Inc.", "Couchbase, Inc.", "GitHub, Inc. (Microsoft)",
-    "GitLab Inc.", "JetBrains s.r.o.", "Postman, Inc.", "OpenAI, L.L.C.", "Anthropic, PBC",
-    "Databricks, Inc.", "Glean Technologies, Inc.", "Harvey AI, Inc.", "Hebbia, Inc.", "Waabi Innovation Inc.",
-    "Weaviate B.V.", "Writer, Inc.", "NVIDIA Corporation", "Siemens AG", "Sift Science, Inc.",
-    "Scale AI, Inc.", "Hugging Face, Inc.", "Jasper AI, Inc.", "Netflix, Inc.", "Disney+",
-    "Amazon Prime Video", "Apple TV+", "Spotify Technology S.A.", "YouTube Premium", "Singtel",
-    "StarHub Ltd", "M1 Limited", "Grab Holdings Ltd", "Sea Limited", "Tableau Software, LLC (Salesforce)",
-    "QlikTech International AB", "MicroStrategy Incorporated", "Asana, Inc.", "Monday.com Ltd",
-    "Smartsheet Inc.", "Notion Labs, Inc.", "Trello (Atlassian)", "Basecamp, LLC", "Figma, Inc.",
-    "Sketch B.V.", "InVisionApp Inc.", "Miro (RealtimeBoard Inc.)", "Lucid Software Inc.", "Shutterstock, Inc.",
-    "Getty Images Holdings, Inc.", "Envato Pty Ltd", "Webflow, Inc.", "Squarespace, Inc.", "Wix.com Ltd.",
-    "GoDaddy Inc.", "Namecheap, Inc.", "Bluehost Inc. (Newfold Digital)", "SiteGround Hosting Ltd.",
-    "WP Engine, Inc.", "1Password", "LastPass", "Dashlane", "NordVPN", "ExpressVPN"
-  ];
+    "1Password", "3M Company", "Adobe Inc.", "Adyen N.V.", "Ahrefs Pte. Ltd.", "Akamai Technologies, Inc.",
+    "ActiveCampaign, LLC", "Amazon Prime Video", "Amazon Web Services, Inc.", "Anthropic, PBC", "Apple TV+",
+    "AppDirect, Inc.", "Arista Networks, Inc.", "Arrow Electronics, Inc. (Arrow ECS)", "Asana, Inc.",
+    "Atlassian Corporation", "Automatic Data Processing, Inc. (ADP)", "Basecamp, LLC", "BambooHR LLC",
+    "Basecamp, LLC", "Bluehost Inc. (Newfold Digital)", "Bill.com Holdings, Inc.", "Booz Allen Hamilton Holding Corporation",
+    "Box, Inc.", "Braze, Inc.", "Brex Inc.", "Broadcom Inc.", "Canonical Ltd. (Ubuntu)", "CACI International Inc",
+    "Carahsoft Technology Corp.", "Canva Pty Ltd", "Cision Ltd.", "Cisco Systems, Inc.", "Citrix Systems, Inc.",
+    "CDW Corporation", "Check Point Software Technologies Ltd.", "CrowdStrike Holdings, Inc.", "Commvault Systems, Inc.",
+    "Constant Contact, Inc.", "Cornerstone OnDemand, Inc.", "Couchbase, Inc.", "Coupa Software Inc.",
+    "Crayon Group Holding ASA (Acquirer of Rhipe)", "Cyberark Software Ltd.", "CyberArk Software Ltd.",
+    "Databricks, Inc.", "Datadog, Inc.", "Dashlane", "Dicker Data Limited", "Dell Technologies Inc.",
+    "Deel, Inc.", "DevOps Research and Assessment (DORA)", "Dicker Data Limited", "Disney+", "DigitalOcean Holdings, Inc.",
+    "Drift.com, Inc.", "Dropbox, Inc.", "Docker, Inc.", "DocuSign, Inc.", "Dynatrace, Inc.",
+    "Elastic N.V.", "Elasticity", "Envato Pty Ltd", "Expensify, Inc.", "ExpressVPN",
+    "F5, Inc.", "Figma, Inc.", "Fidelity National Information Services, Inc. (FIS)", "Fiserv, Inc.",
+    "Fortinet, Inc.", "Freshworks Inc.", "F5, Inc.", "Glean Technologies, Inc.", "General Dynamics Corporation",
+    "GitHub, Inc. (Microsoft)", "GitLab Inc.", "GoDaddy Inc.", "Google LLC", "Getty Images Holdings, Inc.",
+    "Grab Holdings Ltd", "Gusto, Inc.", "Hewlett Packard Enterprise Company", "Harvey AI, Inc.",
+    "Hebbia, Inc.", "HubSpot, Inc.", "Hugging Face, Inc.", "HashiCorp, Inc.", "Intercom, Inc.",
+    "Insight Enterprises, Inc.", "International Business Machines Corporation (IBM)", "Intuit Inc.",
+    "Ingram Micro Inc.", "Jasper AI, Inc.", "JetBrains s.r.o.", "JFrog Ltd.", "Juniper Networks, Inc.",
+    "Klaviyo, Inc.", "Leidos Holdings, Inc.", "LastPass", "Lucid Software Inc.", "Mailchimp (Intuit Inc.)",
+    "Mandiant (Google)", "McAfee, LLC", "Meltwater B.V.", "Miro (RealtimeBoard Inc.)", "MicroStrategy Incorporated",
+    "Microsoft Corporation", "M1 Limited", "Monday.com Ltd", "MongoDB, Inc.", "Moz, Inc.",
+    "NetApp, Inc.", "Netflix, Inc.", "New Relic, Inc.", "Northrop Grumman Corporation", "NordVPN",
+    "Namecheap, Inc.", "Notion Labs, Inc.", "NVIDIA Corporation", "Okta, Inc.", "OpenAI, L.L.C.",
+    "Oracle Corporation", "Palo Alto Networks, Inc.", "PagerDuty, Inc.", "Palantir Technologies Inc.",
+    "Pax8, Inc.", "PayPal Holdings, Inc.", "Paychex, Inc.", "Paycom Software, Inc.", "Proofpoint, Inc.",
+    "Pure Storage, Inc.", "Qlik Technologies", "Qualtrics, LLC", "Rapid7, Inc.", "Ramp Business Corporation",
+    "Red Hat, Inc. (IBM)", "Redis, Inc.", "Rippling People Center Inc.", "Robert Half International Inc.",
+    "Rubrik, Inc.", "SAP SE", "SHI International Corp.", "SUSE S.A.", "Salesforce, Inc.",
+    "Scale AI, Inc.", "Science Applications International Corporation (SAIC)", "Semrush Holdings, Inc.",
+    "SentinelOne, Inc.", "ServiceNow, Inc.", "Shopify Inc.", "Sherweb Inc.", "SiteGround Hosting Ltd.",
+    "Siemens AG", "Sift Science, Inc.", "Singtel", "Sketch B.V.", "Slack Technologies, LLC (Salesforce)",
+    "Smartsheet Inc.", "Snowflake Inc.", "SoftwareOne AG", "Sophos Ltd.", "Spotify Technology S.A.",
+    "Sprinklr, Inc.", "Sprout Social, Inc.", "Square (Block, Inc.)", "Squarespace, Inc.", "StarHub Ltd",
+    "Stripe, Inc.", "Tableau Software, LLC (Salesforce)", "TD SYNNEX Corporation", "Tenable Holdings, Inc.",
+    "The Sage Group plc", "Trend Micro Incorporated", "Trello (Atlassian)", "Trustpilot Group plc",
+    "Tyler Technologies, Inc.", "Twilio Inc.", "TypeForm SL", "UKG Inc. (Ultimate Kronos Group)",
+    "Veeam Software", "VMware, Inc. (Broadcom)", "Webflow, Inc.", "Weaviate B.V.", "Waabi Innovation Inc.",
+    "Workday, Inc.", "Writer, Inc.", "WP Engine, Inc.", "Wix.com Ltd.", "Xero Limited",
+    "Yotpo Ltd.", "YouTube Premium", "Zendesk, Inc.", "Zscaler, Inc.", "Zoho Corporation Pvt. Ltd."
+  ].sort();
   
   // Close category dropdown when clicking outside
   useEffect(() => {
@@ -2131,13 +2130,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       }, 100);
     } else {
       setStartDate("");
-      setBillingCycle("");
+      setBillingCycle("monthly");
       setEndDate("");
-  // removed manual end date flag
+      // removed manual end date flag
       setSelectedDepartments([]);
       
-  // Reset status to Draft for new subscriptions
-  setStatus('Draft');
+      // Reset status to Draft for new subscriptions
+      setStatus('Draft');
       
       // Reset auto renewal to false for new subscriptions
       setAutoRenewal(false);
@@ -2150,7 +2149,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         qty: "",
         amount: "",
         totalAmount: "",
-        billingCycle: "",
+        billingCycle: "monthly",
         paymentFrequency: "",
         category: "",
         department: "",
@@ -2160,9 +2159,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         paymentMethod: "",
         startDate: "",
         nextRenewal: "",
-  status: "Draft",
-        reminderDays: "",
-        reminderPolicy: "",
+        status: "Draft",
+        reminderDays: 7,
+        reminderPolicy: "One time",
         notes: "",
         isActive: true,
       });
@@ -2487,16 +2486,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
 
   // Draft mutation for saving drafts
   const draftMutation = useMutation({
-    mutationFn: async (data: FormData) => {
-      const { id, createdAt, ...rest } = data as any;
+    mutationFn: async (data: FormData & { silent?: boolean }) => {
+      const { id, createdAt, silent, ...rest } = data as any;
       
       // Safely convert dates - use null if invalid
       const startDateValue = data.startDate ? new Date(data.startDate) : null;
       const nextRenewalValue = data.nextRenewal ? new Date(data.nextRenewal) : null;
       
-      // Validate dates before sending
-      const startDateISO = startDateValue && !isNaN(startDateValue.getTime()) ? startDateValue.toISOString() : new Date().toISOString();
-      const nextRenewalISO = nextRenewalValue && !isNaN(nextRenewalValue.getTime()) ? nextRenewalValue.toISOString() : new Date().toISOString();
+      // Validate dates before sending - do not default to today's date for draft saves
+      const startDateISO = startDateValue && !isNaN(startDateValue.getTime()) ? startDateValue.toISOString() : "";
+      const nextRenewalISO = nextRenewalValue && !isNaN(nextRenewalValue.getTime()) ? nextRenewalValue.toISOString() : "";
       
       // Convert departments array to JSON string for storage
       const draftData: any = {
@@ -2589,20 +2588,23 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       // Return a context object with the snapshotted value
       return { previousSubscriptions, previousSubscriptionsGlobal, tenantId };
     },
-    onSuccess: async (result, variables, context) => {
+    onSuccess: async (result, variables: any, context) => {
       void result;
-      void variables;
       const tenantId = context?.tenantId || (window as any).currentTenantId || (window as any).user?.tenantId || null;
       
-      // Show success message based on whether editing or creating
-      toast({
-        title: isEditing ? "Draft Updated" : "Draft Saved",
-        description: isEditing ? "Draft subscription updated successfully" : "Subscription saved as draft successfully",
-        variant: "success",
-      });
+      // Show success message based on whether editing or creating, but skip if silent
+      if (!variables?.silent) {
+        toast({
+          title: isEditing ? "Draft Updated" : "Draft Saved",
+          description: isEditing ? "Draft subscription updated successfully" : "Subscription saved as draft successfully",
+          variant: "success",
+        });
+      }
       
-      // Close modal
-      onOpenChange(false);
+      // Close modal only if not silent (so we don't close the modal when navigating to users page)
+      if (!variables?.silent) {
+        onOpenChange(false);
+      }
       
       // Invalidate and refetch to replace optimistic data with real data
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions", tenantId] });
@@ -2610,9 +2612,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions/drafts"] });
       
       // Reset form after a short delay
-      setTimeout(() => {
-        form.reset();
-      }, 300);
+      if (!variables?.silent) {
+        setTimeout(() => {
+          form.reset();
+        }, 300);
+      }
     },
     onError: (error: any, newData, context: any) => {
       void newData;
@@ -2644,7 +2648,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   });
 
   // Handle save draft function
-  const handleSaveDraft = async (options?: { returnResult?: boolean }) => {
+  const handleSaveDraft = async (options?: { returnResult?: boolean; silent?: boolean }) => {
     if (draftSaveInFlightRef.current || draftMutation.isPending) {
       return;
     }
@@ -2652,7 +2656,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
     const currentValues = form.getValues();
     
     // Basic validation for required fields
-    if (!currentValues.serviceName?.trim()) {
+    if (!options?.silent && !currentValues.serviceName?.trim()) {
       toast({
         title: "Validation Error",
         description: "Service name is required to save as draft",
@@ -2668,6 +2672,15 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const totalAmountInclTaxNum = totalAmountInclTax !== "" ? parseFloat(totalAmountInclTax) : 0;
       const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       
+      const getValidDateStr = (dateInput?: string | null) => {
+        if (!dateInput) return "";
+        const parsed = new Date(dateInput);
+        return isNaN(parsed.getTime()) ? "" : parsed.toISOString().split('T')[0];
+      };
+
+      const validStartDate = getValidDateStr(currentValues.startDate);
+      const validNextRenewal = getValidDateStr(currentValues.nextRenewal);
+
       const payload = {
         ...currentValues,
         status: 'Draft', // Always save as draft
@@ -2675,12 +2688,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         amount: amountNum,
         taxAmount: isNaN(taxAmountNum) ? 0 : taxAmountNum,
         totalAmountInclTax: isNaN(totalAmountInclTaxNum) ? 0 : totalAmountInclTaxNum,
-        initialDate: new Date(currentValues.startDate ?? ""), // Set initialDate to startDate
+        initialDate: validStartDate, // Set initialDate to startDate
         tenantId,
         departments: currentValues.departments || [],
-        startDate: currentValues.startDate || new Date().toISOString().split('T')[0],
-        nextRenewal: currentValues.nextRenewal || new Date().toISOString().split('T')[0],
+        startDate: validStartDate,
+        nextRenewal: validNextRenewal,
         ...(isEditing ? {} : { draftSessionId: draftSessionIdRef.current }),
+        silent: options?.silent, // Pass down to mutation variables
       };
 
       // Always use mutateAsync so we can reliably reset the single-flight guard in finally.
@@ -2717,13 +2731,53 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       return;
     }
     
+    // Check if users exist when saving or updating a subscription
+    const effectiveSubId = subscription?.id || subscription?._id;
+    if (!effectiveSubId) {
+      toast({
+        title: "No Users Assigned",
+        description: "Please assign at least one user before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      const usersRes = await fetch(`/api/subscriptions/${effectiveSubId}/users`, { 
+        credentials: "include" 
+      });
+      if (usersRes.ok) {
+        const users = await usersRes.json();
+        if (!Array.isArray(users) || users.length === 0) {
+          toast({
+            title: "No Users Assigned",
+            description: "Please assign at least one user before saving.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Error checking users:", error);
+    }
+    
     const currentStatus = String((form.getValues() as any)?.status ?? status ?? '').trim();
     if (isEditing && currentStatus === 'Cancelled') {
       setReactivateCancelledConfirmDialog({ show: true });
       return;
     }
 
-    setStatus('Active'); // Set status to Active when saving
+    // Calculate status dynamically based on expiry date and reminder days
+    const endDateValue = data.nextRenewal || endDate;
+    const reminderDaysValue = data.reminderDays || 7;
+    const determinedStatus = calculateSubscriptionStatus(
+      endDateValue,
+      reminderDaysValue,
+      currentStatus === 'Draft' ? 'Active' : currentStatus
+    );
+    
+    setStatus(determinedStatus as any);
+    
     try {
       // Always include department as JSON string for backend
       // Ensure amount is a number
@@ -2733,10 +2787,11 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       const taxAmountNum = taxAmount !== "" ? parseFloat(taxAmount) : 0;
       const totalAmountInclTaxNum = totalAmountInclTax !== "" ? parseFloat(totalAmountInclTax) : 0;
       // Get tenantId from context, state, or user info
-  const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
+      const tenantId = String((window as any).currentTenantId || (window as any).user?.tenantId || "");
       const payload = {
         ...data,
-        status: 'Active', // Always save as active
+        status: determinedStatus,
+        isDraft: false, // Ensure subscription is promoted out of Draft status when fully saved
         autoRenewal: autoRenewal, // Add auto renewal from state
         amount: isNaN(amountNum) ? 0 : amountNum,
         totalAmount: isNaN(totalAmountNum) ? 0 : totalAmountNum,
@@ -3694,11 +3749,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold tracking-wide ${
                     subscription?.billingCycle === 'trial' 
                       ? 'bg-purple-500 text-white' 
-                      : status === 'Active' 
-                        ? 'bg-emerald-500 text-white' 
-                        : status === 'Cancelled' 
-                          ? 'bg-rose-500 text-white' 
-                          : 'bg-orange-500 text-white'
+                      : getStatusModalBadgeClass(status)
                   }`}
                 >
                   {subscription?.billingCycle === 'trial' ? 'Trial' : status}
@@ -3714,9 +3765,72 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   const subscriptionId = subscription?._id || subscription?.id;
                   const serviceName = subscription?.serviceName || subscription?.name || 'Subscription';
                   
-                  // Check if subscription has been saved
+                  // Check if subscription has been saved; if not, auto-save as draft
+                  const handleUserNav = async (subId: string) => {
+                    const mintDeeplinkToken = async (id: string) => {
+                      const res = await fetch('/api/deeplink/token', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ entityType: 'subscription', id }),
+                      });
+                      if (!res.ok) throw new Error('Failed to create deeplink token');
+                      const data = (await res.json()) as { token?: string };
+                      if (!data?.token) throw new Error('Invalid deeplink token response');
+                      return String(data.token);
+                    };
+
+                    try {
+                      const token = await mintDeeplinkToken(String(subId));
+                      const qs = new URLSearchParams({
+                        openToken: token,
+                        name: String(serviceName),
+                      }).toString();
+                      navigate(`/subscription-user?${qs}`, {
+                        state: {
+                          ...(location.state as any),
+                          returnOpenSubscriptionId: subId,
+                          returnPath: location.pathname,
+                        },
+                      });
+                    } catch {
+                      const qs = new URLSearchParams({
+                        id: String(subId),
+                        name: String(serviceName),
+                      }).toString();
+                      navigate(`/subscription-user?${qs}`, {
+                        state: {
+                          ...(location.state as any),
+                          returnOpenSubscriptionId: subId,
+                          returnPath: location.pathname,
+                        },
+                      });
+                    }
+                  };
+
                   if (!subscriptionId) {
-                    setSaveDraftRequiredDialog({show: true});
+                    // Save draft silently in background
+                    void (async () => {
+                      try {
+                        const result = await handleSaveDraft({ returnResult: true, silent: true });
+                        const newId = result?._id || result?.subscription?._id;
+                        if (newId) {
+                          await handleUserNav(String(newId));
+                        } else {
+                          toast({
+                            title: "Error",
+                            description: "Failed to automatically save draft. Please fill in required fields.",
+                            variant: "destructive",
+                          });
+                        }
+                      } catch (e: any) {
+                        toast({
+                          title: "Error",
+                          description: e?.message || "Failed to automatically save draft",
+                          variant: "destructive",
+                        });
+                      }
+                    })();
                     return;
                   }
 
@@ -3768,7 +3882,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               <Button
                 type="button"
                 variant="outline"
-                disabled={!subscription?._id && !subscription?.id}
+                disabled={(!subscription?._id && !subscription?.id) || status === 'Draft'}
+                title={status === 'Draft' ? 'History is not available for draft subscriptions' : undefined}
                 className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] border-indigo-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:!bg-white"
                 onClick={() => {
                   const subscriptionId = subscription?._id || subscription?.id;
@@ -3962,12 +4077,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           onChange={field.onChange}
                           options={allCurrencies}
                           placeholder="Select currency"
-                          onAddNew={() => {
-                            setCurrencyDraft({ code: '', name: '', symbol: '', isoNumber: '', exchangeRate: '' });
-                            setCurrencyDropdownOpen(false);
-                            setCurrencyDropdownOptions([]);
-                            setCurrencyModal({ show: true });
-                          }}
                           className="w-full border-gray-300 rounded-lg p-3 pr-10 text-base font-medium bg-white shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer"
                         />
                         <FormMessage />
@@ -4175,10 +4284,10 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       };
                     }, [cycleOpen]);
                     const options = [
-                      { value: 'monthly', label: 'Monthly' },
-                      { value: 'yearly', label: 'Yearly' },
-                      { value: 'quarterly', label: 'Quarterly' },
                       { value: 'weekly', label: 'Weekly' },
+                      { value: 'monthly', label: 'Monthly' },
+                      { value: 'quarterly', label: 'Quarterly' },
+                      { value: 'yearly', label: 'Yearly' },
                       { value: '2 years', label: '2 Years' },
                       { value: '3 years', label: '3 Years' },
                       { value: 'trial', label: 'Trial' },
@@ -4333,8 +4442,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       ? categories.filter(cat => cat.visible).map(cat => cat.name)
                       : [];
                     
-                    // Combine and deduplicate
-                    const allCategories = Array.from(new Set([...dbCategories, ...DEFAULT_CATEGORY_SUGGESTIONS]));
+                    // Combine, deduplicate, and sort alphabetically
+                    const allCategories = Array.from(new Set([...dbCategories, ...DEFAULT_CATEGORY_SUGGESTIONS])).sort();
 
                     return (
                       <FormItem className={getStableColSpan("category", field.value, 18)}>
@@ -4345,7 +4454,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           options={allCategories}
                           placeholder="Select or type category"
                           disabled={categoriesLoading}
-                          onAddNew={() => setCategoryModal({ show: true })}
                           className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
                         />
                         <FormMessage />
@@ -4364,6 +4472,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                       function handleClickOutside(event: MouseEvent) {
                         if (deptDropdownRef.current && !deptDropdownRef.current.contains(event.target as Node)) {
                           setDeptOpen(false);
+                          setDeptSearch('');
                         }
                       }
                       document.addEventListener('mousedown', handleClickOutside);
@@ -4371,52 +4480,86 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         document.removeEventListener('mousedown', handleClickOutside);
                       };
                     }, [deptOpen]);
+                    
+                    const [deptSearch, setDeptSearch] = useState('');
+                    const normalizedDeptSearch = deptSearch.trim().toLowerCase();
+                    
+                    // Filter and sort departments - prioritize starts-with matches
+                    const filteredDepts = Array.isArray(departments) && departments.length > 0
+                      ? departments
+                          .filter(dept => {
+                            if (!dept.visible) return false;
+                            if (!normalizedDeptSearch) return true; // Show all when no search
+                            return dept.name.toLowerCase().includes(normalizedDeptSearch);
+                          })
+                          .sort((a, b) => {
+                            // If searching, prioritize departments that start with the search term
+                            if (normalizedDeptSearch) {
+                              const aStarts = a.name.toLowerCase().startsWith(normalizedDeptSearch);
+                              const bStarts = b.name.toLowerCase().startsWith(normalizedDeptSearch);
+                              if (aStarts && !bStarts) return -1;
+                              if (!aStarts && bStarts) return 1;
+                            }
+                            // Otherwise maintain alphabetical order
+                            return a.name.localeCompare(b.name);
+                          })
+                      : [];
+                    
                     return (
                       <FormItem className="relative" ref={deptDropdownRef}>
                         <FormLabel className="block text-sm font-medium text-slate-700">Departments</FormLabel>
                         <div className="relative">
                           <div
-                            className="w-full border border-slate-300 rounded-lg p-2 text-base h-[44px] flex items-center justify-start overflow-x-auto overflow-y-hidden bg-white cursor-pointer focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all duration-200 scrollbar-hide"
-                            onClick={() => setDeptOpen(true)}
-                            tabIndex={0}
-                            onFocus={() => setDeptOpen(true)}
+                            className="w-full border border-slate-300 rounded-lg p-2.5 pr-10 text-base cursor-pointer bg-white h-[42px] flex items-center overflow-x-auto overflow-y-hidden scrollbar-hide"
+                            onClick={() => setDeptOpen(!deptOpen)}
                             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                           >
                             {selectedDepartments.length > 0 ? (
                               <div className="flex gap-1 flex-nowrap">
                                 {selectedDepartments.map((dept) => (
                                   <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 whitespace-nowrap flex-shrink-0">
-                                    <span className="truncate max-w-[80px]">{dept}</span>
+                                    <span>{dept}</span>
                                     <button
                                       type="button"
-                                      data-remove-dept="true"
                                       onClick={(e) => { 
                                         e.preventDefault();
                                         e.stopPropagation(); 
                                         removeDepartment(dept); 
                                       }}
-                                      className="ml-1 rounded-full hover:bg-indigo-300 flex-shrink-0"
-                                      tabIndex={-1}
+                                      className="ml-1 rounded-full hover:bg-indigo-300"
                                     >
-                                      <X className="h-3 w-3" data-remove-dept="true" />
+                                      <X className="h-3 w-3" />
                                     </button>
                                   </Badge>
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-gray-400">Select departments</span>
+                              <span className="text-slate-400">Select departments...</span>
                             )}
-                            <ChevronDown
-                              className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer flex-shrink-0"
-                              onClick={(e) => { e.stopPropagation(); setDeptOpen(!deptOpen); }}
-                            />
                           </div>
+                          <ChevronDown
+                            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 cursor-pointer flex-shrink-0 pointer-events-none"
+                          />
                         </div>
                         {selectedDepartments.includes('Company Level') && (
                           <p className="mt-1 text-xs text-slate-500">All departments are selected</p>
                         )}
                         {deptOpen && (
                           <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                            {/* Search bar inside dropdown */}
+                            <div className="p-2 border-b border-gray-200">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+                                <Input
+                                  type="text"
+                                  placeholder="Search departments..."
+                                  value={deptSearch}
+                                  onChange={(e) => setDeptSearch(e.target.value)}
+                                  className="pl-9 h-9 text-sm"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            </div>
                             <div className="max-h-60 overflow-auto custom-scrollbar">
                               <div className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md border-b border-gray-200 mb-1">
                                 <Checkbox
@@ -4432,10 +4575,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                   Company Level
                                 </label>
                               </div>
-                              {Array.isArray(departments) && departments.length > 0 ? (
-                                departments
-                                  .filter(dept => dept.visible)
-                                  .map(dept => (
+                              {filteredDepts.length > 0 ? (
+                                filteredDepts.map(dept => (
                                     <div key={dept.name} className="flex items-center px-2 py-2 hover:bg-slate-100 rounded-md">
                                       <Checkbox
                                         id={`dept-${dept.name}`}
@@ -4451,7 +4592,9 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                       </label>
                                     </div>
                                   ))
-                              ) : null}
+                              ) : (
+                                <div className="px-2 py-2 text-sm text-slate-500">No departments found</div>
+                              )}
                               {Array.isArray(departments) && departments.filter(dept => dept.visible).length === 0 && (
                                 <div className="dropdown-item disabled text-gray-400">No departments found</div>
                               )}
@@ -4470,13 +4613,12 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     );
                   }}
                 />
-                {/* Payment Method field - dynamic dropdown */}
                 <FormField
                   control={form.control}
                   name="paymentMethod"
                   render={({ field }) => {
                     const allPaymentMethods = Array.isArray(paymentMethods)
-                      ? paymentMethods.map(pm => pm.name)
+                      ? paymentMethods.map(pm => pm.name).sort((a, b) => a.localeCompare(b))
                       : [];
 
                     return (
@@ -4490,7 +4632,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                           options={allPaymentMethods}
                           placeholder="Select payment method"
                           disabled={paymentMethodsLoading}
-                          onAddNew={() => setPaymentMethodModal({ show: true })}
                           className="w-full border-slate-300 rounded-lg p-2 pr-10 text-base focus:border-blue-500 focus:ring-blue-500 cursor-pointer"
                         />
                         <FormMessage className="text-red-500" />
@@ -4520,7 +4661,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                             }
                           }}
                           employees={employeesRaw}
-                          onAddNew={() => setOwnerModal({ show: true })}
                         />
                         <FormMessage />
                       </FormItem>
@@ -5036,7 +5176,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold px-8 py-3 shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-blue-700 rounded-lg transition-all duration-200 tracking-tight"
                   disabled={mutation.isPending}
                 >
-                  {mutation.isPending ? 'Saving...' : isEditing ? 'Update Subscription' : 'Save Subscription'}
+                  {mutation.isPending ? 'Saving...' : (isEditing && form.watch('status') !== 'Draft') ? 'Update Subscription' : 'Save Subscription'}
                 </Button>
               </div>
             </form>
@@ -6451,7 +6591,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             <div className="flex items-start justify-between">
               <div>
                 <DialogTitle className="text-lg font-semibold text-gray-900">Documents</DialogTitle>
-                
+                <p className="text-xs text-gray-500 mt-1">Max 10MB • PDF, DOC, DOCX, XLS, XLSX, PNG, JPG, CSV</p>
               </div>
               <div className="flex items-center gap-2">
                 <Button

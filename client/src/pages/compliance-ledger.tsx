@@ -10,8 +10,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FileText, Calendar, CheckCircle, XCircle, Clock, ArrowLeft, History } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { FileText, Calendar, CheckCircle, XCircle, Clock, History } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 
 function sanitizeId(raw: string | null) {
   const trimmed = (raw ?? "").trim();
@@ -153,16 +154,11 @@ const truncateText = (value: unknown, maxChars: number) => {
 };
 
 export default function ComplianceLedger() {
-  const navigate = useNavigate();
+
   const [searchParams] = useSearchParams();
 
-  // Read all ledger records from MongoDB
-  const [ledgerItems, setLedgerItems] = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(true);
-
-  const pageSize = 25;
+  const [pageSize, setPageSize] = React.useState(25);
   const [page, setPage] = React.useState(1);
-  const [totalPages, setTotalPages] = React.useState(1);
 
   const idParam = sanitizeId(searchParams.get("id"));
   const openToken = sanitizeToken(searchParams.get("openToken"));
@@ -360,9 +356,25 @@ export default function ComplianceLedger() {
 
   const tableColumnCount = visibleColumns.length;
   
-  const fetchLedger = async () => {
-    setLoading(true);
-    try {
+  const queryClient = useQueryClient();
+
+  type LedgerPageResponse = {
+    items: any[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+
+  const { data: ledgerPage, isLoading, isFetching } = useQuery<LedgerPageResponse>({
+    queryKey: ["/api/ledger/list", complianceId || 'all', page, pageSize],
+    enabled: !isResolvingToken,
+    staleTime: 0,
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (complianceId) params.set('complianceId', complianceId);
       const res = await fetch(`/api/ledger/list?${params.toString()}`);
@@ -372,11 +384,6 @@ export default function ComplianceLedger() {
       const pageItems: any[] = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
       const serverTotalPages = typeof json?.totalPages === 'number' ? json.totalPages : 1;
       const serverPage = typeof json?.page === 'number' ? json.page : 1;
-      setTotalPages(serverTotalPages > 0 ? serverTotalPages : 1);
-      setPage((prev) => {
-        if (serverPage && serverPage !== prev) return serverPage;
-        return prev;
-      });
 
       // Backward-compat safety: if server returned an array, filter client-side.
       let filteredData = pageItems;
@@ -389,38 +396,102 @@ export default function ComplianceLedger() {
         if (diff !== 0) return diff;
         return String(b?._id || b?.id || '').localeCompare(String(a?._id || a?.id || ''));
       });
-      setLedgerItems(sortedData);
-    } catch {
-      setLedgerItems([]);
-      setTotalPages(1);
+
+      return {
+        items: sortedData,
+        total: typeof json?.total === 'number' ? json.total : sortedData.length,
+        page: serverPage,
+        pageSize,
+        totalPages: serverTotalPages > 0 ? serverTotalPages : 1
+      };
     }
-    setLoading(false);
-  };
-  
+  });
+
+  const ledgerItems = ledgerPage?.items ?? [];
+  const totalPages = ledgerPage?.totalPages ?? 1;
+  const totalItems = ledgerPage?.total ?? 0;
+  const loading = isLoading && !ledgerPage;
+
+  // Prefetch adjacent pages for instant navigation
   React.useEffect(() => {
-    if (isResolvingToken) {
-      setLoading(true);
-      setLedgerItems([]);
-      return;
+    if (!queryClient || isResolvingToken) return;
+
+    // Prefetch next page
+    if (page < totalPages) {
+      const nextPage = page + 1;
+      queryClient.prefetchQuery({
+        queryKey: ["/api/ledger/list", complianceId || 'all', nextPage, pageSize],
+        queryFn: async () => {
+          const params = new URLSearchParams({ page: String(nextPage), pageSize: String(pageSize) });
+          if (complianceId) params.set('complianceId', complianceId);
+          const res = await fetch(`/api/ledger/list?${params.toString()}`);
+          if (!res.ok) throw new Error("Failed to fetch ledger data");
+          const json = await res.json();
+          const pageItems: any[] = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
+          const serverTotalPages = typeof json?.totalPages === 'number' ? json.totalPages : 1;
+          const serverPage = typeof json?.page === 'number' ? json.page : 1;
+          
+          let filteredData = pageItems;
+          if (complianceId && Array.isArray(json)) {
+            filteredData = pageItems.filter((item: any) => item.complianceId === complianceId || item._id === complianceId);
+          }
+          const sortedData = [...(Array.isArray(filteredData) ? filteredData : [])].sort((a: any, b: any) => {
+            const diff = ledgerSortMs(b) - ledgerSortMs(a);
+            if (diff !== 0) return diff;
+            return String(b?._id || b?.id || '').localeCompare(String(a?._id || a?.id || ''));
+          });
+          return {
+            items: sortedData,
+            total: typeof json?.total === 'number' ? json.total : sortedData.length,
+            page: serverPage,
+            pageSize,
+            totalPages: serverTotalPages > 0 ? serverTotalPages : 1
+          };
+        },
+        staleTime: 0,
+      });
     }
-    fetchLedger();
-  }, [complianceId, isResolvingToken, page]);
-  
+
+    // Prefetch previous page
+    if (page > 1) {
+      const prevPage = page - 1;
+      queryClient.prefetchQuery({
+        queryKey: ["/api/ledger/list", complianceId || 'all', prevPage, pageSize],
+        queryFn: async () => {
+          const params = new URLSearchParams({ page: String(prevPage), pageSize: String(pageSize) });
+          if (complianceId) params.set('complianceId', complianceId);
+          const res = await fetch(`/api/ledger/list?${params.toString()}`);
+          if (!res.ok) throw new Error("Failed to fetch ledger data");
+          const json = await res.json();
+          const pageItems: any[] = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
+          const serverTotalPages = typeof json?.totalPages === 'number' ? json.totalPages : 1;
+          const serverPage = typeof json?.page === 'number' ? json.page : 1;
+          
+          let filteredData = pageItems;
+          if (complianceId && Array.isArray(json)) {
+            filteredData = pageItems.filter((item: any) => item.complianceId === complianceId || item._id === complianceId);
+          }
+          const sortedData = [...(Array.isArray(filteredData) ? filteredData : [])].sort((a: any, b: any) => {
+            const diff = ledgerSortMs(b) - ledgerSortMs(a);
+            if (diff !== 0) return diff;
+            return String(b?._id || b?.id || '').localeCompare(String(a?._id || a?.id || ''));
+          });
+          return {
+            items: sortedData,
+            total: typeof json?.total === 'number' ? json.total : sortedData.length,
+            page: serverPage,
+            pageSize,
+            totalPages: serverTotalPages > 0 ? serverTotalPages : 1
+          };
+        },
+        staleTime: 0,
+      });
+    }
+  }, [page, totalPages, complianceId, isResolvingToken, pageSize, queryClient]);
+
   const displayedLedgerItems = isResolvingToken ? [] : ledgerItems;
 
-  // Handle back navigation to compliance page with modal reopened
-  const handleBackToCompliance = () => {
-    const idToOpen = resolvedComplianceId || idParam;
 
-    if (!idToOpen) {
-      navigate('/compliance', { replace: true });
-      return;
-    }
-
-    // Use direct open=<id> navigation (no async token) to avoid back-navigation blink.
-    const qs = new URLSearchParams({ open: String(idToOpen) }).toString();
-    navigate(`/compliance?${qs}`, { replace: true });
-  };
   
   const derivedName = displayedLedgerItems?.[0]?.filingName || displayedLedgerItems?.[0]?.policy;
   const headerName = complianceNameParam || derivedName;
@@ -495,8 +566,13 @@ export default function ComplianceLedger() {
           </div>
         </div>
 
-        <Card className="shadow-lg border-0 overflow-hidden bg-white/80 backdrop-blur-sm flex-1 min-h-0">
+        <Card className="relative shadow-lg border-0 overflow-hidden bg-white/80 backdrop-blur-sm flex-1 min-h-0">
           <CardContent className="p-0 h-full flex flex-col">
+            {isFetching && (
+              <div className="absolute top-0 left-0 right-0 h-1 bg-blue-100 z-50">
+                <div className="h-full bg-blue-600 animate-pulse"></div>
+              </div>
+            )}
             <Table containerClassName="flex-1 min-h-0 h-full overflow-auto" className="w-full table-fixed">
               <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                 <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
@@ -553,44 +629,86 @@ export default function ComplianceLedger() {
               </TableBody>
             </Table>
 
-            {totalPages > 1 ? (
+            {totalItems > 0 ? (
               <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
-                <div className="text-sm text-slate-600">
-                  Page {page} of {totalPages}
+                <div className="flex items-center gap-4 text-sm text-slate-700">
+                  <div>
+                    {(() => {
+                      const start = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
+                      const end = Math.min(page * pageSize, totalItems);
+                      return `${start}–${end} of ${totalItems}`;
+                    })()}
+                  </div>
+                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                    <span className="text-xs text-slate-500">Rows per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setPage(1);
+                      }}
+                      className="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    >
+                      {[10, 25, 50, 100].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page <= 1}
-                  >
-                    Previous
-                  </Button>
-                  {[1, 2, 3]
-                    .filter((p) => p <= totalPages)
-                    .map((p) => (
-                      <Button
-                        key={p}
-                        type="button"
-                        variant={p === page ? 'default' : 'outline'}
-                        className="h-9 w-10 px-0"
-                        onClick={() => setPage(p)}
-                      >
-                        {p}
-                      </Button>
-                    ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9"
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages}
-                  >
-                    Next
-                  </Button>
-                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page <= 1}
+                    >
+                      Previous
+                    </Button>
+                    {(() => {
+                      const buttons: number[] = [];
+                      const maxButtons = 5;
+                      let startPage = Math.max(1, page - Math.floor(maxButtons / 2));
+                      let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+                      
+                      if (endPage - startPage < maxButtons - 1) {
+                        startPage = Math.max(1, endPage - maxButtons + 1);
+                      }
+                      
+                      for (let i = startPage; i <= endPage; i++) {
+                        buttons.push(i);
+                      }
+                      
+                      return buttons.map((p) => (
+                        <Button
+                          key={p}
+                          type="button"
+                          variant={p === page ? "default" : "ghost"}
+                          className={`h-9 w-9 px-0 text-sm ${
+                            p === page 
+                              ? "bg-blue-600 text-white hover:bg-blue-700" 
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                          onClick={() => setPage(p)}
+                        >
+                          {p}
+                        </Button>
+                      ));
+                    })()}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : null}
           </CardContent>

@@ -2856,6 +2856,7 @@ router.post("/api/subscriptions", async (req, res) => {
       try {
         const createdSubscription = await collection.findOne({ _id: subscriptionId, tenantId });
         if (!createdSubscription) return;
+        if (createdSubscription.isDraft === true || createdSubscription.status === "Draft") return;
 
         const { decryptSubscriptionData } = await import("./encryption.service.js");
         const decryptedCreated = decryptSubscriptionData(createdSubscription);
@@ -3424,11 +3425,19 @@ const update = {
           // If this looks like a renewal (only date-range changed), force action=renewed.
           const isRenewalLike = diffs.length > 0 && diffs.every((k) => k === 'startDate' || k === 'nextRenewal' || k === 'endDate');
           const allowedActions = new Set(["renewed"]);
-          const finalAction = allowedActions.has(historyActionRaw)
-            ? historyActionRaw
-            : isRenewalLike
-              ? 'renewed'
-              : 'update';
+          const isDraftBefore = oldDoc.isDraft === true || oldDoc.status === "Draft";
+          const isDraftAfter = updatedDoc.isDraft === true || updatedDoc.status === "Draft";
+          
+          if (isDraftBefore && isDraftAfter) {
+            // Skip logging draft-to-draft updates in history
+          } else {
+            const finalAction = isDraftBefore && !isDraftAfter
+              ? 'create'
+              : allowedActions.has(historyActionRaw)
+                ? historyActionRaw
+                : isRenewalLike
+                  ? 'renewed'
+                  : 'update';
 
           const historyRecord = {
             subscriptionId: subscriptionId,  // Store as ObjectId
@@ -3454,6 +3463,7 @@ const update = {
             await historyCollection.insertOne(historyRecord);
           } catch (err) {
             console.error('Error inserting history record:', err);
+          }
           }
         }
       } else {

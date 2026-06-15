@@ -322,9 +322,9 @@ export default function SubscriptionUserPage() {
       
       await response.json();
       toast({
-        title: "Success",
+        title: "Removed",
         description: `${user.name} removed successfully.`,
-        variant: "success",
+        variant: "destructive",
       });
       
       await refetchSubscriptionUsers();
@@ -464,9 +464,9 @@ export default function SubscriptionUserPage() {
       console.log('Remove all successful:', result);
       
       toast({
-        title: "Success",
+        title: "Removed",
         description: `All users removed successfully.`,
-        variant: "success",
+        variant: "destructive",
       });
       
       await refetchSubscriptionUsers();
@@ -503,7 +503,7 @@ export default function SubscriptionUserPage() {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-indigo-50 to-blue-100 p-4 md:p-8">
+    <div className="h-full overflow-hidden bg-gradient-to-br from-indigo-50 to-blue-100 p-4 md:p-8">
       <div className="max-w-[100rem] mx-auto px-4 h-full flex flex-col">
         {/* Header */}
         <motion.div 

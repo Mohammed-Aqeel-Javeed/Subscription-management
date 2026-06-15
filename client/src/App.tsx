@@ -107,16 +107,26 @@ function AppWithSidebar() {
         return;
       }
 
+      // Check TanStack Query cache first to see if the user is already authenticated
+      const cachedMe = queryClient.getQueryData<any>(["/api/me"]);
+
       // For root path, check if user is authenticated
       if (location.pathname === "/") {
         try {
-          const res = await apiFetch("/api/me");
-          if (res.ok) {
-            const me = await res.json().catch(() => null);
+          let me = cachedMe;
+          if (!me) {
+            const res = await apiFetch("/api/me");
+            if (res.ok) {
+              me = await res.json().catch(() => null);
+              if (me) {
+                queryClient.setQueryData(["/api/me"], me);
+              }
+            }
+          }
+          if (me) {
             const next = me?.role === "global_admin" ? "/platform-admin" : "/dashboard";
             navigate(next, { replace: true });
           }
-          // If not authenticated, stay on landing page
         } catch (error) {
           // Network error, stay on landing page
         }
@@ -124,43 +134,44 @@ function AppWithSidebar() {
       }
 
       try {
-        const res = await apiFetch("/api/me");
-        console.log("[App Auth Guard] /api/me response:", {
-          ok: res.ok,
-          status: res.status,
-          pathname: location.pathname
-        });
-        if (!res.ok) {
-          // Only hard-redirect on real auth failures.
-          if (res.status === 401 || res.status === 403) {
-            const hasTabToken = (() => {
+        let me = cachedMe;
+        if (!me) {
+          const res = await apiFetch("/api/me");
+          console.log("[App Auth Guard] /api/me response:", {
+            ok: res.ok,
+            status: res.status,
+            pathname: location.pathname
+          });
+          if (!res.ok) {
+            // Only hard-redirect on real auth failures.
+            if (res.status === 401 || res.status === 403) {
+              const hasTabToken = (() => {
+                try {
+                  return Boolean(String(sessionStorage.getItem("token") || "").trim());
+                } catch {
+                  return false;
+                }
+              })();
+
+              console.log("[App Auth Guard] Not authenticated, redirecting to landing");
               try {
-                return Boolean(String(sessionStorage.getItem("token") || "").trim());
+                sessionStorage.removeItem("isAuthenticated");
               } catch {
-                return false;
+                // ignore
               }
-            })();
 
-            console.log("[App Auth Guard] Not authenticated, redirecting to landing");
-            try {
-              // Do not clear the per-tab token on a single 401/403.
-              // Cookies may be temporarily unavailable or the backend may be restarting.
-              sessionStorage.removeItem("isAuthenticated");
-            } catch {
-              // ignore
+              if (!hasTabToken) {
+                navigate("/", { replace: true });
+              }
             }
-
-            // If this tab has a token, stay on the current page and let subsequent
-            // retries (focus/online) recover. This prevents platform pages from
-            // going "empty" on a hard refresh.
-            if (!hasTabToken) {
-              navigate("/", { replace: true });
-            }
+            return;
           }
-          return;
+          me = await res.json().catch(() => null);
+          if (me) {
+            queryClient.setQueryData(["/api/me"], me);
+          }
         }
 
-        const me = await res.json().catch(() => null);
         if (me?.role === "global_admin") {
           // In impersonation mode, allow the global admin to use the normal app shell
           // while still having platform access.

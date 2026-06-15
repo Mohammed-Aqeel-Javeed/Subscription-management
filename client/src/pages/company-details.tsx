@@ -21,6 +21,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Can } from "@/components/Can";
 // ...existing code...
 import type { User as UserType, CompanyInfo, InsertCompanyInfo } from "@shared/types";
@@ -268,6 +269,13 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
   const [openActionsMenuForId, setOpenActionsMenuForId] = useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
   const downloadEmployeeTemplate = () => {
     const template = [{ name: 'John Doe', email: 'john@example.com', department: 'IT', role: 'Manager', status: 'active' }];
     const csv = Papa.unparse(template, { header: true });
@@ -290,6 +298,8 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
+  const [employeeBulkDeleteConfirmOpen, setEmployeeBulkDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -434,12 +444,69 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
     },
   });
 
+  const toggleSelectAllVisibleEmployees = () => {
+    if (selectedEmployeeIds.size === paginatedEmployees.length && paginatedEmployees.length > 0) {
+      setSelectedEmployeeIds(new Set());
+    } else {
+      setSelectedEmployeeIds(new Set(paginatedEmployees.map((e: any) => e._id)));
+    }
+  };
+
+  const toggleSelectOneEmployee = (id: string) => {
+    const newSelected = new Set(selectedEmployeeIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedEmployeeIds(newSelected);
+  };
+
+  const bulkDeleteEmployeesMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const promises = ids.map(id => apiRequest("DELETE", `/api/employees/${id}`));
+      return Promise.all(promises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      toast({
+        title: "Success",
+        description: "Selected employees deleted successfully",
+        variant: "destructive",
+        duration: 2000,
+      });
+      setSelectedEmployeeIds(new Set());
+      setEmployeeBulkDeleteConfirmOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete employees",
+        variant: "destructive",
+        duration: 2000,
+      });
+    }
+  });
+
+  const confirmBulkDeleteEmployees = () => {
+    bulkDeleteEmployeesMutation.mutate(Array.from(selectedEmployeeIds));
+  };
+
   // Filter employees based on search term
   const filteredEmployees = employees.filter(employee =>
     employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     employee.department.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const totalFiltered = filteredEmployees.length;
+  const totalPages = Math.ceil(totalFiltered / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+
+  const paginatedEmployees = React.useMemo(() => {
+    const reversed = [...filteredEmployees].reverse();
+    return reversed.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredEmployees, startIndex, itemsPerPage]);
 
   const handleEdit = (employee: Employee) => {
     setEditingEmployee(employee);
@@ -503,46 +570,74 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
         throw new Error('Invalid file format. Expected a list of employees.');
       }
 
-      // Check for duplicate emails within the imported data
+      // Track invalid and duplicate employees to skip them
       const emailSet = new Set();
-      for (const emp of newEmployees) {
-        if (emailSet.has(emp.email?.toLowerCase())) {
-          throw new Error(`Duplicate email found in import data: ${emp.email}`);
-        }
-        emailSet.add(emp.email?.toLowerCase());
-      }
+      const skippedEmployees: string[] = [];
+      const validEmployees: any[] = [];
 
-      // Check for duplicate emails with existing employees
       for (const emp of newEmployees) {
+        const empEmail = emp.email?.toLowerCase()?.trim();
+        const empName = emp.name?.trim();
+        const empDept = emp.department?.trim();
+        const empRole = emp.role?.trim();
+
+        // Skip if missing required fields
+        if (!empName || !empEmail || !empDept || !empRole) {
+          skippedEmployees.push(`Row with email "${emp.email || 'N/A'}" - Missing required fields`);
+          continue;
+        }
+
+        // Skip if duplicate email in import file
+        if (emailSet.has(empEmail)) {
+          skippedEmployees.push(`${empEmail} - Duplicate in import file`);
+          continue;
+        }
+
+        // Skip if email already exists in system
         const existingEmployee = employees.find(
-          existing => existing.email.toLowerCase() === emp.email?.toLowerCase()
+          existing => existing.email.toLowerCase() === empEmail
         );
         if (existingEmployee) {
-          throw new Error(`Email already exists in system: ${emp.email}`);
+          skippedEmployees.push(`${empEmail} - Already exists in system`);
+          continue;
         }
-      }
 
-      // Validate each employee
-      for (const emp of newEmployees) {
-        if (!emp.name || !emp.email || !emp.department || !emp.role) {
-          throw new Error('Invalid employee data. Required fields: name, email, department, role');
-        }
         // Ensure status is valid
         emp.status = emp.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active';
+        
+        // Add to valid list
+        emailSet.add(empEmail);
+        validEmployees.push(emp);
       }
 
-      // Create each employee
-      const promises = newEmployees.map(emp =>
+      // If no valid employees, show error
+      if (validEmployees.length === 0) {
+        throw new Error(`No valid employees to import. ${skippedEmployees.length} rows were skipped. Check that all rows have: name, email, department, and role.`);
+      }
+
+      // Create each valid employee
+      const promises = validEmployees.map(emp =>
         apiRequest("POST", "/api/employees", emp)
       );
       await Promise.all(promises);
 
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      
+      // Show success message with skip details if any
+      const successMessage = skippedEmployees.length > 0
+        ? `Imported ${validEmployees.length} employees. Skipped ${skippedEmployees.length} invalid/duplicate rows.`
+        : `Imported ${validEmployees.length} employees successfully`;
+
       toast({
         title: "Success",
-        description: `Imported ${newEmployees.length} employees successfully`,
-        duration: 2000,
+        description: successMessage,
+        duration: skippedEmployees.length > 0 ? 4000 : 2000,
       });
+
+      // If there were skipped rows, log them to console for debugging
+      if (skippedEmployees.length > 0) {
+        console.log('Skipped employee rows:', skippedEmployees);
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -756,21 +851,32 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
               </SelectContent>
             </Select>
           </div>
-          <Dialog open={modalOpen} onOpenChange={(open) => {
-            if (open) {
-              setModalOpen(true);
-              return;
-            }
-            requestCloseEmployeeDialog();
-          }}>
-            <DialogTrigger asChild>
-              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+          <div className="flex items-center gap-3">
+            {selectedEmployeeIds.size > 0 && (
+              <Button
+                type="button"
+                onClick={() => setEmployeeBulkDeleteConfirmOpen(true)}
+                className="h-10 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md transition-all duration-200 border-0"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Selected ({selectedEmployeeIds.size})
+              </Button>
+            )}
+            <Dialog open={modalOpen} onOpenChange={(open) => {
+              if (open) {
+                setModalOpen(true);
+                return;
+              }
+              requestCloseEmployeeDialog();
+            }}>
+              <DialogTrigger asChild>
+                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                 <Button
                   onClick={handleAddNew}
                   className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
                 >
                   <UserPlus className="mr-2" size={16} />
-                  New Employee
+                  Employee
                 </Button>
               </motion.div>
             </DialogTrigger>
@@ -968,6 +1074,7 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
 
           {/* Exit Confirmation Dialog */}
           <AlertDialog open={exitConfirmOpen} onOpenChange={(open) => !open && setExitConfirmOpen(false)}>
@@ -1020,6 +1127,16 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
             <Table containerClassName="overflow-visible" className="w-full table-fixed">
               <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                 <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 w-[50px]">
+                    <div className="flex items-center justify-center">
+                      <Checkbox 
+                        checked={paginatedEmployees.length > 0 && selectedEmployeeIds.size === paginatedEmployees.length}
+                        onCheckedChange={toggleSelectAllVisibleEmployees}
+                        className="border-white/50 data-[state=checked]:bg-white data-[state=checked]:text-indigo-600"
+                        aria-label="Select all employees on this page"
+                      />
+                    </div>
+                  </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">Employee</TableHead>
                   <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[140px]">Role</TableHead>
                   <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[160px]">Department</TableHead>
@@ -1031,7 +1148,7 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
               </TableHeader>
               <TableBody>
                 <AnimatePresence>
-                  {[...filteredEmployees].reverse().map((employee, index) => {
+                  {paginatedEmployees.map((employee, index) => {
                   // Count subscriptions owned by this employee
                   const subscriptionCount = subscriptions.filter((sub: any) =>
                     sub.owner?.toLowerCase() === employee.name?.toLowerCase() ||
@@ -1047,6 +1164,15 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
                       exit={{ opacity: 0 }}
                       transition={{ delay: 0.04 * index }}
                     >
+                      <TableCell className="px-4 py-3 w-[50px]">
+                        <div className="flex items-center justify-center">
+                          <Checkbox 
+                            checked={selectedEmployeeIds.has(employee._id)}
+                            onCheckedChange={() => toggleSelectOneEmployee(employee._id)}
+                            aria-label={`Select ${employee.name}`}
+                          />
+                        </div>
+                      </TableCell>
                       <TableCell className="px-4 py-3 w-[200px] min-w-0 text-left">
                         <button
                           type="button"
@@ -1154,6 +1280,90 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
               </TableBody>
             </Table>
           </div>
+          
+          {/* Pagination Footer */}
+          {totalFiltered > 0 && (
+            <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-4 text-sm text-slate-700">
+                <div>
+                  {(() => {
+                    const start = totalFiltered === 0 ? 0 : startIndex + 1;
+                    const end = Math.min(startIndex + itemsPerPage, totalFiltered);
+                    return `${start}–${end} of ${totalFiltered}`;
+                  })()}
+                </div>
+                <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                  <span className="text-xs text-slate-500">Rows per page:</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  >
+                    {[10, 25, 50, 100].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1}
+                  >
+                    Previous
+                  </Button>
+                  {(() => {
+                    const buttons: number[] = [];
+                    const maxButtons = 5;
+                    let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+                    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+                    
+                    if (endPage - startPage < maxButtons - 1) {
+                      startPage = Math.max(1, endPage - maxButtons + 1);
+                    }
+                    
+                    for (let i = startPage; i <= endPage; i++) {
+                      buttons.push(i);
+                    }
+                    
+                    return buttons.map((p) => (
+                      <Button
+                        key={p}
+                        type="button"
+                        variant={p === currentPage ? "default" : "ghost"}
+                        className={`h-9 w-9 px-0 text-sm ${
+                          p === currentPage 
+                            ? "bg-blue-600 text-white hover:bg-blue-700" 
+                            : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                        onClick={() => setCurrentPage(p)}
+                      >
+                        {p}
+                      </Button>
+                    ));
+                  })()}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </motion.div>
 
@@ -1345,6 +1555,30 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={employeeBulkDeleteConfirmOpen} onOpenChange={setEmployeeBulkDeleteConfirmOpen}>
+        <AlertDialogContent className="sm:max-w-[425px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              Confirm Bulk Delete
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              Are you sure you want to delete {selectedEmployeeIds.size} selected employee(s)? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-gray-300 text-gray-700 hover:bg-gray-100">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDeleteEmployees}
+              className="bg-red-600 text-white hover:bg-red-700 font-medium border-0 shadow-md"
+              disabled={bulkDeleteEmployeesMutation.isPending}
+            >
+              {bulkDeleteEmployeesMutation.isPending ? "Deleting..." : "Delete All Selected"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }
@@ -1364,9 +1598,18 @@ function UserManagementTab() {
   const [searchTerm, setSearchTerm] = useState("");
   const [userDeleteConfirmOpen, setUserDeleteConfirmOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserType | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [userBulkDeleteConfirmOpen, setUserBulkDeleteConfirmOpen] = useState(false);
   const [openActionsMenuForId, setOpenActionsMenuForId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // User Management Data Management state
   const userFileInputRef = React.useRef<HTMLInputElement>(null);
@@ -1602,12 +1845,69 @@ function UserManagementTab() {
     },
   });
 
+  const toggleSelectAllVisibleUsers = () => {
+    if (selectedUserIds.size === paginatedUsers.length && paginatedUsers.length > 0) {
+      setSelectedUserIds(new Set());
+    } else {
+      setSelectedUserIds(new Set(paginatedUsers.map((u: any) => u.id)));
+    }
+  };
+
+  const toggleSelectOneUser = (id: string) => {
+    const newSelected = new Set(selectedUserIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedUserIds(newSelected);
+  };
+
+  const bulkDeleteUsersMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const promises = ids.map(id => apiRequest("DELETE", `/api/users/${id}`));
+      return Promise.all(promises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Success",
+        description: "Selected users deleted successfully",
+        variant: "destructive",
+        duration: 2000,
+      });
+      setSelectedUserIds(new Set());
+      setUserBulkDeleteConfirmOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete users",
+        variant: "destructive",
+        duration: 2000,
+      });
+    }
+  });
+
+  const confirmBulkDeleteUsers = () => {
+    bulkDeleteUsersMutation.mutate(Array.from(selectedUserIds));
+  };
+
   // Filter users based on search term
   const filteredUsers = users?.filter(user =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.role.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
+
+  const totalFiltered = filteredUsers.length;
+  const totalPages = Math.ceil(totalFiltered / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+
+  const paginatedUsers = React.useMemo(() => {
+    const reversed = [...filteredUsers].reverse();
+    return reversed.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredUsers, startIndex, itemsPerPage]);
 
   const handleEdit = (user: UserType) => {
     const freshUser = users?.find(u => u.id === user.id) || user;
@@ -1839,21 +2139,32 @@ function UserManagementTab() {
               </SelectItem>
             </SelectContent>
           </Select>
-          <Dialog open={modalOpen} onOpenChange={(open) => {
-            if (open) {
-              setModalOpen(true);
-              return;
-            }
-            requestCloseUserDialog();
-          }}>
-            <DialogTrigger asChild>
-              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+          <div className="flex items-center gap-3">
+            {selectedUserIds.size > 0 && (
+              <Button
+                type="button"
+                onClick={() => setUserBulkDeleteConfirmOpen(true)}
+                className="h-10 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md transition-all duration-200 border-0"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Selected ({selectedUserIds.size})
+              </Button>
+            )}
+            <Dialog open={modalOpen} onOpenChange={(open) => {
+              if (open) {
+                setModalOpen(true);
+                return;
+              }
+              requestCloseUserDialog();
+            }}>
+              <DialogTrigger asChild>
+                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                 <Button
                   onClick={handleAddNew}
                   className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-md rounded-lg h-10 px-4"
                 >
                   <UserPlus className="mr-2" size={16} />
-                  New User
+                   User
                 </Button>
               </motion.div>
             </DialogTrigger>
@@ -1978,6 +2289,7 @@ function UserManagementTab() {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
 
           {/* Exit Confirmation Dialog */}
           <AlertDialog open={exitConfirmOpen} onOpenChange={(open) => !open && setExitConfirmOpen(false)}>
@@ -2017,6 +2329,31 @@ function UserManagementTab() {
           </AlertDialog>
         </div>
       </div>
+
+      {/* User Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={userBulkDeleteConfirmOpen} onOpenChange={setUserBulkDeleteConfirmOpen}>
+        <AlertDialogContent className="sm:max-w-[425px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              Confirm Bulk Delete
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              Are you sure you want to delete {selectedUserIds.size} selected user(s)? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-gray-300 text-gray-700 hover:bg-gray-100">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDeleteUsers}
+              className="bg-red-600 text-white hover:bg-red-700 font-medium border-0 shadow-md"
+              disabled={bulkDeleteUsersMutation.isPending}
+            >
+              {bulkDeleteUsersMutation.isPending ? "Deleting..." : "Delete All Selected"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* User Delete Confirmation Dialog */}
       <Dialog
@@ -2093,6 +2430,16 @@ function UserManagementTab() {
             <Table containerClassName="overflow-visible" className="w-full table-fixed">
               <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
                 <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 w-[50px]">
+                    <div className="flex items-center justify-center">
+                      <Checkbox 
+                        checked={paginatedUsers.length > 0 && selectedUserIds.size === paginatedUsers.length}
+                        onCheckedChange={toggleSelectAllVisibleUsers}
+                        className="border-white/50 data-[state=checked]:bg-white data-[state=checked]:text-indigo-600"
+                        aria-label="Select all users on this page"
+                      />
+                    </div>
+                  </TableHead>
                   <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[240px]">User</TableHead>
                   <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide">Email</TableHead>
                   <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[220px]">Role</TableHead>
@@ -2103,7 +2450,7 @@ function UserManagementTab() {
               <TableBody>
                 {filteredUsers.length > 0 ? (
                   <AnimatePresence>
-                    {[...filteredUsers].reverse().map((user, index) => (
+                    {paginatedUsers.map((user, index) => (
                       <motion.tr
                         key={user.id}
                         className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
@@ -2112,6 +2459,15 @@ function UserManagementTab() {
                         exit={{ opacity: 0 }}
                         transition={{ delay: 0.04 * index }}
                       >
+                        <TableCell className="px-4 py-3 w-[50px]">
+                          <div className="flex items-center justify-center">
+                            <Checkbox 
+                              checked={selectedUserIds.has(user.id)}
+                              onCheckedChange={() => toggleSelectOneUser(user.id)}
+                              aria-label={`Select ${user.name}`}
+                            />
+                          </div>
+                        </TableCell>
                         <TableCell className="px-4 py-3 w-[240px] min-w-0 text-left">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-10 h-10 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center shadow-sm flex-shrink-0">
@@ -2198,6 +2554,90 @@ function UserManagementTab() {
               </TableBody>
             </Table>
           </div>
+          
+          {/* Pagination Footer */}
+          {totalFiltered > 0 && (
+            <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-4 text-sm text-slate-700">
+                <div>
+                  {(() => {
+                    const start = totalFiltered === 0 ? 0 : startIndex + 1;
+                    const end = Math.min(startIndex + itemsPerPage, totalFiltered);
+                    return `${start}–${end} of ${totalFiltered}`;
+                  })()}
+                </div>
+                <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                  <span className="text-xs text-slate-500">Rows per page:</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  >
+                    {[10, 25, 50, 100].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1}
+                  >
+                    Previous
+                  </Button>
+                  {(() => {
+                    const buttons: number[] = [];
+                    const maxButtons = 5;
+                    let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+                    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+                    
+                    if (endPage - startPage < maxButtons - 1) {
+                      startPage = Math.max(1, endPage - maxButtons + 1);
+                    }
+                    
+                    for (let i = startPage; i <= endPage; i++) {
+                      buttons.push(i);
+                    }
+                    
+                    return buttons.map((p) => (
+                      <Button
+                        key={p}
+                        type="button"
+                        variant={p === currentPage ? "default" : "ghost"}
+                        className={`h-9 w-9 px-0 text-sm ${
+                          p === currentPage 
+                            ? "bg-blue-600 text-white hover:bg-blue-700" 
+                            : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                        onClick={() => setCurrentPage(p)}
+                      >
+                        {p}
+                      </Button>
+                    ));
+                  })()}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </motion.div>
 
@@ -3899,7 +4339,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                                     className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
                                   >
                                     <Plus className="w-4 h-4 mr-2" />
-                                    New Department
+                                    Department
                                   </Button>
                                 </motion.div>
                               </DialogTrigger>
@@ -4695,7 +5135,7 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                                 className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
                               >
                                 <Plus className="w-4 h-4 mr-2" />
-                                New Category
+                                Category
                               </Button>
                             </motion.div>
                           </div>

@@ -445,19 +445,22 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
     const usdRow = currencySheet.getRow(3);
     usdRow.getCell(1).value = '$ United States Dollar (USD)';
     usdRow.getCell(1).alignment = { horizontal: 'left' };
-    usdRow.getCell(2).value = '1.00';
+    usdRow.getCell(2).value = 1.000;
+    usdRow.getCell(2).numFmt = '0.000';
     usdRow.commit();
     
     const eurRow = currencySheet.getRow(4);
     eurRow.getCell(1).value = '€ Euro (EUR)';
     eurRow.getCell(1).alignment = { horizontal: 'left' };
-    eurRow.getCell(2).value = '0.85';
+    eurRow.getCell(2).value = 0.850;
+    eurRow.getCell(2).numFmt = '0.000';
     eurRow.commit();
     
     const inrRow = currencySheet.getRow(5);
     inrRow.getCell(1).value = '₹ Indian Rupee (INR)';
     inrRow.getCell(1).alignment = { horizontal: 'left' };
-    inrRow.getCell(2).value = '83.12';
+    inrRow.getCell(2).value = 83.120;
+    inrRow.getCell(2).numFmt = '0.000';
     inrRow.commit();
     
     // Add dropdown list validation ONLY (duplicate check will happen on import)
@@ -477,9 +480,9 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         error: 'Please select a currency from the dropdown list.'
       };
       
-      // Exchange Rate validation - must be numeric with 2 decimal places
+      // Exchange Rate validation - must be numeric with 3 decimal places
       const rateCell = currencySheet.getCell(`B${i}`);
-      rateCell.numFmt = '0.00'; // Format as number with 2 decimal places
+      rateCell.numFmt = '0.000'; // Format as number with 3 decimal places
       rateCell.dataValidation = {
         type: 'decimal',
         operator: 'greaterThan',
@@ -487,7 +490,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         formulae: [0],
         showInputMessage: true,
         promptTitle: 'Exchange Rate Required',
-        prompt: 'Enter the exchange rate as a number (e.g., 1.00, 83.12). Must be greater than 0.',
+        prompt: 'Enter the exchange rate as a number (e.g., 1.000, 83.120). Must be greater than 0.',
         showErrorMessage: true,
         errorStyle: 'error',
         errorTitle: 'Invalid Exchange Rate',
@@ -1336,6 +1339,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
       toast({
         title: "Template Downloaded",
         description: "Template with currency dropdown created successfully!",
+        variant: "success",
       });
     } catch (error) {
       console.error('Template generation error:', error);
@@ -2291,7 +2295,7 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
         toast({
           title: "Import Complete",
           description: results.join(' | '),
-          variant: totalError > 0 ? "destructive" : "default",
+          variant: totalError > 0 ? "warning" : "success",
         });
 
         // Refresh the page to show new data
