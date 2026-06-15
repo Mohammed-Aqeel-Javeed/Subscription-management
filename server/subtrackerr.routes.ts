@@ -3265,6 +3265,9 @@ const update = {
     if (result.matchedCount === 1) {
       // Get the updated document
       const updatedDoc = await collection.findOne({ _id: subscriptionId, tenantId });
+      if (!updatedDoc) {
+        return res.status(500).json({ message: "Failed to fetch updated subscription" });
+      }
       
       // Only create history record if there were actual changes
       if (result.modifiedCount > 0) {
