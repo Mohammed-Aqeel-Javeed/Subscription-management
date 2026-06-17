@@ -10,8 +10,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FileText, Calendar, CheckCircle, XCircle, Clock, History } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { FileText, Calendar, CheckCircle, XCircle, Clock, History, ArrowLeft } from "lucide-react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 
 function sanitizeId(raw: string | null) {
@@ -65,26 +65,26 @@ const ledgerSortMs = (item: any): number => {
 const getComplianceStatus = (endDate?: string, submissionDeadline?: string): string => {
   // If no dates provided, default to Pending
   if (!endDate && !submissionDeadline) return "Pending";
-  
+
   const today = new Date();
   today.setHours(0, 0, 0, 0); // Set to start of today for accurate comparison
-  
+
   // Use submission deadline if available, otherwise use end date
   const targetDate = new Date(submissionDeadline || endDate || "");
   if (isNaN(targetDate.getTime())) return "Pending";
-  
+
   targetDate.setHours(0, 0, 0, 0); // Set to start of day for accurate comparison
-  
+
   // If today is past the target date, it's overdue
   if (today > targetDate) {
     return "Overdue";
   }
-  
+
   // If today equals the target date, it's due today
   if (today.getTime() === targetDate.getTime()) {
     return "Due Today";
   }
-  
+
   // If target date is in the future, it's pending
   return "Pending";
 };
@@ -92,37 +92,37 @@ const getComplianceStatus = (endDate?: string, submissionDeadline?: string): str
 // Function to map status values and get appropriate icon
 const getStatusInfo = (status: string) => {
   if (status === "Completed") {
-    return { 
-      text: "Completed", 
-      variant: "default" as const, 
+    return {
+      text: "Completed",
+      variant: "default" as const,
       icon: <CheckCircle className="w-4 h-4" />,
       color: "bg-green-100 text-green-800"
     };
   } else if (status === "Overdue") {
-    return { 
-      text: "Overdue", 
-      variant: "destructive" as const, 
+    return {
+      text: "Overdue",
+      variant: "destructive" as const,
       icon: <XCircle className="w-4 h-4" />,
       color: "bg-red-100 text-red-800"
     };
   } else if (status === "Due Today") {
-    return { 
-      text: "Due Today", 
-      variant: "secondary" as const, 
+    return {
+      text: "Due Today",
+      variant: "secondary" as const,
       icon: <Clock className="w-4 h-4" />,
       color: "bg-orange-100 text-orange-800"
     };
   } else if (status === "Pending") {
-    return { 
-      text: "Pending", 
-      variant: "secondary" as const, 
+    return {
+      text: "Pending",
+      variant: "secondary" as const,
       icon: <Clock className="w-4 h-4" />,
       color: "bg-yellow-100 text-yellow-800"
     };
   } else {
-    return { 
-      text: status, 
-      variant: "destructive" as const, 
+    return {
+      text: status,
+      variant: "destructive" as const,
       icon: <XCircle className="w-4 h-4" />,
       color: "bg-red-100 text-red-800"
     };
@@ -154,7 +154,7 @@ const truncateText = (value: unknown, maxChars: number) => {
 };
 
 export default function ComplianceLedger() {
-
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [pageSize, setPageSize] = React.useState(25);
@@ -167,6 +167,33 @@ export default function ComplianceLedger() {
   const [resolvedComplianceId, setResolvedComplianceId] = React.useState<string | null>(idParam);
   const [tokenError, setTokenError] = React.useState<string | null>(null);
   const [isResolvingToken, setIsResolvingToken] = React.useState(() => Boolean(openToken && !idParam));
+
+  const handleBackToCompliance = () => {
+    const idToOpen = resolvedComplianceId || idParam;
+    if (!idToOpen) {
+      navigate("/compliance", { replace: true });
+      return;
+    }
+    
+    void (async () => {
+      try {
+        const res = await fetch('/api/deeplink/token', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityType: 'compliance', id: String(idToOpen) }),
+        });
+        if (!res.ok) throw new Error('Failed to create deeplink token');
+        const data = (await res.json()) as { token?: string };
+        if (!data?.token) throw new Error('Invalid token');
+        const qs = new URLSearchParams({ openToken: data.token, view: 'submission' }).toString();
+        navigate(`/compliance?${qs}`, { replace: true });
+      } catch {
+        const qs = new URLSearchParams({ open: String(idToOpen), view: 'submission' }).toString();
+        navigate(`/compliance?${qs}`, { replace: true });
+      }
+    })();
+  };
 
   React.useEffect(() => {
     if (idParam) {
@@ -355,7 +382,7 @@ export default function ComplianceLedger() {
   }, [columns, visibleColumnIds]);
 
   const tableColumnCount = visibleColumns.length;
-  
+
   const queryClient = useQueryClient();
 
   type LedgerPageResponse = {
@@ -430,7 +457,7 @@ export default function ComplianceLedger() {
           const pageItems: any[] = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
           const serverTotalPages = typeof json?.totalPages === 'number' ? json.totalPages : 1;
           const serverPage = typeof json?.page === 'number' ? json.page : 1;
-          
+
           let filteredData = pageItems;
           if (complianceId && Array.isArray(json)) {
             filteredData = pageItems.filter((item: any) => item.complianceId === complianceId || item._id === complianceId);
@@ -466,7 +493,7 @@ export default function ComplianceLedger() {
           const pageItems: any[] = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
           const serverTotalPages = typeof json?.totalPages === 'number' ? json.totalPages : 1;
           const serverPage = typeof json?.page === 'number' ? json.page : 1;
-          
+
           let filteredData = pageItems;
           if (complianceId && Array.isArray(json)) {
             filteredData = pageItems.filter((item: any) => item.complianceId === complianceId || item._id === complianceId);
@@ -492,11 +519,11 @@ export default function ComplianceLedger() {
   const displayedLedgerItems = isResolvingToken ? [] : ledgerItems;
 
 
-  
+
   const derivedName = displayedLedgerItems?.[0]?.filingName || displayedLedgerItems?.[0]?.policy;
   const headerName = complianceNameParam || derivedName;
   const isNamedHistory = Boolean(isFilteredById && headerName);
-  const headerTitle = isNamedHistory ? `${headerName} History Log` : "Audit Trail";
+  const headerTitle = isNamedHistory ? `${headerName} Log` : "Audit Trail";
   const displayedHeaderName = isNamedHistory ? (truncateText(String(headerName), 45) || String(headerName)) : "";
 
   return (
@@ -506,6 +533,16 @@ export default function ComplianceLedger() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-4">
+              {isFilteredById && (
+                <Button
+                  onClick={handleBackToCompliance}
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-full bg-blue-500/20 hover:bg-blue-500/30 backdrop-blur-sm border border-blue-300/50 shadow-sm transition-all duration-200 hover:scale-105 flex items-center justify-center"
+                >
+                  <ArrowLeft className="h-5 w-5 text-blue-600" />
+                </Button>
+              )}
               <div className="h-12 w-12 flex items-center justify-center">
                 <History className="h-7 w-7 text-indigo-600" />
               </div>
@@ -517,7 +554,7 @@ export default function ComplianceLedger() {
                   {isNamedHistory ? (
                     <>
                       <span className="truncate min-w-0">{displayedHeaderName}</span>
-                      <span className="flex-shrink-0 whitespace-nowrap">History Log</span>
+                      <span className="flex-shrink-0 whitespace-nowrap"> Log</span>
                     </>
                   ) : (
                     <span className="truncate">{headerTitle}</span>
@@ -579,9 +616,8 @@ export default function ComplianceLedger() {
                   {visibleColumns.map((col) => (
                     <TableHead
                       key={col.id}
-                      className={`sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide ${
-                        col.headerClassName || ""
-                      }`}
+                      className={`sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide ${col.headerClassName || ""
+                        }`}
                     >
                       {col.label}
                     </TableHead>
@@ -589,43 +625,42 @@ export default function ComplianceLedger() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                  {loading || isResolvingToken ? (
-                    <TableRow>
-                      <TableCell colSpan={tableColumnCount} className="text-center py-12">
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-3"></div>
-                          <p className="text-gray-600">{isResolvingToken ? 'Opening compliance...' : 'Loading compliance records...'}</p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : displayedLedgerItems.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={tableColumnCount} className="text-center py-12">
-                        <div className="flex flex-col items-center justify-center">
-                          <FileText className="w-12 h-12 text-gray-400 mb-3" />
-                          <p className="text-lg font-medium text-gray-900">No records found</p>
-                          <p className="text-gray-500 mt-1">Check back later</p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    displayedLedgerItems.map((item: any, index: number) => {
-                      return (
-                        <TableRow
-                          key={item._id}
-                          className={`border-b border-gray-100 transition-colors ${
-                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                {loading || isResolvingToken ? (
+                  <TableRow>
+                    <TableCell colSpan={tableColumnCount} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-3"></div>
+                        <p className="text-gray-600">{isResolvingToken ? 'Opening compliance...' : 'Loading compliance records...'}</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : displayedLedgerItems.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={tableColumnCount} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center">
+                        <FileText className="w-12 h-12 text-gray-400 mb-3" />
+                        <p className="text-lg font-medium text-gray-900">No records found</p>
+                        <p className="text-gray-500 mt-1">Check back later</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  displayedLedgerItems.map((item: any, index: number) => {
+                    return (
+                      <TableRow
+                        key={item._id}
+                        className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
                           }`}
-                        >
-                          {visibleColumns.map((col) => (
-                            <TableCell key={col.id} className={col.cellClassName}>
-                              {col.renderCell(item)}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      );
-                    })
-                  )}
+                      >
+                        {visibleColumns.map((col) => (
+                          <TableCell key={col.id} className={col.cellClassName}>
+                            {col.renderCell(item)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
 
@@ -673,25 +708,24 @@ export default function ComplianceLedger() {
                       const maxButtons = 5;
                       let startPage = Math.max(1, page - Math.floor(maxButtons / 2));
                       let endPage = Math.min(totalPages, startPage + maxButtons - 1);
-                      
+
                       if (endPage - startPage < maxButtons - 1) {
                         startPage = Math.max(1, endPage - maxButtons + 1);
                       }
-                      
+
                       for (let i = startPage; i <= endPage; i++) {
                         buttons.push(i);
                       }
-                      
+
                       return buttons.map((p) => (
                         <Button
                           key={p}
                           type="button"
                           variant={p === page ? "default" : "ghost"}
-                          className={`h-9 w-9 px-0 text-sm ${
-                            p === page 
-                              ? "bg-blue-600 text-white hover:bg-blue-700" 
+                          className={`h-9 w-9 px-0 text-sm ${p === page
+                              ? "bg-blue-600 text-white hover:bg-blue-700"
                               : "text-slate-600 hover:bg-slate-100"
-                          }`}
+                            }`}
                           onClick={() => setPage(p)}
                         >
                           {p}

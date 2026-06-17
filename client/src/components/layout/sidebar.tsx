@@ -136,7 +136,7 @@ const companySubItems = [
 
 const logsSubItems = [
   { path: "/subscription-history", label: "Subscription Logs" },
-  { path: "/compliance-ledger", label: "Compliance Logs" },
+  { path: "/compliance-history-log", label: "Compliance Logs" },
   { path: "/renewal-log", label: "Renewal Logs" },
 ];
 
@@ -151,6 +151,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
   const isLogsPath =
     location.pathname === "/subscription-history" ||
     location.pathname === "/compliance-ledger" ||
+    location.pathname === "/compliance-history-log" ||
     location.pathname === "/renewal-log";
   const [logsOpen, setLogsOpen] = useState(() => isLogsPath);
   const [platformOpen, setPlatformOpen] = useState<Record<string,boolean>>(() =>
@@ -164,6 +165,7 @@ export default function Sidebar({ isOpen = true, onToggle }: { isOpen?: boolean;
     if (
       location.pathname === "/subscription-history" ||
       location.pathname === "/compliance-ledger" ||
+      location.pathname === "/compliance-history-log" ||
       location.pathname === "/renewal-log"
     ) {
       setLogsOpen(true);

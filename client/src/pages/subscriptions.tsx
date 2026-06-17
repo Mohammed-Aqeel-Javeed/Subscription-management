@@ -1981,32 +1981,47 @@ export default function Subscriptions() {
         <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
           <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
             <AlertDialogHeader>
-              <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Select Yes to choose a file. Select No to download the template.
+              <AlertDialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+                Import Subscriptions Data
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-700 space-y-3">
+                <div className="bg-amber-50 border-l-4 border-amber-500 p-3 text-amber-900 text-xs font-semibold rounded-r-md">
+                  WARNING: You must download and use our official Excel template to import subscriptions. Importing other files will fail.
+                </div>
+                <p className="text-sm font-medium">
+                  Please follow these steps:
+                </p>
+                <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-600">
+                  <li>Download the template using the button below.</li>
+                  <li>Fill in the template with your data.</li>
+                  <li>Click upload to select your filled template file.</li>
+                </ol>
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel
-                className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+            <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
+              <AlertDialogCancel className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100">
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
                 onClick={() => {
-                  // "No" -> download template
                   downloadSubscriptionsImportTemplate();
                   setImportConfirmOpen(false);
                 }}
               >
-                No
-              </AlertDialogCancel>
+                Download Template
+              </Button>
               <AlertDialogAction
-                className="bg-green-600 text-white hover:bg-green-700"
+                className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold shadow-md"
                 onClick={() => {
-                  // "Yes" -> open file picker
                   setImportConfirmOpen(false);
-                  // allow dialog close animation to finish
                   setTimeout(() => triggerImport(), 0);
                 }}
               >
-                Yes
+                Upload File
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -2065,8 +2080,8 @@ export default function Subscriptions() {
                 setDataManagementSelectKey((k) => k + 1);
               }}
             >
-              <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
-                <SelectValue placeholder="Import/Export" />
+              <SelectTrigger className="w-16 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-1 px-2.5" title="Import/Export">
+                <ArrowUpDown className="h-4 w-4 text-white" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="export" className="cursor-pointer">

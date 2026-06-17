@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, Maximize2, Minimize2, ShieldCheck, Upload, Download, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Check, MoreVertical } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Calendar, FileText, AlertCircle, Maximize2, Minimize2, ShieldCheck, Upload, Download, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Check, MoreVertical, History, Save } from "lucide-react";
 import { RiFileExcel2Fill, RiFileImageFill, RiFilePdf2Fill, RiFileTextFill, RiFileWord2Fill } from "react-icons/ri";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -577,7 +577,7 @@ export default function Compliance() {
     .filter(Boolean);
   
   // Fullscreen toggle state
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(true);
 
   const [openActionsMenuForId, setOpenActionsMenuForId] = useState<string | null>(null);
   
@@ -720,12 +720,9 @@ export default function Compliance() {
 
   const [selectedComplianceIds, setSelectedComplianceIds] = useState<Set<string>>(new Set());
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
-  const [modalOpen, setModalOpen] = useState(() => {
-    const sp = new URLSearchParams(location.search);
-    return Boolean(sp.get('openToken') || sp.get('open') || sp.get('create') === '1');
-  });
+  const [modalOpen, setModalOpen] = useState(false);
   const [isDeepLinkOpening, setIsDeepLinkOpening] = useState(() => {
-    const sp = new URLSearchParams(location.search);
+    const sp = new URLSearchParams(window.location.search);
     return Boolean(sp.get('openToken') || sp.get('open') || sp.get('create') === '1');
   });
   const [editIndex, setEditIndex] = useState<number | null>(null);
@@ -737,6 +734,12 @@ export default function Compliance() {
   const [submissionDocuments, setSubmissionDocuments] = useState<
     Array<{ name: string; url: string; remark?: string; updatedBy?: string; updatedAt?: string }>
   >([]);
+  const [originalSubmissionDocuments, setOriginalSubmissionDocuments] = useState<
+    Array<{ name: string; url: string; remark?: string; updatedBy?: string; updatedAt?: string }>
+  >([]);
+  const [showSubmissionSaveConfirmOpen, setShowSubmissionSaveConfirmOpen] = useState(false);
+  const [showSubmissionDeleteConfirmOpen, setShowSubmissionDeleteConfirmOpen] = useState(false);
+  const [submissionDocumentToDeleteIndex, setSubmissionDocumentToDeleteIndex] = useState<number | null>(null);
   const [pendingSubmissionDocument, setPendingSubmissionDocument] = useState<
     { name: string; url: string; updatedBy?: string; updatedAt?: string } | null
   >(null);
@@ -744,6 +747,29 @@ export default function Compliance() {
   const [showSubmissionDocumentDialog, setShowSubmissionDocumentDialog] = useState(false);
   const persistSubmissionDocumentsInFlightRef = useRef(false);
   const [isPersistingSubmissionDocuments, setIsPersistingSubmissionDocuments] = useState(false);
+  const [activeSubmissionRemarkIndex, setActiveSubmissionRemarkIndex] = useState<number | null>(null);
+
+  const hasSubmissionUnsavedChanges = () => {
+    if (pendingSubmissionDocument) return true;
+    if (pendingSubmissionDocumentRemark.trim()) return true;
+    if (submissionDocuments.length !== originalSubmissionDocuments.length) return true;
+    for (let i = 0; i < submissionDocuments.length; i++) {
+      const doc = submissionDocuments[i];
+      const orig = originalSubmissionDocuments[i];
+      if (!orig || doc.name !== orig.name || doc.url !== orig.url || (doc.remark || '') !== (orig.remark || '')) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const closeSubmissionDialogAndReset = () => {
+    setSubmissionDocuments(originalSubmissionDocuments);
+    setPendingSubmissionDocument(null);
+    setPendingSubmissionDocumentRemark('');
+    setShowSubmissionDocumentDialog(false);
+    setShowSubmissionSaveConfirmOpen(false);
+  };
 
   const initialComplianceSnapshotRef = useRef<string | null>(null);
 
@@ -873,6 +899,7 @@ export default function Compliance() {
   useEffect(() => {
     if (!modalOpen) {
       lastHydratedSubmissionDocsComplianceIdRef.current = '';
+      setOriginalSubmissionDocuments([]);
     }
   }, [modalOpen]);
 
@@ -887,6 +914,7 @@ export default function Compliance() {
     lastHydratedSubmissionDocsComplianceIdRef.current = complianceId;
     const nextDocs = normalizeSubmissionDocumentsInput(item?.documents ?? item?.submissionDocuments);
     setSubmissionDocuments(nextDocs);
+    setOriginalSubmissionDocuments(nextDocs);
   }, [modalOpen, editIndex, complianceItems]);
 
   const handleSubmissionDocumentDialogDone = async () => {
@@ -1139,32 +1167,17 @@ export default function Compliance() {
         if (!blob) throw new Error('Invalid data url');
         const objUrl = URL.createObjectURL(blob);
         
-        // Open in new tab with proper window features
-        const newWindow = window.open('', '_blank');
+        // Open in new tab by setting location on a blank window
+        const newWindow = window.open();
         if (newWindow) {
-          newWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>${doc.name}</title>
-                <style>
-                  body { margin: 0; padding: 0; overflow: hidden; }
-                  iframe { border: none; width: 100vw; height: 100vh; }
-                </style>
-              </head>
-              <body>
-                <iframe src="${objUrl}"></iframe>
-              </body>
-            </html>
-          `);
-          newWindow.document.close();
-          
-          // Revoke after a longer delay to ensure document loads
-          setTimeout(() => URL.revokeObjectURL(objUrl), 300_000); // 5 minutes
+          newWindow.location.href = objUrl;
         } else {
           // Popup blocked: fallback to direct navigation
           window.location.href = objUrl;
         }
+        
+        // Revoke after a longer delay to ensure document loads
+        setTimeout(() => URL.revokeObjectURL(objUrl), 300_000); // 5 minutes
         return;
       }
       const w = window.open(url, '_blank', 'noopener,noreferrer');
@@ -1303,9 +1316,8 @@ export default function Compliance() {
 
       try {
         const reader = new FileReader();
-        reader.onloadend = () => {
+        reader.onloadend = async () => {
           const base64String = reader.result as string;
-          // Auto-save document without confirmation
           const newDoc = {
             name: file.name,
             url: base64String,
@@ -1313,13 +1325,47 @@ export default function Compliance() {
             updatedAt: new Date().toISOString(),
             remark: '', // Empty remark by default
           };
-          setSubmissionDocuments((prev) => [...prev, newDoc]);
-          toast({
-            title: 'Success',
-            description: `${file.name} uploaded successfully`,
-            duration: 2000,
-            variant: 'success',
-          });
+          const updatedDocs = [...submissionDocuments, newDoc];
+          setSubmissionDocuments(updatedDocs);
+
+          const complianceId =
+            editIndex !== null
+              ? String((complianceItems as any)?.[editIndex]?._id || (complianceItems as any)?.[editIndex]?.id || '')
+              : '';
+
+          if (complianceId) {
+            setIsPersistingSubmissionDocuments(true);
+            try {
+              await editMutation.mutateAsync({
+                _id: complianceId,
+                data: {
+                  documents: updatedDocs,
+                },
+              });
+              setOriginalSubmissionDocuments(updatedDocs);
+              toast({
+                title: 'Success',
+                description: `${file.name} uploaded and saved successfully`,
+                duration: 2000,
+                variant: 'success',
+              });
+            } catch (err: any) {
+              toast({
+                title: 'Error saving document',
+                description: err.message || 'Failed to save to database',
+                variant: 'destructive',
+              });
+            } finally {
+              setIsPersistingSubmissionDocuments(false);
+            }
+          } else {
+            toast({
+              title: 'Success',
+              description: `${file.name} uploaded successfully`,
+              duration: 2000,
+              variant: 'success',
+            });
+          }
         };
         reader.readAsDataURL(file);
       } catch (error) {
@@ -2080,11 +2126,7 @@ export default function Compliance() {
       isValid = false;
     }
     
-    // Fixed: Allow submission ON or BEFORE the deadline, only error if AFTER deadline
-    if (submissionDate && submissionDeadline && submissionDate > submissionDeadline) {
-      errors.submissionDate = "Submission Date cannot be after the Submission Deadline";
-      isValid = false;
-    }
+
     
     // Also check that submission date is not before end date (filing period must be complete)
     if (submissionDate && endDate && submissionDate < endDate) {
@@ -2115,6 +2157,36 @@ export default function Compliance() {
         variant: "destructive",
       });
       return false;
+    }
+
+    // Validate dynamic fields
+    if (Array.isArray(complianceFields)) {
+      for (const field of complianceFields) {
+        if (!field.enabled) continue;
+        const val = String(dynamicFieldValues[field.name] || '').trim();
+
+        if (field.required && !val) {
+          toast({
+            title: "Required Fields Missing",
+            description: `Please fill in: ${field.name}`,
+            variant: "destructive",
+          });
+          return false;
+        }
+
+        const lowerName = field.name.toLowerCase();
+        if (val && (lowerName === 'mail' || lowerName === 'email' || lowerName.includes('mail id') || lowerName.includes('email id'))) {
+          const result = validateEmail(val);
+          if (!result.valid) {
+            toast({
+              title: "Validation Error",
+              description: `Invalid email in field "${field.name}": ${result.error || 'Please enter a valid email'}`,
+              variant: "destructive",
+            });
+            return false;
+          }
+        }
+      }
     }
     
     return true;
@@ -2179,17 +2251,20 @@ export default function Compliance() {
     if (isDeepLinkOpening && modalOpen) setIsDeepLinkOpening(false);
   }, [isDeepLinkOpening, modalOpen]);
 
-  // Auto-open compliance modal when deep-linked via URL: /compliance?open=<id>
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const openToken = searchParams.get('openToken');
     const openComplianceId = searchParams.get('open');
     const createMode = searchParams.get('create') === '1';
+    const view = searchParams.get('view');
+    const showSubmission = view === 'submission';
     if (!openToken && !openComplianceId && !createMode) return;
     setIsDeepLinkOpening(true);
-    setModalOpen(true);
-    setEditIndex(null);
-    setShowSubmissionDetails(false);
+    if (createMode) {
+      setModalOpen(true);
+      setEditIndex(null);
+      setShowSubmissionDetails(showSubmission);
+    }
 
     if (createMode) {
       navigate(location.pathname, { replace: true, state: location.state });
@@ -2280,7 +2355,7 @@ export default function Compliance() {
       }
 
       setEditIndex(index);
-      setShowSubmissionDetails(false);
+      setShowSubmissionDetails(showSubmission);
       setModalOpen(true);
 
       const currentItem = complianceItems[index] as ComplianceItem;
@@ -2538,6 +2613,24 @@ export default function Compliance() {
   
   const deleteMutation = useMutation({
     mutationFn: async (_id: string) => {
+      // Fetch compliance to log deletion
+      try {
+        const item = complianceItems.find((c: any) => c._id === _id || c.id === _id);
+        if (item) {
+          fetch(`${API_BASE_URL}/api/logs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              licenseId: _id,
+              licenseName: item.policy || 'Unnamed',
+              action: 'Deleted',
+              changes: `Deleted compliance: ${item.policy || 'Unnamed'}`,
+              module: 'compliance'
+            })
+          }).catch(console.error);
+        }
+      } catch (e) {}
       await apiRequest("DELETE", `/api/compliance/${_id}`);
       return _id;
     },
@@ -2688,22 +2781,25 @@ export default function Compliance() {
       return { _id, data };
     },
     onSuccess: ({ _id, data }) => {
-      const upsertToFront = <T extends any>(oldData: T[] | undefined, match: (item: T) => boolean) => {
+      const updateInPlace = <T extends any>(oldData: T[] | undefined, match: (item: T) => boolean) => {
         if (!oldData) return [] as T[];
-        const existing = oldData.find(match);
-        const updated = existing ? ({ ...(existing as any), ...(data as any) } as T) : ({ ...(data as any) } as T);
-        return [updated, ...oldData.filter(item => !match(item))];
+        const index = oldData.findIndex(match);
+        if (index === -1) return [({ ...(data as any) } as T), ...oldData];
+        const updated = { ...(oldData[index] as any), ...(data as any) } as T;
+        const newData = [...oldData];
+        newData[index] = updated;
+        return newData;
       };
 
       queryClient.setQueryData(["compliance"], (oldData: ComplianceItem[] | undefined) =>
-        upsertToFront(oldData, (item) => (item as any)?._id === _id)
+        updateInPlace(oldData, (item) => (item as any)?._id === _id)
       );
       queryClient.setQueryData(["/api/compliance/list"], (oldData: ComplianceItem[] | undefined) =>
-        upsertToFront(oldData, (item) => ((item as any)?._id === _id || (item as any)?.id === _id))
+        updateInPlace(oldData, (item) => ((item as any)?._id === _id || (item as any)?.id === _id))
       );
-      queryClient.invalidateQueries({ queryKey: ["compliance"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/compliance/list"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications/compliance"] });
+      // Note: intentionally NOT calling invalidateQueries here to avoid blank flash.
+      // The setQueryData calls above keep the UI in sync optimistically.
+      // Background refetch will happen naturally on next navigation/focus.
     }
   });
 
@@ -3361,6 +3457,17 @@ export default function Compliance() {
     });
   };
 
+  if (isDeepLinkOpening) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100 font-['Inter']">
+        <div className="flex flex-col items-center justify-center p-8 bg-white/80 backdrop-blur-md rounded-2xl shadow-xl border border-white/40">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-4"></div>
+          <p className="text-gray-600 font-medium">Opening compliance details...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <PlanLimitModal open={planLimitOpen} onOpenChange={setPlanLimitOpen} message={planLimitMessage} />
@@ -3398,29 +3505,47 @@ export default function Compliance() {
         <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
           <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
             <AlertDialogHeader>
-              <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-              <AlertDialogDescription>
-                If you don’t have a file, click No to download an XLSX template.
+              <AlertDialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+                Import Compliance Data
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-700 space-y-3">
+                <div className="bg-amber-50 border-l-4 border-amber-500 p-3 text-amber-900 text-xs font-semibold rounded-r-md">
+                  WARNING: You must download and use our official Excel template to import compliance records. Importing other files will fail.
+                </div>
+                <p className="text-sm font-medium">
+                  Please follow these steps:
+                </p>
+                <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-600">
+                  <li>Download the template using the button below.</li>
+                  <li>Fill in the template with your data.</li>
+                  <li>Click upload to select your filled template file.</li>
+                </ol>
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel
-                className="bg-red-600 text-white hover:bg-red-700"
+            <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
+              <AlertDialogCancel className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100">
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
                 onClick={() => {
                   setImportConfirmOpen(false);
                   downloadComplianceImportTemplate();
                 }}
               >
-                No
-              </AlertDialogCancel>
+                Download Template
+              </Button>
               <AlertDialogAction
-                className="bg-green-600 text-white hover:bg-green-700"
+                className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold shadow-md"
                 onClick={() => {
                   setImportConfirmOpen(false);
                   setTimeout(() => triggerImport(), 0);
                 }}
               >
-                Yes
+                Upload File
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -3521,8 +3646,8 @@ export default function Compliance() {
                   setDataManagementSelectKey((k) => k + 1);
                 }}
               >
-                <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
-                  <SelectValue placeholder="Import/Export" />
+                <SelectTrigger className="w-16 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-1 px-2.5" title="Import/Export">
+                  <ArrowUpDown className="h-4 w-4 text-white" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="export" className="cursor-pointer">
@@ -4088,7 +4213,7 @@ export default function Compliance() {
         onOpenChange={(nextOpen) => {
           // Treat X/overlay/Esc like clicking Exit
           if (!nextOpen) {
-            setIsFullscreen(false);
+            setIsFullscreen(true);
 
             if (showSubmissionDetails) {
               if (submissionOpenedFromTable) {
@@ -4195,6 +4320,29 @@ export default function Compliance() {
                     Submission
                   </Button>
                 )}
+                
+                {/* Submission Logs Button - only when in submission view */}
+                {showSubmissionDetails && editIndex !== null && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const qs = new URLSearchParams({
+                        id: String(complianceItems[editIndex]?._id || complianceItems[editIndex]?.id || ''),
+                        name: form.filingName || '',
+                      }).toString();
+                      navigate(`/compliance-ledger?${qs}`);
+                    }}
+                    className="!bg-white !text-indigo-600 hover:!bg-indigo-50 font-semibold rounded-xl shadow-md transition-all duration-300 hover:scale-105 border border-indigo-200 h-10 px-3 flex items-center justify-center"
+                    title="Submission Logs"
+                  >
+                    <History className="h-4 w-4 mr-2" />
+                    Logs
+                  </Button>
+                )}
+                
+
+
                 <Button
                   type="button"
                   variant="outline"
@@ -4344,15 +4492,16 @@ export default function Compliance() {
                         )}
                       </div>
 
-                      <Button
-                        type="button"
-                        variant="outline"
+                      <div
                         onClick={() => setShowSubmissionDocumentDialog(true)}
-                        className="gap-2 border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 rounded-lg"
+                        className="cursor-pointer group flex flex-col items-center justify-center border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100/50 transition-colors rounded-lg px-4 py-2 h-[42px] self-end"
+                        title="View and Manage Documents"
                       >
-                        <Upload className="h-4 w-4" />
-                        UploadDocument
-                      </Button>
+                        <div className="flex items-center gap-1.5 text-sm font-semibold text-indigo-700 group-hover:text-indigo-800">
+                          <Upload className="h-4 w-4" />
+                          <span>{submissionDocuments.length} Attachment{submissionDocuments.length !== 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4708,7 +4857,7 @@ export default function Compliance() {
                       <div className="flex gap-1 flex-nowrap">
                         {selectedDepartments.map((dept) => (
                           <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 whitespace-nowrap flex-shrink-0">
-                            <span className="truncate max-w-[80px]">{dept}</span>
+                            <span className="truncate max-w-[80px]">{dept === 'Company Level' ? 'Select All' : dept}</span>
                             <button
                               type="button"
                               data-remove-dept="true"
@@ -4765,7 +4914,7 @@ export default function Compliance() {
                           htmlFor="dept-company-level"
                           className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
                         >
-                          Company Level
+                          Select All
                         </label>
                       </div>
                       {Array.isArray(departments) && departments.length > 0 ? (
@@ -5271,7 +5420,7 @@ export default function Compliance() {
               <Button 
                 type="button" 
                 variant="outline" 
-                className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-6 py-2"
+                className="border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold px-6 py-2 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={isSavingCompliance}
                 onClick={async () => {
                   // For draft saves, only validate filing name (minimal validation)
@@ -5591,6 +5740,97 @@ export default function Compliance() {
                       complianceId = newItem._id || newItem.id;
                     }
                   }
+                  
+                  // Log to history / audit trail for ALL updates/creates
+                  try {
+                    const action = editIndex === null ? 'Created' : 'Updated';
+                    let changes = '';
+                    let hasChanges = false;
+                    
+                    if (editIndex === null) {
+                      changes = `Created new compliance: ${saveData.policy || 'Unnamed'}`;
+                      hasChanges = true;
+                    } else {
+                      const oldItem: any = complianceItems[editIndex] || {};
+                      const changesList: string[] = [];
+                      const ignoredKeys = ['notes', 'submissionDocuments', 'complianceFieldValues', 'department', 'ownerEmail', 'owner2Email', 'isDraft', 'issues'];
+                      
+                       const keyLabels: Record<string, string> = {
+                        policy: 'Filing Name',
+                        category: 'Category',
+                        status: 'Status',
+                        lastAudit: 'Start Date',
+                        frequency: 'Frequency',
+                        governingAuthority: 'Governing Authority',
+                        endDate: 'End Date',
+                        submissionDeadline: 'Submission Deadline',
+                        recurringFrequency: 'Recurring Frequency',
+                        remarks: 'Remarks',
+                        filingSubmissionDate: 'Submission Date',
+                        reminderDays: 'Reminder Days',
+                        reminderPolicy: 'Reminder Policy',
+                        submittedBy: 'Submitted By',
+                        owner: 'Owner',
+                        owner2: 'Owner2',
+                        amount: 'Amount',
+                        paymentDate: 'Payment Date',
+                        departments: 'Departments'
+                      };
+
+                      Object.keys(saveData).forEach(key => {
+                        if (ignoredKeys.includes(key)) return;
+                        
+                        let oldVal = oldItem[key];
+                        let newVal = (saveData as any)[key];
+                        
+                        if (Array.isArray(oldVal)) oldVal = oldVal.join(', ');
+                        if (Array.isArray(newVal)) newVal = newVal.join(', ');
+
+                        oldVal = String(oldVal || '');
+                        newVal = String(newVal || '');
+
+                        if (oldVal !== newVal) {
+                          const label = keyLabels[key] || (key.charAt(0).toUpperCase() + key.slice(1));
+                          changesList.push(`${label}: ${oldVal || 'Not Set'} → ${newVal || 'Not Set'}`);
+                        }
+                      });
+                      
+                      if (changesList.length > 0) {
+                        changes = changesList.join('\n');
+                        hasChanges = true;
+                      }
+                    }
+                    
+                    const isSubmitting = hasSubmissionDate && hasSubmittedBy;
+                    if (hasChanges || isSubmitting) {
+                      if (!hasChanges && isSubmitting) {
+                        changes = `Submitted compliance: ${saveData.policy || 'Unnamed'}`;
+                      }
+                      
+                      // We do not await this fetch so we don't block saving
+                      fetch(`${API_BASE_URL}/api/logs`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                          licenseId: complianceId,
+                          licenseName: saveData.policy || 'Unnamed',
+                          action: action,
+                          changes: changes,
+                          module: 'compliance',
+                          ...(isSubmitting ? { 
+                            renewalStatus: "Submitted",
+                            renewalInitiatedDate: form.filingSubmissionDate,
+                            submittedBy: form.submittedBy,
+                            amount: form.amount 
+                          } : {})
+                        })
+                      }).catch(console.error);
+                    }
+                  } catch (logErr) {
+                    console.error("Failed to format compliance log", logErr);
+                  }
+
                   if (hasSubmissionDate && hasSubmittedBy) {
                     try {
                       const ledgerData = {
@@ -5607,6 +5847,7 @@ export default function Compliance() {
                       });
                       if (!res.ok) throw new Error('Failed to save ledger data');
                       toast({ title: 'Ledger entry created', variant: 'success' });
+                      navigate('/compliance-ledger');
                     } catch (error) {
                       toast({
                         title: 'Error',
@@ -6554,10 +6795,10 @@ export default function Compliance() {
       <Dialog
         open={showSubmissionDocumentDialog}
         onOpenChange={(next) => {
-          setShowSubmissionDocumentDialog(next);
           if (!next) {
-            setPendingSubmissionDocument(null);
-            setPendingSubmissionDocumentRemark('');
+            closeSubmissionDialogAndReset();
+          } else {
+            setShowSubmissionDocumentDialog(true);
           }
         }}
       >
@@ -6693,7 +6934,16 @@ export default function Compliance() {
                         <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
                           {renderDocumentTypeIcon(doc.name, doc.url)}
                         </div>
-                        <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
+                        <div className="flex flex-col min-w-0">
+                          <p className="text-xs font-semibold text-gray-900 truncate" title={doc.name}>{doc.name}</p>
+                          <button
+                            type="button"
+                            onClick={() => openDocumentInNewTab(doc)}
+                            className="text-[10px] text-blue-600 hover:underline hover:text-blue-800 font-medium cursor-pointer w-fit text-left"
+                          >
+                            View Document
+                          </button>
+                        </div>
                       </div>
                       <div className="col-span-2 text-xs font-medium text-gray-900 truncate">{doc.updatedBy || '-'}</div>
                       <div className="col-span-2 text-xs font-medium text-gray-900 truncate">
@@ -6705,88 +6955,96 @@ export default function Compliance() {
                             })
                           : '-'}
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-3 flex items-center gap-1">
                         <Input
                           value={doc.remark || ''}
                           onChange={(e) => {
                             const value = e.target.value;
                             setSubmissionDocuments((prev) => prev.map((d, i) => (i === index ? { ...d, remark: value } : d)));
                           }}
-                          onBlur={(e) => {
-                            const value = e.target.value;
-                            setSubmissionDocuments((prev) =>
-                              prev.map((d, i) =>
-                                i === index
-                                  ? {
-                                      ...d,
-                                      remark: value,
-                                      updatedBy:
-                                        currentUserName ||
-                                        (window as any)?.user?.name ||
-                                        (window as any)?.user?.email ||
-                                        'User',
-                                      updatedAt: new Date().toISOString(),
-                                    }
-                                  : d
-                              )
-                            );
-                          }}
+                          onFocus={() => setActiveSubmissionRemarkIndex(index)}
+                          onBlur={() => setTimeout(() => setActiveSubmissionRemarkIndex(prev => prev === index ? null : prev), 150)}
                           placeholder="Enter remark"
-                          className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
+                          className="flex-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
                         />
-                      </div>
-                      <div className="col-span-2 flex items-center justify-end gap-1.5">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                              aria-label="Document actions"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            side="top"
-                            sideOffset={8}
-                            className="z-[3000] bg-white text-gray-900 border-gray-200 shadow-lg"
-                          >
-                            <DropdownMenuItem
-                              onClick={() => {
-                                openDocumentInNewTab(doc);
-                              }}
-                              className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
-                            >
-                              View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                downloadDocument(doc);
-                              }}
-                              className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
-                            >
-                              Download
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                const updatedDocs = submissionDocuments.filter((_, i) => i !== index);
-                                setSubmissionDocuments(updatedDocs);
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          title="Save Remark"
+                          className={`h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50 transition-all duration-150 flex-shrink-0 ${activeSubmissionRemarkIndex === index ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}
+                          onClick={async () => {
+                            const value = (doc.remark || '').trim();
+                            const currentDoc = submissionDocuments[index];
+                            const updatedDoc = {
+                              ...currentDoc,
+                              remark: value,
+                              updatedBy: currentUserName || (window as any)?.user?.name || (window as any)?.user?.email || 'User',
+                              updatedAt: new Date().toISOString(),
+                            };
+                            const updatedDocs = submissionDocuments.map((d, i) => (i === index ? updatedDoc : d));
+                            setSubmissionDocuments(updatedDocs);
+
+                            const complianceId =
+                              editIndex !== null
+                                ? String((complianceItems as any)?.[editIndex]?._id || (complianceItems as any)?.[editIndex]?.id || '')
+                                : '';
+
+                            if (complianceId) {
+                              setIsPersistingSubmissionDocuments(true);
+                              try {
+                                await editMutation.mutateAsync({
+                                  _id: complianceId,
+                                  data: {
+                                    documents: updatedDocs,
+                                  },
+                                });
+                                setOriginalSubmissionDocuments(updatedDocs);
                                 toast({
-                                  title: 'Document Removed',
-                                  description: `${doc.name} has been removed`,
+                                  title: 'Remark Saved',
+                                  description: 'Your remark has been saved successfully.',
                                   duration: 2000,
+                                  variant: 'success',
+                                });
+                              } catch (err: any) {
+                                toast({
+                                  title: 'Error saving remark',
+                                  description: err.message || 'Failed to save remark to database.',
                                   variant: 'destructive',
                                 });
-                              }}
-                              className="cursor-pointer text-red-600 focus:text-red-600 data-[highlighted]:bg-blue-50 data-[highlighted]:text-red-600 focus:bg-blue-50"
-                            >
-                              Remove
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              } finally {
+                                setIsPersistingSubmissionDocuments(false);
+                              }
+                            }
+                          }}
+                        >
+                          <Save className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="col-span-2 flex items-center justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => downloadDocument(doc)}
+                          className="h-8 w-8 p-0 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                          title="Download"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSubmissionDocumentToDeleteIndex(index);
+                            setShowSubmissionDeleteConfirmOpen(true);
+                          }}
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors"
+                          title="Remove"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -6808,28 +7066,119 @@ export default function Compliance() {
             <span className="text-xs text-gray-600">
               {submissionDocuments.length} document{submissionDocuments.length !== 1 ? 's' : ''}
             </span>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowSubmissionDocumentDialog(false)}
-                disabled={isPersistingSubmissionDocuments}
-                className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 text-sm px-4 py-1.5"
-              >
-                Close
-              </Button>
-              <Button
-                type="button"
-                onClick={handleSubmissionDocumentDialogDone}
-                disabled={isPersistingSubmissionDocuments}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5"
-              >
-                Done
-              </Button>
-            </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Save Changes Confirmation Dialog */}
+      <AlertDialog open={showSubmissionSaveConfirmOpen} onOpenChange={setShowSubmissionSaveConfirmOpen}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-indigo-600" />
+              Save Changes?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              You have unsaved changes to your documents. Do you want to save them before closing?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={closeSubmissionDialogAndReset}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Discard Changes
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                await handleSubmissionDocumentDialogDone();
+                setShowSubmissionSaveConfirmOpen(false);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-md px-6 py-2"
+            >
+              Save Changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Document Confirmation Dialog */}
+      <AlertDialog open={showSubmissionDeleteConfirmOpen} onOpenChange={setShowSubmissionDeleteConfirmOpen}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              Confirm Delete
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              Are you sure you want to delete this document? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setShowSubmissionDeleteConfirmOpen(false);
+                setSubmissionDocumentToDeleteIndex(null);
+              }}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (submissionDocumentToDeleteIndex !== null) {
+                  const updatedDocs = submissionDocuments.filter((_, i) => i !== submissionDocumentToDeleteIndex);
+                  setSubmissionDocuments(updatedDocs);
+
+                  const complianceId =
+                    editIndex !== null
+                      ? String((complianceItems as any)?.[editIndex]?._id || (complianceItems as any)?.[editIndex]?.id || '')
+                      : '';
+
+                  if (complianceId) {
+                    setIsPersistingSubmissionDocuments(true);
+                    try {
+                      await editMutation.mutateAsync({
+                        _id: complianceId,
+                        data: {
+                          documents: updatedDocs,
+                        },
+                      });
+                      setOriginalSubmissionDocuments(updatedDocs);
+                      toast({
+                        title: 'Document Removed',
+                        description: 'The document has been removed successfully',
+                        duration: 2000,
+                        variant: 'destructive',
+                      });
+                    } catch (err: any) {
+                      toast({
+                        title: 'Error deleting document',
+                        description: err.message || 'Failed to save deletion to database.',
+                        variant: 'destructive',
+                      });
+                    } finally {
+                      setIsPersistingSubmissionDocuments(false);
+                    }
+                  } else {
+                    toast({
+                      title: 'Document Removed',
+                      description: 'The document has been removed',
+                      duration: 2000,
+                      variant: 'destructive',
+                    });
+                  }
+                }
+                setShowSubmissionDeleteConfirmOpen(false);
+                setSubmissionDocumentToDeleteIndex(null);
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       {/* Exit Confirmation Dialog (match SubscriptionModal) */}
       <AlertDialog open={exitConfirmOpen} onOpenChange={(open) => !open && setExitConfirmOpen(false)}>

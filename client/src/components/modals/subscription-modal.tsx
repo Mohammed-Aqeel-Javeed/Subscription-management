@@ -59,8 +59,7 @@ type SubscriptionModalData = Partial<Subscription> & {
   name?: string;
 };
 import { z } from "zod";
-import { X, RefreshCw, Maximize2, Minimize2, AlertCircle, ChevronDown, MoreVertical } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { X, RefreshCw, Maximize2, Minimize2, AlertCircle, ChevronDown, Download, Trash2, Save, Upload } from "lucide-react";
 import { RiFilePdf2Fill, RiFileWord2Fill, RiFileExcel2Fill, RiFileTextFill, RiFileImageFill } from "react-icons/ri";
 // Define the Category interface
 interface Category {
@@ -1007,7 +1006,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   }, [open]);
   
   // Fullscreen toggle state
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(true);
   
   // Status state (Active/Cancelled/Expired/Expiring Soon)
   const [status, setStatus] = useState<'Active' | 'Cancelled' | 'Draft' | 'Expired' | 'Expiring Soon'>('Draft');
@@ -1468,75 +1467,105 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       .filter((d): d is SubscriptionDocument => Boolean(d));
   };
 
+  const activeSubscription = useMemo(() => {
+    const subId = subscription?.id || subscription?._id;
+    if (!subId) return subscription;
+    const list = queryClient.getQueryData<Subscription[]>(["/api/subscriptions"]);
+    if (list) {
+      const found = list.find(s => (s.id || (s as any)._id) === subId);
+      if (found) return found;
+    }
+    return subscription;
+  }, [subscription, queryClient]);
+
   const [documents, setDocuments] = useState<SubscriptionDocument[]>([]);
+  const [originalDocuments, setOriginalDocuments] = useState<SubscriptionDocument[]>([]);
   const [showDocumentDialog, setShowDocumentDialog] = useState<boolean>(false);
+  const [showSaveConfirmOpen, setShowSaveConfirmOpen] = useState(false);
+  const [showDeleteConfirmOpen, setShowDeleteConfirmOpen] = useState(false);
+  const [documentToDeleteIndex, setDocumentToDeleteIndex] = useState<number | null>(null);
   const [pendingDocument, setPendingDocument] = useState<SubscriptionDocument | null>(null);
   const [pendingDocumentRemark, setPendingDocumentRemark] = useState<string>('');
   const persistDocumentsInFlightRef = useRef(false);
   const hydrateDocumentsInFlightRef = useRef(false);
   const lastDocumentSubscriptionIdRef = useRef<string | null>(null);
+  // Tracks whether documents have been synced directly with DB in this session
+  // (e.g. after upload / delete). When true, skip re-hydrating from stale prop.
+  const documentsSyncedFromDbRef = useRef(false);
   const [isPersistingDocuments, setIsPersistingDocuments] = useState(false);
+  const [activeRemarkIndex, setActiveRemarkIndex] = useState<number | null>(null);
 
-  // Hydrate documents when the dialog opens (handles page-refresh timing gaps).
-  // - Priority 1: use documents already on the subscription prop.
-  // - Priority 2: fetch from server if the prop has no documents yet (prop can arrive
-  //   after the dialog is opened when the page was refreshed mid-session).
+  const hasDocumentUnsavedChanges = () => {
+    if (pendingDocument) return true;
+    if (pendingDocumentRemark.trim()) return true;
+    if (documents.length !== originalDocuments.length) return true;
+    for (let i = 0; i < documents.length; i++) {
+      const doc = documents[i];
+      const orig = originalDocuments[i];
+      if (!orig || doc.name !== orig.name || doc.url !== orig.url || (doc.remark || '') !== (orig.remark || '')) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const closeDialogAndReset = () => {
+    setDocuments(originalDocuments);
+    setPendingDocument(null);
+    setPendingDocumentRemark('');
+    setShowDocumentDialog(false);
+    setShowSaveConfirmOpen(false);
+  };
+
+  // Hydrate documents when the dialog opens.
+  // Always fetches fresh data from the server so stale React Query cache / prop
+  // values (e.g. from before a delete) never cause ghost documents to reappear.
   useEffect(() => {
-    if (!showDocumentDialog) return;
+    if (!showDocumentDialog) {
+      setOriginalDocuments([]);
+      documentsSyncedFromDbRef.current = false;
+      return;
+    }
 
-    const subscriptionId = (subscription as any)?.id || (subscription as any)?._id;
-    const subDocuments = (subscription as any)?.documents;
+    const subscriptionId = (activeSubscription as any)?.id || (activeSubscription as any)?._id;
 
-    // If prop already has documents, use them immediately.
+    // If we just did a DB write inside this dialog session (upload/delete/remark)
+    // the state is already up-to-date — no need to re-fetch.
+    if (documentsSyncedFromDbRef.current) return;
+
+    // If we have a subscription ID, always fetch fresh data from the server.
+    // This avoids showing stale documents from the prop (e.g. after a delete).
+    if (subscriptionId) {
+      if (hydrateDocumentsInFlightRef.current) return;
+      hydrateDocumentsInFlightRef.current = true;
+
+      let cancelled = false;
+      void (async () => {
+        try {
+          const res = await apiRequest('GET', `/api/subscriptions/${String(subscriptionId)}`);
+          if (!res.ok) return;
+          const latest = await res.json().catch(() => null);
+          if (cancelled) return;
+          const nextDocs = normalizeDocumentsInput((latest as any)?.documents);
+          setDocuments(nextDocs);
+          setOriginalDocuments(nextDocs);
+        } finally {
+          hydrateDocumentsInFlightRef.current = false;
+        }
+      })();
+
+      return () => { cancelled = true; };
+    }
+
+    // No subscription ID (new unsaved subscription) — use the prop data if available.
+    const subDocuments = (activeSubscription as any)?.documents;
     if (subDocuments !== undefined && subDocuments !== null) {
       const normalized = normalizeDocumentsInput(subDocuments);
-      // Only overwrite local state if it's different (avoid flicker after user uploads).
-      if (normalized.length > 0 || documents.length === 0) {
-        setDocuments(normalized);
-      }
-      return;
+      setDocuments(normalized);
+      setOriginalDocuments(normalized);
     }
-
-    // Fallback to the subscriptions list cache, which usually contains the full document payload.
-    const cachedSubscriptions = queryClient.getQueryData<any[]>(["/api/subscriptions"]);
-    const cachedMatch = subscriptionId
-      ? cachedSubscriptions?.find(
-          (item: any) => String(item?.id || item?._id || '') === String(subscriptionId)
-        )
-      : undefined;
-    if (cachedMatch?.documents !== undefined && cachedMatch?.documents !== null) {
-      const normalizedCached = normalizeDocumentsInput(cachedMatch.documents);
-      if (normalizedCached.length > 0 || documents.length === 0) {
-        setDocuments(normalizedCached);
-      }
-      return;
-    }
-
-    // Prop has no documents yet. If we already loaded docs locally, keep them.
-    if (documents.length > 0) return;
-
-    // Need to fetch. Requires a known subscription ID.
-    if (!subscriptionId) return;
-    if (hydrateDocumentsInFlightRef.current) return;
-    hydrateDocumentsInFlightRef.current = true;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await apiRequest('GET', `/api/subscriptions/${String(subscriptionId)}`);
-        if (!res.ok) return;
-        const latest = await res.json().catch(() => null);
-        if (cancelled) return;
-        const nextDocs = normalizeDocumentsInput((latest as any)?.documents);
-        setDocuments(nextDocs); // set even if empty so we stop retrying
-      } finally {
-        hydrateDocumentsInFlightRef.current = false;
-      }
-    })();
-
-    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showDocumentDialog, (subscription as any)?._id, (subscription as any)?.id, (subscription as any)?.documents]);
+  }, [showDocumentDialog, (activeSubscription as any)?._id, (activeSubscription as any)?.id]);
   // Handler for Done in document dialog: auto-save and close
   const handleDocumentDialogDone = async () => {
     if (persistDocumentsInFlightRef.current) return;
@@ -1691,32 +1720,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         if (!blob) throw new Error('Invalid data url');
         const objUrl = URL.createObjectURL(blob);
         
-        // Open in new tab with proper window features
-        const newWindow = window.open('', '_blank');
+        // Open in new tab by setting location on a blank window
+        const newWindow = window.open();
         if (newWindow) {
-          newWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>${doc.name}</title>
-                <style>
-                  body { margin: 0; padding: 0; overflow: hidden; }
-                  iframe { border: none; width: 100vw; height: 100vh; }
-                </style>
-              </head>
-              <body>
-                <iframe src="${objUrl}"></iframe>
-              </body>
-            </html>
-          `);
-          newWindow.document.close();
-          
-          // Revoke after a longer delay to ensure document loads
-          setTimeout(() => URL.revokeObjectURL(objUrl), 300_000); // 5 minutes
+          newWindow.location.href = objUrl;
         } else {
           // Popup blocked: fallback to direct navigation
           window.location.href = objUrl;
         }
+        
+        // Revoke after a longer delay to ensure document loads
+        setTimeout(() => URL.revokeObjectURL(objUrl), 300_000); // 5 minutes
         return;
       }
       const w = window.open(url, '_blank', 'noopener,noreferrer');
@@ -3658,76 +3672,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               setExitConfirmDialog({ show: true });
               return;
             }
-            setIsFullscreen(false);
+            setIsFullscreen(true);
           }
           onOpenChange(v);
         }}
       >
         <DialogContent showClose={false} className={`${isFullscreen ? 'max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh]' : 'max-w-5xl min-w-[400px] max-h-[85vh]'}  border-0 shadow-2xl p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 transition-[width,height] duration-300 font-inter flex flex-col overflow-hidden`}> 
-                {/* Document Upload Modal */}
-                <Dialog open={showDocumentDialog} onOpenChange={(open) => {
-                  if (!open) {
-                    setPendingDocument(null);
-                    setPendingDocumentRemark('');
-                  }
-                  setShowDocumentDialog(open);
-                }}>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Upload Document</DialogTitle>
-                    </DialogHeader>
-                    {/* Document upload form fields go here (file input, remark, etc.) */}
-                    {/* Example: */}
-                    <div className="space-y-4">
-                      {/* File input (replace with your actual file upload logic) */}
-                      <Input
-                        type="file"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg"
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => {
-                              setPendingDocument({
-                                name: file.name,
-                                url: ev.target?.result as string,
-                              });
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                      />
-                      {/* Remark input */}
-                      <Textarea
-                        placeholder="Remark (optional)"
-                        value={pendingDocumentRemark}
-                        onChange={e => setPendingDocumentRemark(e.target.value)}
-                      />
-                    </div>
-                    {/* Button group: Cancel | Done */}
-                    <div className="flex justify-end gap-3 mt-6">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setPendingDocument(null);
-                          setPendingDocumentRemark('');
-                          setShowDocumentDialog(false);
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={handleDocumentDialogDone}
-                        disabled={!pendingDocument || !pendingDocument.url}
-                        className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold px-6"
-                      >
-                        Done
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+
           <DialogHeader className="sticky top-0 z-50 bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 text-white p-6  flex flex-row items-center shadow-sm">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               {companyLogo && (
@@ -3940,17 +3891,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               >
                 History
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="bg-white text-indigo-600 hover:!bg-indigo-50 hover:!border-indigo-200 hover:!text-indigo-700 font-medium px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] flex items-center gap-2 border-indigo-200 shadow-sm"
+              <div
                 onClick={() => setShowDocumentDialog(true)}
+                className="cursor-pointer group flex items-center justify-center border border-indigo-200 bg-white hover:bg-indigo-50 transition-colors rounded-lg px-4 py-2 h-10 shadow-sm"
+                title="View and Manage Documents"
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                Upload
-              </Button>
+                <div className="flex items-center gap-2 text-sm font-semibold text-indigo-600 group-hover:text-indigo-700">
+                  <Upload className="h-4 w-4" />
+                  <span>{documents.length} Attachment{documents.length !== 1 ? 's' : ''}</span>
+                </div>
+              </div>
               <Button
                 type="button"
                 variant="outline"
@@ -4518,7 +4468,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               <div className="flex gap-1 flex-nowrap">
                                 {selectedDepartments.map((dept) => (
                                   <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 whitespace-nowrap flex-shrink-0">
-                                    <span>{dept}</span>
+                                    <span>{dept === 'Company Level' ? 'Select All' : dept}</span>
                                     <button
                                       type="button"
                                       onClick={(e) => { 
@@ -4572,7 +4522,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                                   htmlFor="dept-company-level"
                                   className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
                                 >
-                                  Company Level
+                                  Select All
                                 </label>
                               </div>
                               {filteredDepts.length > 0 ? (
@@ -6579,10 +6529,14 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       <Dialog
         open={showDocumentDialog}
         onOpenChange={(next) => {
-          setShowDocumentDialog(next);
           if (!next) {
-            setPendingDocument(null);
-            setPendingDocumentRemark('');
+            if (hasDocumentUnsavedChanges()) {
+              setShowSaveConfirmOpen(true);
+            } else {
+              closeDialogAndReset();
+            }
+          } else {
+            setShowDocumentDialog(true);
           }
         }}
       >
@@ -6705,24 +6659,52 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         try {
                           const reader = new FileReader();
                           reader.onloadend = async () => {
-                            const base64String = reader.result as string;
-                            // Auto-save document without confirmation
-                            const newDoc = {
-                              name: file.name,
-                              url: base64String,
-                              updatedBy: currentUserName || (window as any)?.user?.name || (window as any)?.user?.email || 'User',
-                              updatedAt: new Date().toISOString(),
-                              remark: '', // Empty remark by default
-                            };
-                            setDocuments((prev) => [...prev, newDoc]);
-                            toast({
-                              title: 'Success',
-                              description: `${file.name} uploaded successfully`,
-                              duration: 2000,
-                              variant: 'success',
-                            });
-                          };
-                          reader.readAsDataURL(file);
+                             const base64String = reader.result as string;
+                             const newDoc = {
+                               name: file.name,
+                               url: base64String,
+                               updatedBy: currentUserName || (window as any)?.user?.name || (window as any)?.user?.email || 'User',
+                               updatedAt: new Date().toISOString(),
+                               remark: '', // Empty remark by default
+                             };
+                             const updatedDocs = [...documents, newDoc];
+                             setDocuments(updatedDocs);
+
+                             const subId = subscription?.id || subscription?._id;
+                             if (subId) {
+                               setIsPersistingDocuments(true);
+                               try {
+                                 const res = await apiRequest('PUT', `/api/subscriptions/${subId}`, {
+                                   documents: updatedDocs,
+                                 } as any);
+                                 if (!res.ok) throw new Error('Failed to save to database');
+                                 setOriginalDocuments(updatedDocs);
+                                 toast({
+                                   title: 'Success',
+                                   description: `${file.name} uploaded and saved successfully`,
+                                   duration: 2000,
+                                   variant: 'success',
+                                 });
+                                 queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"], exact: false });
+                               } catch (err: any) {
+                                 toast({
+                                   title: 'Error saving document',
+                                   description: err.message || 'Failed to save to database',
+                                   variant: 'destructive',
+                                 });
+                               } finally {
+                                 setIsPersistingDocuments(false);
+                               }
+                             } else {
+                               toast({
+                                 title: 'Success',
+                                 description: `${file.name} uploaded successfully`,
+                                 duration: 2000,
+                                 variant: 'success',
+                               });
+                             }
+                           };
+                           reader.readAsDataURL(file);
                         } catch (error) {
                           toast({
                             title: "Error",
@@ -6844,15 +6826,24 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                         <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
                           {renderDocumentTypeIcon(doc.name, doc.url)}
                         </div>
-                        <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
+                        <div className="flex flex-col min-w-0">
+                          <p className="text-xs font-semibold text-gray-900 truncate" title={doc.name}>{doc.name}</p>
+                          <button
+                            type="button"
+                            onClick={() => openDocumentInNewTab(doc)}
+                            className="text-[10px] text-blue-600 hover:underline hover:text-blue-800 font-medium cursor-pointer w-fit text-left"
+                          >
+                            View Document
+                          </button>
+                        </div>
                       </div>
                       <div className="col-span-2 text-xs font-medium text-gray-900 truncate">{doc.updatedBy || '-'}</div>
                       <div className="col-span-2 text-xs font-medium text-gray-900 truncate">
                         {doc.updatedAt
-                          ? new Date(doc.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                          : '-'}
+                           ? new Date(doc.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                           : '-'}
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-3 flex items-center gap-1">
                         <Input
                           value={doc.remark || ''}
                           onChange={(e) => {
@@ -6861,81 +6852,91 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                               prev.map((d, i) => (i === index ? { ...d, remark: value } : d))
                             );
                           }}
-                          onBlur={(e) => {
-                            const value = e.target.value;
-                            setDocuments((prev) =>
-                              prev.map((d, i) =>
-                                i === index
-                                  ? {
-                                      ...d,
-                                      remark: value,
-                                      updatedBy:
-                                        currentUserName ||
-                                        (window as any)?.user?.name ||
-                                        (window as any)?.user?.email ||
-                                        'User',
-                                      updatedAt: new Date().toISOString(),
-                                    }
-                                  : d
-                              )
-                            );
-                          }}
+                          onFocus={() => setActiveRemarkIndex(index)}
+                          onBlur={() => setTimeout(() => setActiveRemarkIndex(prev => prev === index ? null : prev), 150)}
                           placeholder="Enter remark"
-                          className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
+                          className="flex-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
                         />
-                      </div>
-                      <div className="col-span-2 flex items-center justify-end gap-1.5">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                              aria-label="Document actions"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            side="top"
-                            sideOffset={8}
-                            className="z-[3000] bg-white text-gray-900 border-gray-200 shadow-lg"
-                          >
-                            <DropdownMenuItem
-                              onClick={() => {
-                                openDocumentInNewTab(doc);
-                              }}
-                              className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
-                            >
-                              View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                downloadDocument(doc);
-                              }}
-                              className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
-                            >
-                              Download
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                const updatedDocs = documents.filter((_, i) => i !== index);
-                                setDocuments(updatedDocs);
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          title="Save Remark"
+                          className={`h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50 transition-all duration-150 flex-shrink-0 ${activeRemarkIndex === index ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}
+                          onClick={async () => {
+                            const value = (doc.remark || '').trim();
+                            const currentDoc = documents[index];
+                            const updatedDoc = {
+                              ...currentDoc,
+                              remark: value,
+                              updatedBy: currentUserName || (window as any)?.user?.name || (window as any)?.user?.email || 'User',
+                              updatedAt: new Date().toISOString(),
+                            };
+                            const updatedDocs = documents.map((d, i) => (i === index ? updatedDoc : d));
+                            setDocuments(updatedDocs);
+
+                            const subId = subscription?.id || subscription?._id;
+                            if (subId) {
+                              setIsPersistingDocuments(true);
+                              try {
+                                const res = await apiRequest('PUT', `/api/subscriptions/${subId}`, {
+                                  documents: updatedDocs,
+                                } as any);
+                                if (!res.ok) throw new Error('Failed to save remark to database');
+                                setOriginalDocuments(updatedDocs);
+                                documentsSyncedFromDbRef.current = true;
                                 toast({
-                                  title: 'Document Removed',
-                                  description: `${doc.name} has been removed`,
+                                  title: 'Remark Saved',
+                                  description: 'Your remark has been saved successfully.',
                                   duration: 2000,
+                                  variant: 'success',
+                                });
+                                queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"], exact: false });
+                              } catch (err: any) {
+                                toast({
+                                  title: 'Error saving remark',
+                                  description: err.message || 'Failed to save remark to database.',
                                   variant: 'destructive',
                                 });
-                              }}
-                              className="cursor-pointer text-red-600 focus:text-red-600 data-[highlighted]:bg-blue-50 data-[highlighted]:text-red-600 focus:bg-blue-50"
-                            >
-                              Remove
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              } finally {
+                                setIsPersistingDocuments(false);
+                              }
+                            } else {
+                              toast({
+                                title: 'Remark updated',
+                                description: 'Remark will be saved when the subscription is saved.',
+                                duration: 2000,
+                              });
+                            }
+                          }}
+                        >
+                          <Save className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="col-span-2 flex items-center justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => downloadDocument(doc)}
+                          className="h-8 w-8 p-0 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                          title="Download"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setDocumentToDeleteIndex(index);
+                            setShowDeleteConfirmOpen(true);
+                          }}
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors"
+                          title="Remove"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -6957,28 +6958,116 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             <span className="text-xs text-gray-600">
               {documents.length} document{documents.length !== 1 ? 's' : ''}
             </span>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowDocumentDialog(false)}
-                disabled={isPersistingDocuments}
-                className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 text-sm px-4 py-1.5"
-              >
-                Close
-              </Button>
-              <Button
-                type="button"
-                onClick={handleDocumentDialogDone}
-                disabled={isPersistingDocuments}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5"
-              >
-                Done
-              </Button>
-            </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Save Changes Confirmation Dialog */}
+      <AlertDialog open={showSaveConfirmOpen} onOpenChange={setShowSaveConfirmOpen}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-indigo-600" />
+              Save Changes?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              You have unsaved changes to your documents. Do you want to save them before closing?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={closeDialogAndReset}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Discard Changes
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                await handleDocumentDialogDone();
+                setShowSaveConfirmOpen(false);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-md px-6 py-2"
+            >
+              Save Changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Document Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirmOpen} onOpenChange={setShowDeleteConfirmOpen}>
+        <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              Confirm Delete
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 font-medium">
+              Are you sure you want to delete this document? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setShowDeleteConfirmOpen(false);
+                setDocumentToDeleteIndex(null);
+              }}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (documentToDeleteIndex !== null) {
+                  const updatedDocs = documents.filter((_, i) => i !== documentToDeleteIndex);
+                  setDocuments(updatedDocs);
+
+                  const subId = subscription?.id || subscription?._id;
+                  if (subId) {
+                    setIsPersistingDocuments(true);
+                    try {
+                      const res = await apiRequest('PUT', `/api/subscriptions/${subId}`, {
+                        documents: updatedDocs,
+                      } as any);
+                      if (!res.ok) throw new Error('Failed to delete document from database');
+                      setOriginalDocuments(updatedDocs);
+                      // Mark that we have fresh DB data so dialog re-open won't reload stale prop
+                      documentsSyncedFromDbRef.current = true;
+                      toast({
+                        title: 'Document Removed',
+                        description: 'The document has been removed successfully',
+                        duration: 2000,
+                        variant: 'destructive',
+                      });
+                      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"], exact: false });
+                    } catch (err: any) {
+                      toast({
+                        title: 'Error deleting document',
+                        description: err.message || 'Failed to save deletion to database.',
+                        variant: 'destructive',
+                      });
+                    } finally {
+                      setIsPersistingDocuments(false);
+                    }
+                  } else {
+                    toast({
+                      title: 'Document Removed',
+                      description: 'The document has been removed',
+                      duration: 2000,
+                      variant: 'destructive',
+                    });
+                  }
+                }
+                setShowDeleteConfirmOpen(false);
+                setDocumentToDeleteIndex(null);
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       {/* Validation Error Dialog */}
       <Dialog open={validationErrorOpen} onOpenChange={setValidationErrorOpen}>

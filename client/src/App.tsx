@@ -13,6 +13,7 @@ import Chatbot from "@/pages/chatbot";
 import Dashboard from "@/pages/dashboard";
 import ComplianceLedger from "@/pages/compliance-ledger";
 import ComplianceLogPage from "@/pages/compliance-log";
+import ComplianceHistoryLogPage from "@/pages/compliance-history-log";
 import Subscriptions from "@/pages/subscriptions";
 import CancelledSubscriptionsPage from "@/pages/cancelled-subscriptions";
 import Notifications from "@/pages/notifications";
@@ -287,6 +288,7 @@ function AppWithSidebar() {
               <Route path="/compliance" element={<Compliance />} />
               <Route path="/compliance-ledger" element={<ComplianceLedger />} />
               <Route path="/compliance-log" element={<ComplianceLogPage />} />
+              <Route path="/compliance-history-log" element={<ComplianceHistoryLogPage />} />
               <Route path="/government-license" element={<GovernmentLicense />} />
               <Route path="/renewal-log" element={<RenewalLog />} />
               <Route path="/company-details" element={<CompanyDetails />} />

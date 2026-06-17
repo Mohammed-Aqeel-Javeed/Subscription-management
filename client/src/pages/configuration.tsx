@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Settings, CreditCard, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X, MoreVertical, BadgeDollarSign, WalletCards, Layers, LayoutGrid, Pencil } from "lucide-react";
+import { Plus, Settings, CreditCard, DollarSign, Edit, Trash2, Maximize2, Minimize2, Search, Upload, Download, AlertCircle, X, MoreVertical, BadgeDollarSign, WalletCards, Layers, LayoutGrid, Pencil, ArrowUpDown } from "lucide-react";
 import ReactCountryFlag from "react-country-flag";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -2525,10 +2525,15 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
     lastFourDigits: '',
   });
 
-  // Capitalize the first letter of a string (preserve rest as typed)
+  // Capitalize the first letter of each word (preserve rest as typed)
   const capitalizeFirst = (s: string) => {
     if (!s) return s;
-    return s.charAt(0).toUpperCase() + s.slice(1);
+    const isTypingAllCaps = /[A-Z]{2,}/.test(s);
+    if (isTypingAllCaps) return s;
+    return s
+      .split(' ')
+      .map(word => word.length === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
 
   // Handler for adding a new payment method (POST to backend)
@@ -2831,44 +2836,6 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
 
                             {/* Right: all controls inline, no wrap */}
                             <div className="flex items-center gap-2 shrink-0">
-                              {/* Data Management Dropdown */}
-                              <input
-                                ref={currencyFileInputRef}
-                                type="file"
-                                accept=".xlsx,.xls"
-                                onChange={importCurrencies}
-                                className="hidden"
-                              />
-                              <Select
-                                key={currencyDataManagementSelectKey}
-                                onValueChange={(value) => {
-                                  if (value === 'export') {
-                                    exportCurrencies();
-                                  } else if (value === 'import') {
-                                    setCurrencyImportConfirmOpen(true);
-                                  }
-                                  setCurrencyDataManagementSelectKey((k) => k + 1);
-                                }}
-                              >
-                                <SelectTrigger className="w-36 h-9 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md transition-all duration-200 text-sm">
-                                  <SelectValue placeholder="Import/Export" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="import" className="cursor-pointer">
-                                    <div className="flex items-center">
-                                      <Upload className="h-4 w-4 mr-2" />
-                                      Import
-                                    </div>
-                                  </SelectItem>
-                                  <SelectItem value="export" className="cursor-pointer">
-                                    <div className="flex items-center">
-                                      <Download className="h-4 w-4 mr-2" />
-                                      Export
-                                    </div>
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-
                               {/* Action Buttons */}
                               {isUpdateMode ? (
                                 <>
@@ -2890,25 +2857,6 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                 </>
                               ) : (
                                 <>
-                                  {selectedCurrencyCodes.size > 0 && (
-                                    <Button
-                                      type="button"
-                                      onClick={() => setCurrencyBulkDeleteConfirmOpen(true)}
-                                      className="h-9 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md transition-all duration-200 border-0 text-sm whitespace-nowrap"
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-1.5" />
-                                      Delete ({selectedCurrencyCodes.size})
-                                    </Button>
-                                  )}
-                                  <Button
-                                    variant="outline"
-                                    onClick={enterUpdateMode}
-                                    disabled={currencies.length === 0}
-                                    className="h-9 px-4 rounded-lg border-0 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-sm whitespace-nowrap"
-                                  >
-                                    <Edit className="w-4 h-4 mr-1.5" />
-                                    Update Rates
-                                  </Button>
                                   <Button
                                     className="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md text-sm border-0 whitespace-nowrap"
                                     onClick={() => {
@@ -2919,8 +2867,65 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                     <Plus className="w-4 h-4 mr-1.5" />
                                     Currency
                                   </Button>
+                                  <Button
+                                    variant="outline"
+                                    onClick={enterUpdateMode}
+                                    disabled={currencies.length === 0}
+                                    className="h-9 px-4 rounded-lg border-0 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-sm whitespace-nowrap"
+                                  >
+                                    <Edit className="w-4 h-4 mr-1.5" />
+                                    Update Rates
+                                  </Button>
+                                  {selectedCurrencyCodes.size > 0 && (
+                                    <Button
+                                      type="button"
+                                      onClick={() => setCurrencyBulkDeleteConfirmOpen(true)}
+                                      className="h-9 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md transition-all duration-200 border-0 text-sm whitespace-nowrap"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-1.5" />
+                                      Delete ({selectedCurrencyCodes.size})
+                                    </Button>
+                                  )}
                                 </>
                               )}
+
+                              {/* Data Management Dropdown */}
+                              <input
+                                ref={currencyFileInputRef}
+                                type="file"
+                                accept=".xlsx,.xls"
+                                onChange={importCurrencies}
+                                className="hidden"
+                              />
+                              <Select
+                                key={currencyDataManagementSelectKey}
+                                onValueChange={(value) => {
+                                  if (value === 'export') {
+                                    exportCurrencies();
+                                  } else if (value === 'import') {
+                                    setCurrencyImportConfirmOpen(true);
+                                  }
+                                  setCurrencyDataManagementSelectKey((k) => k + 1);
+                                }}
+                              >
+                                <SelectTrigger className="w-16 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-1 px-2.5" title="Import/Export">
+                                  <ArrowUpDown className="h-4 w-4 text-white" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="import" className="cursor-pointer">
+                                    <div className="flex items-center">
+                                      <Upload className="h-4 w-4 mr-2" />
+                                      Import
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="export" className="cursor-pointer">
+                                    <div className="flex items-center">
+                                      <Download className="h-4 w-4 mr-2" />
+                                      Export
+                                    </div>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                           </div>
                         
@@ -3578,14 +3583,32 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
               <AlertDialog open={currencyImportConfirmOpen} onOpenChange={setCurrencyImportConfirmOpen}>
                 <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Select Yes to choose a file. Select No to download the template with examples.
+                    <AlertDialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5 text-amber-500" />
+                      Import Currency Data
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-gray-700 space-y-3">
+                      <div className="bg-amber-50 border-l-4 border-amber-500 p-3 text-amber-900 text-xs font-semibold rounded-r-md mt-2">
+                        WARNING: You must download and use our official Excel template to import currencies. Importing other files will fail.
+                      </div>
+                      <p className="text-sm font-medium mt-3">
+                        Please follow these steps:
+                      </p>
+                      <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-600">
+                        <li>Download the template using the button below.</li>
+                        <li>Fill in the template with your data.</li>
+                        <li>Click upload to select your filled template file.</li>
+                      </ol>
                     </AlertDialogDescription>
                   </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel
-                      className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+                  <AlertDialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
+                    <AlertDialogCancel className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100">
+                      Cancel
+                    </AlertDialogCancel>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
                       onClick={() => {
                         // Download template with examples
                         const wb = XLSX.utils.book_new();
@@ -3623,16 +3646,16 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                         setCurrencyImportConfirmOpen(false);
                       }}
                     >
-                      No
-                    </AlertDialogCancel>
+                      Download Template
+                    </Button>
                     <AlertDialogAction
-                      className="bg-green-600 text-white hover:bg-green-700"
+                      className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold shadow-md"
                       onClick={() => {
                         setCurrencyImportConfirmOpen(false);
                         setTimeout(() => currencyFileInputRef.current?.click(), 0);
                       }}
                     >
-                      Yes
+                      Upload File
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -3670,46 +3693,6 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
 
                         {/* Right: controls */}
                         <div className="flex items-center gap-3">
-                          <input
-                            type="file"
-                            ref={paymentFileInputRef}
-                            className="hidden"
-                            accept=".xlsx,.xls"
-                            onChange={importPaymentMethods}
-                          />
-                          <Select
-                            key={paymentDataManagementSelectKey}
-                            onValueChange={(value) => {
-                              if (value === 'export') {
-                                exportPaymentMethods();
-                              } else if (value === 'import') {
-                                setPaymentImportConfirmOpen(true);
-                              }
-                              setPaymentDataManagementSelectKey((k) => k + 1);
-                            }}
-                          >
-                            <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
-                              <SelectValue placeholder="Import/Export" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="export" className="cursor-pointer">
-                                <div className="flex items-center"><Download className="h-4 w-4 mr-2" />Export</div>
-                              </SelectItem>
-                              <SelectItem value="import" className="cursor-pointer">
-                                <div className="flex items-center"><Upload className="h-4 w-4 mr-2" />Import</div>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setPaymentMethodsView((v) => (v === 'tiles' ? 'table' : 'tiles'))}
-                            className="h-10 px-4 rounded-xl border-0 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-sm shadow-none"
-                          >
-                            {paymentMethodsView === 'tiles' ? 'Table View' : 'Card View'}
-                          </Button>
-
                           <Button
                             onClick={() => {
                               const nextPaymentForm = {
@@ -3732,6 +3715,46 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                             <Plus className="w-4 h-4 mr-2" />
                             Payment Method
                           </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setPaymentMethodsView((v) => (v === 'tiles' ? 'table' : 'tiles'))}
+                            className="h-10 px-4 rounded-xl border-0 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-sm shadow-none"
+                          >
+                            {paymentMethodsView === 'tiles' ? 'Table View' : 'Card View'}
+                          </Button>
+
+                          <input
+                            type="file"
+                            ref={paymentFileInputRef}
+                            className="hidden"
+                            accept=".xlsx,.xls"
+                            onChange={importPaymentMethods}
+                          />
+                          <Select
+                            key={paymentDataManagementSelectKey}
+                            onValueChange={(value) => {
+                              if (value === 'export') {
+                                exportPaymentMethods();
+                              } else if (value === 'import') {
+                                setPaymentImportConfirmOpen(true);
+                              }
+                              setPaymentDataManagementSelectKey((k) => k + 1);
+                            }}
+                          >
+                            <SelectTrigger className="w-16 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-1 px-2.5" title="Import/Export">
+                              <ArrowUpDown className="h-4 w-4 text-white" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="export" className="cursor-pointer">
+                                <div className="flex items-center"><Download className="h-4 w-4 mr-2" />Export</div>
+                              </SelectItem>
+                              <SelectItem value="import" className="cursor-pointer">
+                                <div className="flex items-center"><Upload className="h-4 w-4 mr-2" />Import</div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                     </div>
@@ -4164,7 +4187,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                       setPmOwnerOpen(true);
                                     }}
                                     onChange={(e) => {
-                                      setPmOwnerSearch(e.target.value);
+                                      setPmOwnerSearch(capitalizeFirst(e.target.value));
                                       setPmOwnerOpen(true);
                                     }}
                                     autoComplete="off"
@@ -4254,7 +4277,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                       setPmManagerOpen(true);
                                     }}
                                     onChange={(e) => {
-                                      setPmManagerSearch(e.target.value);
+                                      setPmManagerSearch(capitalizeFirst(e.target.value));
                                       setPmManagerOpen(true);
                                     }}
                                     autoComplete="off"
@@ -4718,7 +4741,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                       setPmOwnerOpen(true);
                                     }}
                                     onChange={e => {
-                                      setPmOwnerSearch(e.target.value);
+                                      setPmOwnerSearch(capitalizeFirst(e.target.value));
                                       setPmOwnerOpen(true);
                                     }}
                                     autoComplete="off"
@@ -4809,7 +4832,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                       setPmManagerOpen(true);
                                     }}
                                     onChange={e => {
-                                      setPmManagerSearch(e.target.value);
+                                      setPmManagerSearch(capitalizeFirst(e.target.value));
                                       setPmManagerOpen(true);
                                     }}
                                     autoComplete="off"
@@ -5019,29 +5042,47 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                     <AlertDialog open={paymentImportConfirmOpen} onOpenChange={setPaymentImportConfirmOpen}>
                       <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Select Yes to choose a file. Select No to download the template.
+                          <AlertDialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5 text-amber-500" />
+                            Import Payment Methods
+                          </AlertDialogTitle>
+                          <AlertDialogDescription className="text-gray-700 space-y-3">
+                            <div className="bg-amber-50 border-l-4 border-amber-500 p-3 text-amber-900 text-xs font-semibold rounded-r-md mt-2">
+                              WARNING: You must download and use our official Excel template to import payment methods. Importing other files will fail.
+                            </div>
+                            <p className="text-sm font-medium mt-3">
+                              Please follow these steps:
+                            </p>
+                            <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-600">
+                              <li>Download the template using the button below.</li>
+                              <li>Fill in the template with your data.</li>
+                              <li>Click upload to select your filled template file.</li>
+                            </ol>
                           </AlertDialogDescription>
                         </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel
-                            className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+                        <AlertDialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
+                          <AlertDialogCancel className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100">
+                            Cancel
+                          </AlertDialogCancel>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
                             onClick={() => {
                               downloadPaymentTemplate();
                               setPaymentImportConfirmOpen(false);
                             }}
                           >
-                            No
-                          </AlertDialogCancel>
+                            Download Template
+                          </Button>
                           <AlertDialogAction
-                            className="bg-green-600 text-white hover:bg-green-700"
+                            className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold shadow-md"
                             onClick={() => {
                               setPaymentImportConfirmOpen(false);
                               setTimeout(() => paymentFileInputRef.current?.click(), 0);
                             }}
                           >
-                            Yes
+                            Upload File
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>

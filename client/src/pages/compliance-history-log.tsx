@@ -34,7 +34,7 @@ function truncateText(value: string | undefined | null, maxChars: number) {
 
 
 
-export default function RenewalLog() {
+export default function ComplianceHistoryLog() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -139,7 +139,7 @@ export default function RenewalLog() {
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-      params.set('module', 'renewal');
+      params.set('module', 'compliance');
       if (licenseId) params.set('licenseId', licenseId);
       const res = await fetch(`${API_BASE_URL}/api/logs?${params.toString()}`, {
         credentials: "include",
@@ -319,8 +319,8 @@ export default function RenewalLog() {
                   const displayName = licenseNameParam ? decodeURIComponent(licenseNameParam) : derivedName;
                   const isNamedHistory = Boolean(licenseId && displayName);
                   const title = isSubmissionView
-                    ? (isNamedHistory ? `${displayName} Submission Log` : 'Renewal Submission Log')
-                    : (isNamedHistory ? `${displayName} History Log` : 'Audit Trail');
+                    ? (isNamedHistory ? `${displayName} Submission Log` : 'Compliance Submission Log')
+                    : (isNamedHistory ? `${displayName} Log` : 'Audit Trail');
                   const displayedHeaderName = isNamedHistory ? (truncateText(String(displayName), 45) || String(displayName)) : '';
                   return (
                     <h1
@@ -330,7 +330,7 @@ export default function RenewalLog() {
                       {isNamedHistory ? (
                         <>
                           <span className="truncate min-w-0">{displayedHeaderName}</span>
-                          <span className="flex-shrink-0 whitespace-nowrap">{isSubmissionView ? 'Submission Log' : 'History Log'}</span>
+                          <span className="flex-shrink-0 whitespace-nowrap">{isSubmissionView ? 'Submission Log' : 'Log'}</span>
                         </>
                       ) : (
                         <span className="truncate">{title}</span>
@@ -375,7 +375,7 @@ export default function RenewalLog() {
                       ) : (
                         <>
                           {!licenseId && (
-                            <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">Renewal Name</th>
+                            <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">Compliance Name</th>
                           )}
                           <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[180px]">Changed By</th>
                           <th className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[400px]">Changes</th>
@@ -547,7 +547,7 @@ export default function RenewalLog() {
                   </div>
                   <div>
                     <p className="text-slate-600 font-medium">
-                      {licenseId ? 'No history records found for this renewal' : 'No history records found'}
+                      {licenseId ? 'No records found for this renewal' : 'No records found'}
                     </p>
                     <p className="text-sm text-slate-500 mt-1">
                       {licenseId 

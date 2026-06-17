@@ -11,7 +11,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown, X, ArrowUpDown, ArrowUp, ArrowDown, History, MoreVertical } from "lucide-react";
+import { Edit, Trash2, Plus, Search, Shield, ShieldCheck, AlertCircle, Maximize2, Minimize2, Calendar, Download, Upload, Check, ChevronDown, X, ArrowUpDown, ArrowUp, ArrowDown, History, MoreVertical, Save } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -996,7 +996,7 @@ function MultiSelectDepartmentsDropdown(props: {
           <div className="flex gap-1 flex-nowrap">
             {selectedDepartments.map((dept) => (
               <Badge key={dept} variant="secondary" className="flex items-center gap-1 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 text-xs py-1 px-2 whitespace-nowrap flex-shrink-0">
-                <span className="truncate max-w-[80px]">{dept}</span>
+                <span className="truncate max-w-[80px]">{dept === 'Company Level' ? 'Select All' : dept}</span>
                 <button
                   type="button"
                   data-remove-dept="true"
@@ -1055,7 +1055,7 @@ function MultiSelectDepartmentsDropdown(props: {
                 htmlFor="dept-company-level"
                 className="text-sm font-bold cursor-pointer flex-1 ml-2 text-blue-600"
               >
-                Company Level
+                Select All
               </label>
             </div>
             {filteredDepts.length > 0 ? (
@@ -1262,7 +1262,7 @@ export default function GovernmentLicense() {
     return Boolean(sp.get('openToken') || sp.get('open') || sp.get('create') === '1');
   });
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(true);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [licenseToDelete, setLicenseToDelete] = useState<License | null>(null);
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
@@ -1289,10 +1289,47 @@ export default function GovernmentLicense() {
   });
 
   const [showRenewalDocumentsModal, setShowRenewalDocumentsModal] = useState(false);
+  const [originalRenewalAttachments, setOriginalRenewalAttachments] = useState<RenewalAttachment[]>([]);
+  const [showRenewalSaveConfirmOpen, setShowRenewalSaveConfirmOpen] = useState(false);
+  const [showRenewalDeleteConfirmOpen, setShowRenewalDeleteConfirmOpen] = useState(false);
+  const [renewalAttachmentToDeleteIndex, setRenewalAttachmentToDeleteIndex] = useState<number | null>(null);
   const [pendingRenewalAttachment, setPendingRenewalAttachment] = useState<RenewalAttachment | null>(null);
   const [pendingRenewalAttachmentRemark, setPendingRenewalAttachmentRemark] = useState("");
   const persistRenewalAttachmentsInFlightRef = useRef(false);
   const [isPersistingRenewalAttachments, setIsPersistingRenewalAttachments] = useState(false);
+  const [activeRenewalRemarkIndex, setActiveRenewalRemarkIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (showRenewalDocumentsModal) {
+      const current = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
+      setOriginalRenewalAttachments(current);
+    } else {
+      setOriginalRenewalAttachments([]);
+    }
+  }, [showRenewalDocumentsModal]);
+
+  const hasRenewalAttachmentsUnsavedChanges = () => {
+    if (pendingRenewalAttachment) return true;
+    if (pendingRenewalAttachmentRemark.trim()) return true;
+    const current = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
+    if (current.length !== originalRenewalAttachments.length) return true;
+    for (let i = 0; i < current.length; i++) {
+      const doc = current[i];
+      const orig = originalRenewalAttachments[i];
+      if (!orig || doc.name !== orig.name || doc.url !== orig.url || (doc.remark || '') !== (orig.remark || '')) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const closeRenewalDocumentsAndReset = () => {
+    form.setValue('renewalAttachments', originalRenewalAttachments, { shouldDirty: true });
+    setPendingRenewalAttachment(null);
+    setPendingRenewalAttachmentRemark('');
+    setShowRenewalDocumentsModal(false);
+    setShowRenewalSaveConfirmOpen(false);
+  };
 
   const handleRenewalDocumentsDone = async () => {
     if (persistRenewalAttachmentsInFlightRef.current) return;
@@ -1548,32 +1585,17 @@ export default function GovernmentLicense() {
         if (!blob) throw new Error('Invalid data url');
         const objUrl = URL.createObjectURL(blob);
         
-        // Open in new tab with proper window features
-        const newWindow = window.open('', '_blank');
+        // Open in new tab by setting location on a blank window
+        const newWindow = window.open();
         if (newWindow) {
-          newWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>${doc.name}</title>
-                <style>
-                  body { margin: 0; padding: 0; overflow: hidden; }
-                  iframe { border: none; width: 100vw; height: 100vh; }
-                </style>
-              </head>
-              <body>
-                <iframe src="${objUrl}"></iframe>
-              </body>
-            </html>
-          `);
-          newWindow.document.close();
-          
-          // Revoke after a longer delay to ensure document loads
-          setTimeout(() => URL.revokeObjectURL(objUrl), 300_000); // 5 minutes
+          newWindow.location.href = objUrl;
         } else {
           // Popup blocked: fallback to direct navigation
           window.location.href = objUrl;
         }
+        
+        // Revoke after a longer delay to ensure document loads
+        setTimeout(() => URL.revokeObjectURL(objUrl), 300_000); // 5 minutes
         return;
       }
       const w = window.open(url, '_blank', 'noopener,noreferrer');
@@ -1893,7 +1915,6 @@ export default function GovernmentLicense() {
         const reader = new FileReader();
         reader.onloadend = async () => {
           const base64String = reader.result as string;
-          // Auto-save document without confirmation
           const newDoc = {
             name: file.name,
             url: base64String,
@@ -1901,14 +1922,49 @@ export default function GovernmentLicense() {
             updatedAt: new Date().toISOString(),
             remark: '', // Empty remark by default
           };
-          const currentAttachments = form.getValues('renewalAttachments') || [];
-          form.setValue('renewalAttachments', [...currentAttachments, newDoc], { shouldDirty: true });
-          toast({
-            title: 'Success',
-            description: `${file.name} uploaded successfully`,
-            duration: 2000,
-            variant: 'success',
-          });
+          const currentAttachments = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
+          const updatedDocs = [...currentAttachments, newDoc];
+          form.setValue('renewalAttachments', updatedDocs, { shouldDirty: true });
+
+          const licenseId = editingLicense?.id ? String(editingLicense.id) : '';
+          if (licenseId) {
+            setIsPersistingRenewalAttachments(true);
+            try {
+              const res = await fetch(`${API_BASE_URL}/api/licenses/${licenseId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ renewalAttachments: updatedDocs }),
+              });
+              if (!res.ok) throw new Error('Failed to save to database');
+              setOriginalRenewalAttachments(updatedDocs);
+              if (initialFormSnapshotRef.current) {
+                initialFormSnapshotRef.current.renewalAttachments = updatedDocs;
+              }
+              toast({
+                title: 'Success',
+                description: `${file.name} uploaded and saved successfully`,
+                duration: 2000,
+                variant: 'success',
+              });
+              queryClient.invalidateQueries({ queryKey: ['/api/licenses'] });
+            } catch (err: any) {
+              toast({
+                title: 'Error saving document',
+                description: err.message || 'Failed to save to database',
+                variant: 'destructive',
+              });
+            } finally {
+              setIsPersistingRenewalAttachments(false);
+            }
+          } else {
+            toast({
+              title: 'Success',
+              description: `${file.name} uploaded successfully`,
+              duration: 2000,
+              variant: 'success',
+            });
+          }
         };
         reader.readAsDataURL(file);
       } catch (error) {
@@ -3815,7 +3871,7 @@ export default function GovernmentLicense() {
   // Handle add new
   const handleAddNew = () => {
   setEditingLicense(null);
-  setIsFullscreen(false);
+  setIsFullscreen(true);
   setShowSubmissionDetails(false);
   setSubmissionOpenedFromTable(false);
   setSelectedDepartments([]);
@@ -3939,7 +3995,7 @@ export default function GovernmentLicense() {
     }
 
     setTimeout(() => {
-      setIsFullscreen(false);
+      setIsFullscreen(true);
       setShowSubmissionDetails(false);
       setEditingLicense(null);
       setSelectedDepartments([]);
@@ -4261,29 +4317,47 @@ export default function GovernmentLicense() {
         <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
           <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
             <AlertDialogHeader>
-              <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-              <AlertDialogDescription>
-                If you don’t have a file, click No to download an XLSX template.
+              <AlertDialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+                Import Renewals Data
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-700 space-y-3">
+                <div className="bg-amber-50 border-l-4 border-amber-500 p-3 text-amber-900 text-xs font-semibold rounded-r-md">
+                  WARNING: You must download and use our official Excel template to import renewals. Importing other files will fail.
+                </div>
+                <p className="text-sm font-medium">
+                  Please follow these steps:
+                </p>
+                <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-600">
+                  <li>Download the template using the button below.</li>
+                  <li>Fill in the template with your data.</li>
+                  <li>Click upload to select your filled template file.</li>
+                </ol>
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel
-                className="bg-red-600 text-white hover:bg-red-700"
+            <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
+              <AlertDialogCancel className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100">
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
                 onClick={() => {
                   setImportConfirmOpen(false);
                   downloadRenewalsImportTemplate();
                 }}
               >
-                No
-              </AlertDialogCancel>
+                Download Template
+              </Button>
               <AlertDialogAction
-                className="bg-green-600 text-white hover:bg-green-700"
+                className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold shadow-md"
                 onClick={() => {
                   setImportConfirmOpen(false);
                   setTimeout(() => triggerImport(), 0);
                 }}
               >
-                Yes
+                Upload File
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -4338,8 +4412,8 @@ export default function GovernmentLicense() {
                 setDataManagementSelectKey((k) => k + 1);
               }}
             >
-              <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
-                <SelectValue placeholder="Import/Export" />
+              <SelectTrigger className="w-16 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-1 px-2.5" title="Import/Export">
+                <ArrowUpDown className="h-4 w-4 text-white" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="export" className="cursor-pointer">
@@ -5164,14 +5238,16 @@ export default function GovernmentLicense() {
                               <FormControl>
                                 <div className="space-y-3">
                                   <div className="flex items-center gap-3">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      className="h-10 px-6 bg-blue-600 hover:bg-blue-700 text-white"
+                                    <div
                                       onClick={() => setShowRenewalDocumentsModal(true)}
+                                      className="cursor-pointer group flex flex-col items-center justify-center border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100/50 transition-colors rounded-lg px-4 py-2 h-10 w-fit"
+                                      title="View and Manage Documents"
                                     >
-                                      Upload
-                                    </Button>
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-indigo-700 group-hover:text-indigo-800">
+                                        <Upload className="h-4 w-4" />
+                                        <span>{((form.watch('renewalAttachments') || []) as any[]).length} Attachment{((form.watch('renewalAttachments') || []) as any[]).length !== 1 ? 's' : ''}</span>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               </FormControl>
@@ -6033,11 +6109,15 @@ export default function GovernmentLicense() {
         {/* Renewal Documents Modal (like Subscription Documents dialog) */}
         <Dialog
           open={showRenewalDocumentsModal}
-          onOpenChange={(open) => {
-            setShowRenewalDocumentsModal(open);
-            if (!open) {
-              setPendingRenewalAttachment(null);
-              setPendingRenewalAttachmentRemark('');
+          onOpenChange={(next) => {
+            if (!next) {
+              if (hasRenewalAttachmentsUnsavedChanges()) {
+                setShowRenewalSaveConfirmOpen(true);
+              } else {
+                closeRenewalDocumentsAndReset();
+              }
+            } else {
+              setShowRenewalDocumentsModal(true);
             }
           }}
         >
@@ -6189,7 +6269,16 @@ export default function GovernmentLicense() {
                                 <div className="h-9 w-9 bg-white rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
                                   {renderDocumentTypeIcon(doc.name, doc.url)}
                                 </div>
-                                <p className="text-xs font-semibold text-gray-900 truncate">{doc.name}</p>
+                                <div className="flex flex-col min-w-0">
+                                  <p className="text-xs font-semibold text-gray-900 truncate" title={doc.name}>{doc.name}</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => openDocumentInNewTab({ name: doc.name, url: doc.url })}
+                                    className="text-[10px] text-blue-600 hover:underline hover:text-blue-800 font-medium cursor-pointer w-fit text-left"
+                                  >
+                                    View Document
+                                  </button>
+                                </div>
                               </div>
                               <div className="col-span-2 text-xs font-medium text-gray-900 truncate">{doc.updatedBy || doc.uploadedBy || currentUserName || '-'}</div>
                               <div className="col-span-2 text-xs font-medium text-gray-900 truncate">
@@ -6201,7 +6290,7 @@ export default function GovernmentLicense() {
                                     })
                                   : (doc.uploadedAt || '-')}
                               </div>
-                              <div className="col-span-3">
+                              <div className="col-span-3 flex items-center gap-1">
                                 <Input
                                   value={doc.remark || ''}
                                   onChange={(e) => {
@@ -6209,63 +6298,100 @@ export default function GovernmentLicense() {
                                     updatedDocs[index] = {
                                       ...updatedDocs[index],
                                       remark: e.target.value,
-                                      updatedBy: currentUserName || updatedDocs[index]?.updatedBy || updatedDocs[index]?.uploadedBy,
+                                    };
+                                    form.setValue('renewalAttachments', updatedDocs, { shouldDirty: false });
+                                  }}
+                                  onFocus={() => setActiveRenewalRemarkIndex(index)}
+                                  onBlur={() => setTimeout(() => setActiveRenewalRemarkIndex(prev => prev === index ? null : prev), 150)}
+                                  placeholder="Enter remark"
+                                  className="flex-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Save Remark"
+                                  className={`h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50 transition-all duration-150 flex-shrink-0 ${activeRenewalRemarkIndex === index ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}
+                                  onClick={async () => {
+                                    const currentAttachments = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
+                                    const value = (currentAttachments[index]?.remark || '').trim();
+                                    const updatedDoc = {
+                                      ...currentAttachments[index],
+                                      remark: value,
+                                      updatedBy: currentUserName || currentAttachments[index]?.updatedBy || currentAttachments[index]?.uploadedBy,
                                       updatedAt: new Date().toISOString(),
                                     };
-                                    form.setValue('renewalAttachments', updatedDocs, { shouldDirty: true });
-                                  }}
-                                  placeholder="Enter remark"
-                                  className="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-9"
-                                />
-                              </div>
-                              <div className="col-span-2 flex items-center justify-end gap-1.5">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                                      aria-label="Document actions"
-                                    >
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent
-                                    align="end"
-                                    side="top"
-                                    sideOffset={8}
-                                    className="z-[3000] bg-white text-gray-900 border-gray-200 shadow-lg"
-                                  >
-                                    <DropdownMenuItem
-                                      onClick={() => openDocumentInNewTab({ name: doc.name, url: doc.url })}
-                                      className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
-                                    >
-                                      View
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => downloadDocument({ name: doc.name, url: doc.url })}
-                                      className="cursor-pointer data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-900 focus:bg-blue-50 focus:text-blue-900"
-                                    >
-                                      Download
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        const updatedDocs = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
-                                        form.setValue('renewalAttachments', updatedDocs.filter((_, i) => i !== index), { shouldDirty: true });
+                                    const updatedDocs = currentAttachments.map((d, i) => (i === index ? updatedDoc : d));
+                                    // Save with shouldDirty: false so closing the modal doesn't prompt Confirm Exit
+                                    form.setValue('renewalAttachments', updatedDocs, { shouldDirty: false });
+
+                                    const licenseId = editingLicense?.id ? String(editingLicense.id) : '';
+                                    if (licenseId) {
+                                      setIsPersistingRenewalAttachments(true);
+                                      try {
+                                        const res = await fetch(`${API_BASE_URL}/api/licenses/${licenseId}`, {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          credentials: 'include',
+                                          body: JSON.stringify({ renewalAttachments: updatedDocs }),
+                                        });
+                                        if (!res.ok) throw new Error('Failed to save remark to database');
+                                        setOriginalRenewalAttachments(updatedDocs);
+                                        if (initialFormSnapshotRef.current) {
+                                          initialFormSnapshotRef.current.renewalAttachments = updatedDocs;
+                                        }
                                         toast({
-                                          title: 'Document Removed',
-                                          description: `${doc.name} has been removed`,
+                                          title: 'Remark Saved',
+                                          description: 'Your remark has been saved successfully.',
                                           duration: 2000,
+                                          variant: 'success',
+                                        });
+                                        queryClient.invalidateQueries({ queryKey: ['/api/licenses'] });
+                                      } catch (err: any) {
+                                        toast({
+                                          title: 'Error saving remark',
+                                          description: err.message || 'Failed to save remark to database.',
                                           variant: 'destructive',
                                         });
-                                      }}
-                                      className="cursor-pointer text-red-600 focus:text-red-600 data-[highlighted]:bg-blue-50 data-[highlighted]:text-red-600 focus:bg-blue-50"
-                                    >
-                                      Remove
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
+                                      } finally {
+                                        setIsPersistingRenewalAttachments(false);
+                                      }
+                                    } else {
+                                      toast({
+                                        title: 'Remark updated',
+                                        description: 'Remark will be saved when the license is saved.',
+                                        duration: 2000,
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <Save className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <div className="col-span-2 flex items-center justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => downloadDocument({ name: doc.name, url: doc.url })}
+                                  className="h-8 w-8 p-0 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                  title="Download"
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setRenewalAttachmentToDeleteIndex(index);
+                                    setShowRenewalDeleteConfirmOpen(true);
+                                  }}
+                                  className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors"
+                                  title="Remove"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
                           ))}
@@ -6288,32 +6414,121 @@ export default function GovernmentLicense() {
                   <span className="text-xs text-gray-600">
                     {((form.watch('renewalAttachments') || []) as any[]).length} document{((form.watch('renewalAttachments') || []) as any[]).length !== 1 ? 's' : ''}
                   </span>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setShowRenewalDocumentsModal(false);
-                        setPendingRenewalAttachment(null);
-                        setPendingRenewalAttachmentRemark('');
-                      }}
-                      disabled={isPersistingRenewalAttachments}
-                      className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 text-sm px-4 py-1.5"
-                    >
-                      Close
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={handleRenewalDocumentsDone}
-                      disabled={isPersistingRenewalAttachments}
-                      className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5"
-                    >
-                      Done
-                    </Button>
-                  </div>
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Save Changes Confirmation Dialog */}
+            <AlertDialog open={showRenewalSaveConfirmOpen} onOpenChange={setShowRenewalSaveConfirmOpen}>
+              <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+                    <AlertCircle className="h-5 w-5 text-indigo-600" />
+                    Save Changes?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="text-gray-700 font-medium">
+                    You have unsaved changes to your documents. Do you want to save them before closing?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel
+                    onClick={closeRenewalDocumentsAndReset}
+                    className="border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    Discard Changes
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async () => {
+                      await handleRenewalDocumentsDone();
+                      setShowRenewalSaveConfirmOpen(false);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md px-6 py-2"
+                  >
+                    Save Changes
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Delete Document Confirmation Dialog */}
+            <AlertDialog open={showRenewalDeleteConfirmOpen} onOpenChange={setShowRenewalDeleteConfirmOpen}>
+              <AlertDialogContent className="sm:max-w-[460px] bg-white border border-gray-200 shadow-2xl">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+                    <AlertCircle className="h-5 w-5 text-red-600" />
+                    Confirm Delete
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="text-gray-700 font-medium">
+                    Are you sure you want to delete this document? This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel
+                    onClick={() => {
+                      setShowRenewalDeleteConfirmOpen(false);
+                      setRenewalAttachmentToDeleteIndex(null);
+                    }}
+                    className="border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async () => {
+                      if (renewalAttachmentToDeleteIndex !== null) {
+                        const currentAttachments = (form.getValues('renewalAttachments') || []) as RenewalAttachment[];
+                        const updatedDocs = currentAttachments.filter((_, i) => i !== renewalAttachmentToDeleteIndex);
+                        form.setValue('renewalAttachments', updatedDocs, { shouldDirty: false });
+
+                        const licenseId = editingLicense?.id ? String(editingLicense.id) : '';
+                        if (licenseId) {
+                          setIsPersistingRenewalAttachments(true);
+                          try {
+                            const res = await fetch(`${API_BASE_URL}/api/licenses/${licenseId}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              credentials: 'include',
+                              body: JSON.stringify({ renewalAttachments: updatedDocs }),
+                            });
+                            if (!res.ok) throw new Error('Failed to delete document from database');
+                            setOriginalRenewalAttachments(updatedDocs);
+                            if (initialFormSnapshotRef.current) {
+                              initialFormSnapshotRef.current.renewalAttachments = updatedDocs;
+                            }
+                            toast({
+                              title: 'Document Removed',
+                              description: 'The document has been removed successfully',
+                              duration: 2000,
+                              variant: 'destructive',
+                            });
+                            queryClient.invalidateQueries({ queryKey: ['/api/licenses'] });
+                          } catch (err: any) {
+                            toast({
+                              title: 'Error deleting document',
+                              description: err.message || 'Failed to save deletion to database.',
+                              variant: 'destructive',
+                            });
+                          } finally {
+                            setIsPersistingRenewalAttachments(false);
+                          }
+                        } else {
+                          toast({
+                            title: 'Document Removed',
+                            description: 'The document has been removed',
+                            duration: 2000,
+                            variant: 'destructive',
+                          });
+                        }
+                      }
+                      setShowRenewalDeleteConfirmOpen(false);
+                      setRenewalAttachmentToDeleteIndex(null);
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white shadow-md px-6 py-2"
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             {/* Renewal Status Log is shown on the separate Compliance Log page */}
 

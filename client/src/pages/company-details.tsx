@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, ChevronDown, Check, MoreVertical, AlertCircle, Building, Tags, UserCog } from "lucide-react";
+import { Shield, Users, Building2, Monitor, Upload, Save, Plus, Settings, UserPlus, Edit, Trash2, User, Activity, UsersIcon, Search, Download, ChevronDown, Check, MoreVertical, AlertCircle, Building, Tags, UserCog, ArrowUpDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -814,42 +814,6 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
                 className="pl-10 w-full sm:w-64 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm"
               />
             </div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              accept=".csv,.xlsx,.xls"
-              onChange={handleFileUpload}
-            />
-            <Select
-              key={dataManagementSelectKey}
-              onValueChange={(value) => {
-                if (value === 'export') {
-                  handleExport();
-                } else if (value === 'import') {
-                  setImportConfirmOpen(true);
-                }
-                setDataManagementSelectKey((k) => k + 1);
-              }}
-            >
-                <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
-                <SelectValue placeholder="Import/Export" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="export" className="cursor-pointer">
-                  <div className="flex items-center">
-                    <Download className="h-4 w-4 mr-2" />
-                    Export
-                  </div>
-                </SelectItem>
-                <SelectItem value="import" className="cursor-pointer">
-                  <div className="flex items-center">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Import
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div className="flex items-center gap-3">
             {selectedEmployeeIds.size > 0 && (
@@ -1074,6 +1038,36 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
               </div>
             </DialogContent>
           </Dialog>
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept=".csv,.xlsx,.xls"
+              onChange={handleFileUpload}
+            />
+            <Select
+              key={dataManagementSelectKey}
+              onValueChange={(value) => {
+                if (value === 'export') {
+                  handleExport();
+                } else if (value === 'import') {
+                  setImportConfirmOpen(true);
+                }
+                setDataManagementSelectKey((k) => k + 1);
+              }}
+            >
+              <SelectTrigger className="w-16 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-1 px-2.5" title="Import/Export">
+                <ArrowUpDown className="h-4 w-4 text-white" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="export" className="cursor-pointer">
+                  <div className="flex items-center"><Download className="h-4 w-4 mr-2" />Export</div>
+                </SelectItem>
+                <SelectItem value="import" className="cursor-pointer">
+                  <div className="flex items-center"><Upload className="h-4 w-4 mr-2" />Import</div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Exit Confirmation Dialog */}
@@ -1371,29 +1365,47 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
       <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
         <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
           <AlertDialogHeader>
-            <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Select Yes to choose a file. Select No to download the template.
+            <AlertDialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Import Employees Data
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 space-y-3">
+              <div className="bg-amber-50 border-l-4 border-amber-500 p-3 text-amber-900 text-xs font-semibold rounded-r-md mt-2">
+                WARNING: You must download and use our official Excel template to import employees. Importing other files will fail.
+              </div>
+              <p className="text-sm font-medium mt-3">
+                Please follow these steps:
+              </p>
+              <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-600">
+                <li>Download the template using the button below.</li>
+                <li>Fill in the template with your data.</li>
+                <li>Click upload to select your filled template file.</li>
+              </ol>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+          <AlertDialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
+            <AlertDialogCancel className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100">
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
               onClick={() => {
                 downloadEmployeeTemplate();
                 setImportConfirmOpen(false);
               }}
             >
-              No
-            </AlertDialogCancel>
+              Download Template
+            </Button>
             <AlertDialogAction
-              className="bg-green-600 text-white hover:bg-green-700"
+              className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold shadow-md"
               onClick={() => {
                 setImportConfirmOpen(false);
                 setTimeout(() => fileInputRef.current?.click(), 0);
               }}
             >
-              Yes
+              Upload File
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2093,7 +2105,7 @@ function UserManagementTab() {
             {/* Description removed as requested */}
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 justify-between">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
@@ -2103,42 +2115,6 @@ function UserManagementTab() {
               className="pl-10 w-full sm:w-64 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm"
             />
           </div>
-          <input
-            type="file"
-            ref={userFileInputRef}
-            className="hidden"
-            accept=".csv,.xlsx,.xls"
-            onChange={importUsers}
-          />
-          <Select
-            key={userDataManagementSelectKey}
-            onValueChange={(value) => {
-              if (value === 'export') {
-                exportUsers();
-              } else if (value === 'import') {
-                setUserImportConfirmOpen(true);
-              }
-              setUserDataManagementSelectKey((k) => k + 1);
-            }}
-          >
-            <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
-              <SelectValue placeholder="Import/Export" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="export" className="cursor-pointer">
-                <div className="flex items-center">
-                  <Download className="h-4 w-4 mr-2" />
-                  Export
-                </div>
-              </SelectItem>
-              <SelectItem value="import" className="cursor-pointer">
-                <div className="flex items-center">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Import
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
           <div className="flex items-center gap-3">
             {selectedUserIds.size > 0 && (
               <Button
@@ -2289,6 +2265,36 @@ function UserManagementTab() {
               </div>
             </DialogContent>
           </Dialog>
+          <input
+            type="file"
+            ref={userFileInputRef}
+            className="hidden"
+            accept=".csv,.xlsx,.xls"
+            onChange={importUsers}
+          />
+          <Select
+            key={userDataManagementSelectKey}
+            onValueChange={(value) => {
+              if (value === 'export') {
+                exportUsers();
+              } else if (value === 'import') {
+                setUserImportConfirmOpen(true);
+              }
+              setUserDataManagementSelectKey((k) => k + 1);
+            }}
+          >
+            <SelectTrigger className="w-16 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-1 px-2.5" title="Import/Export">
+              <ArrowUpDown className="h-4 w-4 text-white" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="export" className="cursor-pointer">
+                <div className="flex items-center"><Download className="h-4 w-4 mr-2" />Export</div>
+              </SelectItem>
+              <SelectItem value="import" className="cursor-pointer">
+                <div className="flex items-center"><Upload className="h-4 w-4 mr-2" />Import</div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
           </div>
 
           {/* Exit Confirmation Dialog */}
@@ -2645,29 +2651,47 @@ function UserManagementTab() {
       <AlertDialog open={userImportConfirmOpen} onOpenChange={setUserImportConfirmOpen}>
         <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
           <AlertDialogHeader>
-            <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Select Yes to choose a file. Select No to download the template.
+            <AlertDialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Import Users Data
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700 space-y-3">
+              <div className="bg-amber-50 border-l-4 border-amber-500 p-3 text-amber-900 text-xs font-semibold rounded-r-md mt-2">
+                WARNING: You must download and use our official Excel template to import users. Importing other files will fail.
+              </div>
+              <p className="text-sm font-medium mt-3">
+                Please follow these steps:
+              </p>
+              <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-600">
+                <li>Download the template using the button below.</li>
+                <li>Fill in the template with your data.</li>
+                <li>Click upload to select your filled template file.</li>
+              </ol>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+          <AlertDialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
+            <AlertDialogCancel className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100">
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
               onClick={() => {
                 downloadUserTemplate();
                 setUserImportConfirmOpen(false);
               }}
             >
-              No
-            </AlertDialogCancel>
+              Download Template
+            </Button>
             <AlertDialogAction
-              className="bg-green-600 text-white hover:bg-green-700"
+              className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold shadow-md"
               onClick={() => {
                 setUserImportConfirmOpen(false);
                 setTimeout(() => userFileInputRef.current?.click(), 0);
               }}
             >
-              Yes
+              Upload File
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -4012,29 +4036,47 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
         <AlertDialog open={companyImportConfirmOpen} onOpenChange={setCompanyImportConfirmOpen}>
           <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
             <AlertDialogHeader>
-              <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Select Yes to choose a file. Select No to download the template.
+              <AlertDialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+                Import Company Data
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-700 space-y-3">
+                <div className="bg-amber-50 border-l-4 border-amber-500 p-3 text-amber-900 text-xs font-semibold rounded-r-md mt-2">
+                  WARNING: You must download and use our official Excel template to import company data. Importing other files will fail.
+                </div>
+                <p className="text-sm font-medium mt-3">
+                  Please follow these steps:
+                </p>
+                <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-600">
+                  <li>Download the template using the button below.</li>
+                  <li>Fill in the template with your data.</li>
+                  <li>Click upload to select your filled template file.</li>
+                </ol>
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel
-                className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+            <AlertDialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
+              <AlertDialogCancel className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100">
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
                 onClick={() => {
                   downloadCombinedTemplate();
                   setCompanyImportConfirmOpen(false);
                 }}
               >
-                No
-              </AlertDialogCancel>
+                Download Template
+              </Button>
               <AlertDialogAction
-                className="bg-green-600 text-white hover:bg-green-700"
+                className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold shadow-md"
                 onClick={() => {
                   setCompanyImportConfirmOpen(false);
                   setTimeout(() => companyFileInputRef.current?.click(), 0);
                 }}
               >
-                Yes
+                Upload File
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -4263,63 +4305,18 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                         </div>
                       </div>
                       <div className="flex flex-col sm:flex-row gap-4 justify-between">
-                        <div className="flex items-center gap-4">
-                            <div className="relative flex-1 max-w-sm">
+                        <div className="flex items-center gap-4 w-full max-w-sm">
+                            <div className="relative w-full">
                               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                               <Input
                                 placeholder="Search departments..."
                                 value={departmentSearchTerm}
                                 onChange={(e) => setDepartmentSearchTerm(e.target.value)}
-                                className="pl-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm"
+                                className="pl-10 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg h-10 bg-white shadow-sm w-full"
                               />
                             </div>
-                            <input
-                              type="file"
-                              ref={departmentFileInputRef}
-                              className="hidden"
-                              accept=".csv,.xlsx,.xls"
-                              onChange={importDepartments}
-                            />
-                            <Select
-                              key={departmentDataManagementSelectKey}
-                              onValueChange={(value) => {
-                                if (value === 'export') {
-                                  exportDepartments();
-                                } else if (value === 'import') {
-                                  setDepartmentImportConfirmOpen(true);
-                                }
-                                setDepartmentDataManagementSelectKey((k) => k + 1);
-                              }}
-                            >
-                              <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
-                                <SelectValue placeholder="Import/Export" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="export" className="cursor-pointer">
-                                  <div className="flex items-center">
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Export
-                                  </div>
-                                </SelectItem>
-                                <SelectItem value="import" className="cursor-pointer">
-                                  <div className="flex items-center">
-                                    <Upload className="h-4 w-4 mr-2" />
-                                    Import
-                                  </div>
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => setDepartmentView((v) => (v === 'tiles' ? 'table' : 'tiles'))}
-                              className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                            >
-                              {departmentView === 'tiles' ? 'Table View' : 'Card View'}
-                            </Button>
-
+                        <div className="flex items-center gap-3">
                             <Dialog open={departmentModalOpen} onOpenChange={handleDepartmentModalOpenChange}>
                               <DialogTrigger asChild>
                                 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
@@ -4530,6 +4527,46 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                                 </div>
                               </DialogContent>
                             </Dialog>
+
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setDepartmentView((v) => (v === 'tiles' ? 'table' : 'tiles'))}
+                              className="h-10 px-4 rounded-lg border-0 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-sm shadow-none"
+                            >
+                              {departmentView === 'tiles' ? 'Table View' : 'Card View'}
+                            </Button>
+
+                            <input
+                              type="file"
+                              ref={departmentFileInputRef}
+                              className="hidden"
+                              accept=".csv,.xlsx,.xls"
+                              onChange={importDepartments}
+                            />
+                            <Select
+                              key={departmentDataManagementSelectKey}
+                              onValueChange={(value) => {
+                                if (value === 'export') {
+                                  exportDepartments();
+                                } else if (value === 'import') {
+                                  setDepartmentImportConfirmOpen(true);
+                                }
+                                setDepartmentDataManagementSelectKey((k) => k + 1);
+                              }}
+                            >
+                              <SelectTrigger className="w-16 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-1 px-2.5" title="Import/Export">
+                                <ArrowUpDown className="h-4 w-4 text-white" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="export" className="cursor-pointer">
+                                  <div className="flex items-center"><Download className="h-4 w-4 mr-2" />Export</div>
+                                </SelectItem>
+                                <SelectItem value="import" className="cursor-pointer">
+                                  <div className="flex items-center"><Upload className="h-4 w-4 mr-2" />Import</div>
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
                         </div>
                       </div>
                     </div>
@@ -4985,29 +5022,47 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                         <AlertDialog open={departmentImportConfirmOpen} onOpenChange={setDepartmentImportConfirmOpen}>
                           <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Select Yes to choose a file. Select No to download the template.
+                              <AlertDialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                <AlertCircle className="h-5 w-5 text-amber-500" />
+                                Import Departments Data
+                              </AlertDialogTitle>
+                              <AlertDialogDescription className="text-gray-700 space-y-3">
+                                <div className="bg-amber-50 border-l-4 border-amber-500 p-3 text-amber-900 text-xs font-semibold rounded-r-md mt-2">
+                                  WARNING: You must download and use our official Excel template to import departments. Importing other files will fail.
+                                </div>
+                                <p className="text-sm font-medium mt-3">
+                                  Please follow these steps:
+                                </p>
+                                <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-600">
+                                  <li>Download the template using the button below.</li>
+                                  <li>Fill in the template with your data.</li>
+                                  <li>Click upload to select your filled template file.</li>
+                                </ol>
                               </AlertDialogDescription>
                             </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel
-                                className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+                            <AlertDialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
+                              <AlertDialogCancel className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100">
+                                Cancel
+                              </AlertDialogCancel>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
                                 onClick={() => {
                                   downloadDepartmentTemplate();
                                   setDepartmentImportConfirmOpen(false);
                                 }}
                               >
-                                No
-                              </AlertDialogCancel>
+                                Download Template
+                              </Button>
                               <AlertDialogAction
-                                className="bg-green-600 text-white hover:bg-green-700"
+                                className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold shadow-md"
                                 onClick={() => {
                                   setDepartmentImportConfirmOpen(false);
                                   setTimeout(() => departmentFileInputRef.current?.click(), 0);
                                 }}
                               >
-                                Yes
+                                Upload File
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
@@ -5082,62 +5137,60 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                           </TabsList>
 
                           {/* Add New Category Input and Data Management */}
-                          <div className="flex flex-wrap items-center gap-4 mb-6">
-                            <Input
-                              placeholder="Search categories..."
-                              value={categorySearchTerm}
-                              onChange={(e) => setCategorySearchTerm(e.target.value)}
-                              className="w-[420px] max-w-full h-10 text-sm"
-                            />
-                            <input
-                              type="file"
-                              ref={categoryFileInputRef}
-                              className="hidden"
-                              accept=".csv,.xlsx,.xls"
-                              onChange={importCategories}
-                            />
-                            <Select
-                              key={categoryDataManagementSelectKey}
-                              onValueChange={(value) => {
-                                if (value === 'export') {
-                                  exportCategories(categoryKind);
-                                } else if (value === 'import') {
-                                  setCategoryImportConfirmOpen(true);
-                                }
-                                setCategoryDataManagementSelectKey((k) => k + 1);
-                              }}
-                            >
-                              <SelectTrigger className="w-44 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white data-[placeholder]:text-white/90 border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200">
-                                <SelectValue placeholder="Import/Export" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="export" className="cursor-pointer">
-                                  <div className="flex items-center">
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Export
-                                  </div>
-                                </SelectItem>
-                                <SelectItem value="import" className="cursor-pointer">
-                                  <div className="flex items-center">
-                                    <Upload className="h-4 w-4 mr-2" />
-                                    Import
-                                  </div>
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-
-                            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                              <Button
-                                onClick={() => {
-                                  setActiveNewCategoryName('');
-                                  setCategoryAddOpen(true);
+                          <div className="flex flex-col sm:flex-row gap-4 justify-between mb-6">
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                              <Input
+                                placeholder="Search categories..."
+                                value={categorySearchTerm}
+                                onChange={(e) => setCategorySearchTerm(e.target.value)}
+                                className="pl-10 w-[420px] max-w-full h-10 text-sm border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm"
+                              />
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                                <Button
+                                  onClick={() => {
+                                    setActiveNewCategoryName('');
+                                    setCategoryAddOpen(true);
+                                  }}
+                                  className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
+                                >
+                                  <Plus className="w-4 h-4 mr-2" />
+                                  Category
+                                </Button>
+                              </motion.div>
+                              <input
+                                type="file"
+                                ref={categoryFileInputRef}
+                                className="hidden"
+                                accept=".csv,.xlsx,.xls"
+                                onChange={importCategories}
+                              />
+                              <Select
+                                key={categoryDataManagementSelectKey}
+                                onValueChange={(value) => {
+                                  if (value === 'export') {
+                                    exportCategories(categoryKind);
+                                  } else if (value === 'import') {
+                                    setCategoryImportConfirmOpen(true);
+                                  }
+                                  setCategoryDataManagementSelectKey((k) => k + 1);
                                 }}
-                                className="bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-medium shadow-lg rounded-lg h-10 px-4"
                               >
-                                <Plus className="w-4 h-4 mr-2" />
-                                Category
-                              </Button>
-                            </motion.div>
+                                <SelectTrigger className="w-16 h-10 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-0 hover:from-indigo-600 hover:to-blue-700 font-semibold shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-1 px-2.5" title="Import/Export">
+                                  <ArrowUpDown className="h-4 w-4 text-white" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="export" className="cursor-pointer">
+                                    <div className="flex items-center"><Download className="h-4 w-4 mr-2" />Export</div>
+                                  </SelectItem>
+                                  <SelectItem value="import" className="cursor-pointer">
+                                    <div className="flex items-center"><Upload className="h-4 w-4 mr-2" />Import</div>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
 
                           {/* Category List - matching Custom Fields table design */}
@@ -5383,29 +5436,47 @@ function CompanyDetailsContent({ section }: { section: CompanySection }) {
                       <AlertDialog open={categoryImportConfirmOpen} onOpenChange={setCategoryImportConfirmOpen}>
                         <AlertDialogContent className="bg-white text-gray-900 border border-gray-200">
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Do you have a file to import?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Select Yes to choose a file. Select No to download the template.
+                            <AlertDialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                              <AlertCircle className="h-5 w-5 text-amber-500" />
+                              Import Categories Data
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-gray-700 space-y-3">
+                              <div className="bg-amber-50 border-l-4 border-amber-500 p-3 text-amber-900 text-xs font-semibold rounded-r-md mt-2">
+                                WARNING: You must download and use our official Excel template to import categories. Importing other files will fail.
+                              </div>
+                              <p className="text-sm font-medium mt-3">
+                                Please follow these steps:
+                              </p>
+                              <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-600">
+                                <li>Download the template using the button below.</li>
+                                <li>Fill in the template with your data.</li>
+                                <li>Click upload to select your filled template file.</li>
+                              </ol>
                             </AlertDialogDescription>
                           </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel
-                              className="bg-red-600 text-white hover:bg-red-700 border-red-600 hover:border-red-700"
+                          <AlertDialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
+                            <AlertDialogCancel className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100">
+                              Cancel
+                            </AlertDialogCancel>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold"
                               onClick={() => {
                                 downloadCategoryTemplate();
                                 setCategoryImportConfirmOpen(false);
                               }}
                             >
-                              No
-                            </AlertDialogCancel>
+                              Download Template
+                            </Button>
                             <AlertDialogAction
-                              className="bg-green-600 text-white hover:bg-green-700"
+                              className="bg-indigo-600 text-white hover:bg-indigo-700 font-semibold shadow-md"
                               onClick={() => {
                                 setCategoryImportConfirmOpen(false);
                                 setTimeout(() => categoryFileInputRef.current?.click(), 0);
                               }}
                             >
-                              Yes
+                              Upload File
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>

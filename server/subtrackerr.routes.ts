@@ -3109,6 +3109,9 @@ router.post("/api/subscriptions/draft/:id/activate", async (req, res) => {
 
     // Get the updated subscription
     const activatedSubscription = await collection.findOne({ _id: subscriptionId });
+    if (!activatedSubscription) {
+      return res.status(500).json({ message: "Failed to load activated subscription" });
+    }
 
     // Create history record for activation
     const { decrypt } = await import("./encryption.service.js");
@@ -3131,6 +3134,33 @@ router.post("/api/subscriptions/draft/:id/activate", async (req, res) => {
 
     // Generate reminders for the activated subscription
     await generateRemindersForSubscription(activatedSubscription, tenantId, db);
+
+    // Generate notification event and send lifecycle notifications
+    try {
+      const notificationEvent = {
+        _id: new ObjectId(),
+        tenantId,
+        type: 'subscription',
+        eventType: 'created',
+        subscriptionId: subscriptionId.toString(),
+        subscriptionName: activatedName,
+        category: activatedSubscription.category || 'Software',
+        message: `Subscription ${activatedName} created`,
+        read: false,
+        timestamp: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        reminderTriggerDate: new Date().toISOString().slice(0, 10),
+      };
+      await db.collection('notification_events').insertOne(notificationEvent);
+    } catch (e) {
+      console.error('❌ [SUBTRACKERR] Failed to create notification event on activate route:', e);
+    }
+
+    try {
+      await sendSubscriptionNotifications('create', activatedSubscription, null, tenantId, db);
+    } catch (e) {
+      console.error('❌ [SUBTRACKERR] Failed to send lifecycle notifications on activate route:', e);
+    }
 
     res.status(200).json({ 
       message: "Draft activated successfully",
@@ -3506,20 +3536,53 @@ const update = {
               const decryptedUpdated = decryptSubscriptionData(updatedDoc);
               const changes = detectSubscriptionChanges(decryptedOld, decryptedUpdated);
 
-              if (changes.ownerChanged) {
-                await sendSubscriptionNotifications('ownerChange', updatedDoc, oldDoc, tenantId, db);
-              }
-              if (changes.priceChanged) {
-                await sendSubscriptionNotifications('priceChange', updatedDoc, oldDoc, tenantId, db);
-              }
-              if (changes.quantityChanged) {
-                await sendSubscriptionNotifications('quantityChange', updatedDoc, oldDoc, tenantId, db);
-              }
-              if (changes.statusChanged) {
-                const normalizedStatus = String((updatedDoc as any).status || '').trim().toLowerCase();
-                const isCancelled = normalizedStatus === 'cancelled' || normalizedStatus === 'canceled' || normalizedStatus === 'cancel';
-                if (isCancelled) {
-                  await sendSubscriptionNotifications('cancel', updatedDoc, oldDoc, tenantId, db);
+              const isDraftBefore = oldDoc.isDraft === true || oldDoc.status === "Draft";
+              const isDraftAfter = updatedDoc.isDraft === true || updatedDoc.status === "Draft";
+
+              if (isDraftBefore && !isDraftAfter) {
+                try {
+                  const { ObjectId } = await import('mongodb');
+                  const serviceNameDecrypted = decryptedUpdated.serviceName || updatedDoc.serviceName;
+                  const notificationEvent = {
+                    _id: new ObjectId(),
+                    tenantId,
+                    type: 'subscription',
+                    eventType: 'created',
+                    subscriptionId: subscriptionId.toString(),
+                    subscriptionName: serviceNameDecrypted,
+                    category: decryptedUpdated.category || 'Software',
+                    message: `Subscription ${serviceNameDecrypted} created`,
+                    read: false,
+                    timestamp: new Date().toISOString(),
+                    createdAt: new Date().toISOString(),
+                    reminderTriggerDate: new Date().toISOString().slice(0, 10),
+                  };
+                  await db.collection('notification_events').insertOne(notificationEvent);
+                } catch (e) {
+                  console.error('❌ [SUBTRACKERR] Failed to create notification event on draft promotion:', e);
+                }
+
+                try {
+                  await sendSubscriptionNotifications('create', updatedDoc, null, tenantId, db);
+                } catch (e) {
+                  console.error('❌ [SUBTRACKERR] Failed to send lifecycle notifications on draft promotion:', e);
+                }
+              } else {
+                if (changes.ownerChanged) {
+                  await sendSubscriptionNotifications('ownerChange', updatedDoc, oldDoc, tenantId, db);
+                }
+                if (changes.priceChanged) {
+                  await sendSubscriptionNotifications('priceChange', updatedDoc, oldDoc, tenantId, db);
+                }
+                if (changes.quantityChanged) {
+                  await sendSubscriptionNotifications('quantityChange', updatedDoc, oldDoc, tenantId, db);
+                }
+                if (changes.statusChanged) {
+                  const normalizedStatus = String((updatedDoc as any).status || '').trim().toLowerCase();
+                  const isCancelled = normalizedStatus === 'cancelled' || normalizedStatus === 'canceled' || normalizedStatus === 'cancel';
+                  if (isCancelled) {
+                    await sendSubscriptionNotifications('cancel', updatedDoc, oldDoc, tenantId, db);
+                  }
                 }
               }
 
@@ -5661,12 +5724,13 @@ router.delete("/api/licenses/:id", async (req, res) => {
   }
 });
 
-// --- Logs API ---
 // Get all logs for the current tenant
 router.get("/api/logs", async (req, res) => {
   try {
     const db = await connectToDatabase();
-    const collection = db.collection("Log");
+    const moduleType = typeof req.query.module === 'string' ? req.query.module.trim() : '';
+    const useCollection = moduleType === 'compliance' ? 'ledger' : 'Log';
+    const collection = db.collection(useCollection);
     const tenantId = req.user?.tenantId;
 
     if (!tenantId) {
@@ -5685,7 +5749,15 @@ router.get("/api/logs", async (req, res) => {
     const wantsPaging = parsedPage.success || parsedPageSize.success;
 
     const licenseId = typeof req.query.licenseId === 'string' ? req.query.licenseId.trim() : '';
-    const filter: any = { tenantId, ...(licenseId ? { licenseId } : {}) };
+    
+    let moduleFilter = {};
+    if (moduleType === 'compliance') {
+      moduleFilter = { module: 'compliance' };
+    } else if (moduleType === 'renewal') {
+      moduleFilter = { $or: [{ module: 'renewal' }, { module: { $exists: false } }] };
+    }
+    
+    const filter: any = { tenantId, ...(licenseId ? { licenseId } : {}), ...moduleFilter };
 
     let logs: any[] = [];
     let pagingMeta: { total: number; page: number; pageSize: number; totalPages: number } | null = null;
@@ -5792,7 +5864,9 @@ router.get("/api/logs", async (req, res) => {
 router.post("/api/logs", async (req, res) => {
   try {
     const db = await connectToDatabase();
-    const collection = db.collection("Log");
+    const { module } = req.body;
+    const useCollection = module === 'compliance' ? 'ledger' : 'Log';
+    const collection = db.collection(useCollection);
     const tenantId = req.user?.tenantId;
     const user = req.user?.email || req.user?.userId || 'System';
 
@@ -5809,6 +5883,7 @@ router.post("/api/logs", async (req, res) => {
       user,
       action, // 'create', 'update', 'delete'
       changes,
+      ...(module !== undefined ? { module } : {}),
       ...(renewalInitiatedDate !== undefined ? { renewalInitiatedDate } : {}),
       ...(renewalStatus !== undefined ? { renewalStatus } : {}),
       ...(submittedBy !== undefined ? { submittedBy } : {}),
