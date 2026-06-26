@@ -6320,36 +6320,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         companyList.sort((a, b) => a.companyName.localeCompare(b.companyName));
       } else {
-        // For now, non-global-admin users are restricted to their active company only.
-        // This keeps the Switch Company UI intact but prevents switching across tenants.
-        const dbUser = await db
+        // Fetch all companies registered under this user's email
+        const userEmailKey = String(user.email || "").trim().toLowerCase();
+        const userLogins = await db
           .collection("login")
-          .findOne(
-            { _id: new ObjectId(user.userId) },
-            { projection: { tenantId: 1 } }
-          );
+          .find({ email: userEmailKey })
+          .toArray();
 
-        const activeTenantId = String(((user as any)?.actingTenantId ?? (user as any)?.tenantId ?? (dbUser as any)?.tenantId) ?? "").trim();
-        if (!activeTenantId) {
+        const tenantIds = Array.from(
+          new Set(
+            userLogins
+              .map((d: any) => (d?.tenantId == null ? "" : String(d.tenantId)))
+              .map((t) => t.trim())
+              .filter(Boolean)
+          )
+        );
+
+        if (tenantIds.length === 0) {
           return res.status(200).json([]);
         }
 
-        const [companyInfo, loginCompany] = await Promise.all([
-          db.collection("companyInfo").findOne({ tenantId: activeTenantId }, { projection: { companyName: 1 } }),
+        const [companyInfoList, loginNameAgg] = await Promise.all([
+          db
+            .collection("companyInfo")
+            .find({ tenantId: { $in: tenantIds } }, { projection: { tenantId: 1, companyName: 1 } })
+            .toArray(),
           db
             .collection("login")
-            .findOne(
-              { tenantId: activeTenantId, companyName: { $exists: true, $ne: null } },
-              { projection: { companyName: 1 } }
-            ),
+            .aggregate([
+              { $match: { tenantId: { $in: tenantIds }, companyName: { $exists: true, $ne: null } } },
+              { $group: { _id: "$tenantId", companyName: { $max: "$companyName" } } },
+            ])
+            .toArray(),
         ]);
 
-        const name =
-          String((companyInfo as any)?.companyName || "").trim() ||
-          String((loginCompany as any)?.companyName || "").trim() ||
-          "Unnamed Company";
+        const companyInfoMap = new Map(
+          (companyInfoList as any[]).map((ci: any) => [String(ci.tenantId), String(ci.companyName || "").trim()])
+        );
+        const loginNameMap = new Map(
+          (loginNameAgg as any[]).map((row: any) => [String(row._id), String(row.companyName || "").trim()])
+        );
 
-        companyList = [{ tenantId: activeTenantId, companyName: name, isActive: true }];
+        const activeTenantId = String(((user as any)?.actingTenantId ?? (user as any)?.tenantId) ?? "").trim();
+        companyList = tenantIds.map((tid) => ({
+          tenantId: tid,
+          companyName: companyInfoMap.get(tid) || loginNameMap.get(tid) || "Unnamed Company",
+          isActive: tid === activeTenantId,
+        }));
+
+        companyList.sort((a, b) => a.companyName.localeCompare(b.companyName));
       }
       
       res.setHeader("X-Company-Count", String(companyList.length));
@@ -6525,14 +6544,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const planLimits = (plan: unknown) => {
         const normalized = normalizePlanKey(plan);
         if (normalized === "premium") {
-          return { key: "premium", label: "Premium", maxCompanies: 5 };
+          return { key: "premium", label: "Premium", maxCompanies: 10 };
         }
         if (normalized === "professional") {
-          // Basic (renamed from Professional) currently cannot add companies
-          return { key: "professional", label: "Basic", maxCompanies: 1 };
+          return { key: "professional", label: "Basic", maxCompanies: 10 };
         }
-        // Trial (renamed from Starter) currently cannot add companies
-        return { key: "starter", label: "Trial", maxCompanies: 1 };
+        return { key: "starter", label: "Trial", maxCompanies: 10 };
       };
 
       let derivedPlanForNewTenant: string | null = null;
@@ -6566,10 +6583,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const derivedPlan = existingLoginDocs.reduce((acc: any, d: any) => bestPlan(acc, d?.plan), "starter");
         const limits = planLimits(derivedPlan);
 
-        // Explicitly block multi-company on Trial/Basic.
-        if (limits.key === "starter" || limits.key === "professional") {
-          return res.status(403).json({ message: "Your plan has no feature" });
-        }
+        // Explicitly block multi-company on Trial/Basic (removed to allow all plans to add companies)
 
         if (existingTenantIds.length >= limits.maxCompanies) {
           return res.status(403).json({

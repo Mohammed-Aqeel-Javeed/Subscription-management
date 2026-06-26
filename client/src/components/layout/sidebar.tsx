@@ -30,7 +30,7 @@ function CompanySwitcherDialog({ onClose, plan }: { onClose: () => void; plan?: 
   const { toast } = useToast();
 
   const normalizedPlan = String(plan ?? '').trim().toLowerCase();
-  const isAddCompanyBlocked = normalizedPlan === 'starter' || normalizedPlan === 'professional';
+  const isAddCompanyBlocked = false; // Always allow adding companies
 
   const { data: companies = [], isLoading } = useQuery<Company[]>({
     queryKey: ["/api/user/companies"],
