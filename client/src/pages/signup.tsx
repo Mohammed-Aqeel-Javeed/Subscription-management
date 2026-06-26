@@ -21,6 +21,9 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(120); // 2 minutes in seconds
   const [canResend, setCanResend] = useState(false);
+  const [emailExists, setEmailExists] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [currencyError, setCurrencyError] = useState("");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get("session_id");
@@ -153,6 +156,12 @@ export default function SignupPage() {
     const upperValue = value.toUpperCase();
     setCompanyCurrency(upperValue);
     
+    // Clear error while typing or if it matches
+    const exists = currencyList.some(c => c.code === upperValue);
+    if (exists || upperValue === "") {
+      setCurrencyError("");
+    }
+    
     if (upperValue.length > 0) {
       const filtered = currencyList
         .filter(curr => 
@@ -177,6 +186,7 @@ export default function SignupPage() {
     setCompanyCurrency(currency.code);
     setShowCurrencyDropdown(false);
     setFilteredCurrencies([]);
+    setCurrencyError("");
   };
   // Autogenerate tenantId in frontend
 
@@ -226,6 +236,29 @@ export default function SignupPage() {
   const passwordValidation = validatePassword(password);
   const isPasswordValid = Object.values(passwordValidation).every(Boolean);
 
+  const checkEmailExists = async (emailVal: string) => {
+    if (!emailVal || !isValidEmail(emailVal)) {
+      setEmailExists(false);
+      return;
+    }
+    setCheckingEmail(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/check-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailVal })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEmailExists(data.exists);
+      }
+    } catch (err) {
+      console.error("Error checking email:", err);
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
   const handleSubmitDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -238,6 +271,11 @@ export default function SignupPage() {
 
     if (!isValidEmail(email)) {
       setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (emailExists) {
+      setError("Email already registered. Please use a different email.");
       return;
     }
 
@@ -254,12 +292,29 @@ export default function SignupPage() {
     // Validate currency code
     const validCurrency = currencyList.find(c => c.code === companyCurrency);
     if (!validCurrency) {
+      setCurrencyError("Please select a valid currency from the list.");
       setError("Please select a valid currency from the list.");
       return;
     }
 
     setLoading(true);
     try {
+      // Double check email existence before sending OTP
+      const checkRes = await fetch(`${API_BASE_URL}/api/auth/check-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      });
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData.exists) {
+          setEmailExists(true);
+          setError("Email already registered. Please use a different email.");
+          setLoading(false);
+          return;
+        }
+      }
+
       const res = await fetch(`${API_BASE_URL}/api/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -679,7 +734,11 @@ export default function SignupPage() {
                   <input
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setEmailExists(false);
+                    }}
+                    onBlur={(e) => checkEmailExists(e.target.value)}
                     required
                     style={{
                       width: "100%",
@@ -695,6 +754,11 @@ export default function SignupPage() {
                   {email && !isValidEmail(email) && (
                     <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
                       Please enter a valid email address
+                    </div>
+                  )}
+                  {email && isValidEmail(email) && emailExists && (
+                    <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+                      Email already registered. Please use a different email.
                     </div>
                   )}
                 </div>
@@ -713,7 +777,15 @@ export default function SignupPage() {
                       }
                     }}
                     onBlur={() => {
-                      setTimeout(() => setShowCurrencyDropdown(false), 200);
+                      setTimeout(() => {
+                        setShowCurrencyDropdown(false);
+                        const exists = currencyList.some(c => c.code === companyCurrency);
+                        if (companyCurrency && !exists) {
+                          setCurrencyError("Please select a valid currency from the list.");
+                        } else {
+                          setCurrencyError("");
+                        }
+                      }, 200);
                     }}
                     required
                     style={{
@@ -788,6 +860,11 @@ export default function SignupPage() {
                           </div>
                         </button>
                       ))}
+                    </div>
+                  )}
+                  {currencyError && (
+                    <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+                      {currencyError}
                     </div>
                   )}
                 </div>

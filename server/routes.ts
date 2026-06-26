@@ -1570,6 +1570,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
+  // ===== Check Email Exists =====
+  app.post("/api/auth/check-email", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(200).json({ exists: false });
+      }
+
+      const db = await connectToDatabase();
+      const normalizeEmail = (raw: unknown) => String(raw ?? "").trim().toLowerCase();
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const emailKey = normalizeEmail(email);
+      const emailRegex = new RegExp(`^${escapeRegExp(emailKey)}$`, "i");
+
+      const existingUser = await db.collection("login").findOne({ email: { $regex: emailRegex } });
+      return res.status(200).json({ exists: !!existingUser });
+    } catch (err) {
+      console.error("Check email error:", err);
+      return res.status(500).json({ message: "Failed to check email" });
+    }
+  });
+
   // ===== Send OTP =====
   app.post("/api/send-otp", async (req, res) => {
     try {
