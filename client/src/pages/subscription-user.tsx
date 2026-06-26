@@ -239,8 +239,6 @@ export default function SubscriptionUserPage() {
         }))
       };
       
-      console.log('Saving user to subscription:', subscriptionId, 'Payload:', payload);
-      
       const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
         method: "PUT",
         headers: {
@@ -256,8 +254,7 @@ export default function SubscriptionUserPage() {
         throw new Error(`Failed to save: ${response.status}`);
       }
       
-      const result = await response.json();
-      console.log('Save successful:', result);
+      await response.json();
       
       toast({
         title: "Success",
@@ -380,8 +377,6 @@ export default function SubscriptionUserPage() {
         }))
       };
       
-      console.log('Adding all users to subscription:', subscriptionId, 'Count:', newUsers.length);
-      
       const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
         method: "PUT",
         headers: {
@@ -397,8 +392,7 @@ export default function SubscriptionUserPage() {
         throw new Error(`Failed to save: ${response.status}`);
       }
       
-      const result = await response.json();
-      console.log('Add all successful:', result);
+      await response.json();
       
       toast({
         title: "Success",
@@ -443,8 +437,6 @@ export default function SubscriptionUserPage() {
         users: []
       };
       
-      console.log('Removing all users from subscription:', subscriptionId);
-      
       const response = await fetch(`/api/subscriptions/${subscriptionId}/users`, {
         method: "PUT",
         headers: {
@@ -460,8 +452,7 @@ export default function SubscriptionUserPage() {
         throw new Error(`Failed to save: ${response.status}`);
       }
       
-      const result = await response.json();
-      console.log('Remove all successful:', result);
+      await response.json();
       
       toast({
         title: "Removed",

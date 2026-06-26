@@ -344,7 +344,6 @@ export default function Reports() {
     if (id === "ren-2") { navigate("/reports/renewal-responsibility" + tabParam); return; }
     if (id === "ren-3") { navigate("/reports/expired-renewals" + tabParam); return; }
     if (id === "ren-4") { navigate("/reports/upcoming-renewals" + tabParam); return; }
-    console.log("Open report", id);
   };
 
   const shouldShowCategory = (category: ReportCategory) =>

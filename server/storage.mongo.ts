@@ -10,6 +10,86 @@ function getTenantFilter(tenantId: string) {
   return { tenantId };
 }
 
+function toNativeDate(val: any) {
+  if (val === undefined || val === null || val === '') return null;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function sanitizeComplianceOrHistoryDoc(doc: any, ObjectIdClass: any) {
+  if (!doc) return doc;
+  const sanitized = { ...doc };
+
+  // 1. Process Date fields
+  const dateFields = [
+    'filingStartDate', 'filingEndDate', 'filingSubmissionDeadline', 'filingSubmissionDate',
+    'endDate', 'submissionDeadline', 'lastAudit', 'paymentDate'
+  ];
+  for (const field of dateFields) {
+    if (field in sanitized) {
+      const val = sanitized[field];
+      if (val === undefined || val === null || val === '') {
+        sanitized[field] = null;
+      } else {
+        const d = new Date(val);
+        sanitized[field] = isNaN(d.getTime()) ? null : d;
+      }
+    }
+  }
+
+  // 2. Process Number fields
+  const numFields = ['submissionAmount', 'amount', 'reminderDays'];
+  for (const field of numFields) {
+    if (field in sanitized) {
+      const val = sanitized[field];
+      if (val === undefined || val === null || val === '') {
+        sanitized[field] = null;
+      } else {
+        const num = Number(val);
+        sanitized[field] = isNaN(num) ? null : num;
+      }
+    }
+  }
+
+  // 3. Process ObjectId fields
+  const oidFields = ['submittedBy', 'complianceId'];
+  for (const field of oidFields) {
+    if (field in sanitized) {
+      const val = sanitized[field];
+      if (val === undefined || val === null || val === '') {
+        sanitized[field] = null;
+      } else if (typeof val === 'string' && val.length === 24 && /^[0-9a-fA-F]{24}$/.test(val)) {
+        try {
+          sanitized[field] = new ObjectIdClass(val);
+        } catch {
+          // If ObjectId construction fails
+        }
+      }
+    }
+  }
+
+  // 4. Process departments / department
+  if ('departments' in sanitized) {
+    if (Array.isArray(sanitized.departments)) {
+      sanitized.departments = sanitized.departments.map((d: any) => String(d));
+    } else if (typeof sanitized.departments === 'string') {
+      try {
+        const parsed = JSON.parse(sanitized.departments);
+        sanitized.departments = Array.isArray(parsed) ? parsed.map((d: any) => String(d)) : [];
+      } catch {
+        sanitized.departments = sanitized.departments.split(/[|,,]/).map((d: any) => d.trim()).filter(Boolean);
+      }
+    } else {
+      sanitized.departments = [];
+    }
+  }
+  
+  // Remove/unset legacy department field
+  delete sanitized.department;
+
+  return sanitized;
+}
+
 export class MongoStorage implements IStorage {
   private db: Db | null = null;
 
@@ -226,6 +306,33 @@ export class MongoStorage implements IStorage {
     // Don't destructure updatedAt, just spread subscription
     const doc = { ...encrypted, tenantId, _id: new ObjectId(), createdAt: new Date(), updatedAt: new Date(), updatedBy: null };
     
+    // Explicitly parse dates as native Date objects
+    if (doc.startDate) doc.startDate = toNativeDate(doc.startDate);
+    if (doc.nextRenewal) doc.nextRenewal = toNativeDate(doc.nextRenewal);
+    if (doc.initialDate) doc.initialDate = toNativeDate(doc.initialDate);
+    if ('firstPurchaseDate' in doc) doc.firstPurchaseDate = toNativeDate(doc.firstPurchaseDate);
+    if ('currentCycleStart' in doc) doc.currentCycleStart = toNativeDate(doc.currentCycleStart);
+    
+    // Explicitly ensure reminderDays is null if empty string
+    if (doc.reminderDays === "" || doc.reminderDays === undefined || doc.reminderDays === null) {
+      doc.reminderDays = null;
+    } else {
+      const parsed = Number(doc.reminderDays);
+      doc.reminderDays = isNaN(parsed) ? null : parsed;
+    }
+    
+    // Explicitly ensure departments is a native array of strings
+    if (doc.departments) {
+      if (Array.isArray(doc.departments)) {
+        doc.departments = doc.departments.map((d: any) => String(d));
+      } else {
+        doc.departments = [];
+      }
+    }
+    
+    // Delete legacy department field if present to avoid redundancy
+    delete doc.department;
+
     await db.collection("subscriptions").insertOne(doc);
     // Generate reminders for this subscription
     await this.generateAndInsertRemindersForSubscription(doc, tenantId);
@@ -273,10 +380,45 @@ export class MongoStorage implements IStorage {
     let filter: any = { $or: [ { _id: new ObjectId(id), tenantId }, { id, tenantId } ] };
     // Encrypt sensitive data before updating
     const encrypted = encryptSubscriptionData(subscription);
-    // Don't destructure updatedAt, just spread subscription
+    
+    const updateDoc = { ...encrypted, updatedAt: new Date() };
+
+    // Explicitly parse dates as native Date objects
+    if (updateDoc.startDate) updateDoc.startDate = toNativeDate(updateDoc.startDate);
+    if (updateDoc.nextRenewal) updateDoc.nextRenewal = toNativeDate(updateDoc.nextRenewal);
+    if (updateDoc.initialDate) updateDoc.initialDate = toNativeDate(updateDoc.initialDate);
+    if ('firstPurchaseDate' in updateDoc) updateDoc.firstPurchaseDate = toNativeDate(updateDoc.firstPurchaseDate);
+    if ('currentCycleStart' in updateDoc) updateDoc.currentCycleStart = toNativeDate(updateDoc.currentCycleStart);
+    
+    // Explicitly ensure reminderDays is null if empty string
+    if ('reminderDays' in updateDoc) {
+      if (updateDoc.reminderDays === "" || updateDoc.reminderDays === undefined || updateDoc.reminderDays === null) {
+        updateDoc.reminderDays = null;
+      } else {
+        const parsed = Number(updateDoc.reminderDays);
+        updateDoc.reminderDays = isNaN(parsed) ? null : parsed;
+      }
+    }
+    
+    // Explicitly ensure departments is a native array of strings
+    if (updateDoc.departments) {
+      if (Array.isArray(updateDoc.departments)) {
+        updateDoc.departments = updateDoc.departments.map((d: any) => String(d));
+      } else {
+        updateDoc.departments = [];
+      }
+    }
+    
+    // Always remove and unset legacy department field to avoid redundancy
+    delete updateDoc.department;
+    const unsetDoc = { department: "" };
+
     const result = await db.collection("subscriptions").findOneAndUpdate(
       filter,
-      { $set: encrypted },
+      { 
+        $set: updateDoc,
+        $unset: unsetDoc
+      },
       { returnDocument: "after" }
     );
     if (!result || !result.value) return undefined;
@@ -511,9 +653,9 @@ export class MongoStorage implements IStorage {
   async createComplianceItem(item: any, tenantId: string): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
-    const doc = { ...item, tenantId, _id: new ObjectId() };
+    const doc = sanitizeComplianceOrHistoryDoc({ ...item, tenantId, _id: new ObjectId() }, ObjectId);
     await db.collection("compliance").insertOne(doc);
-    return { ...item, id: doc._id.toString(), tenantId };
+    return { ...doc, id: doc._id.toString() };
   }
 
   async updateComplianceItem(id: string, item: any): Promise<any> {
@@ -524,9 +666,16 @@ export class MongoStorage implements IStorage {
     try { filter.$or.push({ _id: new ObjectId(id) }); } catch {}
     // Try string id
     filter.$or.push({ id });
+    
+    const sanitized = sanitizeComplianceOrHistoryDoc(item, ObjectId);
+    delete sanitized._id;
+
     const result = await db.collection("compliance").findOneAndUpdate(
       filter,
-      { $set: item },
+      { 
+        $set: sanitized,
+        $unset: { department: "" }
+      },
       { returnDocument: "after" }
     );
     return result?.value || null;
@@ -553,9 +702,9 @@ export class MongoStorage implements IStorage {
   async createHistoryItem(item: any, tenantId: string): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
-    const doc = { ...item, tenantId, _id: new ObjectId() };
+    const doc = sanitizeComplianceOrHistoryDoc({ ...item, tenantId, _id: new ObjectId() }, ObjectId);
     await db.collection("history").insertOne(doc);
-    return { ...item, id: doc._id.toString(), tenantId };
+    return { ...doc, id: doc._id.toString() };
   }
 
   async updateHistoryItem(id: string, item: any): Promise<any> {
@@ -566,9 +715,16 @@ export class MongoStorage implements IStorage {
     try { filter.$or.push({ _id: new ObjectId(id) }); } catch {}
     // Try string id
     filter.$or.push({ id });
+    
+    const sanitized = sanitizeComplianceOrHistoryDoc(item, ObjectId);
+    delete sanitized._id;
+
     const result = await db.collection("history").findOneAndUpdate(
       filter,
-      { $set: item },
+      { 
+        $set: sanitized,
+        $unset: { department: "" }
+      },
       { returnDocument: "after" }
     );
     return result?.value || null;
@@ -637,9 +793,9 @@ export class MongoStorage implements IStorage {
   async createLedgerItem(item: any, tenantId: string): Promise<any> {
     const db = await this.getDb();
     const { ObjectId } = await import("mongodb");
-    const doc = { ...item, tenantId, _id: new ObjectId() };
+    const doc = sanitizeComplianceOrHistoryDoc({ ...item, tenantId, _id: new ObjectId() }, ObjectId);
     await db.collection("ledger").insertOne(doc);
-    return { ...item, id: doc._id.toString(), tenantId };
+    return { ...doc, id: doc._id.toString() };
   }
 
   async deleteLedgerItem(id: string): Promise<boolean> {

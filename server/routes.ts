@@ -23,6 +23,11 @@ import { decrypt } from "./encryption.service.js";
 import StripeLib from "stripe";
 import type { Stripe } from "stripe";
 
+const JWT_SECRET = process.env.JWT_SECRET as string;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error("JWT_SECRET missing or too short (must be at least 32 characters) — refusing to start");
+}
+
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const StripeCtor: any = StripeLib as any;
 const stripe: Stripe | null = STRIPE_SECRET_KEY
@@ -218,7 +223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (token) {
         try {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET || "subs_secret_key");
+          const decoded = jwt.verify(token, JWT_SECRET);
           if (typeof decoded === "object" && decoded && (decoded as any).jti) {
             const db = await connectToDatabase();
             await db.collection<{ _id: string }>("auth_sessions").updateOne(
@@ -386,7 +391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       tokenPayload.jti = sid;
 
-      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const jwtSecret = JWT_SECRET;
       const token = securitySettings.jwtExpiryEnabled
         ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${securitySettings.jwtExpiryMinutes}m` })
         : jwt.sign(tokenPayload, jwtSecret);
@@ -663,7 +668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           next: nextFromCookie || "",
         });
 
-        const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+        const jwtSecret = JWT_SECRET;
         const onboardingToken = jwt.sign(
           {
             typ: "google_onboarding",
@@ -746,7 +751,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       tokenPayload.jti = crypto.randomUUID();
 
-      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const jwtSecret = JWT_SECRET;
       const token = securitySettings.jwtExpiryEnabled
         ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${securitySettings.jwtExpiryMinutes}m` })
         : jwt.sign(tokenPayload, jwtSecret);
@@ -847,7 +852,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "No pending Google signup" });
       }
 
-      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const jwtSecret = JWT_SECRET;
       const decoded = jwt.verify(token, jwtSecret);
       if (typeof decoded !== "object" || !decoded) {
         return res.status(404).json({ message: "No pending Google signup" });
@@ -892,7 +897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Google signup session expired. Please try again." });
       }
 
-      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const jwtSecret = JWT_SECRET;
       const decoded = jwt.verify(onboardingToken, jwtSecret);
       if (typeof decoded !== "object" || !decoded) {
         clearOnboardingCookie();
@@ -1225,7 +1230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || "subs_secret_key");
+      const decoded = jwt.verify(token, JWT_SECRET);
       if (typeof decoded !== "object" || !decoded) {
         req.user = undefined;
         return next();
@@ -1343,9 +1348,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return true;
   };
 
-  // Generate random 6-digit OTP
+  // Generate random 6-digit OTP using cryptographically secure random numbers
   const generateOTP = (): string => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return crypto.randomInt(100000, 1000000).toString();
   };
 
   const sha256Hex = (value: string): string => {
@@ -2346,7 +2351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
           tokenPayload.jti = crypto.randomUUID();
 
-          const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+          const jwtSecret = JWT_SECRET;
           const token = securitySettings.jwtExpiryEnabled
             ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${securitySettings.jwtExpiryMinutes}m` })
             : jwt.sign(tokenPayload, jwtSecret);
@@ -2758,7 +2763,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         actingTenantId: tokenPayload.actingTenantId
       });
       
-      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const jwtSecret = JWT_SECRET;
       const token = securitySettings.jwtExpiryEnabled
         ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${securitySettings.jwtExpiryMinutes}m` })
         : jwt.sign(tokenPayload, jwtSecret);
@@ -4788,7 +4793,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         department: actor?.department ?? null,
       };
 
-      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const jwtSecret = JWT_SECRET;
       const token = settings?.security?.jwtExpiryEnabled
         ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${settings.security.jwtExpiryMinutes}m` })
         : jwt.sign(tokenPayload, jwtSecret);
@@ -4825,7 +4830,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         department: actor?.department ?? null,
       };
 
-      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const jwtSecret = JWT_SECRET;
       const token = settings?.security?.jwtExpiryEnabled
         ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${settings.security.jwtExpiryMinutes}m` })
         : jwt.sign(tokenPayload, jwtSecret);
@@ -6192,7 +6197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tokenPayload.jti = crypto.randomUUID();
 
         const platformSettings = await getPlatformSettingsCached(db);
-        const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+        const jwtSecret = JWT_SECRET;
         const token = platformSettings.security.jwtExpiryEnabled
           ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${platformSettings.security.jwtExpiryMinutes}m` })
           : jwt.sign(tokenPayload, jwtSecret);
@@ -6435,7 +6440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const platformSettings = await getPlatformSettingsCached(db);
-      const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+      const jwtSecret = JWT_SECRET;
       const token = platformSettings.security.jwtExpiryEnabled
         ? jwt.sign(tokenPayload, jwtSecret, { expiresIn: `${platformSettings.security.jwtExpiryMinutes}m` })
         : jwt.sign(tokenPayload, jwtSecret);
@@ -6700,7 +6705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // If requested, switch the current session into the new tenant immediately.
       if (setAsDefault) {
         const platformSettings = await getPlatformSettingsCached(db);
-        const jwtSecret = process.env.JWT_SECRET || "subs_secret_key";
+        const jwtSecret = JWT_SECRET;
         const tokenPayload: any = {
           userId: insertResult.insertedId?.toString?.() || String(insertResult.insertedId),
           email: emailKey,

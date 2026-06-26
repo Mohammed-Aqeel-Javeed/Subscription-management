@@ -1482,7 +1482,6 @@ export function UnifiedImportExport({ localCurrency = "LCY" }) {
           if (userRes.ok) {
             const userData = await userRes.json();
             currentUserName = userData.fullName || userData.name || userData.username || userData.email || 'Import';
-            console.log('Import user:', currentUserName, userData);
           } else {
             console.error('Failed to fetch user info:', userRes.status);
           }

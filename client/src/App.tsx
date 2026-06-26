@@ -138,11 +138,6 @@ function AppWithSidebar() {
         let me = cachedMe;
         if (!me) {
           const res = await apiFetch("/api/me");
-          console.log("[App Auth Guard] /api/me response:", {
-            ok: res.ok,
-            status: res.status,
-            pathname: location.pathname
-          });
           if (!res.ok) {
             // Only hard-redirect on real auth failures.
             if (res.status === 401 || res.status === 403) {
@@ -154,7 +149,6 @@ function AppWithSidebar() {
                 }
               })();
 
-              console.log("[App Auth Guard] Not authenticated, redirecting to landing");
               try {
                 sessionStorage.removeItem("isAuthenticated");
               } catch {

@@ -484,10 +484,7 @@ export default function LandingPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55 }}
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6 text-xs font-semibold bg-white/70 border border-indigo-100 text-indigo-600 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-indigo-600" />
-              SaaS Subscription, Compliance &amp; Renewal Platform
-            </div>
+
 
             <h1
               className="font-heading mb-6 leading-[1.05] text-slate-900 font-bold tracking-tight"

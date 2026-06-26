@@ -58,6 +58,8 @@ import { ObjectId as LedgerObjectId } from "mongodb";
 import { ObjectId } from "mongodb";
 
 import { Router } from "express";
+import { requireRole } from "./middleware/auth.middleware.js";
+import { z } from "zod";
 // @ts-ignore
 import { connectToDatabase } from "./mongo.js";
 import jwt from "jsonwebtoken";
@@ -67,8 +69,10 @@ import type { User } from "./types";
 import { sendSubscriptionNotifications, detectSubscriptionChanges } from "./subscription-notification.service.js";
 import { sendComplianceNotifications, detectComplianceChanges } from "./compliance-notification.service.js";
 import { encryptUrlSafe, decrypt } from "./encryption.service.js";
-import { z } from "zod";
-const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
+const JWT_SECRET = process.env.JWT_SECRET as string;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error("JWT_SECRET missing or too short (must be at least 32 characters) — refusing to start");
+}
 
 const router = Router();
 
@@ -1141,7 +1145,7 @@ router.get("/api/payment", async (req, res) => {
 });
 
 // Add a new payment method
-router.post("/api/payment", async (req, res) => {
+router.post("/api/payment", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("payment");
@@ -1163,14 +1167,18 @@ router.post("/api/payment", async (req, res) => {
 });
 
 // Update a payment method
-router.put("/api/payment/:id", async (req, res) => {
+router.put("/api/payment/:id", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("payment");
     const { id } = req.params;
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
     let filter;
     try {
-      filter = { _id: new PaymentObjectId(id) };
+      filter = { _id: new PaymentObjectId(id), tenantId };
     } catch {
       return res.status(400).json({ message: "Invalid payment id" });
     }
@@ -1187,22 +1195,20 @@ router.put("/api/payment/:id", async (req, res) => {
 });
 
 // Delete a payment method
-router.delete("/api/payment/:id", async (req, res) => {
+router.delete("/api/payment/:id", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("payment");
     const { id } = req.params;
-    let filter;
-    try {
-      filter = { _id: new PaymentObjectId(id) };
-    } catch {
-      return res.status(400).json({ message: "Invalid payment id" });
-    }
-
-    // Block deletion if this payment method is linked to any subscription.
     const tenantId = req.user?.tenantId;
     if (!tenantId) {
       return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    let filter;
+    try {
+      filter = { _id: new PaymentObjectId(id), tenantId };
+    } catch {
+      return res.status(400).json({ message: "Invalid payment id" });
     }
 
     const existing = await collection.findOne(filter);
@@ -1399,15 +1405,19 @@ router.post("/api/ledger/insert", async (req, res) => {
   }
 });
 // Delete a ledger record
-router.delete("/api/ledger/:id", async (req, res) => {
+router.delete("/api/ledger/:id", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("ledger");
-    const result = await collection.deleteOne({ _id: new LedgerObjectId(req.params.id) });
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
+    const result = await collection.deleteOne({ _id: new LedgerObjectId(req.params.id), tenantId });
     if (result.deletedCount === 1) {
       res.status(200).json({ message: "Ledger record deleted" });
     } else {
-      res.status(404).json({ message: "Ledger record not found" });
+      res.status(404).json({ message: "Ledger record not found or access denied" });
     }
   } catch (error) {
     res.status(500).json({ message: "Failed to delete ledger record", error });
@@ -1456,24 +1466,28 @@ router.get("/api/compliance/list", async (req, res) => {
   }
 });
 // Delete a compliance filing from the database
-router.delete("/api/compliance/:id", async (req, res) => {
+router.delete("/api/compliance/:id", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("compliance");
     const { id } = req.params;
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
     
     // Get compliance data before deleting for notification event
-    const complianceToDelete = await collection.findOne({ _id: new ObjectId(id) });
+    const complianceToDelete = await collection.findOne({ _id: new ObjectId(id), tenantId });
     
-    const result = await collection.deleteOne({ _id: new ObjectId(id) });
+    const result = await collection.deleteOne({ _id: new ObjectId(id), tenantId });
     if (result.deletedCount === 1) {
       // Create notification event for compliance deletion
       if (complianceToDelete) {
         try {
           const filingName = complianceToDelete.policy || complianceToDelete.filingName || complianceToDelete.complianceName || complianceToDelete.name || 'Compliance Filing';
-const notificationEvent = {
+          const notificationEvent = {
             _id: new ObjectId(),
-            tenantId: req.user?.tenantId,
+            tenantId,
             type: 'compliance',
             eventType: 'deleted',
             complianceId: id,
@@ -1486,8 +1500,8 @@ const notificationEvent = {
             createdAt: new Date().toISOString(),
             reminderTriggerDate: new Date().toISOString().slice(0, 10)
           };
-const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
-} catch (notificationError) {
+          const notificationResult = await db.collection("compliance_notifications").insertOne(notificationEvent);
+        } catch (notificationError) {
           console.error(`❌ [COMPLIANCE] Failed to create deletion notification event for compliance filing:`, notificationError);
           // Don't throw - let deletion succeed even if notification fails
         }
@@ -1495,7 +1509,7 @@ const notificationResult = await db.collection("compliance_notifications").inser
       
       res.status(200).json({ message: "Compliance filing deleted" });
     } else {
-      res.status(404).json({ message: "Compliance filing not found" });
+      res.status(404).json({ message: "Compliance filing not found or access denied" });
     }
   } catch (error) {
     res.status(500).json({ message: "Failed to delete compliance filing", error });
@@ -1503,7 +1517,7 @@ const notificationResult = await db.collection("compliance_notifications").inser
 });
 
 // Save a compliance filing to the database
-router.post("/api/compliance/insert", async (req, res) => {
+router.post("/api/compliance/insert", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("compliance");
@@ -1538,8 +1552,8 @@ router.post("/api/compliance/insert", async (req, res) => {
     
     // Generate reminders for compliance
     try {
-await generateRemindersForCompliance(createdCompliance, tenantId, db);
-} catch (reminderError) {
+      await generateRemindersForCompliance(createdCompliance, tenantId, db);
+    } catch (reminderError) {
       console.error(`❌ [COMPLIANCE] Failed to generate reminders:`, reminderError);
       // Don't throw - let compliance creation succeed even if reminder generation fails
     }
@@ -1574,15 +1588,21 @@ await generateRemindersForCompliance(createdCompliance, tenantId, db);
 });
 
 // Edit (update) a compliance filing in the database
-router.put("/api/compliance/:id", async (req, res) => {
+router.put("/api/compliance/:id", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("compliance");
     const { id } = req.params;
     const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
     
     // Get the document before update for notification
-    const oldDoc = await collection.findOne({ _id: new ObjectId(id) });
+    const oldDoc = await collection.findOne({ _id: new ObjectId(id), tenantId });
+    if (!oldDoc) {
+      return res.status(404).json({ message: "Compliance filing not found or access denied" });
+    }
     
     const updateData: any = { ...req.body, updatedAt: new Date() };
     if ('submissionDeadline' in updateData || 'filingSubmissionDeadline' in updateData) {
@@ -1599,13 +1619,13 @@ router.put("/api/compliance/:id", async (req, res) => {
       delete updateData.filingEndDate;
     }
     const result = await collection.updateOne(
-      { _id: new ObjectId(id) },
+      { _id: new ObjectId(id), tenantId },
       { $set: updateData }
     );
     
     if (result.matchedCount === 1) {
       // Get the updated document for reminder generation
-      const updatedDoc = await collection.findOne({ _id: new ObjectId(id) });
+      const updatedDoc = await collection.findOne({ _id: new ObjectId(id), tenantId });
 
       // Respond immediately; run heavy side-effects in the background.
       res.status(200).json({ message: "Compliance filing updated" });
@@ -1872,7 +1892,7 @@ if (!tenantId) {
 });
 
 // Delete a subscription and its reminders (main route that frontend uses)
-router.delete("/api/subscriptions/:id", async (req, res) => {
+router.delete("/api/subscriptions/:id", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const { ObjectId } = await import("mongodb");
@@ -1977,24 +1997,31 @@ router.delete("/api/subscriptions/:id", async (req, res) => {
 });
 
 // Delete a subscription and its reminders (legacy route)
-router.delete("/api/subtrackerr/:id", async (req, res) => {
+router.delete("/api/subtrackerr/:id", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const { ObjectId } = await import("mongodb");
     const collection = db.collection("subscriptions");
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(401).json({ message: "Missing tenantId in user context" });
+    }
     let filter;
     try {
-      filter = { _id: new ObjectId(req.params.id) };
+      filter = { _id: new ObjectId(req.params.id), tenantId };
     } catch {
-      filter = { id: req.params.id };
+      filter = { id: req.params.id, tenantId };
     }
     const result = await collection.deleteOne(filter);
     if (result.deletedCount === 1) {
       // Cascade delete reminders for this subscription
-      await db.collection("reminders").deleteMany({ $or: [ { subscriptionId: req.params.id }, { subscriptionId: new ObjectId(req.params.id) } ] });
+      await db.collection("reminders").deleteMany({ 
+        tenantId,
+        $or: [ { subscriptionId: req.params.id }, { subscriptionId: new ObjectId(req.params.id) } ] 
+      });
       res.status(200).json({ message: "Subscription and related reminders deleted" });
     } else {
-      res.status(404).json({ message: "Subscription not found" });
+      res.status(404).json({ message: "Subscription not found or access denied" });
     }
   } catch (error) {
     res.status(500).json({ message: "Failed to delete subscription", error });
@@ -2558,7 +2585,7 @@ router.get("/api/company/departments", async (req, res) => {
 });
 
 // Add a new department
-router.post("/api/company/departments", async (req, res) => {
+router.post("/api/company/departments", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
@@ -2609,7 +2636,7 @@ router.post("/api/company/departments", async (req, res) => {
 });
 
 // Update department (name, departmentHead, email)
-router.put("/api/company/departments/:id", async (req, res) => {
+router.put("/api/company/departments/:id", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
@@ -2665,7 +2692,7 @@ router.put("/api/company/departments/:id", async (req, res) => {
 });
 
 // Update department visibility
-router.patch("/api/company/departments/:name", async (req, res) => {
+router.patch("/api/company/departments/:name", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
@@ -2701,7 +2728,7 @@ router.patch("/api/company/departments/:name", async (req, res) => {
 });
 
 // Delete a department by name
-router.delete("/api/company/departments/:name", async (req, res) => {
+router.delete("/api/company/departments/:name", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("departments");
@@ -3198,7 +3225,7 @@ router.get("/api/subscriptions/drafts", async (req, res) => {
 });
 
 // Update an existing subscription
-router.put("/api/subscriptions/:id", async (req, res) => {
+router.put("/api/subscriptions/:id", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("subscriptions");
@@ -4002,7 +4029,7 @@ function buildWelcomeEmailHtml(params: {
 }
 
 // Add a new user
-router.post("/api/users", async (req, res) => {
+router.post("/api/users", requireRole(), async (req, res) => {
   const requestedRole = req.body?.role;
   const isCreatingGlobalAdmin = requestedRole === 'global_admin';
 
@@ -4251,7 +4278,7 @@ return res.status(400).json({ message: "User name already exists" });
 });
 
 // Update a user
-router.put("/api/users/:_id", async (req, res) => {
+router.put("/api/users/:_id", requireRole(), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("login");
@@ -4463,7 +4490,7 @@ router.put("/api/users/:_id", async (req, res) => {
 
 // --- Subscription Fields Configuration API ---
 // Save enabled fields
-router.post("/api/config/fields", async (req, res) => {
+router.post("/api/config/fields", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("config");
@@ -4501,7 +4528,7 @@ router.get("/api/config/fields", async (req, res) => {
 
 // --- Compliance Fields Configuration API ---
 // Save compliance field
-router.post("/api/config/compliance-fields", async (req, res) => {
+router.post("/api/config/compliance-fields", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields"); // Changed to Fields collection
@@ -4584,7 +4611,7 @@ router.get("/api/config/compliance-fields", async (req, res) => {
 });
 
 // Update compliance field
-router.patch("/api/config/compliance-fields/:id", async (req, res) => {
+router.patch("/api/config/compliance-fields/:id", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields"); // Changed to Fields collection
@@ -4621,7 +4648,7 @@ router.patch("/api/config/compliance-fields/:id", async (req, res) => {
 });
 
 // Delete compliance field
-router.delete("/api/config/compliance-fields/:id", async (req, res) => {
+router.delete("/api/config/compliance-fields/:id", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields"); // Changed to Fields collection
@@ -4649,7 +4676,7 @@ router.delete("/api/config/compliance-fields/:id", async (req, res) => {
 
 // --- Renewal Fields Configuration API ---
 // Save renewal field
-router.post("/api/config/renewal-fields", async (req, res) => {
+router.post("/api/config/renewal-fields", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields");
@@ -4732,7 +4759,7 @@ router.get("/api/config/renewal-fields", async (req, res) => {
 });
 
 // Update renewal field
-router.patch("/api/config/renewal-fields/:id", async (req, res) => {
+router.patch("/api/config/renewal-fields/:id", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields");
@@ -4769,7 +4796,7 @@ router.patch("/api/config/renewal-fields/:id", async (req, res) => {
 });
 
 // Delete renewal field
-router.delete("/api/config/renewal-fields/:id", async (req, res) => {
+router.delete("/api/config/renewal-fields/:id", requireRole('editor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("Fields");
@@ -5151,6 +5178,80 @@ router.get("/api/notifications/license", async (req, res) => {
   }
 });
 
+function sanitizeLicenseDoc(doc: any, ObjectIdClass: any) {
+  if (!doc) return doc;
+  const sanitized = { ...doc };
+
+  // 1. Process Date fields
+  const dateFields = [
+    'filingStartDate', 'filingEndDate', 'filingSubmissionDeadline', 'filingSubmissionDate',
+    'endDate', 'submissionDeadline', 'lastAudit', 'paymentDate', 'startDate', 'expectedCompletedDate', 'renewalInitiatedDate'
+  ];
+  for (const field of dateFields) {
+    if (field in sanitized) {
+      const val = sanitized[field];
+      if (val === undefined || val === null || val === '') {
+        sanitized[field] = null;
+      } else {
+        const d = new Date(val);
+        sanitized[field] = isNaN(d.getTime()) ? null : d;
+      }
+    }
+  }
+
+  // 2. Process Number fields
+  const numFields = ['submissionAmount', 'amount', 'reminderDays'];
+  for (const field of numFields) {
+    if (field in sanitized) {
+      const val = sanitized[field];
+      if (val === undefined || val === null || val === '') {
+        sanitized[field] = null;
+      } else {
+        const num = Number(val);
+        sanitized[field] = isNaN(num) ? null : num;
+      }
+    }
+  }
+
+  // 3. Process ObjectId fields
+  const oidFields = ['submittedBy', 'complianceId'];
+  for (const field of oidFields) {
+    if (field in sanitized) {
+      const val = sanitized[field];
+      if (val === undefined || val === null || val === '') {
+        sanitized[field] = null;
+      } else if (typeof val === 'string' && val.length === 24 && /^[0-9a-fA-F]{24}$/.test(val)) {
+        try {
+          sanitized[field] = new ObjectIdClass(val);
+        } catch {
+          // If ObjectId construction fails
+        }
+      }
+    }
+  }
+
+  // 4. Process departments / department
+  if ('departments' in sanitized) {
+    if (Array.isArray(sanitized.departments)) {
+      sanitized.departments = sanitized.departments.map((d: any) => String(d));
+    } else if (typeof sanitized.departments === 'string') {
+      try {
+        const parsed = JSON.parse(sanitized.departments);
+        sanitized.departments = Array.isArray(parsed) ? parsed.map((d: any) => String(d)) : [];
+      } catch {
+        sanitized.departments = sanitized.departments.split(/[|,,]/).map((d: any) => d.trim()).filter(Boolean);
+      }
+    } else {
+      sanitized.departments = [];
+    }
+  }
+  
+  // Remove legacy department field
+  delete sanitized.department;
+
+  return sanitized;
+}
+
 // --- Government Licenses API ---
 // Get all licenses
 router.get("/api/licenses", async (req, res) => {
@@ -5244,7 +5345,7 @@ router.get("/api/licenses/:id/renewal-status-log", async (req, res) => {
 });
 
 // Create a new license
-router.post("/api/licenses", async (req, res) => {
+router.post("/api/licenses", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("licenses");
@@ -5273,8 +5374,9 @@ router.post("/api/licenses", async (req, res) => {
       );
     };
 
+    const sanitized = sanitizeLicenseDoc(req.body, ObjectId);
     const licenseData: any = {
-      ...req.body,
+      ...sanitized,
       tenantId,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -5369,7 +5471,7 @@ router.post("/api/licenses", async (req, res) => {
 });
 
 // Update a license
-router.put("/api/licenses/:id", async (req, res) => {
+router.put("/api/licenses/:id", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("licenses");
@@ -5389,8 +5491,10 @@ router.put("/api/licenses/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid license ID format" });
     }
 
+    const sanitized = sanitizeLicenseDoc(req.body, ObjectId);
+    delete sanitized._id;
     const updateData: any = {
-      ...req.body,
+      ...sanitized,
       updatedAt: new Date()
     };
     
@@ -5440,7 +5544,10 @@ router.put("/api/licenses/:id", async (req, res) => {
       endDate: hasOwn(updateData, 'endDate') ? norm(updateData.endDate) : existingDatesSnapshot.endDate,
     };
 
-    const updateOps: any = { $set: updateData };
+    const updateOps: any = { 
+      $set: updateData,
+      $unset: { department: "" }
+    };
     if (appendSubmissionLog) {
       updateOps.$push = {
         renewalStatusLog: {
@@ -5641,7 +5748,7 @@ router.put("/api/licenses/:id", async (req, res) => {
 });
 
 // Delete a license
-router.delete("/api/licenses/:id", async (req, res) => {
+router.delete("/api/licenses/:id", requireRole('editor', 'contributor', 'department_editor'), async (req, res) => {
   try {
     const db = await connectToDatabase();
     const collection = db.collection("licenses");

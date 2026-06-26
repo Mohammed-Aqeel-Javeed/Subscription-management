@@ -277,13 +277,11 @@ const formatDueDate = (raw: any): string => {
 };
 
 const handleViewSubscription = async (subscriptionId: string | number) => {
-console.log('handleViewSubscription called with:', subscriptionId);
 // Convert to string for backend lookup
 const idStr = String(subscriptionId);
 try {
 const res = await apiRequest('GET', `/api/subscriptions/${idStr}`);
 const latestSubscription = await res.json();
-console.log('Fetched subscription:', latestSubscription);
 if (latestSubscription && (String(latestSubscription.id) === idStr || String((latestSubscription as any)._id ?? '') === idStr)) {
 setSelectedSubscription(latestSubscription);
 setIsModalOpen(true);
@@ -294,14 +292,12 @@ console.error('Error fetching subscription:', error);
 }
 // fallback to cached
 const subscription = subscriptions.find(sub => String(sub.id) === idStr || String((sub as any)._id ?? '') === idStr);
-console.log('Fallback subscription:', subscription);
 if (subscription) {
 setSelectedSubscription(subscription);
 setIsModalOpen(true);
 }
 };
 const handleViewCompliance = async (complianceId: string | number) => {
-	console.log('handleViewCompliance called with:', complianceId);
 	// Store the compliance ID so the compliance page can auto-open the modal
 	localStorage.setItem('openComplianceId', String(complianceId));
 	// Navigate to compliance page
@@ -309,7 +305,6 @@ const handleViewCompliance = async (complianceId: string | number) => {
 };
 
 const handleViewLicense = async (licenseId: string | number) => {
-	console.log('handleViewLicense called with:', licenseId);
 	// Store the license ID so the license page can auto-open the modal
 	localStorage.setItem('openLicenseId', String(licenseId));
 	// Navigate to license page
@@ -328,24 +323,14 @@ const handleMarkAsRead = async () => {
 			
 			// Try to get the actual MongoDB _id
 			const actualId = (notification as any)._id || notification.id;
-			console.log('Notification:', notification.subscriptionName || notification.filingName || notification.licenseName, 'ID:', actualId);
 			return actualId;
 		}).filter(Boolean);
-
-		console.log('Marking as read - IDs:', notificationIds);
 
 		const res = await apiRequest('POST', '/api/notifications/mark-read', {
 			notificationIds
 		});
 
 		const result = await res.json();
-		console.log('Mark as read response:', result);
-		console.log('Full response details:', {
-			ok: res.ok,
-			status: res.status,
-			modifiedCount: result.modifiedCount,
-			message: result.message
-		});
 
 		if (res.ok) {
 			// Force refetch all notification queries

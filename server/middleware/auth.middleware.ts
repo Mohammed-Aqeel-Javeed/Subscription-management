@@ -2,7 +2,10 @@ import jwt from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
 import { connectToDatabase } from '../mongo';
 
-const JWT_SECRET = process.env.JWT_SECRET || "subs_secret_key";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error("JWT_SECRET missing or too short (must be at least 32 characters) — refusing to start");
+}
 
 export interface AuthUser {
   userId: string;
@@ -127,8 +130,14 @@ export const requireRole = (...allowedRoles: string[]) => {
       return next();
     }
     
+    // Normalise 'admin' access (if editor is allowed, admin is also allowed since admin > editor)
+    const effectiveRoles = [...allowedRoles];
+    if (effectiveRoles.includes('editor') && !effectiveRoles.includes('admin')) {
+      effectiveRoles.push('admin');
+    }
+    
     // Check if user's role is in the allowed roles
-    if (allowedRoles.includes(user.role)) {
+    if (effectiveRoles.includes(user.role)) {
       return next();
     }
     

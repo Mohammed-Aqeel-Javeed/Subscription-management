@@ -92,7 +92,7 @@ interface License {
   secondaryPerson?: string;
   department?: string;
   departments?: string[];
-  status: 'Active' | 'Expired' | 'Cancelled';
+  status: 'Active' | 'Expired' | 'Cancelled' | 'Expiring Soon';
   issuingAuthorityEmail: string;
   issuingAuthorityPhone: string;
   reminderDays?: number | string;
@@ -470,7 +470,7 @@ const licenseSchema = z
   secondaryPerson: z.string().optional(),
   department: z.string().optional(),
   departments: z.array(z.string()).optional(),
-  status: z.enum(['Active', 'Expired', 'Cancelled']).optional(),
+  status: z.enum(['Active', 'Expired', 'Cancelled', 'Expiring Soon']).optional(),
   renewalStatus: z
     .enum([
       'Renewal Initiated',
@@ -1980,10 +1980,11 @@ export default function GovernmentLicense() {
 
   // Keep "Submitted by" empty by default; user must choose it explicitly.
 
-  const issueDateValue = form.watch('startDate') || '';
+   const issueDateValue = form.watch('startDate') || '';
   const expiryDateValue = form.watch('endDate') || '';
   const renewalFreqValue = form.watch('renewalCycleTime') || '';
   const statusValue = form.watch('status') || '';
+  const reminderDaysValue = form.watch('reminderDays') || '';
   const endDateError = (form.formState.errors as any)?.endDate?.message as string | undefined;
 
   const isExpiryDisabled = renewalFreqValue === 'One-time';
@@ -2046,13 +2047,21 @@ export default function GovernmentLicense() {
     return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
   };
 
-  const getDerivedStatus = (licenseOrDates: { endDate?: string; status?: string }) => {
+  const getDerivedStatus = (licenseOrDates: { endDate?: string; status?: string; reminderDays?: number | string }) => {
     if (licenseOrDates.status === 'Cancelled') return 'Cancelled' as const;
     const end = parseLocalDate(String(licenseOrDates.endDate || ''));
     if (!end) return 'Active' as const;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    return end.getTime() <= today.getTime() ? ('Expired' as const) : ('Active' as const);
+    if (end.getTime() <= today.getTime()) {
+      return 'Expired' as const;
+    }
+    const daysUntilExpiry = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const threshold = Number(licenseOrDates.reminderDays) || 30; // Default to 30 days for renewals
+    if (daysUntilExpiry <= threshold) {
+      return 'Expiring Soon' as const;
+    }
+    return 'Active' as const;
   };
 
   useEffect(() => {
@@ -2116,7 +2125,11 @@ export default function GovernmentLicense() {
                 ? 24
                 : renewalFreqValue === '3 years'
                   ? 36
-                  : null;
+                  : renewalFreqValue === '5 years'
+                    ? 60
+                    : renewalFreqValue === '10 years'
+                      ? 120
+                      : null;
 
     if (!monthsToAdd) {
       commitInputs();
@@ -3046,7 +3059,7 @@ export default function GovernmentLicense() {
       RenewalFee: license.renewalFee || 0,
       RenewalLeadTimeEstimated: String(license.renewalLeadTimeEstimated || ''),
       ResponsiblePerson: license.responsiblePerson,
-      Status: getDerivedStatus({ endDate: license.endDate, status: license.status }),
+      Status: getDerivedStatus({ endDate: license.endDate, status: license.status, reminderDays: license.reminderDays }),
       IssuingAuthorityEmail: license.issuingAuthorityEmail || '',
       IssuingAuthorityPhone: license.issuingAuthorityPhone || '',
       Details: license.details || ''
@@ -3381,12 +3394,9 @@ export default function GovernmentLicense() {
     const q = (searchTerm || "").toLowerCase();
     const matchesSearch = 
       (license.licenseName || "").toLowerCase().includes(q) ||
-      (license.issuingAuthorityName || "").toLowerCase().includes(q) ||
-      (license.responsiblePerson || "").toLowerCase().includes(q) ||
-      (String((license as any).department || "").toLowerCase().includes(q)) ||
-      (String((license as any).secondaryPerson || "").toLowerCase().includes(q));
+      (license.issuingAuthorityName || "").toLowerCase().includes(q);
 
-    const derivedStatus = getDerivedStatus({ endDate: license.endDate, status: license.status });
+    const derivedStatus = getDerivedStatus({ endDate: license.endDate, status: license.status, reminderDays: license.reminderDays });
     const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(derivedStatus);
     const matchesRenewalStatus =
       selectedRenewalStatuses.length === 0 ||
@@ -3424,7 +3434,7 @@ export default function GovernmentLicense() {
 
   // Filter dropdown values based on what is currently present in the table data
   const uniqueDerivedStatuses = Array.from(
-    new Set((licenses || []).map((l) => getDerivedStatus({ endDate: l.endDate, status: l.status })))
+    new Set((licenses || []).map((l) => getDerivedStatus({ endDate: l.endDate, status: l.status, reminderDays: l.reminderDays })))
   ).filter(Boolean);
 
   const uniqueRenewalStatuses = Array.from(
@@ -3610,15 +3620,15 @@ export default function GovernmentLicense() {
     if (!isModalOpen) return;
     const current = String(form.getValues('status') || '').trim();
     if (current === 'Cancelled') return;
-    const next = getDerivedStatus({ endDate: String(form.getValues('endDate') || ''), status: current });
+    const next = getDerivedStatus({ endDate: String(form.getValues('endDate') || ''), status: current, reminderDays: form.getValues('reminderDays') });
     if (current !== next) form.setValue('status', next);
   }, [isModalOpen, expiryDateValue, form]);
 
-  const submitLicense = (data: LicenseFormData, opts?: { forceStatus?: 'Active' | 'Expired' | 'Cancelled' }) => {
+  const submitLicense = (data: LicenseFormData, opts?: { forceStatus?: 'Active' | 'Expired' | 'Cancelled' | 'Expiring Soon' }) => {
     // On normal Save/Update, status is based on expiry date (Active/Expired).
     // Cancelled is only set via the "Cancel Renewal" action.
     const derivedStatus =
-      opts?.forceStatus ?? getDerivedStatus({ endDate: String(data.endDate || ''), status: '' });
+      opts?.forceStatus ?? getDerivedStatus({ endDate: String(data.endDate || ''), status: '', reminderDays: data.reminderDays });
 
     // Calculate lcyAmount if not already set
     const lcyAmountValue = lcyAmount ? parseFloat(lcyAmount) : undefined;
@@ -3745,7 +3755,7 @@ export default function GovernmentLicense() {
   const handleEdit = (license: License) => {
     setEditingLicense(license);
     setSubmissionOpenedFromTable(false);
-    const normalizedStatus = getDerivedStatus({ endDate: license.endDate, status: license.status });
+    const normalizedStatus = getDerivedStatus({ endDate: license.endDate, status: license.status, reminderDays: license.reminderDays });
 
     const depts = parseDepartments((license as any).department);
     setSelectedDepartments(depts);
@@ -4079,6 +4089,8 @@ export default function GovernmentLicense() {
     switch (status) {
       case "Active":
         return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      case "Expiring Soon":
+        return "bg-orange-50 text-orange-700 border-orange-200";
       case "Expired":
         return "bg-rose-50 text-rose-700 border-rose-200";
       case "Cancelled":
@@ -4105,7 +4117,7 @@ export default function GovernmentLicense() {
   const statusPillWidthCh = (() => {
     let maxLen = 0;
     for (const license of (licenses || [])) {
-      const derived = getDerivedStatus({ endDate: license.endDate, status: license.status });
+      const derived = getDerivedStatus({ endDate: license.endDate, status: license.status, reminderDays: license.reminderDays });
       if (derived.length > maxLen) maxLen = derived.length;
     }
     return Math.min(Math.max(maxLen, 8), 16);
@@ -4484,7 +4496,7 @@ export default function GovernmentLicense() {
         <div className="min-w-0 flex-1 min-h-0">
           <Card className="bg-white border border-gray-200  shadow-md overflow-hidden h-full flex flex-col min-h-0">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              {isLoading ? (
+              {isLoading && licenses.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20">
                   <motion.div
                     animate={{ rotate: 360 }}
@@ -4551,7 +4563,7 @@ export default function GovernmentLicense() {
                           {getSortIcon('renewalFee')}
                         </button>
                       </TableHead>
-                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[100px]">Status</TableHead>
+                      <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[130px]">Status</TableHead>
                       <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 pr-4 text-right text-xs font-bold text-white uppercase tracking-wide w-[80px]">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -4649,10 +4661,10 @@ export default function GovernmentLicense() {
                                 <TableCell className="px-4 py-3.5 text-right text-sm text-gray-700 font-semibold w-[110px]">
                               {typeof license.renewalFee === 'number' ? `$${license.renewalFee.toFixed(2).toLocaleString()}` : '-'}
                             </TableCell>
-                                <TableCell className="px-3 py-3.5 w-[100px] text-left">
+                                <TableCell className="px-3 py-3.5 w-[130px] text-left">
                               {(() => {
                                 const isDraft = license.isDraft;
-                                const derived = getDerivedStatus({ endDate: license.endDate, status: license.status });
+                                const derived = getDerivedStatus({ endDate: license.endDate, status: license.status, reminderDays: license.reminderDays });
                                 const displayStatus = isDraft ? 'Draft' : derived;
                                 const statusClass = isDraft 
                                   ? 'bg-amber-50 text-amber-700 border-amber-200'
@@ -4869,13 +4881,15 @@ export default function GovernmentLicense() {
                     Draft
                   </span>
                 ) : (() => {
-                  const derived = getDerivedStatus({ endDate: expiryDateValue, status: statusValue });
+                  const derived = getDerivedStatus({ endDate: expiryDateValue, status: statusValue, reminderDays: reminderDaysValue });
                   const cls =
                     derived === 'Active'
                       ? 'bg-green-500 text-white'
-                      : derived === 'Expired'
-                        ? 'bg-rose-500 text-white'
-                        : 'bg-gray-500 text-white';
+                      : derived === 'Expiring Soon'
+                        ? 'bg-orange-500 text-white'
+                        : derived === 'Expired'
+                          ? 'bg-rose-500 text-white'
+                          : 'bg-gray-500 text-white';
                   return (
                     <span className={`ml-4 shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-semibold shadow-sm tracking-wide ${cls}`}>{derived}</span>
                   );
@@ -5308,10 +5322,6 @@ export default function GovernmentLicense() {
                           onChange={(value) => {
                             form.setValue('category', value);
                           }}
-                          onAddNew={() => {
-                            setNewRenewalCategoryName('');
-                            setAddRenewalCategoryOpen(true);
-                          }}
                           options={(() => {
                             const fallback = ['Visa', 'E-Pass', 'Govt. License', 'Insurance', 'Contract', 'Agreement', 'Maintenance', 'Others'];
                             const dynamic = (Array.isArray(licenseCategoryOptions) ? licenseCategoryOptions : []);
@@ -5448,7 +5458,6 @@ export default function GovernmentLicense() {
                                 value={String(field.value || '')}
                                 onChange={field.onChange}
                                 employees={employeesRaw as any}
-                                onAddNew={() => setEmployeeModal({ show: true, target: 'secondaryPerson' })}
                               />
                             </FormControl>
                             <FormMessage className="text-red-500" />
@@ -5468,7 +5477,6 @@ export default function GovernmentLicense() {
                                 value={String(field.value || '')}
                                 onChange={field.onChange}
                                 employees={employeesRaw as any}
-                                onAddNew={() => setEmployeeModal({ show: true, target: 'responsiblePerson' })}
                               />
                             </FormControl>
                             <FormMessage className="text-red-500" />
@@ -5541,6 +5549,8 @@ export default function GovernmentLicense() {
                             <SelectItem value="Yearly">Yearly</SelectItem>
                             <SelectItem value="2 years">2 years</SelectItem>
                             <SelectItem value="3 years">3 years</SelectItem>
+                            <SelectItem value="5 years">5 years</SelectItem>
+                            <SelectItem value="10 years">10 years</SelectItem>
                             <SelectItem value="Ad-hoc">Ad-hoc</SelectItem>
                           </SelectContent>
                         </Select>
@@ -6058,7 +6068,8 @@ export default function GovernmentLicense() {
                       const lcyAmountValue = lcyAmount ? parseFloat(lcyAmount) : undefined;
                       const derivedStatus = getDerivedStatus({ 
                         endDate: String(currentValues.endDate || ''), 
-                        status: '' 
+                        status: '',
+                        reminderDays: currentValues.reminderDays
                       });
                       
                       const remarksValue = String(currentValues.remarks || '');

@@ -39,6 +39,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/context/UserContext";
 import { PlanLimitModal } from "@/components/modals/plan-limit-modal";
 import { getPlanLimitErrorInfo } from "@/lib/plan-limit";
 // Removed unused insertSubscriptionSchema import
@@ -832,6 +833,34 @@ function calculateRenewalDates(currentEndDate: string, billingCycle: string): { 
   return { newStartDate, newEndDate };
 }
 type FormData = z.infer<typeof formSchema>;
+
+const isPaymentMethodExpired = (expiresAt?: string | null, status?: string | null) => {
+  if (status === "Inactive" || status === "inactive") return false;
+  if (!expiresAt) return false;
+  const raw = String(expiresAt).trim();
+  let year = 0;
+  let month = 0;
+
+  let match = raw.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?$/);
+  if (match) {
+    year = parseInt(match[1]);
+    month = parseInt(match[2]);
+  } else {
+    match = raw.match(/^(\d{2})[\/-](\d{4})$/);
+    if (match) {
+      month = parseInt(match[1]);
+      year = parseInt(match[2]);
+    }
+  }
+
+  if (!year || !month || month < 1 || month > 12) return false;
+
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const nextMonthStart = new Date(year, month, 1);
+  return todayStart >= nextMonthStart;
+};
+
 interface SubscriptionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -842,6 +871,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user: currentUser, ability } = useUser();
   // Consider any subscription with an existing id as an edit, even if its status is "Draft".
   // Imported subscriptions may have status "Draft" and must remain editable/savable.
   const isEditing = !!subscription && !!(subscription?._id || subscription?.id);
@@ -1159,7 +1189,32 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
       return deptString ? [deptString] : [];
     }
   };
-  
+
+  // A contributor can only edit if they are the owner/creator
+  const isContributorOwner = currentUser?.role === 'contributor' && subscription
+    ? (
+        ((subscription as any).ownerEmail && currentUser.email && (subscription as any).ownerEmail.toLowerCase() === currentUser.email.toLowerCase()) ||
+        ((subscription as any).owner && currentUser.userId && (subscription as any).owner === currentUser.userId) ||
+        (!(subscription as any).ownerEmail && !(subscription as any).owner) // New subscription
+      )
+    : true;
+
+  // A department editor can only edit if the subscription belongs to their department or is Company Level
+  const isDeptEditorAllowed = currentUser?.role === 'department_editor' && subscription && currentUser.department
+    ? (
+        (() => {
+          const depts = parseDepartments(subscription.department);
+          return depts.includes(currentUser.department) || depts.includes('Company Level') || depts.length === 0;
+        })()
+      )
+    : true;
+
+  const canEdit = (
+    isEditing
+      ? ability.can('update', 'Subscription')
+      : ability.can('create', 'Subscription')
+  ) && isContributorOwner && isDeptEditorAllowed;
+
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -2030,8 +2085,13 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
   // removed manual end date flag
       setSelectedDepartments(depts);
       
-      // Set status state from subscription data
-  setStatus((subscription.status && subscription.status !== "" ? subscription.status : "Active") as 'Active' | 'Cancelled' | 'Draft');
+      // Set status state from subscription data dynamically
+      const derivedStatus = calculateSubscriptionStatus(
+        subscription.nextRenewal,
+        subscription.reminderDays,
+        subscription.status
+      );
+      setStatus(derivedStatus as any);
       
       // Set auto renewal state from subscription data
       setAutoRenewal(subscription.autoRenewal ?? true);
@@ -3420,12 +3480,6 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
         icon: newPaymentMethodCardImage
       };
       
-      console.log('Creating payment method with data:', paymentData);
-      console.log('Owner being saved:', `"${paymentData.owner}"`);
-      console.log('Manager being saved:', `"${paymentData.manager}"`);
-      console.log('Owner length:', paymentData.owner.length);
-      console.log('Manager length:', paymentData.manager.length);
-      
       await apiRequest(
         "POST",
         "/api/payment",
@@ -3694,7 +3748,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
               )}
               <div className="flex items-center gap-4 flex-wrap min-w-0">
                 <DialogTitle className="text-xl font-bold tracking-tight text-white truncate max-w-xs">
-                  {isEditing ? (subscription?.serviceName || 'Edit Subscription') : 'Subscription'}
+                  {isEditing && subscription?.status !== 'Draft' ? (subscription?.serviceName || 'Edit Subscription') : (subscription?.serviceName || 'Subscription')}
                 </DialogTitle>
                 <span
                   className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold tracking-wide ${
@@ -3930,6 +3984,17 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
           <div className="flex-1 overflow-y-auto">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="p-8 bg-white/60 backdrop-blur-sm">
+              {!canEdit && (
+                <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-6 rounded-r-lg">
+                  <div className="flex items-center">
+                    <AlertCircle className="h-5 w-5 text-amber-500 mr-3 flex-shrink-0" />
+                    <p className="text-sm text-amber-800 font-medium">
+                      Read-Only Mode: You do not have permissions to edit this subscription.
+                    </p>
+                  </div>
+                </div>
+              )}
+              <fieldset disabled={!canEdit} className={!canEdit ? "pointer-events-none opacity-85" : ""}>
               {/* Professional Section Header */}
               <div className="mb-8">
                 <h2 className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent tracking-tight mb-2">Subscription Details</h2>
@@ -4567,8 +4632,16 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   control={form.control}
                   name="paymentMethod"
                   render={({ field }) => {
-                    const allPaymentMethods = Array.isArray(paymentMethods)
-                      ? paymentMethods.map(pm => pm.name).sort((a, b) => a.localeCompare(b))
+                    const currentValue = field.value || "";
+                    const activePaymentMethods = Array.isArray(paymentMethods)
+                      ? paymentMethods.filter(pm => {
+                          const name = pm.name || "";
+                          if (name === currentValue) return true;
+                          return !isPaymentMethodExpired(pm.expiresAt, pm.status);
+                        })
+                      : [];
+                    const allPaymentMethods = activePaymentMethods
+                      ? activePaymentMethods.map(pm => pm.name).sort((a, b) => a.localeCompare(b))
                       : [];
 
                     return (
@@ -5072,6 +5145,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                   <p className="text-gray-400 text-sm italic">No notes added yet. Click + to add a note.</p>
                 )}
               </div>
+            </fieldset>
               
               <div className="flex justify-end gap-4 mt-10 pt-6 border-t border-gray-200 bg-gray-50/50 -mx-8 px-8 -mb-8 pb-8 rounded-b-2xl">
                 <Button 
@@ -5082,7 +5156,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     if (status === 'Cancelled') return;
                     setCancelRenewalConfirmDialog({ show: true });
                   }}
-                  disabled={!subscription?.id || status === 'Cancelled'}
+                  disabled={!subscription?.id || status === 'Cancelled' || !canEdit}
                   title={status === 'Cancelled' ? 'Already cancelled' : undefined}
                 >
                   Cancel Renewal
@@ -5110,7 +5184,8 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                     draftMutation.isPending || 
                     subscriptionCreated || 
                     form.watch('status') === 'Active' || 
-                    (isEditing && form.watch('status') !== 'Draft')
+                    (isEditing && form.watch('status') !== 'Draft') ||
+                    !canEdit
                   }
                   title={
                     (isEditing && form.watch('status') !== 'Draft') ? "Draft is only available for draft subscriptions" :
@@ -5124,7 +5199,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
                 <Button 
                   type="submit" 
                   className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold px-8 py-3 shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-blue-700 rounded-lg transition-all duration-200 tracking-tight"
-                  disabled={mutation.isPending}
+                  disabled={mutation.isPending || !canEdit}
                 >
                   {mutation.isPending ? 'Saving...' : (isEditing && form.watch('status') !== 'Draft') ? 'Update Subscription' : 'Save Subscription'}
                 </Button>
@@ -6233,7 +6308,7 @@ export default function SubscriptionModal({ open, onOpenChange, subscription }: 
             )}
             {newPaymentMethodType !== 'Cash' && (
             <div className="w-1/2 pr-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Expires at</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Month/Year</label>
               <div className="relative">
                 <Input
                   type="month"

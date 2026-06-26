@@ -39,6 +39,108 @@ function isConfigSection(value: unknown): value is ConfigSection {
   );
 }
 
+const getPaymentMethodStatus = (expiresAt: string, status?: string) => {
+  if (status === "Inactive" || status === "inactive") return "Inactive";
+  if (!expiresAt) return "Active";
+  const raw = String(expiresAt).trim();
+  let year = 0;
+  let month = 0;
+
+  let match = raw.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?$/);
+  if (match) {
+    year = parseInt(match[1]);
+    month = parseInt(match[2]);
+  } else {
+    match = raw.match(/^(\d{2})[\/-](\d{4})$/);
+    if (match) {
+      month = parseInt(match[1]);
+      year = parseInt(match[2]);
+    }
+  }
+
+  if (!year || !month || month < 1 || month > 12) {
+    return "Active";
+  }
+
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  const nextMonthStart = new Date(year, month, 1);
+  if (todayStart >= nextMonthStart) {
+    return "Expired";
+  }
+
+  const expiryEnd = new Date(year, month, 0, 23, 59, 59, 999);
+  const diffTime = expiryEnd.getTime() - todayStart.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 30) {
+    return "Expiring Soon";
+  }
+
+  return "Active";
+};
+
+const getPmBadgeStyles = (status: string) => {
+  switch (status) {
+    case "Active":
+      return {
+        text: "text-emerald-600",
+        ping: "bg-emerald-400",
+        dot: "bg-emerald-500",
+        bg: "bg-emerald-50 text-emerald-700 border-emerald-200"
+      };
+    case "Expiring Soon":
+      return {
+        text: "text-amber-600",
+        ping: "bg-amber-400",
+        dot: "bg-amber-500",
+        bg: "bg-amber-50 text-amber-700 border-amber-200"
+      };
+    case "Expired":
+      return {
+        text: "text-rose-600",
+        ping: "bg-rose-400",
+        dot: "bg-rose-500",
+        bg: "bg-rose-50 text-rose-700 border-rose-200"
+      };
+    case "Inactive":
+    default:
+      return {
+        text: "text-gray-500",
+        ping: "bg-gray-400",
+        dot: "bg-gray-500",
+        bg: "bg-gray-50 text-gray-700 border-gray-200"
+      };
+  }
+};
+
+const formatExpiryDisplay = (expiresAt: string) => {
+  if (!expiresAt) return 'Expiry: --';
+  const raw = String(expiresAt).trim();
+  let year = 0;
+  let month = 0;
+
+  let match = raw.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?$/);
+  if (match) {
+    year = parseInt(match[1]);
+    month = parseInt(match[2]);
+  } else {
+    match = raw.match(/^(\d{2})[\/-](\d{4})$/);
+    if (match) {
+      month = parseInt(match[1]);
+      year = parseInt(match[2]);
+    }
+  }
+
+  if (year && month && month >= 1 && month <= 12) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `Expiry: ${months[month - 1]} ${year}`;
+  }
+
+  return `Expiry: ${expiresAt}`;
+};
+
 function ConfigurationLanding() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -312,20 +414,10 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
       });
   };
   
-  // Edit payment method logic
   const openEditPayment = (method: any) => {
-    console.log('Opening edit payment with method:', method);
-    console.log('Owner value:', method.owner);
-    console.log('Manager value:', method.manager);
-    console.log('Available employees:', employeesRaw.map((e: any) => e.name));
-    console.log('Employees loaded:', employeesRaw.length > 0);
-    
     // Trim values to remove any extra spaces
     const ownerValue = method.owner?.trim() || '';
     const managerValue = method.manager?.trim() || '';
-    
-    console.log('Trimmed owner:', ownerValue);
-    console.log('Trimmed manager:', managerValue);
     
     const nextPaymentForm = {
       // Prefer canonical field from backend
@@ -487,7 +579,6 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
     queryFn: async () => {
       const res = await fetch("/api/payment", { credentials: 'include' });
       const data = await res.json();
-      console.log('Fetched payment methods:', data);
       return Array.isArray(data) ? data : [];
     },
     staleTime: 0,
@@ -515,7 +606,6 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
           );
           
           if (payment) {
-            console.log('Auto-opening payment method edit modal for:', payment);
             openEditPayment(payment);
           }
           
@@ -1456,7 +1546,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
       code: match.code || '',
       symbol: match.symbol || '',
       isoNumber: '',
-      exchangeRate: match.exchangeRate || '',
+      exchangeRate: match.exchangeRate !== undefined && match.exchangeRate !== null ? String(match.exchangeRate) : '',
       visible: match.visible,
       created: match.created || '',
     });
@@ -1532,9 +1622,8 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
     return cleaned.slice(0, dotIndex + 1) + cleaned.slice(dotIndex + 1).replace(/\./g, "");
   };
   
-  // Add/Update currency handler
   const addNewCurrency = async (): Promise<boolean> => {
-    const exchangeRate = newCurrency.exchangeRate.trim();
+    const exchangeRate = String(newCurrency.exchangeRate || '').trim();
     if (!exchangeRate) {
       toast({
         title: "Validation Error",
@@ -2991,7 +3080,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                           setAddCurrencyOpen(false);
                           currencySnapshotRef.current = '';
                         }}>
-                          <DialogContent className="max-w-2xl min-w-[600px] max-h-[85vh] overflow-y-auto  border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
+                          <DialogContent className="sm:max-w-[460px] max-h-[85vh] overflow-y-auto border-0 shadow-2xl p-0 bg-white transition-[width,height] duration-300 font-inter">
                             {/* Header with Gradient Background */}
                             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 ">
                               <DialogHeader>
@@ -3027,6 +3116,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                   <Input
                                     value={newCurrency.code}
                                     onChange={(e) => handleCurrencyCodeChange(e.target.value)}
+                                    disabled={isEditMode}
                                     onFocus={() => {
                                       if (newCurrency.code && filteredCurrencies.length > 0) {
                                         setShowDropdown(true);
@@ -3083,6 +3173,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                     step="0.01"
                                     min="0"
                                     value={newCurrency.exchangeRate || ''}
+                                    placeholder="1.00"
                                     inputMode="decimal"
                                     pattern="\\d*\\.?\\d*"
                                     onKeyDown={(e) => {
@@ -3097,6 +3188,15 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                         exchangeRate: sanitizeDecimalInput(e.target.value),
                                       })
                                     }
+                                    onBlur={(e) => {
+                                      const val = parseFloat(e.target.value);
+                                      if (!isNaN(val)) {
+                                        setNewCurrency({
+                                          ...newCurrency,
+                                          exchangeRate: val.toFixed(2),
+                                        });
+                                      }
+                                    }}
                                     className="h-9 px-3 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500 font-medium bg-gray-50 focus:bg-white transition-all duration-200 w-full"
                                   />
                                 </div>
@@ -3343,7 +3443,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                                     code: currency.code || '',
                                                     symbol: currency.symbol || '',
                                                     isoNumber: '', // Not used
-                                                    exchangeRate: currency.exchangeRate || '',
+                                                    exchangeRate: currency.exchangeRate !== undefined && currency.exchangeRate !== null ? String(currency.exchangeRate) : '',
                                                     visible: currency.visible,
                                                     created: currency.created || ''
                                                   });
@@ -3455,7 +3555,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                                                             code: currency.code || '',
                                                             symbol: currency.symbol || '',
                                                             isoNumber: '', // Not used
-                                                            exchangeRate: currency.exchangeRate || '',
+                                                            exchangeRate: currency.exchangeRate !== undefined && currency.exchangeRate !== null ? String(currency.exchangeRate) : '',
                                                             visible: currency.visible,
                                                             created: currency.created || ''
                                                           });
@@ -3885,80 +3985,69 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                           {filteredPaymentMethods.map((method, idx) => {
                             const subsCount = getPaymentMethodSubscriptions(method.name).length;
 
-                            // Determine active / inactive from expiry date
-                            let isActive = true;
-                            if (method.expiresAt) {
-                              const [year, month] = String(method.expiresAt).split('-');
-                              const expiry = new Date(parseInt(year), parseInt(month) - 1);
-                              const today = new Date();
-                              today.setDate(1); today.setHours(0,0,0,0);
-                              isActive = expiry >= today;
-                            }
+                             // Card gradient — uniform blue for all types
+                             const cardGrad = 'from-indigo-600 via-blue-600 to-blue-700';
 
-                            // Card gradient — uniform blue for all types
-                            const cardGrad = 'from-indigo-600 via-blue-600 to-blue-700';
+                             // Last 4 digits dots
+                             const last4 = method.lastFourDigits ? String(method.lastFourDigits).slice(-4) : '••••';
 
-                            // Format expiry
-                            const expiryDisplay = method.expiresAt
-                              ? (() => { const [y, m] = String(method.expiresAt).split('-'); return `${m}/${String(y).slice(2)}`; })()
-                              : '-- / --';
+                             return (
+                               <motion.div
+                                 key={idx}
+                                 whileHover={{ y: -3, boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }}
+                                 transition={{ duration: 0.18 }}
+                                 className="flex flex-col rounded-2xl overflow-hidden shadow-md border border-gray-100 bg-white"
+                               >
+                                 {/* ── Small gradient header: icon + active badge only ── */}
+                                 <div className={`relative bg-gradient-to-r ${cardGrad} px-5 py-4 overflow-hidden`}>
+                                   {/* Subtle decorative circle */}
+                                   <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10" />
+                                   <div className="relative flex items-center justify-between">
+                                     {/* Icon */}
+                                     <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                                       <CreditCard className="w-5 h-5 text-white" />
+                                     </div>
+                                     {/* Expiry status badge — solid white bg for max visibility on any gradient */}
+                                     {(() => {
+                                       const status = getPaymentMethodStatus(method.expiresAt, method.status);
+                                       const styles = getPmBadgeStyles(status);
+                                       return (
+                                         <span className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-white shadow-sm ${styles.text}`}>
+                                           <span className="relative flex h-2 w-2">
+                                             <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${styles.ping}`} />
+                                             <span className={`relative inline-flex rounded-full h-2 w-2 ${styles.dot}`} />
+                                           </span>
+                                           {status}
+                                         </span>
+                                       );
+                                     })()}
+                                   </div>
+                                 </div>
 
-                            // Last 4 digits dots
-                            const last4 = method.lastFourDigits ? String(method.lastFourDigits).slice(-4) : '••••';
+                                 {/* ── White body ── */}
+                                 <div className="px-5 pt-4 pb-2">
+                                   {/* Name */}
+                                   <p className="font-bold text-gray-900 text-base leading-tight truncate">{method.name}</p>
+                                   {/* Institution / type */}
+                                   {method.financialInstitution
+                                     ? <p className="text-sm text-gray-400 mt-0.5 truncate">{method.financialInstitution}</p>
+                                     : <p className="text-sm text-gray-400 mt-0.5">{method.type || 'Card'}</p>
+                                   }
 
-                            return (
-                              <motion.div
-                                key={idx}
-                                whileHover={{ y: -3, boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }}
-                                transition={{ duration: 0.18 }}
-                                className="flex flex-col rounded-2xl overflow-hidden shadow-md border border-gray-100 bg-white"
-                              >
-                                {/* ── Small gradient header: icon + active badge only ── */}
-                                <div className={`relative bg-gradient-to-r ${cardGrad} px-5 py-4 overflow-hidden`}>
-                                  {/* Subtle decorative circle */}
-                                  <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10" />
-                                  <div className="relative flex items-center justify-between">
-                                    {/* Icon */}
-                                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                                      <CreditCard className="w-5 h-5 text-white" />
-                                    </div>
-                                    {/* Active / Inactive badge — solid white bg for max visibility on any gradient */}
-                                    <span className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-white shadow-sm ${
-                                      isActive ? 'text-emerald-600' : 'text-red-500'
-                                    }`}>
-                                      <span className={`relative flex h-2 w-2`}>
-                                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isActive ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                                        <span className={`relative inline-flex rounded-full h-2 w-2 ${isActive ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                                      </span>
-                                      {isActive ? 'Active' : 'Inactive'}
-                                    </span>
-                                  </div>
-                                </div>
+                                   {/* Card number row — grey pill */}
+                                   <div className="mt-3 flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-xl px-4 py-2.5 font-mono tracking-widest text-sm text-gray-700">
+                                     <span className="text-gray-400 text-base">•••• •••• ••••</span>
+                                     <span className="font-bold">{last4}</span>
+                                   </div>
 
-                                {/* ── White body ── */}
-                                <div className="px-5 pt-4 pb-2">
-                                  {/* Name */}
-                                  <p className="font-bold text-gray-900 text-base leading-tight truncate">{method.name}</p>
-                                  {/* Institution / type */}
-                                  {method.financialInstitution
-                                    ? <p className="text-sm text-gray-400 mt-0.5 truncate">{method.financialInstitution}</p>
-                                    : <p className="text-sm text-gray-400 mt-0.5">{method.type || 'Card'}</p>
-                                  }
-
-                                  {/* Card number row — grey pill */}
-                                  <div className="mt-3 flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-xl px-4 py-2.5 font-mono tracking-widest text-sm text-gray-700">
-                                    <span className="text-gray-400 text-base">•••• •••• ••••</span>
-                                    <span className="font-bold">{last4}</span>
-                                  </div>
-
-                                  {/* Type + expiry row */}
-                                  <div className="mt-3 flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{method.type}</span>
-                                    {method.expiresAt && (
-                                      <span className="text-xs font-mono text-gray-400">Exp: {expiryDisplay}</span>
-                                    )}
-                                  </div>
-                                </div>
+                                   {/* Type + expiry row */}
+                                   <div className="mt-3 flex items-center justify-between">
+                                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{method.type}</span>
+                                     {method.expiresAt && (
+                                       <span className="text-xs font-semibold text-gray-500">{formatExpiryDisplay(method.expiresAt)}</span>
+                                     )}
+                                   </div>
+                                 </div>
 
                                 {/* ── Footer: subscription count + Edit / Delete ── */}
                                 <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 mt-1">
@@ -4386,7 +4475,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                             {paymentForm.type !== 'Cash' && (
                             <div className={`space-y-2 ${isEditPaymentFullscreen ? 'lg:col-span-1' : 'md:col-span-1'}`}>
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                Expires at
+                                Expiry Month/Year
                               </Label>
                               <div className="relative">
                                 <Input 
@@ -4941,7 +5030,7 @@ function ConfigurationContent({ section }: { section: ConfigSection }) {
                             {paymentForm.type !== 'Cash' && (
                             <div className={`space-y-2 ${isAddPaymentFullscreen ? 'lg:col-span-1' : 'md:col-span-1'}`}>
                               <Label className="text-sm font-semibold text-gray-700 tracking-wide">
-                                Expires at
+                                Expiry Month/Year
                               </Label>
                               <div className="relative">
                                 <Input 

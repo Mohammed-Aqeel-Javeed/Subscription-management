@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import compression from "compression";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 // @ts-ignore
 import { registerRoutes } from "./routes.js";
 import { enforceHttps, securityHeaders, sanitizeHeaders } from "./middleware/security.middleware.js";
@@ -285,6 +286,21 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   express.json({ limit: "50mb" })(req, res, next);
 });
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+
+// Rate limiting configuration for key authentication and OTP endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Too many attempts, please try again after 15 minutes." },
+});
+
+app.use("/api/login", authLimiter);
+app.use("/api/signup", authLimiter);
+app.use("/api/verify-otp", authLimiter);
+app.use("/api/password-reset/request", authLimiter);
+app.use("/api/password-reset/confirm", authLimiter);
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();

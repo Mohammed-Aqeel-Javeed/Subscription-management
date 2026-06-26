@@ -29,6 +29,7 @@ import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 // CSV Utilities
 const convertToCSV = (employees: any[]) => {
@@ -276,19 +277,66 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
     setCurrentPage(1);
   }, [searchTerm]);
 
-  const downloadEmployeeTemplate = () => {
-    const template = [{ name: 'John Doe', email: 'john@example.com', department: 'IT', role: 'Manager', status: 'active' }];
-    const csv = Papa.unparse(template, { header: true });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'employees_import_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast({ title: 'Template Downloaded', description: 'Use this template to import employees.' });
+  const downloadEmployeeTemplate = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "SubscriptionTracker";
+      const sheet = workbook.addWorksheet("Employees");
+
+      sheet.columns = [
+        { header: "Name", key: "name", width: 25 },
+        { header: "Email", key: "email", width: 30 },
+        { header: "Department", key: "department", width: 20 },
+        { header: "Role", key: "role", width: 25 },
+        { header: "Status", key: "status", width: 15 },
+      ];
+
+      // Header style
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { vertical: "middle", horizontal: "left" };
+      headerRow.height = 20;
+
+      // Add template example row
+      sheet.addRow({
+        name: "John Doe",
+        email: "john@example.com",
+        department: "IT",
+        role: "Manager",
+        status: "active"
+      });
+
+      // Align cells to match header alignment
+      sheet.eachRow((row, rowNumber) => {
+        row.eachCell((cell) => {
+          cell.alignment = { vertical: "middle", horizontal: "left" };
+        });
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "employees_import_template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Template Downloaded",
+        description: "Use this template to import employees.",
+      });
+    } catch (error) {
+      toast({
+        title: "Template download failed",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    }
   };
 
   const [employeeDeptOpen, setEmployeeDeptOpen] = useState(false);
@@ -551,68 +599,166 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
     }
   };
 
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     try {
-      const text = await file.text();
-      let newEmployees;
+      let rawRows: any[] = [];
 
-      // Parse based on file type
-      if (file.name.endsWith('.csv')) {
-        newEmployees = await parseCSV(text);
+      if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+        const buffer = await file.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const ws = workbook.worksheets[0];
+        if (!ws) {
+          throw new Error('No worksheet found in Excel file');
+        }
+
+        const headerValues = (ws.getRow(1).values as any[]).slice(1).map((h) => String(h || '').trim());
+        ws.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return;
+          const obj: any = {};
+          let hasAny = false;
+          headerValues.forEach((header, idx) => {
+            const v = row.getCell(idx + 1).value;
+            let cellValue = "";
+            if (v != null) {
+              if (v instanceof Date) {
+                cellValue = v.toISOString().slice(0, 10);
+              } else if (typeof v === "object" && typeof (v as any).text === "string") {
+                cellValue = (v as any).text;
+              } else {
+                cellValue = String(v);
+              }
+            }
+            obj[header] = cellValue.trim();
+            if (obj[header]) hasAny = true;
+          });
+          if (hasAny) rawRows.push(obj);
+        });
+      } else if (file.name.toLowerCase().endsWith('.csv')) {
+        const text = await file.text();
+        rawRows = await parseCSV(text);
       } else {
-        newEmployees = JSON.parse(text);
+        throw new Error('Unsupported file format. Please upload an .xlsx, .xls, or .csv file.');
       }
 
-      if (!Array.isArray(newEmployees)) {
-        throw new Error('Invalid file format. Expected a list of employees.');
+      if (!Array.isArray(rawRows) || rawRows.length === 0) {
+        throw new Error('No data found in the imported file.');
       }
 
-      // Track invalid and duplicate employees to skip them
-      const emailSet = new Set();
-      const skippedEmployees: string[] = [];
+      const getRowValue = (row: any, keys: string[]) => {
+        for (const key of keys) {
+          if (row && Object.prototype.hasOwnProperty.call(row, key)) {
+            const v = row[key];
+            if (v != null && String(v).trim() !== "") return String(v).trim();
+          }
+        }
+        return "";
+      };
+
+      const nameKeys = ["Name", "name", "NAME", "Full Name", "fullname", "Fullname", "full name"];
+      const emailKeys = ["Email", "email", "EMAIL", "Email Address", "emailaddress", "EmailAddress", "email address"];
+      const deptKeys = ["Department", "department", "DEPARTMENT"];
+      const roleKeys = ["Role", "role", "ROLE"];
+      const statusKeys = ["Status", "status", "STATUS"];
+
+      const validationErrors: string[] = [];
+      const emailSetInFile = new Set<string>();
       const validEmployees: any[] = [];
 
-      for (const emp of newEmployees) {
-        const empEmail = emp.email?.toLowerCase()?.trim();
-        const empName = emp.name?.trim();
-        const empDept = emp.department?.trim();
-        const empRole = emp.role?.trim();
+      rawRows.forEach((row, idx) => {
+        const rowNum = idx + 2; // Row 1 is header
+        const name = getRowValue(row, nameKeys);
+        const email = getRowValue(row, emailKeys);
+        const department = getRowValue(row, deptKeys);
+        const role = getRowValue(row, roleKeys);
+        const statusRaw = getRowValue(row, statusKeys);
 
-        // Skip if missing required fields
-        if (!empName || !empEmail || !empDept || !empRole) {
-          skippedEmployees.push(`Row with email "${emp.email || 'N/A'}" - Missing required fields`);
-          continue;
+        // Required fields
+        if (!name) {
+          validationErrors.push(`Row ${rowNum}: Name is required`);
+        }
+        if (!email) {
+          validationErrors.push(`Row ${rowNum}: Email is required`);
+        } else {
+          // Email format check
+          const emailCheck = validateEmail(email);
+          if (!emailCheck.valid) {
+            validationErrors.push(`Row ${rowNum}: Email is invalid - ${emailCheck.error}`);
+          } else {
+            const emailNorm = email.toLowerCase();
+            // Duplicate check in file
+            if (emailSetInFile.has(emailNorm)) {
+              validationErrors.push(`Row ${rowNum}: Duplicate email '${email}' in import file`);
+            } else {
+              emailSetInFile.add(emailNorm);
+            }
+            // Duplicate check in system
+            const existsInSystem = employees.some(
+              existing => existing.email.toLowerCase() === emailNorm
+            );
+            if (existsInSystem) {
+              validationErrors.push(`Row ${rowNum}: Email '${email}' already exists in system`);
+            }
+          }
         }
 
-        // Skip if duplicate email in import file
-        if (emailSet.has(empEmail)) {
-          skippedEmployees.push(`${empEmail} - Duplicate in import file`);
-          continue;
+        // Department exists in system check
+        if (!department) {
+          validationErrors.push(`Row ${rowNum}: Department is required`);
+        } else {
+          const deptExists = departments.some(
+            d => d.trim() === department
+          );
+          if (!deptExists) {
+            validationErrors.push(`Row ${rowNum}: Department '${department}' does not exist in the system`);
+          }
         }
 
-        // Skip if email already exists in system
-        const existingEmployee = employees.find(
-          existing => existing.email.toLowerCase() === empEmail
-        );
-        if (existingEmployee) {
-          skippedEmployees.push(`${empEmail} - Already exists in system`);
-          continue;
+        // Role required
+        if (!role) {
+          validationErrors.push(`Row ${rowNum}: Role is required`);
         }
 
-        // Ensure status is valid
-        emp.status = emp.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active';
-        
-        // Add to valid list
-        emailSet.add(empEmail);
-        validEmployees.push(emp);
-      }
+        // Status check
+        let status: "active" | "inactive" = "active";
+        if (statusRaw) {
+          const statusNorm = statusRaw.toLowerCase();
+          if (statusNorm === "active" || statusNorm === "inactive") {
+            status = statusNorm;
+          } else {
+            validationErrors.push(`Row ${rowNum}: Status must be 'active' or 'inactive'`);
+          }
+        }
 
-      // If no valid employees, show error
-      if (validEmployees.length === 0) {
-        throw new Error(`No valid employees to import. ${skippedEmployees.length} rows were skipped. Check that all rows have: name, email, department, and role.`);
+        if (name && email && role && department) {
+          validEmployees.push({
+            name,
+            email,
+            department,
+            role,
+            status
+          });
+        }
+      });
+
+      if (validationErrors.length > 0) {
+        toast({
+          title: "Import Failed: Validation Errors",
+          description: (
+            <div className="mt-2 max-h-60 overflow-y-auto text-sm space-y-1 font-mono">
+              {validationErrors.map((err, i) => (
+                <div key={i} className="text-red-600">{err}</div>
+              ))}
+            </div>
+          ) as any,
+          variant: "destructive",
+          duration: 5000,
+        });
+        return;
       }
 
       // Create each valid employee
@@ -622,34 +768,25 @@ function EmployeeManagementTab({ departments }: { departments: string[] }) {
       await Promise.all(promises);
 
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
-      
-      // Show success message with skip details if any
-      const successMessage = skippedEmployees.length > 0
-        ? `Imported ${validEmployees.length} employees. Skipped ${skippedEmployees.length} invalid/duplicate rows.`
-        : `Imported ${validEmployees.length} employees successfully`;
 
       toast({
         title: "Success",
-        description: successMessage,
-        duration: skippedEmployees.length > 0 ? 4000 : 2000,
+        description: `Imported ${validEmployees.length} employees successfully`,
+        variant: "success",
+        duration: 2000,
       });
 
-      // If there were skipped rows, log them to console for debugging
-      if (skippedEmployees.length > 0) {
-        console.log('Skipped employee rows:', skippedEmployees);
-      }
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message || "Failed to import employees",
         variant: "destructive",
-        duration: 2000,
+        duration: 3000,
       });
-    }
-
-    // Clear the file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 

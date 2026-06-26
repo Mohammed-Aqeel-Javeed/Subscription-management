@@ -336,8 +336,9 @@ router.get("/api/analytics/trends", async (req, res) => {
       subscriptions.forEach(sub => {
         if (sub.status !== "Active") return;
 
+        const decryptedCategory = sub.category ? decrypt(sub.category) : "Other";
         if (categoryParamNorm) {
-          const subCategory = normToken(sub.category || "Other");
+          const subCategory = normToken(decryptedCategory || "Other");
           if (subCategory !== categoryParamNorm) return;
         }
         
@@ -439,8 +440,9 @@ router.get("/api/analytics/categories", async (req, res) => {
       for (const sub of subscriptions) {
         if ((sub as any)?.status !== "Active") continue;
 
+        const decryptedCategory = (sub as any)?.category ? decrypt((sub as any).category) : "Other";
         if (categoryParamNorm) {
-          const subCategory = normToken((sub as any)?.category || "Other");
+          const subCategory = normToken(decryptedCategory || "Other");
           if (subCategory !== categoryParamNorm) continue;
         }
 
@@ -451,7 +453,7 @@ router.get("/api/analytics/categories", async (req, res) => {
         if (startDate && startDate > monthData.monthEnd) continue;
         if (renewalDate && renewalDate < monthData.monthStart) continue;
 
-        const category = (sub as any)?.category || "Other";
+        const category = decryptedCategory || "Other";
         const subForCalc = {
           amount: (sub as any)?.amount ? decrypt((sub as any).amount) : (sub as any)?.amount,
           qty: (sub as any)?.qty,

@@ -38,6 +38,33 @@ import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
 import { parse, isValid as isValidDateFns } from "date-fns";
 
+const isPaymentMethodExpired = (expiresAt?: string | null, status?: string | null) => {
+  if (status === "Inactive" || status === "inactive") return false;
+  if (!expiresAt) return false;
+  const raw = String(expiresAt).trim();
+  let year = 0;
+  let month = 0;
+
+  let match = raw.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?$/);
+  if (match) {
+    year = parseInt(match[1]);
+    month = parseInt(match[2]);
+  } else {
+    match = raw.match(/^(\d{2})[\/-](\d{4})$/);
+    if (match) {
+      month = parseInt(match[1]);
+      year = parseInt(match[2]);
+    }
+  }
+
+  if (!year || !month || month < 1 || month > 12) return false;
+
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const nextMonthStart = new Date(year, month, 1);
+  return todayStart >= nextMonthStart;
+};
+
 const AMOUNT_MAX_10CR = 100000000;
 const REMINDER_DAYS_MAX = 1000;
 
@@ -3782,7 +3809,7 @@ export default function Compliance() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
+                {isLoading && complianceItems.length === 0 ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i} className="border-b border-gray-200">
                       <TableCell colSpan={8} className="px-6 py-4">
@@ -4511,8 +4538,16 @@ export default function Compliance() {
                   <div className="space-y-3">
                     <label className="block text-sm font-medium text-slate-700">Payment Method</label>
                     {(() => {
-                      const allPaymentMethods = Array.isArray(paymentMethods)
-                        ? paymentMethods.map((pm: any) => String(pm?.name || pm?.title || '')).filter(Boolean)
+                      const currentValue = form.paymentMethod || '';
+                      const activePaymentMethods = Array.isArray(paymentMethods)
+                        ? paymentMethods.filter((pm: any) => {
+                            const name = String(pm?.name || pm?.title || '');
+                            if (name === currentValue) return true;
+                            return !isPaymentMethodExpired(pm?.expiresAt, pm?.status);
+                          })
+                        : [];
+                      const allPaymentMethods = activePaymentMethods
+                        ? activePaymentMethods.map((pm: any) => String(pm?.name || pm?.title || '')).filter(Boolean)
                         : [];
                       const normalizedSearch = paymentMethodSearch.trim().toLowerCase();
                       const filtered = normalizedSearch
@@ -4571,17 +4606,6 @@ export default function Compliance() {
                                   <span className="font-normal">{pmName}</span>
                                 </div>
                               ))}
-                              <div
-                                className="font-medium border-t border-gray-200 mt-2 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                                style={{ marginTop: '4px', minHeight: '40px', display: 'flex', alignItems: 'center' }}
-                                onClick={() => {
-                                  setPaymentMethodModal({ show: true });
-                                  setPaymentMethodOpen(false);
-                                  setPaymentMethodSearch('');
-                                }}
-                              >
-                                + New
-                              </div>
                             </div>
                           )}
                         </div>
@@ -4688,10 +4712,6 @@ export default function Compliance() {
                 <SearchableStringDropdown
                   value={form.filingComplianceCategory}
                   onChange={(val) => handleFormChange('filingComplianceCategory', val)}
-                  onAddNew={() => {
-                    setNewComplianceCategoryName('');
-                    setAddComplianceCategoryOpen(true);
-                  }}
                   options={(() => {
                     const fallback = ['Tax', 'Payroll', 'Regulatory', 'Legal'];
                     const dynamic = (Array.isArray(complianceCategoryOptions) ? complianceCategoryOptions : []);
@@ -5061,19 +5081,6 @@ export default function Compliance() {
                         <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
                       )}
                     </div>
-
-                    <div
-                      className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                      style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
-                      onClick={() => {
-                        setOwnerModalTarget('owner');
-                        setOwnerModal({ show: true });
-                        setOwnerOpen(false);
-                        setOwnerSearch('');
-                      }}
-                    >
-                      + New
-                    </div>
                   </div>
                 )}
               </div>
@@ -5171,19 +5178,6 @@ export default function Compliance() {
                       {!isLoadingEmployees && (Array.isArray(employeesData) ? employeesData : []).length === 0 && (
                         <div className="px-3 py-2.5 text-sm text-slate-500">No employees found</div>
                       )}
-                    </div>
-
-                    <div
-                      className="sticky bottom-0 bg-white font-medium border-t border-gray-200 pt-3 pb-2 text-blue-600 cursor-pointer px-3 hover:bg-blue-50 text-sm leading-5"
-                      style={{ minHeight: '40px', display: 'flex', alignItems: 'center' }}
-                      onClick={() => {
-                        setOwnerModalTarget('owner2');
-                        setOwnerModal({ show: true });
-                        setOwner2Open(false);
-                        setOwner2Search('');
-                      }}
-                    >
-                      + New
                     </div>
                   </div>
                 )}
@@ -6328,7 +6322,7 @@ export default function Compliance() {
 
             {newPaymentMethodType !== 'Cash' && (
               <div className="w-1/2 pr-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Expires at</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Month/Year</label>
                 <div className="relative">
                   <Input
                     type="month"

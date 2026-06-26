@@ -47,9 +47,9 @@ import {
 } from "@/lib/subscription-template-lists";
 
 // Extend Subscription type locally to include department and _id for frontend use
-type SubscriptionWithExtras = Subscription & { 
-  departments?: string[]; 
-  _id?: string; 
+type SubscriptionWithExtras = Subscription & {
+  departments?: string[];
+  _id?: string;
   owner?: string | null;
   ownerEmail?: string | null;
 };
@@ -63,7 +63,7 @@ export default function Subscriptions() {
   // Check if we should open modal immediately based on URL parameter
   const searchParams = new URLSearchParams(location.search);
   const shouldOpenModal = !!searchParams.get('open') || !!searchParams.get('openToken') || searchParams.get('create') === '1';
-  
+
   const [modalOpen, setModalOpen] = useState(shouldOpenModal);
   const [editingSubscription, setEditingSubscription] = useState<Partial<SubscriptionWithExtras> | undefined>();
   const [pendingOpenSubscriptionId, setPendingOpenSubscriptionId] = useState<string | null>(null);
@@ -82,7 +82,7 @@ export default function Subscriptions() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { setActive: setSidebarSlotActive, setReplaceNav: setSidebarReplaceNav } = useSidebarSlot();
   const [sidebarSlotEl, setSidebarSlotEl] = React.useState<HTMLElement | null>(null);
-  
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -181,7 +181,7 @@ export default function Subscriptions() {
       // ignore
     }
   }, []);
-  
+
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [subscriptionToDelete, setSubscriptionToDelete] = useState<SubscriptionWithExtras | null>(null);
@@ -189,11 +189,13 @@ export default function Subscriptions() {
   // Import confirmation dialog state
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [dataManagementSelectKey, setDataManagementSelectKey] = useState(0);
-  
+  const [importErrors, setImportErrors] = useState<{ rowNum: number; errors: string[] }[]>([]);
+  const [importErrorsDialogOpen, setImportErrorsDialogOpen] = useState(false);
+
   // Sorting state
   const [sortField, setSortField] = useState<"serviceName" | "vendor" | "amount" | "billingCycle" | "nextRenewal" | "status" | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  
+
   React.useEffect(() => {
     if (location.pathname.includes('cancelled')) {
       setSelectedStatuses(['Cancelled']);
@@ -209,7 +211,7 @@ export default function Subscriptions() {
 
   const [selectedSubscriptionIds, setSelectedSubscriptionIds] = useState<Set<string>>(new Set());
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
-  
+
   const { data: subscriptions, isLoading } = useQuery<SubscriptionWithExtras[]>({
     queryKey: ["/api/subscriptions"],
     staleTime: 0,
@@ -226,7 +228,7 @@ export default function Subscriptions() {
       return res.json();
     },
   });
-  
+
   // Handle URL parameter to open specific subscription modal (placed after subscriptions declaration)
   React.useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -328,11 +330,11 @@ export default function Subscriptions() {
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"], exact: false });
     }
-      // Listen for subscription-renewed event and refetch subscriptions
+    // Listen for subscription-renewed event and refetch subscriptions
     function handleSubscriptionRenewed() { triggerImmediateRefresh(); }
 
     // Add event listeners
-    const events = ['account-changed','login','logout','subscription-created','subscription-updated','subscription-deleted'];
+    const events = ['account-changed', 'login', 'logout', 'subscription-created', 'subscription-updated', 'subscription-deleted'];
     events.forEach(ev => window.addEventListener(ev, triggerImmediateRefresh));
     window.addEventListener('subscription-renewed', handleSubscriptionRenewed);
 
@@ -357,7 +359,7 @@ export default function Subscriptions() {
 
   // Watch for tenantId changes and trigger refetch
   // Removed manual polling logic in favor of react-query interval + events
-  
+
   const deleteMutation = useMutation({
     mutationFn: (id: string | number) => apiRequest("DELETE", `/api/subscriptions/${id}`)
       .then(async (res) => {
@@ -478,7 +480,7 @@ export default function Subscriptions() {
       });
     },
   });
-  
+
   const handleEdit = (subscription: SubscriptionWithExtras) => {
     // Always use id for editing, fallback to _id if present
     const subscriptionId = subscription.id?.toString() || subscription._id?.toString();
@@ -502,7 +504,7 @@ export default function Subscriptions() {
     // This makes the URL shareable without exposing internal IDs.
     void setSecureUrlForSubscriptionEdit(subscriptionId);
   };
-  
+
   const handleCloseModal = () => {
     const returnTo = (location.state as any)?.returnTo;
     if (typeof returnTo === 'string' && returnTo.length > 0) {
@@ -518,12 +520,12 @@ export default function Subscriptions() {
     setModalOpen(false);
     setEditingSubscription(undefined);
   };
-  
+
   const handleDelete = (subscription: SubscriptionWithExtras) => {
     setSubscriptionToDelete(subscription);
     setDeleteConfirmOpen(true);
   };
-  
+
   const confirmDelete = () => {
     if (subscriptionToDelete) {
       deleteMutation.mutate(subscriptionToDelete._id || subscriptionToDelete.id);
@@ -531,7 +533,7 @@ export default function Subscriptions() {
       setSubscriptionToDelete(null);
     }
   };
-  
+
   const handleAddNew = () => {
     setEditingSubscription(undefined);
     setModalOpen(true);
@@ -552,17 +554,21 @@ export default function Subscriptions() {
     filename: string;
     seedRows?: Array<{
       serviceName: string;
-      website?: string;
-      vendor?: string;
       qty?: number;
       amount?: number;
       totalAmount?: number;
+      taxAmount?: number;
+      totalAmountInclTax?: number;
       billingCycle?: string;
       paymentFrequency?: string;
       startDate?: string;
       nextRenewal?: string;
       autoRenewal?: string;
       status?: string;
+      department?: string;
+      paymentMethod?: string;
+      owner?: string;
+      ownerEmail?: string;
       reminderPolicy?: string;
       reminderDays?: number;
       notes?: string;
@@ -579,11 +585,11 @@ export default function Subscriptions() {
     subsSheet.views = [{ state: 'frozen', ySplit: 1 }];
     subsSheet.columns = [
       { header: 'Service Name', key: 'serviceName', width: 20 },
-      { header: 'Website', key: 'website', width: 30 },
-      { header: 'Vendor', key: 'vendor', width: 20 },
       { header: 'Qty', key: 'qty', width: 10 },
       { header: 'Amount per unit', key: 'amount', width: 15 },
       { header: 'Total Amount', key: 'totalAmount', width: 15 },
+      { header: 'Tax Amount', key: 'taxAmount', width: 15 },
+      { header: 'Total Amount Incl. Tax', key: 'totalAmountInclTax', width: 22 },
       { header: 'Commitment cycle', key: 'billingCycle', width: 18 },
       { header: 'Payment Frequency', key: 'paymentFrequency', width: 18 },
       { header: 'First Purchase Date', key: 'firstPurchaseDate', width: 18 },
@@ -591,6 +597,10 @@ export default function Subscriptions() {
       { header: 'Next Renewal', key: 'nextRenewal', width: 15 },
       { header: 'Auto Renewal', key: 'autoRenewal', width: 13 },
       { header: 'Status', key: 'status', width: 12 },
+      { header: 'Department', key: 'department', width: 20 },
+      { header: 'Payment Method', key: 'paymentMethod', width: 20 },
+      { header: 'Owner', key: 'owner', width: 20 },
+      { header: 'Owner Email', key: 'ownerEmail', width: 25 },
       { header: 'Reminder Policy', key: 'reminderPolicy', width: 18 },
       { header: 'Reminder Days', key: 'reminderDays', width: 15 },
       { header: 'Notes', key: 'notes', width: 35 },
@@ -603,7 +613,7 @@ export default function Subscriptions() {
     headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
     headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
 
-    for (let col = 1; col <= 16; col++) {
+    for (let col = 1; col <= 20; col++) {
       const cell = headerRow.getCell(col);
       cell.border = {
         top: { style: 'thin', color: { argb: 'FF000000' } },
@@ -613,38 +623,28 @@ export default function Subscriptions() {
       };
     }
 
-    // Lookup lists stored in hidden columns within the SAME sheet (single-sheet file)
-    // AA (hidden)
-    // NOTE: Vendor supports dropdown but also allows typing.
-    const vendorCol = 27; // AA
-
-    [vendorCol].forEach((col) => {
-      const column = subsSheet.getColumn(col);
-      column.hidden = true;
-      column.width = 2;
-    });
-
-    VENDOR_LIST.forEach((vendor, idx) => {
-      subsSheet.getCell(idx + 2, vendorCol).value = vendor;
-    });
-
-    const rangeFor = (colLetter: string, count: number) => {
-      const safeCount = Math.max(1, count);
-      const lastRow = 1 + safeCount;
-      return `'${sheetName}'!$${colLetter}$2:$${colLetter}$${lastRow}`;
-    };
-
-    const vendorRange = rangeFor('AA', VENDOR_LIST.length);
-
-    const commitmentCycles = ['Monthly', 'Yearly', 'Quarterly', 'Weekly', 'Trial', 'Pay-as-you-go'];
+    const commitmentCycles = ['Weekly', 'Monthly', 'Quarterly', 'Yearly', '2 Years', '3 Years', 'Trial', 'Pay-as-you-go'];
+    const paymentFrequencies = ['Weekly', '28 Days', 'Monthly', 'Quarterly', 'Yearly', '2 Years', '3 Years'];
     const subscriptionStatuses = ['Active', 'Inactive', 'Cancelled'];
     const reminderPolicies = ['One time', 'Two times', 'Until Renewal'];
 
     for (let i = 2; i <= 500; i++) {
-      const totalAmountCell = subsSheet.getCell(`F${i}`);
-      totalAmountCell.value = { formula: `IF(AND(D${i}<>"",E${i}<>""),D${i}*E${i},"")`, result: '' };
+      // Total Amount (D) = Qty (B) * Amount per unit (C)
+      const totalAmountCell = subsSheet.getCell(`D${i}`);
+      totalAmountCell.value = { formula: `IF(AND(B${i}<>"",C${i}<>""),B${i}*C${i},"")`, result: '' };
       totalAmountCell.numFmt = '0.00';
       totalAmountCell.protection = { locked: true };
+
+      // Tax Amount (E) - Editable, no default 0.00
+      const taxAmountCell = subsSheet.getCell(`E${i}`);
+      taxAmountCell.numFmt = '0.00';
+      taxAmountCell.protection = { locked: false };
+
+      // Total Amount Incl. Tax (F) = Total Amount (D) + Tax Amount (E)
+      const totalInclTaxCell = subsSheet.getCell(`F${i}`);
+      totalInclTaxCell.value = { formula: `IF(D${i}<>"",D${i}+E${i},"")`, result: '' };
+      totalInclTaxCell.numFmt = '0.00';
+      totalInclTaxCell.protection = { locked: true };
 
       const serviceNameCell = subsSheet.getCell(`A${i}`);
       serviceNameCell.dataValidation = {
@@ -660,21 +660,7 @@ export default function Subscriptions() {
         error: 'This service name already exists! Please use a unique name.',
       };
 
-      const vendorCell = subsSheet.getCell(`C${i}`);
-      vendorCell.dataValidation = {
-        type: 'list',
-        allowBlank: true,
-        formulae: [vendorRange],
-        showInputMessage: true,
-        promptTitle: 'Select Vendor',
-        prompt: 'Choose a vendor from the dropdown or type your own.',
-        showErrorMessage: true,
-        errorStyle: 'warning',
-        errorTitle: 'Invalid Vendor',
-        error: 'Please select a valid vendor from the dropdown list.',
-      };
-
-      const qtyCell = subsSheet.getCell(`D${i}`);
+      const qtyCell = subsSheet.getCell(`B${i}`);
       qtyCell.dataValidation = {
         type: 'whole',
         operator: 'greaterThanOrEqual',
@@ -689,7 +675,7 @@ export default function Subscriptions() {
         error: 'Please enter a whole number >= 1.',
       };
 
-      const amountCell = subsSheet.getCell(`E${i}`);
+      const amountCell = subsSheet.getCell(`C${i}`);
       amountCell.numFmt = '0.00';
       amountCell.dataValidation = {
         type: 'decimal',
@@ -723,7 +709,7 @@ export default function Subscriptions() {
       paymentFreqCell.dataValidation = {
         type: 'list',
         allowBlank: true,
-        formulae: [`"${commitmentCycles.join(',')}"`],
+        formulae: [`"${paymentFrequencies.join(',')}"`],
         showInputMessage: true,
         promptTitle: 'Select Payment Frequency',
         prompt: 'Choose how often payments are made.',
@@ -733,7 +719,6 @@ export default function Subscriptions() {
         error: 'Please select a valid payment frequency.',
       };
 
-      // First Purchase Date (I): must not be in the future
       const firstPurchaseCell = subsSheet.getCell(`I${i}`);
       firstPurchaseCell.numFmt = '@';
       firstPurchaseCell.dataValidation = {
@@ -751,10 +736,6 @@ export default function Subscriptions() {
 
       const startDateCell = subsSheet.getCell(`J${i}`);
       startDateCell.numFmt = '@';
-
-      // Validate Current Cycle Start (Start Date) >= First Purchase Date
-      // NOTE: This relies on Excel treating entered values as dates (serials) for correct comparisons.
-      // It is intentionally permissive when either cell is blank.
       startDateCell.dataValidation = {
         type: 'custom',
         allowBlank: true,
@@ -770,9 +751,10 @@ export default function Subscriptions() {
         error: 'Current Cycle Start must be on or after First Purchase Date.',
       };
 
+      const freqFormula = `IF(H${i}<>"",H${i},G${i})`;
       const renewalCell = subsSheet.getCell(`K${i}`);
       renewalCell.value = {
-        formula: `IF(AND(J${i}<>"",G${i}<>""),TEXT(IF(G${i}="Monthly",DATE(YEAR(J${i}),MONTH(J${i})+1,DAY(J${i}))-1,IF(G${i}="Quarterly",DATE(YEAR(J${i}),MONTH(J${i})+3,DAY(J${i}))-1,IF(G${i}="Yearly",DATE(YEAR(J${i})+1,MONTH(J${i}),DAY(J${i}))-1,IF(G${i}="Weekly",J${i}+6,IF(G${i}="Trial",J${i}+30,""))))),"dd/mm/yyyy"),"")`,
+        formula: `IF(AND(J${i}<>"",OR(G${i}<>"",H${i}<>"")),TEXT(IF(${freqFormula}="Weekly",J${i}+6,IF(${freqFormula}="28 Days",J${i}+27,IF(${freqFormula}="Monthly",DATE(YEAR(J${i}),MONTH(J${i})+1,DAY(J${i}))-1,IF(${freqFormula}="Quarterly",DATE(YEAR(J${i}),MONTH(J${i})+3,DAY(J${i}))-1,IF(${freqFormula}="Yearly",DATE(YEAR(J${i})+1,MONTH(J${i}),DAY(J${i}))-1,IF(${freqFormula}="2 Years",DATE(YEAR(J${i})+2,MONTH(J${i}),DAY(J${i}))-1,IF(${freqFormula}="3 Years",DATE(YEAR(J${i})+3,MONTH(J${i}),DAY(J${i}))-1,IF(${freqFormula}="Trial",J${i}+30,IF(${freqFormula}="Pay-as-you-go",DATE(YEAR(J${i}),MONTH(J${i})+1,DAY(J${i})),""))))))))),"dd/mm/yyyy"),"")`,
         result: '',
       };
       renewalCell.numFmt = '@';
@@ -806,7 +788,7 @@ export default function Subscriptions() {
         error: 'Please select a valid status.',
       };
 
-      const reminderPolicyCell = subsSheet.getCell(`N${i}`);
+      const reminderPolicyCell = subsSheet.getCell(`R${i}`);
       reminderPolicyCell.dataValidation = {
         type: 'list',
         allowBlank: true,
@@ -820,7 +802,7 @@ export default function Subscriptions() {
         error: 'Please select a valid reminder policy from the dropdown.',
       };
 
-      const reminderDaysCell = subsSheet.getCell(`O${i}`);
+      const reminderDaysCell = subsSheet.getCell(`S${i}`);
       reminderDaysCell.dataValidation = {
         type: 'whole',
         operator: 'between',
@@ -836,45 +818,55 @@ export default function Subscriptions() {
       };
     }
 
-    // Unlock editable cells (lock computed columns: Total Amount (F) and Next Renewal (K))
+    // Unlock editable cells (lock computed columns: Total Amount (D), Total Amount Incl. Tax (F), Next Renewal (K), and Owner Email (Q))
     for (let i = 2; i <= 500; i++) {
-      const editableColumns = ['A', 'B', 'C', 'D', 'E', 'G', 'H', 'I', 'J', 'L', 'M', 'N', 'O', 'P'];
+      const editableColumns = ['A', 'B', 'C', 'E', 'G', 'H', 'I', 'J', 'L', 'M', 'N', 'O', 'P', 'R', 'S', 'T'];
       editableColumns.forEach((col) => {
         subsSheet.getCell(`${col}${i}`).protection = { locked: false };
       });
     }
 
-    // Seed exported rows (keep formulas but provide cached result values for F/K so imports work without opening Excel)
+    // Seed exported rows (keep formulas but provide cached result values for D/F/K so imports work without opening Excel)
     for (let idx = 0; idx < seedRows.length && idx < 499; idx++) {
       const r = seedRows[idx];
       const rowNum = idx + 2;
 
       subsSheet.getCell(`A${rowNum}`).value = r.serviceName || '';
-      subsSheet.getCell(`B${rowNum}`).value = r.website || '';
-      subsSheet.getCell(`C${rowNum}`).value = r.vendor || '';
-      subsSheet.getCell(`D${rowNum}`).value = Number.isFinite(r.qty as any) ? Number(r.qty) : 1;
-      subsSheet.getCell(`E${rowNum}`).value = Number.isFinite(r.amount as any) ? Number(r.amount) : 0;
+      subsSheet.getCell(`B${rowNum}`).value = Number.isFinite(r.qty as any) ? Number(r.qty) : 1;
+      subsSheet.getCell(`C${rowNum}`).value = Number.isFinite(r.amount as any) ? Number(r.amount) : 0;
       subsSheet.getCell(`G${rowNum}`).value = r.billingCycle || '';
       subsSheet.getCell(`H${rowNum}`).value = r.paymentFrequency || '';
       subsSheet.getCell(`I${rowNum}`).value = r.firstPurchaseDate || '';
       subsSheet.getCell(`J${rowNum}`).value = r.startDate || '';
       subsSheet.getCell(`L${rowNum}`).value = r.autoRenewal || '';
       subsSheet.getCell(`M${rowNum}`).value = r.status || '';
-      subsSheet.getCell(`N${rowNum}`).value = r.reminderPolicy || '';
-      subsSheet.getCell(`O${rowNum}`).value = Number.isFinite(r.reminderDays as any) ? Number(r.reminderDays) : '';
-      subsSheet.getCell(`P${rowNum}`).value = r.notes || '';
+      subsSheet.getCell(`N${rowNum}`).value = r.department || '';
+      subsSheet.getCell(`O${rowNum}`).value = r.paymentMethod || '';
+      subsSheet.getCell(`P${rowNum}`).value = r.owner || '';
+      subsSheet.getCell(`Q${rowNum}`).value = r.ownerEmail || '';
+      subsSheet.getCell(`R${rowNum}`).value = r.reminderPolicy || '';
+      subsSheet.getCell(`S${rowNum}`).value = Number.isFinite(r.reminderDays as any) ? Number(r.reminderDays) : '';
+      subsSheet.getCell(`T${rowNum}`).value = r.notes || '';
 
-      const qtyVal = Number(subsSheet.getCell(`D${rowNum}`).value || 0);
-      const amtVal = Number(subsSheet.getCell(`E${rowNum}`).value || 0);
-      const computedTotal = Number.isFinite(r.totalAmount as any) ? Number(r.totalAmount) : qtyVal * amtVal;
+      const qtyVal = Number(subsSheet.getCell(`B${rowNum}`).value || 0);
+      const amtVal = Number(subsSheet.getCell(`C${rowNum}`).value || 0);
+      const computedTotal = qtyVal * amtVal;
 
-      const totalAmountCell = subsSheet.getCell(`F${rowNum}`);
-      totalAmountCell.value = { formula: `IF(AND(D${rowNum}<>"",E${rowNum}<>""),D${rowNum}*E${rowNum},"")`, result: computedTotal };
+      const totalAmountCell = subsSheet.getCell(`D${rowNum}`);
+      totalAmountCell.value = { formula: `IF(AND(B${rowNum}<>"",C${rowNum}<>""),B${rowNum}*C${rowNum},"")`, result: computedTotal };
 
+      const taxAmountCell = subsSheet.getCell(`E${rowNum}`);
+      const taxVal = Number(r.taxAmount) || 0;
+      taxAmountCell.value = taxVal || '';
+
+      const totalInclCell = subsSheet.getCell(`F${rowNum}`);
+      totalInclCell.value = { formula: `IF(D${rowNum}<>"",D${rowNum}+E${rowNum},"")`, result: computedTotal + taxVal };
+
+      const freqFormulaExport = `IF(H${rowNum}<>"",H${rowNum},G${rowNum})`;
       const renewalCell = subsSheet.getCell(`K${rowNum}`);
       const renewalResult = r.nextRenewal || '';
       renewalCell.value = {
-        formula: `IF(AND(J${rowNum}<>"",G${rowNum}<>""),TEXT(IF(G${rowNum}="Monthly",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+1,DAY(J${rowNum}))-1,IF(G${rowNum}="Quarterly",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+3,DAY(J${rowNum}))-1,IF(G${rowNum}="Yearly",DATE(YEAR(J${rowNum})+1,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(G${rowNum}="Weekly",J${rowNum}+6,IF(G${rowNum}="Trial",J${rowNum}+30,""))))),"dd/mm/yyyy"),"")`,
+        formula: `IF(AND(J${rowNum}<>"",OR(G${rowNum}<>"",H${rowNum}<>"")),TEXT(IF(${freqFormulaExport}="Weekly",J${rowNum}+6,IF(${freqFormulaExport}="28 Days",J${rowNum}+27,IF(${freqFormulaExport}="Monthly",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+1,DAY(J${rowNum}))-1,IF(${freqFormulaExport}="Quarterly",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+3,DAY(J${rowNum}))-1,IF(${freqFormulaExport}="Yearly",DATE(YEAR(J${rowNum})+1,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(${freqFormulaExport}="2 Years",DATE(YEAR(J${rowNum})+2,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(${freqFormulaExport}="3 Years",DATE(YEAR(J${rowNum})+3,MONTH(J${rowNum}),DAY(J${rowNum}))-1,IF(${freqFormulaExport}="Trial",J${rowNum}+30,IF(${freqFormulaExport}="Pay-as-you-go",DATE(YEAR(J${rowNum}),MONTH(J${rowNum})+1,DAY(J${rowNum})),""))))))))),"dd/mm/yyyy"),"")`,
         result: renewalResult,
       };
     }
@@ -902,7 +894,7 @@ export default function Subscriptions() {
   // EXPORT current (filtered) subscriptions to XLSX (same template structure)
   const handleExport = async () => {
     if (!filteredSubscriptions.length) {
-      toast({ title: 'No data', description: 'There are no subscriptions to export', variant: 'destructive'});
+      toast({ title: 'No data', description: 'There are no subscriptions to export', variant: 'destructive' });
       return;
     }
 
@@ -916,18 +908,21 @@ export default function Subscriptions() {
       const firstPurchaseRaw = (sub as any)?.firstPurchaseDate ?? (sub as any)?.initialDate;
       return {
         serviceName: String((sub as any)?.serviceName ?? '').trim(),
-        website: String((sub as any)?.website ?? ''),
-        vendor: String((sub as any)?.vendor ?? ''),
         qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
         amount: Number.isFinite(amount) ? amount : 0,
         totalAmount: Number.isFinite(totalAmount) ? totalAmount : undefined,
+        taxAmount: Number((sub as any)?.taxAmount) || 0,
+        totalAmountInclTax: Number((sub as any)?.totalAmountInclTax) || 0,
         billingCycle: String((sub as any)?.billingCycle ?? ''),
         paymentFrequency: String((sub as any)?.paymentFrequency ?? ''),
         startDate: toDdMmYyyy((sub as any)?.startDate),
         nextRenewal: toDdMmYyyy((sub as any)?.nextRenewal),
         autoRenewal: (sub as any)?.autoRenewal === true ? 'Yes' : (sub as any)?.autoRenewal === false ? 'No' : '',
-        // Keep template-valid values: treat Draft as blank so re-import produces Draft.
         status: isDraftStatus ? '' : statusRaw,
+        department: (sub as any)?.departments?.join('|') || (sub as any)?.department || '',
+        paymentMethod: String((sub as any)?.paymentMethod ?? ''),
+        owner: String((sub as any)?.owner ?? ''),
+        ownerEmail: String((sub as any)?.ownerEmail ?? ''),
         reminderPolicy: String((sub as any)?.reminderPolicy ?? ''),
         reminderDays: Number((sub as any)?.reminderDays ?? ''),
         notes: String((sub as any)?.notes ?? ''),
@@ -936,7 +931,7 @@ export default function Subscriptions() {
     }).filter(r => r.serviceName);
 
     if (!seedRows.length) {
-      toast({ title: 'No data', description: 'There are no subscriptions to export', variant: 'destructive'});
+      toast({ title: 'No data', description: 'There are no subscriptions to export', variant: 'destructive' });
       return;
     }
 
@@ -1044,6 +1039,31 @@ export default function Subscriptions() {
       return undefined;
     };
 
+    const fetchMasterData = async () => {
+      try {
+        const [deptRes, payRes, empRes] = await Promise.all([
+          fetch('/api/company/departments', { credentials: 'include' }),
+          fetch('/api/payment', { credentials: 'include' }),
+          fetch('/api/employees', { credentials: 'include' })
+        ]);
+        const depts = deptRes.ok ? await deptRes.json() : [];
+        const pays = payRes.ok ? await payRes.json() : [];
+        const emps = empRes.ok ? await empRes.json() : [];
+        return {
+          departments: depts.map((d: any) => String(d.name || '').trim().toLowerCase()),
+          paymentMethods: pays.map((p: any) => String(p.name || p.title || '').trim().toLowerCase()),
+          employees: emps.map((e: any) => String(e.name || '').trim().toLowerCase()),
+          employeesMap: emps.reduce((acc: Record<string, string>, e: any) => {
+            if (e.name) acc[e.name.trim().toLowerCase()] = e.email;
+            return acc;
+          }, {})
+        };
+      } catch (err) {
+        console.error('Failed to fetch master data:', err);
+        return { departments: [], paymentMethods: [], employees: [], employeesMap: {} };
+      }
+    };
+
     const processRows = async (rows: any[]) => {
       if (!rows.length) {
         toast({ title: 'Empty file', description: 'No rows found in file', variant: 'destructive' });
@@ -1053,24 +1073,19 @@ export default function Subscriptions() {
       const isEffectivelyEmptyRow = (row: Record<string, any>): boolean => {
         const candidates: unknown[] = [
           getValue(row, ['Service Name', 'ServiceName', 'serviceName']),
-          getValue(row, ['Website', 'website']),
-          getValue(row, ['Vendor', 'vendor']),
-          getValue(row, ['Currency', 'currency']),
           getValue(row, ['Qty', 'QTY', 'qty']),
           getValue(row, ['Amount per unit', 'Amount Per Unit', 'Amount', 'amount']),
           getValue(row, ['Total Amount', 'TotalAmount', 'totalAmount']),
           getValue(row, ['Commitment cycle', 'Commitment Cycle', 'BillingCycle', 'billingCycle']),
           getValue(row, ['Payment Frequency', 'paymentFrequency', 'PaymentFrequency']),
-          getValue(row, ['Payment Method', 'paymentMethod', 'PaymentMethod']),
+          getValue(row, ['First Purchase Date', 'FirstPurchaseDate', 'firstPurchaseDate']),
           getValue(row, ['Start Date', 'StartDate', 'startDate']),
-          getValue(row, ['Current Cycle Start', 'CurrentCycleStart', 'currentCycleStart']),
           getValue(row, ['Next Renewal', 'NextRenewal', 'nextRenewal']),
-          getValue(row, ['First Purchase Date', 'FirstPurchaseDate', 'firstPurchaseDate', 'Initial Date', 'InitialDate', 'initialDate']),
+          getValue(row, ['Auto Renewal', 'AutoRenewal', 'autoRenewal']),
           getValue(row, ['Status', 'status']),
-          getValue(row, ['Category', 'category']),
-          getValue(row, ['Departments', 'departments']),
+          getValue(row, ['Department', 'department', 'Departments', 'departments']),
+          getValue(row, ['Payment Method', 'paymentMethod', 'PaymentMethod']),
           getValue(row, ['Owner', 'owner']),
-          getValue(row, ['Owner Email', 'OwnerEmail', 'ownerEmail']),
           getValue(row, ['Reminder Policy', 'ReminderPolicy', 'reminderPolicy']),
           getValue(row, ['Reminder Days', 'ReminderDays', 'reminderDays']),
           getValue(row, ['Notes', 'notes']),
@@ -1087,88 +1102,165 @@ export default function Subscriptions() {
 
       setImportProgress({ processed: 0, total: processableRows.length });
 
+      const masterData = await fetchMasterData();
       let success = 0;
       let failed = 0;
       const seenInFile = new Set<string>();
-      const errorSamples: string[] = [];
+      const validationFailures: { rowNum: number; errors: string[] }[] = [];
 
       let processed = 0;
-      for (const row of processableRows) {
+      for (let idx = 0; idx < processableRows.length; idx++) {
+        const row = processableRows[idx];
+        const rowNum = idx + 2; // header is row 1
         try {
           const normalizedName = normalizeServiceName(
             getValue(row, ['Service Name', 'ServiceName', 'serviceName'])
           );
           const key = normalizedName.toLowerCase();
+
+          const rowErrors: string[] = [];
+
           if (!normalizedName) {
-            failed++;
-            if (errorSamples.length < 5) errorSamples.push('Missing Service Name');
-            continue;
+            rowErrors.push('Missing Service Name');
+          } else {
+            if (existingServiceNames.has(key)) {
+              rowErrors.push(`Duplicate service name already exists: "${normalizedName}"`);
+            }
+            if (seenInFile.has(key)) {
+              rowErrors.push(`Duplicate service name in file: "${normalizedName}"`);
+            }
           }
 
-          if (existingServiceNames.has(key)) {
-            failed++;
-            if (errorSamples.length < 5) errorSamples.push(`Duplicate service name already exists: ${normalizedName}`);
-            continue;
+          const rawDept = getValue(row, ['Department', 'department', 'Departments', 'departments']);
+          const rawPaymentMethod = getValue(row, ['Payment Method', 'paymentMethod', 'PaymentMethod']);
+          const rawOwner = getValue(row, ['Owner', 'owner']);
+
+          if (rawDept) {
+            const rawDeptsArray = rawDept.split('|').map((d: string) => d.trim()).filter(Boolean);
+            for (const d of rawDeptsArray) {
+              if (!masterData.departments.includes(d.toLowerCase())) {
+                rowErrors.push(`Department "${d}" does not exist.`);
+              }
+            }
           }
 
-          if (seenInFile.has(key)) {
+          if (rawPaymentMethod) {
+            if (!masterData.paymentMethods.includes(rawPaymentMethod.trim().toLowerCase())) {
+              rowErrors.push(`Payment Method "${rawPaymentMethod}" does not exist.`);
+            }
+          }
+
+          if (rawOwner) {
+            if (!masterData.employees.includes(rawOwner.trim().toLowerCase())) {
+              rowErrors.push(`Assigned Owner "${rawOwner}" does not exist.`);
+            }
+          }
+
+          if (rowErrors.length > 0) {
             failed++;
-            if (errorSamples.length < 5) errorSamples.push(`Duplicate service name in file: ${normalizedName}`);
+            validationFailures.push({ rowNum, errors: rowErrors });
             continue;
           }
 
           const qty = Math.max(1, Math.floor(parseNumber(getValue(row, ['Qty', 'QTY', 'qty'])) || 1));
           const amountPerUnit = parseNumber(getValue(row, ['Amount per unit', 'Amount Per Unit', 'Amount', 'amount']));
-          const totalAmount = parseNumber(getValue(row, ['Total Amount', 'TotalAmount', 'totalAmount'])) || qty * amountPerUnit;
+          const totalAmount = qty * amountPerUnit;
+          const taxAmount = parseNumber(getValue(row, ['Tax Amount', 'TaxAmount', 'taxAmount']));
+          const totalAmountInclTax = totalAmount + taxAmount;
 
-          // Optional date fields (kept backward-compatible with existing templates/files)
           const firstPurchaseDate = toIsoDate(
-            getValue(row, [
-              'First Purchase Date',
-              'FirstPurchaseDate',
-              'firstPurchaseDate',
-              'Initial Date',
-              'InitialDate',
-              'initialDate',
-            ])
-          );
-          const currentCycleStart = toIsoDate(
-            getValue(row, ['Current Cycle Start', 'CurrentCycleStart', 'currentCycleStart'])
+            getValue(row, ['First Purchase Date', 'FirstPurchaseDate', 'firstPurchaseDate'])
           );
           const startDateFromFile = toIsoDate(getValue(row, ['Start Date', 'StartDate', 'startDate']));
-          const effectiveStartDate = currentCycleStart || startDateFromFile;
+          const effectiveStartDate = startDateFromFile || firstPurchaseDate || new Date().toISOString().split('T')[0];
+
+          const billingCycleRaw = getValue(row, ['Commitment cycle', 'BillingCycle', 'billingCycle', 'Commitment Cycle']) || 'monthly';
+          const billingCycle = String(billingCycleRaw).trim().toLowerCase();
+          const paymentFrequencyRaw = getValue(row, ['Payment Frequency', 'paymentFrequency', 'PaymentFrequency']);
+          const paymentFrequency = paymentFrequencyRaw ? String(paymentFrequencyRaw).trim().toLowerCase() : '';
+
+          const calculateEndDateLocal = (startDateStr: string, cycleStr: string): string => {
+            if (!startDateStr || !cycleStr) return "";
+            const token = cycleStr.trim().toLowerCase();
+            const date = new Date(startDateStr + 'T00:00:00');
+            if (isNaN(date.getTime())) return "";
+            const endDate = new Date(date);
+
+            const dayMatch = token.match(/^(\d+)\s*days?$/);
+            if (dayMatch) {
+              const days = Math.max(1, parseInt(dayMatch[1], 10));
+              endDate.setDate(endDate.getDate() + (days - 1));
+            } else {
+              switch (token) {
+                case "pay-as-you-go":
+                  endDate.setMonth(endDate.getMonth() + 1);
+                  break;
+                case "monthly":
+                  endDate.setMonth(endDate.getMonth() + 1);
+                  endDate.setDate(endDate.getDate() - 1);
+                  break;
+                case "quarterly":
+                  endDate.setMonth(endDate.getMonth() + 3);
+                  endDate.setDate(endDate.getDate() - 1);
+                  break;
+                case "yearly":
+                  endDate.setFullYear(endDate.getFullYear() + 1);
+                  endDate.setDate(endDate.getDate() - 1);
+                  break;
+                case "2 years":
+                  endDate.setFullYear(endDate.getFullYear() + 2);
+                  endDate.setDate(endDate.getDate() - 1);
+                  break;
+                case "3 years":
+                  endDate.setFullYear(endDate.getFullYear() + 3);
+                  endDate.setDate(endDate.getDate() - 1);
+                  break;
+                case "weekly":
+                  endDate.setDate(endDate.getDate() + 6);
+                  break;
+                case "trial":
+                  endDate.setDate(endDate.getDate() + 30);
+                  break;
+              }
+            }
+            const yyyy = endDate.getFullYear();
+            const mm = String(endDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(endDate.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+          };
+
+          const calculatedNextRenewal = toIsoDate(getValue(row, ['Next Renewal', 'NextRenewal', 'nextRenewal'])) ||
+            calculateEndDateLocal(effectiveStartDate, paymentFrequency) ||
+            calculateEndDateLocal(effectiveStartDate, billingCycle) ||
+            effectiveStartDate;
+
+          const departmentsArray = rawDept ? rawDept.split('|').map((d: string) => d.trim()).filter(Boolean) : [];
 
           const payload: any = {
             serviceName: normalizedName,
-            website: getValue(row, ['Website', 'website']),
-            vendor: getValue(row, ['Vendor', 'vendor']),
-            currency: getValue(row, ['Currency', 'currency']),
             qty,
             amount: amountPerUnit,
             totalAmount,
-            billingCycle: getValue(row, ['Commitment cycle', 'BillingCycle', 'billingCycle', 'Commitment Cycle']),
-            paymentFrequency: getValue(row, ['Payment Frequency', 'paymentFrequency', 'PaymentFrequency']),
-            paymentMethod: getValue(row, ['Payment Method', 'paymentMethod', 'PaymentMethod']),
+            taxAmount,
+            totalAmountInclTax,
+            billingCycle: billingCycle || 'monthly',
+            paymentFrequency: paymentFrequency || undefined,
+            paymentMethod: rawPaymentMethod || undefined,
             startDate: effectiveStartDate,
-            // These are optional in the backend, but sending them when available keeps parity with UI.
             firstPurchaseDate: firstPurchaseDate || undefined,
             initialDate: firstPurchaseDate || undefined,
-            currentCycleStart: (currentCycleStart || effectiveStartDate) || undefined,
-            nextRenewal: toIsoDate(getValue(row, ['Next Renewal', 'NextRenewal', 'nextRenewal'])),
+            currentCycleStart: effectiveStartDate,
+            nextRenewal: calculatedNextRenewal,
             autoRenewal: normalizeYesNoToBool(getValue(row, ['Auto Renewal', 'AutoRenewal', 'autoRenewal'])),
             status: getValue(row, ['Status', 'status']) || 'Draft',
             category: getValue(row, ['Category', 'category']),
-            department: '',
-            departments: parseDepartments(getValue(row, ['Departments', 'departments'])),
-            owner: getValue(row, ['Owner', 'owner']),
-            ownerEmail: getValue(row, ['Owner Email', 'OwnerEmail', 'ownerEmail']),
+            departments: departmentsArray,
+            owner: rawOwner || undefined,
+            ownerEmail: rawOwner ? masterData.employeesMap[rawOwner.trim().toLowerCase()] || '' : '',
             reminderPolicy: getValue(row, ['Reminder Policy', 'ReminderPolicy', 'reminderPolicy']) || 'One time',
             reminderDays: Math.max(1, Math.floor(parseNumber(getValue(row, ['Reminder Days', 'ReminderDays', 'reminderDays'])) || 7)),
             notes: getValue(row, ['Notes', 'notes']),
           };
-
-          if (!payload.startDate) payload.startDate = new Date().toISOString().split('T')[0];
-          if (!payload.nextRenewal) payload.nextRenewal = payload.startDate;
 
           await apiRequest('POST', '/api/subscriptions', payload);
           seenInFile.add(key);
@@ -1176,19 +1268,21 @@ export default function Subscriptions() {
           success++;
         } catch {
           failed++;
-          if (errorSamples.length < 5) errorSamples.push('Failed to import a row');
+          validationFailures.push({ rowNum, errors: ['Failed to import this row due to system error.'] });
         } finally {
           processed++;
-          // Update progress (kept simple; avoids additional deps)
           setImportProgress((prev) => (prev ? { ...prev, processed } : { processed, total: processableRows.length }));
         }
       }
 
       queryClient.invalidateQueries({ queryKey: ['/api/subscriptions'] });
-      if (failed > 0 && errorSamples.length) {
+
+      if (validationFailures.length > 0) {
+        setImportErrors(validationFailures);
+        setImportErrorsDialogOpen(true);
         toast({
           title: 'Import finished with errors',
-          description: `Imported ${success} row(s). Failed: ${failed}. ${errorSamples.join(' | ')}`,
+          description: `Imported ${success} row(s). Failed: ${failed}. Check validation report.`,
           variant: 'destructive',
         });
       } else {
@@ -1240,7 +1334,7 @@ export default function Subscriptions() {
       },
     });
   };
-  
+
   const parseDate = (val: unknown): Date | null => {
     if (!val) return null;
     const d = val instanceof Date ? val : new Date(String(val));
@@ -1262,17 +1356,14 @@ export default function Subscriptions() {
       (sub as any).reminderDays,
       sub.status
     );
-    
+
     const effectiveStatus = (String(sub.billingCycle || '').toLowerCase() === 'trial')
       ? 'Trial'
       : calculatedStatus; // Use calculated status instead of raw status
 
     const matchesSearch = !q ||
       (sub.serviceName || '').toLowerCase().includes(q) ||
-      (sub.vendor || '').toLowerCase().includes(q) ||
-      (sub.category || '').toLowerCase().includes(q) ||
-      effectiveStatus.toLowerCase().includes(q) ||
-      ownerVal.toLowerCase().includes(q);
+      (sub.vendor || '').toLowerCase().includes(q);
 
     const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(String(sub.category || ''));
     const matchesVendor = selectedVendors.length === 0 || selectedVendors.includes(String(sub.vendor || ''));
@@ -1324,10 +1415,10 @@ export default function Subscriptions() {
       // Default: Sort by status priority (Active → Expiring Soon → Expired → Cancelled → Draft), then by amount
       const aStatus = calculateSubscriptionStatus(a.nextRenewal, a.reminderDays, a.status);
       const bStatus = calculateSubscriptionStatus(b.nextRenewal, b.reminderDays, b.status);
-      
+
       const aPriority = getStatusPriority(aStatus);
       const bPriority = getStatusPriority(bStatus);
-      
+
       // First sort by status priority
       if (aPriority !== bPriority) return aPriority - bPriority;
 
@@ -1349,57 +1440,57 @@ export default function Subscriptions() {
       const bTime = new Date((b as any).updatedAt || (b as any).createdAt || 0).getTime();
       return bTime - aTime;
     }
-    
+
     if (sortField === "serviceName") {
       const aVal = (a.serviceName || "").toLowerCase();
       const bVal = (b.serviceName || "").toLowerCase();
-      return sortDirection === "asc" 
+      return sortDirection === "asc"
         ? aVal.localeCompare(bVal)
         : bVal.localeCompare(aVal);
     }
-    
+
     if (sortField === "vendor") {
       const aVal = (a.vendor || "").toLowerCase();
       const bVal = (b.vendor || "").toLowerCase();
-      return sortDirection === "asc" 
+      return sortDirection === "asc"
         ? aVal.localeCompare(bVal)
         : bVal.localeCompare(aVal);
     }
-    
+
     if (sortField === "amount") {
       const aVal = parseFloat(String((a as any)?.lcyAmount ?? a.amount)) || 0;
       const bVal = parseFloat(String((b as any)?.lcyAmount ?? b.amount)) || 0;
-      return sortDirection === "asc" 
+      return sortDirection === "asc"
         ? aVal - bVal
         : bVal - aVal;
     }
-    
+
     if (sortField === "billingCycle") {
       const aVal = (a.billingCycle || "").toLowerCase();
       const bVal = (b.billingCycle || "").toLowerCase();
-      return sortDirection === "asc" 
+      return sortDirection === "asc"
         ? aVal.localeCompare(bVal)
         : bVal.localeCompare(aVal);
     }
-    
+
     if (sortField === "nextRenewal") {
       const aVal = new Date(a.nextRenewal || 0).getTime();
       const bVal = new Date(b.nextRenewal || 0).getTime();
-      return sortDirection === "asc" 
+      return sortDirection === "asc"
         ? aVal - bVal
         : bVal - aVal;
     }
-    
+
     if (sortField === "status") {
       const aStatus = calculateSubscriptionStatus(a.nextRenewal, a.reminderDays, a.status);
       const bStatus = calculateSubscriptionStatus(b.nextRenewal, b.reminderDays, b.status);
       const aPriority = getStatusPriority(aStatus);
       const bPriority = getStatusPriority(bStatus);
-      return sortDirection === "asc" 
+      return sortDirection === "asc"
         ? aPriority - bPriority
         : bPriority - aPriority;
     }
-    
+
     return 0;
   }) : [];
 
@@ -1409,7 +1500,7 @@ export default function Subscriptions() {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedSubscriptions = filteredSubscriptions.slice(startIndex, endIndex);
-  
+
   // Reset to page 1 when filters change
   React.useEffect(() => {
     setCurrentPage(1);
@@ -1472,14 +1563,19 @@ export default function Subscriptions() {
     let maxLen = 0;
     for (const sub of (Array.isArray(subscriptions) ? subscriptions : [])) {
       const isTrial = String(sub.billingCycle || '').toLowerCase() === 'trial' || sub.billingCycle === 'Trial';
-      const label = isTrial ? 'Trial' : String(sub.status || '').trim();
+      const calculatedStatus = calculateSubscriptionStatus(
+        sub.nextRenewal,
+        sub.reminderDays,
+        sub.status
+      );
+      const label = isTrial ? 'Trial' : calculatedStatus;
       if (label.length > maxLen) maxLen = label.length;
     }
 
     // Clamp so it stays clean even if a custom status is long.
     return Math.min(Math.max(maxLen, 8), 18);
   })();
-  
+
   // Toggle sort function
   const handleSort = (field: "serviceName" | "vendor" | "amount" | "billingCycle" | "nextRenewal" | "status") => {
     if (sortField === field) {
@@ -1495,17 +1591,17 @@ export default function Subscriptions() {
       setSortDirection("asc");
     }
   };
-  
+
   // Get sort icon
   const getSortIcon = (field: "serviceName" | "vendor" | "amount" | "billingCycle" | "nextRenewal" | "status") => {
     if (sortField !== field) {
       return <ArrowUpDown className="h-3 w-3 ml-1 inline-block opacity-40" />;
     }
-    return sortDirection === "asc" 
+    return sortDirection === "asc"
       ? <ArrowUp className="h-3 w-3 ml-1 inline-block" />
       : <ArrowDown className="h-3 w-3 ml-1 inline-block" />;
   };
-  
+
   const uniqueCategories = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => String(sub.category || '')).filter(Boolean) : [])).sort();
   const uniqueVendors = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => String(sub.vendor || '')).filter(Boolean) : [])).sort();
   const uniqueBillingCycles = Array.from(new Set(Array.isArray(subscriptions) ? subscriptions.map(sub => String(sub.billingCycle || '')).filter(Boolean) : [])).sort();
@@ -1517,8 +1613,8 @@ export default function Subscriptions() {
   const uniqueOwners = Array.from(new Set(
     Array.isArray(subscriptions)
       ? subscriptions
-          .map(sub => String((sub as any)?.owner || (sub as any)?.ownerEmail || '').trim())
-          .filter(Boolean)
+        .map(sub => String((sub as any)?.owner || (sub as any)?.ownerEmail || '').trim())
+        .filter(Boolean)
       : []
   )).sort();
   const uniquePaymentMethods = Array.from(new Set(
@@ -1535,15 +1631,15 @@ export default function Subscriptions() {
   const uniqueStatuses = Array.from(new Set(
     Array.isArray(subscriptions)
       ? subscriptions
-          .map(sub => (String(sub.billingCycle || '').toLowerCase() === 'trial') ? 'Trial' : String(sub.status || '').trim())
-          .filter(Boolean)
+        .map(sub => (String(sub.billingCycle || '').toLowerCase() === 'trial') ? 'Trial' : String(sub.status || '').trim())
+        .filter(Boolean)
       : []
   )).sort();
-  
+
   // Category color helper removed (unused)
 
   // Helper to display department(s) from JSON string or array
-  
+
   // Helper to format date as dd/mm/yyyy
   const formatDate = (dateVal?: string | Date) => {
     if (!dateVal) return "";
@@ -1559,7 +1655,7 @@ export default function Subscriptions() {
     const yyyy = String(d.getFullYear());
     return `${dd}/${mm}/${yyyy}`;
   };
-  
+
   const toggleSelected = (current: string[], value: string) => {
     return current.includes(value) ? current.filter(v => v !== value) : [...current, value];
   };
@@ -1584,8 +1680,8 @@ export default function Subscriptions() {
           const checked = selected.includes(opt);
           const id = `${sectionId}-${opt}`.replace(/\s+/g, '-').toLowerCase();
           return (
-            <div 
-              key={opt} 
+            <div
+              key={opt}
               className="flex items-center gap-2 px-2 py-2 hover:bg-slate-100 rounded-md"
               onClick={(e) => {
                 e.preventDefault();
@@ -1593,15 +1689,15 @@ export default function Subscriptions() {
                 onChange(toggleSelected(selected, opt));
               }}
             >
-              <Checkbox 
-                id={id} 
-                checked={checked} 
+              <Checkbox
+                id={id}
+                checked={checked}
                 onCheckedChange={() => {
                   onChange(toggleSelected(selected, opt));
-                }} 
+                }}
               />
-              <label 
-                htmlFor={id} 
+              <label
+                htmlFor={id}
                 className="text-sm cursor-pointer select-none flex-1 truncate"
                 onClick={(e) => {
                   e.preventDefault();
@@ -1891,8 +1987,8 @@ export default function Subscriptions() {
       </div>
     </div>
   );
-  
-  if (isLoading) {
+
+  if (isLoading && !subscriptions) {
     return (
       <div className="h-full bg-gradient-to-br from-indigo-50 via-slate-50 to-indigo-100 p-4 md:p-6 relative">
         <div className="h-full w-full flex flex-col min-h-0">
@@ -1915,7 +2011,7 @@ export default function Subscriptions() {
               </div>
             </div>
           </div>
-          
+
           {/* Filters Section */}
           <Card className="mb-6 border-slate-200 shadow-md rounded-xl">
             <CardContent className="p-6">
@@ -1930,7 +2026,7 @@ export default function Subscriptions() {
               </div>
             </CardContent>
           </Card>
-          
+
           {/* Table Section */}
           <Card className="border-slate-200 shadow-lg  overflow-hidden">
             <CardContent className="p-0">
@@ -1945,7 +2041,19 @@ export default function Subscriptions() {
       </div>
     );
   }
-  
+
+  if (modalOpen) {
+    return (
+      <div className="h-full w-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100 p-6 overflow-auto flex flex-col">
+        <SubscriptionModal
+          open={modalOpen}
+          onOpenChange={handleCloseModal}
+          subscription={editingSubscription}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full bg-gradient-to-br from-gray-50 via-slate-100 to-gray-100">
       {isImporting && (
@@ -2029,17 +2137,17 @@ export default function Subscriptions() {
         {filtersOpen && sidebarSlotEl ? createPortal(<FiltersSidebarPanel />, sidebarSlotEl) : null}
         {/* ── Header Row ── */}
         <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-200 shrink-0">
-            <div className="flex items-center gap-4">
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg"
-              >
-                <Layers className="h-5 w-5 text-white" />
-              </motion.div>
-              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Subscription Management</h1>
-            </div>
-          
+          <div className="flex items-center gap-4">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg"
+            >
+              <Layers className="h-5 w-5 text-white" />
+            </motion.div>
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Subscription Management</h1>
+          </div>
+
           <div className="flex items-center gap-3">
             {/* Add Subscription button - first */}
             <Can I="create" a="Subscription">
@@ -2064,7 +2172,7 @@ export default function Subscriptions() {
                 Delete Selected ({selectedSubscriptionIds.size})
               </Button>
             )}
-            
+
             {/* Data Management Dropdown - third */}
             <Select
               key={dataManagementSelectKey}
@@ -2127,534 +2235,583 @@ export default function Subscriptions() {
         {/* Search + Filter - hidden when modal is open */}
         {!modalOpen && (
           <>
-        {/* Search + Filter By */}
-        <div className="mb-4 shrink-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Search subscriptions..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-72 border-gray-200 bg-white text-gray-900 placeholder-gray-400 h-10 text-sm rounded-lg shadow-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
-              />
+            {/* Search + Filter By */}
+            <div className="mb-4 shrink-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    placeholder="Search subscriptions..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 w-72 border-gray-200 bg-white text-gray-900 placeholder-gray-400 h-10 text-sm rounded-lg shadow-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 px-5 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white text-sm font-semibold shadow-md border-0 hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg transition-all"
+                  onClick={() => setFiltersOpen((v) => !v)}
+                >
+                  Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+                </Button>
+              </div>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 px-5 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 text-white hover:text-white text-sm font-semibold shadow-md border-0 hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg transition-all"
-              onClick={() => setFiltersOpen((v) => !v)}
-            >
-              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-            </Button>
-          </div>
-        </div>
 
-        {/* Main Content */}
-        <div className="min-w-0 flex-1 min-h-0">
-          <Card className="bg-white border border-gray-200 shadow-md overflow-hidden h-full flex flex-col min-h-0">
-            <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-            <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" className="table-fixed">
-              <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
-                <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-2 text-center text-xs font-bold text-white uppercase tracking-wide w-[48px]">
-                    <Checkbox
-                      aria-label="Select all visible subscriptions"
-                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
-                      onCheckedChange={(v) => toggleSelectAllVisible(!!v)}
-                      className="border-white data-[state=checked]:bg-white data-[state=checked]:text-indigo-700"
-                    />
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[300px]">
-                    <button 
-                      onClick={() => handleSort("serviceName")}
-                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
-                    >
-                      SERVICE
-                      {getSortIcon("serviceName")}
-                    </button>
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">
-                    CATEGORY
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[110px]">
-                    <button 
-                      onClick={() => handleSort("billingCycle")}
-                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
-                    >
-                      BILLING
-                      {getSortIcon("billingCycle")}
-                    </button>
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-1 text-center text-xs font-bold text-white uppercase tracking-wide w-[60px]">
-                    QTY
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-2 text-right text-xs font-bold text-white uppercase tracking-wide w-[130px]">
-                    <button 
-                      onClick={() => handleSort("amount")}
-                      className="flex items-center justify-end w-full font-bold hover:text-indigo-200 transition-colors cursor-pointer"
-                    >
-                      AMOUNT(LCY)
-                      {getSortIcon("amount")}
-                    </button>
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[150px]">
-                    <button 
-                      onClick={() => handleSort("nextRenewal")}
-                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
-                    >
-                      NEXT RENEWAL
-                      {getSortIcon("nextRenewal")}
-                    </button>
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-2 text-left text-xs font-bold text-white uppercase tracking-wide w-[110px]">
-                    <button 
-                      onClick={() => handleSort("status")}
-                      className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
-                    >
-                      STATUS
-                      {getSortIcon("status")}
-                    </button>
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-1 pr-2 text-right text-xs font-bold text-white uppercase tracking-wide w-[60px]">
-                    ACTIONS
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedSubscriptions && paginatedSubscriptions.length > 0 ? (
-                  <AnimatePresence>
-                  {paginatedSubscriptions.map((subscription, index) => (
-                    <motion.tr
-                      key={subscription._id || subscription.id}
-                      className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      <TableCell className="px-2 py-3 w-[48px] text-center">
-                        {(() => {
-                          const rowId = String((subscription as any)?._id ?? (subscription as any)?.id ?? '').trim();
-                          if (!rowId) return null;
-                          return (
-                            <Checkbox
-                              aria-label={`Select ${subscription.serviceName}`}
-                              checked={selectedSubscriptionIds.has(rowId)}
-                              onCheckedChange={(v) => toggleSelectOne(rowId, !!v)}
-                            />
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell className="px-3 py-3 font-medium text-gray-800 w-[300px] max-w-[300px] overflow-hidden text-left">
-                        <div>
+            {/* Main Content */}
+            <div className="min-w-0 flex-1 min-h-0">
+              <Card className="bg-white border border-gray-200 shadow-md overflow-hidden h-full flex flex-col min-h-0">
+                <CardContent className="p-0 flex flex-col flex-1 min-h-0">
+                  <Table containerClassName="flex-1 min-h-0 overflow-y-auto overflow-x-hidden" className="table-fixed">
+                    <TableHeader className="sticky top-0 z-30 bg-gradient-to-r from-indigo-600 to-blue-600">
+                      <TableRow className="border-b-2 border-indigo-700 bg-gradient-to-r from-indigo-600 to-blue-600">
+                        <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-2 text-center text-xs font-bold text-white uppercase tracking-wide w-[48px]">
+                          <Checkbox
+                            aria-label="Select all visible subscriptions"
+                            checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                            onCheckedChange={(v) => toggleSelectAllVisible(!!v)}
+                            className="border-white data-[state=checked]:bg-white data-[state=checked]:text-indigo-700"
+                          />
+                        </TableHead>
+                        <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[300px]">
                           <button
-                            onClick={() => handleEdit(subscription)}
-                            title={subscription.serviceName}
-                            className="group inline-flex items-center gap-1 max-w-full text-left"
+                            onClick={() => handleSort("serviceName")}
+                            className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
                           >
-                            <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
-                              {truncateText(subscription.serviceName, 35)}
-                              <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
-                            </span>
-                            <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                            SERVICE
+                            {getSortIcon("serviceName")}
                           </button>
-                          {subscription.notes && (() => {
-                            try {
-                              const notesArray = typeof subscription.notes === 'string' ? JSON.parse(subscription.notes) : subscription.notes;
-                              if (Array.isArray(notesArray) && notesArray.length > 0) {
-                                // Show the first note's text
-                                const firstNote = notesArray[0];
-                                return (
-                                  <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">
-                                    {firstNote.text}
-                                  </div>
-                                );
-                              }
-                            } catch {
-                              // If it's old format (plain text), show it
-                              if (typeof subscription.notes === 'string' && !subscription.notes.startsWith('[')) {
-                                return <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">{subscription.notes}</div>;
-                              }
-                            }
-                            return null;
-                          })()}
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-3 py-3 w-[200px] max-w-[200px] overflow-hidden text-left">
+                        </TableHead>
+                        <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-4 text-left text-xs font-bold text-white uppercase tracking-wide w-[200px]">
+                          CATEGORY
+                        </TableHead>
+                        <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[110px]">
+                          <button
+                            onClick={() => handleSort("billingCycle")}
+                            className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
+                          >
+                            BILLING
+                            {getSortIcon("billingCycle")}
+                          </button>
+                        </TableHead>
+                        <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-1 text-center text-xs font-bold text-white uppercase tracking-wide w-[60px]">
+                          QTY
+                        </TableHead>
+                        <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-2 text-right text-xs font-bold text-white uppercase tracking-wide w-[130px]">
+                          <button
+                            onClick={() => handleSort("amount")}
+                            className="flex items-center justify-end w-full font-bold hover:text-indigo-200 transition-colors cursor-pointer"
+                          >
+                            AMOUNT(LCY)
+                            {getSortIcon("amount")}
+                          </button>
+                        </TableHead>
+                        <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-3 text-left text-xs font-bold text-white uppercase tracking-wide w-[150px]">
+                          <button
+                            onClick={() => handleSort("nextRenewal")}
+                            className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
+                          >
+                            NEXT RENEWAL
+                            {getSortIcon("nextRenewal")}
+                          </button>
+                        </TableHead>
+                        <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-2 text-left text-xs font-bold text-white uppercase tracking-wide w-[140px]">
+                          <button
+                            onClick={() => handleSort("status")}
+                            className="flex items-center font-bold hover:text-indigo-200 transition-colors cursor-pointer"
+                          >
+                            STATUS
+                            {getSortIcon("status")}
+                          </button>
+                        </TableHead>
+                        <TableHead className="sticky top-0 z-20 bg-transparent h-12 px-1 pr-2 text-right text-xs font-bold text-white uppercase tracking-wide w-[60px]">
+                          ACTIONS
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedSubscriptions && paginatedSubscriptions.length > 0 ? (
+                        <AnimatePresence>
+                          {paginatedSubscriptions.map((subscription, index) => (
+                            <motion.tr
+                              key={subscription._id || subscription.id}
+                              className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-indigo-50/40`}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.15 }}
+                            >
+                              <TableCell className="px-2 py-3 w-[48px] text-center">
+                                {(() => {
+                                  const rowId = String((subscription as any)?._id ?? (subscription as any)?.id ?? '').trim();
+                                  if (!rowId) return null;
+                                  return (
+                                    <Checkbox
+                                      aria-label={`Select ${subscription.serviceName}`}
+                                      checked={selectedSubscriptionIds.has(rowId)}
+                                      onCheckedChange={(v) => toggleSelectOne(rowId, !!v)}
+                                    />
+                                  );
+                                })()}
+                              </TableCell>
+                              <TableCell className="px-3 py-3 font-medium text-gray-800 w-[300px] max-w-[300px] overflow-hidden text-left">
+                                <div>
+                                  <button
+                                    onClick={() => handleEdit(subscription)}
+                                    title={subscription.serviceName}
+                                    className="group inline-flex items-center gap-1 max-w-full text-left"
+                                  >
+                                    <span className="relative font-semibold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors duration-200 truncate">
+                                      {truncateText(subscription.serviceName, 35)}
+                                      <span className="absolute bottom-0 left-0 h-[1.5px] w-0 bg-indigo-500 group-hover:w-full transition-all duration-300 rounded-full" />
+                                    </span>
+                                    <span className="text-indigo-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 text-xs flex-shrink-0">→</span>
+                                  </button>
+                                  {subscription.notes && (() => {
+                                    try {
+                                      const notesArray = typeof subscription.notes === 'string' ? JSON.parse(subscription.notes) : subscription.notes;
+                                      if (Array.isArray(notesArray) && notesArray.length > 0) {
+                                        // Show the first note's text
+                                        const firstNote = notesArray[0];
+                                        return (
+                                          <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">
+                                            {firstNote.text}
+                                          </div>
+                                        );
+                                      }
+                                    } catch {
+                                      // If it's old format (plain text), show it
+                                      if (typeof subscription.notes === 'string' && !subscription.notes.startsWith('[')) {
+                                        return <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">{subscription.notes}</div>;
+                                      }
+                                    }
+                                    return null;
+                                  })()}
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-3 py-3 w-[200px] max-w-[200px] overflow-hidden text-left">
+                                {(() => {
+                                  const categoryValue = String((subscription as any)?.category ?? "").trim();
+                                  if (!categoryValue) {
+                                    return (
+                                      <span
+                                        className="inline-flex items-center justify-start text-gray-400 text-xs"
+                                        style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
+                                      >
+                                        -
+                                      </span>
+                                    );
+                                  }
+
+                                  const raw = categoryValue;
+                                  const normalized = raw.toLowerCase();
+
+                                  // Distinct pastel colors per category (softer tones), plus deterministic fallback.
+                                  const categoryClassMap: Record<string, string> = {
+                                    "productivity & collaboration": "bg-blue-100 text-blue-800 border-blue-300",
+                                    "accounting & finance": "bg-emerald-100 text-emerald-800 border-emerald-300",
+                                    "crm & sales": "bg-indigo-100 text-indigo-800 border-indigo-300",
+                                    "development & hosting": "bg-purple-100 text-purple-800 border-purple-300",
+                                    "design & creative tools": "bg-orange-100 text-orange-800 border-orange-300",
+                                    "marketing & seo": "bg-amber-100 text-amber-800 border-amber-300",
+                                    "communication tools": "bg-sky-100 text-sky-800 border-sky-300",
+                                    "security & compliance": "bg-rose-100 text-rose-800 border-rose-300",
+                                    "hr & admin": "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300",
+                                    "subscription infrastructure": "bg-cyan-100 text-cyan-800 border-cyan-300",
+                                    "office infrastructure": "bg-teal-100 text-teal-800 border-teal-300",
+                                    "games": "bg-violet-100 text-violet-800 border-violet-300",
+                                  };
+
+                                  const fallbackPalette: string[] = [
+                                    "bg-blue-100 text-blue-800 border-blue-300",
+                                    "bg-emerald-100 text-emerald-800 border-emerald-300",
+                                    "bg-indigo-100 text-indigo-800 border-indigo-300",
+                                    "bg-purple-100 text-purple-800 border-purple-300",
+                                    "bg-orange-100 text-orange-800 border-orange-300",
+                                    "bg-amber-100 text-amber-800 border-amber-300",
+                                    "bg-sky-100 text-sky-800 border-sky-300",
+                                    "bg-rose-100 text-rose-800 border-rose-300",
+                                    "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300",
+                                    "bg-cyan-100 text-cyan-800 border-cyan-300",
+                                    "bg-teal-100 text-teal-800 border-teal-300",
+                                    "bg-violet-100 text-violet-800 border-violet-300",
+                                    "bg-slate-100 text-slate-800 border-slate-300",
+                                    "bg-pink-100 text-pink-800 border-pink-300",
+                                  ];
+
+                                  const hashString = (value: string) => {
+                                    let hash = 0;
+                                    for (let i = 0; i < value.length; i++) {
+                                      hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+                                    }
+                                    return hash;
+                                  };
+
+                                  const badgeClass =
+                                    categoryClassMap[normalized] ??
+                                    fallbackPalette[Math.abs(hashString(normalized)) % fallbackPalette.length];
+
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border max-w-full text-left ${badgeClass}`}
+                                      style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
+                                    >
+                                      <span className="truncate whitespace-nowrap" title={raw}>
+                                        {raw}
+                                      </span>
+                                    </span>
+                                  );
+                                })()}
+                              </TableCell>
+
+                              <TableCell className="px-2 py-3 text-sm text-gray-600 w-[110px] capitalize">
+                                {subscription.billingCycle}
+                              </TableCell>
+
+                              <TableCell className="px-1 py-3 text-center w-[60px]">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {Number((subscription as any)?.qty ?? 1) || 1}
+                                </span>
+                              </TableCell>
+
+                              <TableCell className="px-2 py-3 text-right w-[130px]">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {(() => {
+                                    const raw = (subscription as any)?.lcyAmount ?? subscription.amount;
+                                    const n = Number.parseFloat(String(raw));
+                                    return Number.isFinite(n) ? n.toFixed(2) : '—';
+                                  })()}
+                                </span>
+                              </TableCell>
+
+                              <TableCell className="px-2 py-3 text-left w-[150px]">
+                                <div className="flex items-center justify-start text-sm text-gray-700">
+                                  <Calendar className="h-3 w-3 text-gray-400 mr-1" />
+                                  {formatDate(subscription.nextRenewal)}
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-2 py-3 w-[140px] text-left">
+                                {(() => {
+                                  const calculatedStatus = calculateSubscriptionStatus(
+                                    subscription.nextRenewal,
+                                    subscription.reminderDays,
+                                    subscription.status
+                                  );
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border ${subscription.billingCycle === 'Trial'
+                                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                          : getStatusBadgeClass(calculatedStatus)
+                                        }`}
+                                      style={{ width: `calc(${statusPillWidthCh}ch + 1.5rem)`, maxWidth: '100%' }}
+                                    >
+                                      <span
+                                        className="truncate whitespace-nowrap"
+                                        title={subscription.billingCycle === 'Trial' ? 'Trial' : calculatedStatus}
+                                      >
+                                        {subscription.billingCycle === 'Trial' ? 'Trial' : calculatedStatus}
+                                      </span>
+                                    </span>
+                                  );
+                                })()}
+                              </TableCell>
+                              <TableCell className="px-1 pr-2 py-3 text-right w-[60px]">
+                                {(() => {
+                                  const rowId = String(subscription._id || subscription.id || "");
+                                  const isOpen = !!rowId && openActionsMenuForId === rowId;
+                                  const isAnotherRowOpen = !!openActionsMenuForId && openActionsMenuForId !== rowId;
+                                  return (
+                                    <DropdownMenu
+                                      open={isOpen}
+                                      onOpenChange={(open) => {
+                                        if (!rowId) return;
+                                        setOpenActionsMenuForId(open ? rowId : null);
+                                      }}
+                                    >
+                                      <DropdownMenuTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${isAnotherRowOpen ? "invisible" : ""
+                                            }`}
+                                        >
+                                          <MoreVertical className="h-4 w-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent
+                                        align="end"
+                                        className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
+                                      >
+                                        <Can I="update" a="Subscription">
+                                          <DropdownMenuItem
+                                            onClick={() => handleEdit(subscription)}
+                                            className="cursor-pointer"
+                                          >
+                                            <Edit className="h-4 w-4 mr-2" />
+                                            Edit
+                                          </DropdownMenuItem>
+                                        </Can>
+                                        <Can I="delete" a="Subscription">
+                                          <DropdownMenuItem
+                                            onClick={() => handleDelete(subscription)}
+                                            className="cursor-pointer text-red-600 focus:text-red-600"
+                                            disabled={deleteMutation.isPending}
+                                          >
+                                            <Trash2 className="h-4 w-4 mr-2" />
+                                            Delete
+                                          </DropdownMenuItem>
+                                        </Can>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  );
+                                })()}
+                              </TableCell>
+                            </motion.tr>
+                          ))}
+                        </AnimatePresence>
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={7} className="h-32 text-center">
+                            <div className="flex flex-col items-center justify-center text-gray-500">
+                              <AlertCircle className="h-8 w-8 text-gray-300 mb-2" />
+                              <p className="text-sm font-medium text-gray-900">No subscriptions found</p>
+                              <p className="text-xs text-gray-500 mt-1">Try adjusting your search filters or add a new subscription</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+
+                {/* Gmail-style Pagination */}
+                {totalFiltered > 0 && (
+                  <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-4 text-sm text-slate-700">
+                      <div>
                         {(() => {
-                          const categoryValue = String((subscription as any)?.category ?? "").trim();
-                          if (!categoryValue) {
-                            return (
-                              <span
-                                className="inline-flex items-center justify-start text-gray-400 text-xs"
-                                style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
-                              >
-                                -
-                              </span>
-                            );
+                          const start = totalFiltered === 0 ? 0 : startIndex + 1;
+                          const end = Math.min(endIndex, totalFiltered);
+                          return `${start}–${end} of ${totalFiltered}`;
+                        })()}
+                      </div>
+                      <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                        <span className="text-xs text-slate-500">Rows per page:</span>
+                        <select
+                          value={itemsPerPage}
+                          onChange={(e) => {
+                            setItemsPerPage(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                          className="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                        >
+                          {[10, 25, 50, 100].map((size) => (
+                            <option key={size} value={size}>
+                              {size}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={currentPage <= 1}
+                        >
+                          Previous
+                        </Button>
+                        {(() => {
+                          const buttons: number[] = [];
+                          const maxButtons = 5;
+                          let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+                          let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
+                          if (endPage - startPage < maxButtons - 1) {
+                            startPage = Math.max(1, endPage - maxButtons + 1);
                           }
 
-                          const raw = categoryValue;
-                          const normalized = raw.toLowerCase();
+                          for (let i = startPage; i <= endPage; i++) {
+                            buttons.push(i);
+                          }
 
-                          // Distinct pastel colors per category (softer tones), plus deterministic fallback.
-                          const categoryClassMap: Record<string, string> = {
-                            "productivity & collaboration": "bg-blue-100 text-blue-800 border-blue-300",
-                            "accounting & finance": "bg-emerald-100 text-emerald-800 border-emerald-300",
-                            "crm & sales": "bg-indigo-100 text-indigo-800 border-indigo-300",
-                            "development & hosting": "bg-purple-100 text-purple-800 border-purple-300",
-                            "design & creative tools": "bg-orange-100 text-orange-800 border-orange-300",
-                            "marketing & seo": "bg-amber-100 text-amber-800 border-amber-300",
-                            "communication tools": "bg-sky-100 text-sky-800 border-sky-300",
-                            "security & compliance": "bg-rose-100 text-rose-800 border-rose-300",
-                            "hr & admin": "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300",
-                            "subscription infrastructure": "bg-cyan-100 text-cyan-800 border-cyan-300",
-                            "office infrastructure": "bg-teal-100 text-teal-800 border-teal-300",
-                            "games": "bg-violet-100 text-violet-800 border-violet-300",
-                          };
-
-                          const fallbackPalette: string[] = [
-                            "bg-blue-100 text-blue-800 border-blue-300",
-                            "bg-emerald-100 text-emerald-800 border-emerald-300",
-                            "bg-indigo-100 text-indigo-800 border-indigo-300",
-                            "bg-purple-100 text-purple-800 border-purple-300",
-                            "bg-orange-100 text-orange-800 border-orange-300",
-                            "bg-amber-100 text-amber-800 border-amber-300",
-                            "bg-sky-100 text-sky-800 border-sky-300",
-                            "bg-rose-100 text-rose-800 border-rose-300",
-                            "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300",
-                            "bg-cyan-100 text-cyan-800 border-cyan-300",
-                            "bg-teal-100 text-teal-800 border-teal-300",
-                            "bg-violet-100 text-violet-800 border-violet-300",
-                            "bg-slate-100 text-slate-800 border-slate-300",
-                            "bg-pink-100 text-pink-800 border-pink-300",
-                          ];
-
-                          const hashString = (value: string) => {
-                            let hash = 0;
-                            for (let i = 0; i < value.length; i++) {
-                              hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
-                            }
-                            return hash;
-                          };
-
-                          const badgeClass =
-                            categoryClassMap[normalized] ??
-                            fallbackPalette[Math.abs(hashString(normalized)) % fallbackPalette.length];
-
-                          return (
-                            <span
-                              className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-tight border max-w-full text-left ${badgeClass}`}
-                              style={{ width: `${categoryBadgeWidthCh}ch`, maxWidth: "100%" }}
-                            >
-                              <span className="truncate whitespace-nowrap" title={raw}>
-                                {raw}
-                              </span>
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
-
-                      <TableCell className="px-2 py-3 text-sm text-gray-600 w-[110px] capitalize">
-                        {subscription.billingCycle}
-                      </TableCell>
-
-                      <TableCell className="px-1 py-3 text-center w-[60px]">
-                        <span className="text-sm font-medium text-gray-900">
-                          {Number((subscription as any)?.qty ?? 1) || 1}
-                        </span>
-                      </TableCell>
-
-                      <TableCell className="px-2 py-3 text-right w-[130px]">
-                        <span className="text-sm font-medium text-gray-900">
-                          {(() => {
-                            const raw = (subscription as any)?.lcyAmount ?? subscription.amount;
-                            const n = Number.parseFloat(String(raw));
-                            return Number.isFinite(n) ? n.toFixed(2) : '—';
-                          })()}
-                        </span>
-                      </TableCell>
-
-                      <TableCell className="px-2 py-3 text-left w-[150px]">
-                        <div className="flex items-center justify-start text-sm text-gray-700">
-                          <Calendar className="h-3 w-3 text-gray-400 mr-1" />
-                          {formatDate(subscription.nextRenewal)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-2 py-3 w-[110px] text-left">
-                        {(() => {
-                          const calculatedStatus = calculateSubscriptionStatus(
-                            subscription.nextRenewal,
-                            subscription.reminderDays,
-                            subscription.status
-                          );
-                          return (
-                            <span
-                              className={`inline-flex items-center justify-start px-3 py-1 rounded-full text-xs font-semibold leading-none border ${
-                                subscription.billingCycle === 'Trial'
-                                  ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                  : getStatusBadgeClass(calculatedStatus)
-                              }`}
-                              style={{ width: `calc(${statusPillWidthCh}ch + 1.5rem)`, maxWidth: '100%' }}
-                            >
-                              <span
-                                className="truncate whitespace-nowrap"
-                                title={subscription.billingCycle === 'Trial' ? 'Trial' : calculatedStatus}
-                              >
-                                {subscription.billingCycle === 'Trial' ? 'Trial' : calculatedStatus}
-                              </span>
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell className="px-1 pr-2 py-3 text-right w-[60px]">
-                        {(() => {
-                          const rowId = String(subscription._id || subscription.id || "");
-                          const isOpen = !!rowId && openActionsMenuForId === rowId;
-                          const isAnotherRowOpen = !!openActionsMenuForId && openActionsMenuForId !== rowId;
-                          return (
-                            <DropdownMenu
-                              open={isOpen}
-                              onOpenChange={(open) => {
-                                if (!rowId) return;
-                                setOpenActionsMenuForId(open ? rowId : null);
-                              }}
-                            >
-                          <DropdownMenuTrigger asChild>
+                          return buttons.map((p) => (
                             <Button
-                              variant="ghost"
-                              size="sm"
-                              className={`h-8 w-8 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors ${
-                                isAnotherRowOpen ? "invisible" : ""
-                              }`}
+                              key={p}
+                              type="button"
+                              variant={p === currentPage ? "default" : "ghost"}
+                              className={`h-9 w-9 px-0 text-sm ${p === currentPage
+                                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                                  : "text-slate-600 hover:bg-slate-100"
+                                }`}
+                              onClick={() => setCurrentPage(p)}
                             >
-                              <MoreVertical className="h-4 w-4" />
+                              {p}
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="z-[1000] bg-white text-gray-900 border border-gray-200 shadow-lg"
-                          >
-                            <Can I="update" a="Subscription">
-                              <DropdownMenuItem
-                                onClick={() => handleEdit(subscription)}
-                                className="cursor-pointer"
-                              >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit
-                              </DropdownMenuItem>
-                            </Can>
-                            <Can I="delete" a="Subscription">
-                              <DropdownMenuItem
-                                onClick={() => handleDelete(subscription)}
-                                className="cursor-pointer text-red-600 focus:text-red-600"
-                                disabled={deleteMutation.isPending}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </Can>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                          );
+                          ));
                         })()}
-                      </TableCell>
-                    </motion.tr>
-                  ))}
-                  </AnimatePresence>
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-32 text-center">
-                      <div className="flex flex-col items-center justify-center text-gray-500">
-                        <AlertCircle className="h-8 w-8 text-gray-300 mb-2" />
-                        <p className="text-sm font-medium text-gray-900">No subscriptions found</p>
-                        <p className="text-xs text-gray-500 mt-1">Try adjusting your search filters or add a new subscription</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            </CardContent>
-            
-            {/* Gmail-style Pagination */}
-            {totalFiltered > 0 && (
-              <div className="border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-4 text-sm text-slate-700">
-                  <div>
-                    {(() => {
-                      const start = totalFiltered === 0 ? 0 : startIndex + 1;
-                      const end = Math.min(endIndex, totalFiltered);
-                      return `${start}–${end} of ${totalFiltered}`;
-                    })()}
-                  </div>
-                  <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
-                    <span className="text-xs text-slate-500">Rows per page:</span>
-                    <select
-                      value={itemsPerPage}
-                      onChange={(e) => {
-                        setItemsPerPage(Number(e.target.value));
-                        setCurrentPage(1);
-                      }}
-                      className="bg-transparent border border-slate-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                    >
-                      {[10, 25, 50, 100].map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                {totalPages > 1 && (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={currentPage <= 1}
-                    >
-                      Previous
-                    </Button>
-                    {(() => {
-                      const buttons: number[] = [];
-                      const maxButtons = 5;
-                      let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
-                      let endPage = Math.min(totalPages, startPage + maxButtons - 1);
-                      
-                      if (endPage - startPage < maxButtons - 1) {
-                        startPage = Math.max(1, endPage - maxButtons + 1);
-                      }
-                      
-                      for (let i = startPage; i <= endPage; i++) {
-                        buttons.push(i);
-                      }
-                      
-                      return buttons.map((p) => (
                         <Button
-                          key={p}
                           type="button"
-                          variant={p === currentPage ? "default" : "ghost"}
-                          className={`h-9 w-9 px-0 text-sm ${
-                            p === currentPage 
-                              ? "bg-blue-600 text-white hover:bg-blue-700" 
-                              : "text-slate-600 hover:bg-slate-100"
-                          }`}
-                          onClick={() => setCurrentPage(p)}
+                          variant="ghost"
+                          className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={currentPage >= totalPages}
                         >
-                          {p}
+                          Next
                         </Button>
-                      ));
-                    })()}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-9 px-3 text-sm text-slate-600 hover:bg-slate-100"
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={currentPage >= totalPages}
-                    >
-                      Next
-                    </Button>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
-          </Card>
-        </div>
+              </Card>
+            </div>
           </>
         )}
 
-      
-      <SubscriptionModal
-        open={modalOpen}
-        onOpenChange={handleCloseModal}
-        subscription={editingSubscription}
-      />
 
-      <Dialog
-        open={modalOpen && !editingSubscription && (isLoading || isOpenedSubscriptionLoading)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPendingOpenSubscriptionId(null);
-            handleCloseModal();
-          }
-        }}
-      >
-        <DialogContent className="max-w-md ">
-          <DialogHeader>
-            <DialogTitle>Loading subscription...</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center gap-3 text-sm text-gray-600">
-            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-indigo-600" />
-            Please wait
-          </div>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="max-w-md  border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
-          {/* Header with Red Gradient Background */}
-          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
+        <SubscriptionModal
+          open={modalOpen}
+          onOpenChange={handleCloseModal}
+          subscription={editingSubscription}
+        />
+
+        <Dialog
+          open={modalOpen && !editingSubscription && (isLoading || isOpenedSubscriptionLoading)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPendingOpenSubscriptionId(null);
+              handleCloseModal();
+            }
+          }}
+        >
+          <DialogContent className="max-w-md ">
             <DialogHeader>
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <Trash2 className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <DialogTitle className="text-xl font-bold tracking-tight text-white">
-                    Delete Subscription
-                  </DialogTitle>
-                  <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
-                </div>
-              </div>
+              <DialogTitle>Loading subscription...</DialogTitle>
             </DialogHeader>
-          </div>
+            <div className="flex items-center gap-3 text-sm text-gray-600">
+              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-indigo-600" />
+              Please wait
+            </div>
+          </DialogContent>
+        </Dialog>
 
-          {/* Content */}
-          <div className="px-6 py-5">
-            <p className="text-gray-700 text-sm leading-relaxed mb-4">
-              Are you sure you want to delete the subscription <span className="font-semibold text-gray-900">"{subscriptionToDelete?.serviceName}"</span>?
-            </p>
-            <p className="text-gray-600 text-xs leading-relaxed">
-              This will permanently remove this subscription and all its associated data from your system.
-            </p>
-          </div>
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="max-w-md  border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+            {/* Header with Red Gradient Background */}
+            <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
+              <DialogHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Trash2 className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                      Delete Subscription
+                    </DialogTitle>
+                    <p className="text-red-100 mt-0.5 text-sm font-medium">This action cannot be undone</p>
+                  </div>
+                </div>
+              </DialogHeader>
+            </div>
 
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => {
-                setDeleteConfirmOpen(false);
-                setSubscriptionToDelete(null);
-              }}
-              className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
-            >
-              Cancel
-            </Button>
-            <Button 
-              type="button"
-              onClick={confirmDelete}
-              disabled={deleteMutation.isPending}
-              className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      
-      <input
-        type="file"
-        accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-        ref={fileInputRef}
-        onChange={handleImport}
-        className="hidden"
-      />
+            {/* Content */}
+            <div className="px-6 py-5">
+              <p className="text-gray-700 text-sm leading-relaxed mb-4">
+                Are you sure you want to delete the subscription <span className="font-semibold text-gray-900">"{subscriptionToDelete?.serviceName}"</span>?
+              </p>
+              <p className="text-gray-600 text-xs leading-relaxed">
+                This will permanently remove this subscription and all its associated data from your system.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setDeleteConfirmOpen(false);
+                  setSubscriptionToDelete(null);
+                }}
+                className="h-9 px-5 border-gray-300 text-gray-700 hover:bg-white font-semibold rounded-lg transition-all duration-200"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleteMutation.isPending}
+                className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import Validation Errors Dialog */}
+        <Dialog open={importErrorsDialogOpen} onOpenChange={setImportErrorsDialogOpen}>
+          <DialogContent className="max-w-xl border-0 shadow-2xl p-0 bg-white overflow-hidden font-inter">
+            <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-5">
+              <DialogHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <AlertCircle className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                      Import Validation Errors
+                    </DialogTitle>
+                    <p className="text-red-100 mt-0.5 text-sm font-medium">Some rows could not be imported due to validation failures.</p>
+                  </div>
+                </div>
+              </DialogHeader>
+            </div>
+
+            <div className="px-6 py-5 overflow-y-auto max-h-[350px]">
+              <p className="text-gray-700 text-sm mb-4 leading-relaxed">
+                We found the following issues in the uploaded sheet. Valid rows have been imported successfully, but these rows were skipped:
+              </p>
+              <div className="space-y-3">
+                {importErrors.map((err, idx) => (
+                  <div key={idx} className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <div className="font-semibold text-red-800 text-sm mb-1">Row {err.rowNum}</div>
+                    <ul className="list-disc list-inside space-y-1">
+                      {err.errors.map((msg, msgIdx) => (
+                        <li key={msgIdx} className="text-xs text-red-700">{msg}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-100">
+              <Button
+                type="button"
+                onClick={() => {
+                  setImportErrorsDialogOpen(false);
+                  setImportErrors([]);
+                }}
+                className="h-9 px-5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-lg hover:shadow-xl rounded-lg transition-all duration-200"
+              >
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <input
+          type="file"
+          accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          ref={fileInputRef}
+          onChange={handleImport}
+          className="hidden"
+        />
       </div>
     </div>
   );

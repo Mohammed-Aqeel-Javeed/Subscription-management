@@ -333,7 +333,7 @@ export default function ComplianceDashboard() {
                 </Button>
               </div>
             </div>
-            {complianceLoading ? (
+            {complianceLoading && items.length === 0 ? (
               <div className="mt-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-5">
                   {Array.from({ length: 4 }).map((_, i) => (
